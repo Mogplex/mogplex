@@ -240,6 +240,8 @@ export function createSandboxResumeHandler(
     }
 
     const encoder = new TextEncoder();
+    // Readiness is observation, not ownership of the workspace. A reader may
+    // disconnect after ready; bootstrap and the restored VM must survive it.
     let disconnected = false;
 
     const stream = new ReadableStream<Uint8Array>({

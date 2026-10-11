@@ -71,3 +71,75 @@ test("a command is killed when durable ownership cannot be saved or cancellation
   );
   assert.equal(cancelled.killed(), true);
 });
+
+test("Stop interrupts a command while the ownership save is still pending", async () => {
+  const saving = Promise.withResolvers<void>();
+  const saveFinished = Promise.withResolvers<void>();
+  const killed = Promise.withResolvers<void>();
+  const controller = new AbortController();
+  let stops = 0;
+  let completed = false;
+  const command = {
+    cmdId: "command-saving-ownership",
+    exitCode: null,
+    kill: async () => {
+      stops++;
+      killed.resolve();
+    },
+    wait: async () => {
+      await killed.promise;
+      return { exitCode: 143 };
+    },
+  };
+  const result = executeSandboxCommand(
+    { runCommand: async () => command } as unknown as Sandbox,
+    {
+      command: "build",
+      cwd: "/repo",
+      env: {},
+      signal: controller.signal,
+      onStarted: async () => {
+        saving.resolve();
+        await saveFinished.promise;
+      },
+      onFinished: async () => {
+        completed = true;
+      },
+    }
+  );
+  const rejected = assert.rejects(result, /abort/i);
+  try {
+    await saving.promise;
+    controller.abort();
+    // The save stays blocked until Stop actually reaches the provider.
+    await killed.promise;
+  } finally {
+    saveFinished.resolve();
+  }
+  await rejected;
+  assert.equal(stops, 1);
+  assert.equal(completed, false);
+});
+
+test("an already cancelled command never starts compute", async () => {
+  let launched = false;
+  await assert.rejects(
+    executeSandboxCommand(
+      {
+        runCommand: async () => {
+          launched = true;
+          throw new Error("Must not launch");
+        },
+      } as unknown as Sandbox,
+      {
+        command: "build",
+        cwd: "/repo",
+        env: {},
+        signal: AbortSignal.abort(),
+        onStarted: async () => {},
+      }
+    ),
+    /abort/i
+  );
+  assert.equal(launched, false);
+});
