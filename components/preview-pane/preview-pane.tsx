@@ -162,7 +162,7 @@ export function PreviewPane(props: PreviewPaneProps) {
           className="relative flex-1 overflow-hidden"
           data-testid="preview-stage"
         >
-          {previewUrl ? (
+          {previewUrl && !isPaused ? (
             <>
               <iframe
                 key={refreshKey}

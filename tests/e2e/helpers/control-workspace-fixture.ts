@@ -167,5 +167,5 @@ export async function mockControlWorkspace(
     route.fulfill({ contentType: "text/html", body: "<h1>Welcome home</h1>" })
   );
   await page.goto(`${scopedPath("control")}?mission=task-one`);
-  return { mutations, sessions };
+  return { mutations, sessions, sandboxes };
 }
