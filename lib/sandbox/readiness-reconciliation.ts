@@ -310,15 +310,22 @@ export async function reconcileSandboxReadiness(
   const timestamp = new Date().toISOString();
 
   if (liveSandboxStatus === "stopped") {
-    // Route through stopSandboxRecord so cost telemetry (compute_seconds,
-    // cost_cents_estimate, stopped_at) stays consistent with other stop paths,
-    // including the rate-override branch the DB trigger doesn't cover. The
-    // preview-error/dev-log metadata is folded in via additionalUpdates so the
-    // whole transition lands atomically — splitting into two writes would
-    // leave a window where the row is stopped but error fields are stale.
+    // The provider may still expose the previous stopped session while the
+    // owner wakes this persistent name. Bootstrap or stuck-boot recovery owns
+    // this transition; a liveness observation cannot cancel it.
+    if (record.status === "creating" || record.status === "installing") {
+      return {
+        sandbox: buildClientRecord(record),
+        rawRecord: record,
+        isSettled: false,
+      };
+    }
+    // Persist stop state, cost telemetry (including rate overrides), and
+    // preview diagnostics together so readers cannot see a partial transition.
     await deps.stopSandboxRecord(record.id, {
       expectedSandboxId: record.sandbox_id,
       fromStatuses: ACTIVE_RECONCILE_STATUSES,
+      expectedLastBootStartedAt: record.last_boot_started_at ?? null,
       stopReason: "vm_gone",
       additionalUpdates: {
         last_health_check_at: timestamp,
@@ -446,6 +453,7 @@ export async function reconcileSandboxReadiness(
   const updated = await deps.updateSandboxRecord(record.id, updatePayload, {
     expectedSandboxId: record.sandbox_id,
     fromStatuses: ACTIVE_RECONCILE_STATUSES,
+    expectedLastBootStartedAt: record.last_boot_started_at ?? null,
     select: SANDBOX_RECONCILE_SELECT,
   });
 

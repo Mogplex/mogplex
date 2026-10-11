@@ -12,6 +12,7 @@ type UpdateSandboxOptions = {
   expectedSandboxId?: string;
   fromStatuses?: SandboxStatus | readonly SandboxStatus[];
   expectedHealthStatus?: string;
+  expectedLastBootStartedAt?: string | null;
   select?: string;
 };
 
@@ -24,6 +25,7 @@ export async function updateSandboxRecord(
     expectedSandboxId,
     fromStatuses,
     expectedHealthStatus,
+    expectedLastBootStartedAt,
     select = "id, sandbox_id, status, health_status",
   } = options;
   const hasEmbeddedSelect = select.includes("(");
@@ -39,6 +41,13 @@ export async function updateSandboxRecord(
 
   if (expectedHealthStatus) {
     query = query.eq("health_status", expectedHealthStatus);
+  }
+
+  if (expectedLastBootStartedAt !== undefined) {
+    query =
+      expectedLastBootStartedAt === null
+        ? query.is("last_boot_started_at", null)
+        : query.eq("last_boot_started_at", expectedLastBootStartedAt);
   }
 
   if (fromStatuses) {
@@ -152,6 +161,7 @@ export async function stopSandboxRecord(
     expectedSandboxId: options.expectedSandboxId,
     fromStatuses: options.fromStatuses ?? ACTIVE_SANDBOX_STATUSES,
     expectedHealthStatus: options.expectedHealthStatus,
+    expectedLastBootStartedAt: options.expectedLastBootStartedAt,
   });
 }
 

@@ -33,27 +33,34 @@ export async function reconcileStaleListedSandboxes(input: {
 }) {
   const active = input.sandboxes.filter(
     (sandbox) =>
-      ["creating", "installing", "running"].includes(sandbox.status) &&
+      sandbox.status === "running" &&
       sandbox.sandbox_id &&
       sandbox.sandbox_id !== "pending"
   );
-  if (active.length === 0) return;
+  if (active.length === 0) return false;
 
   const { staleIds } = await input.deps.findStaleActiveSandboxIds({
     sandboxCredentials: input.creds,
     records: active,
   });
-  if (staleIds.size === 0) return;
+  if (staleIds.size === 0) return false;
 
-  for (const staleId of staleIds) {
-    await input.deps.stopSandboxRecord(staleId, { stopReason: "vm_gone" });
-  }
-
-  for (const sandbox of input.sandboxes) {
-    if (staleIds.has(sandbox.id)) {
+  let conflicted = false;
+  for (const sandbox of active) {
+    if (!staleIds.has(sandbox.id)) continue;
+    const stopped = await input.deps.stopSandboxRecord(sandbox.id, {
+      expectedSandboxId: sandbox.sandbox_id,
+      fromStatuses: "running",
+      expectedLastBootStartedAt: sandbox.last_boot_started_at ?? null,
+      stopReason: "vm_gone",
+    });
+    if (stopped) {
       sandbox.status = "stopped";
       sandbox.health_status = "stopped";
       sandbox.stop_reason = "vm_gone";
+    } else {
+      conflicted = true;
     }
   }
+  return conflicted;
 }

@@ -93,6 +93,7 @@ export function createSandboxDetailGetHandler(
             ? deps.stopSandboxRecord(id, {
                 expectedSandboxId: record.sandbox_id,
                 fromStatuses: record.status,
+                expectedLastBootStartedAt: record.last_boot_started_at ?? null,
                 stopReason: "vm_gone",
               })
             : deps.updateSandboxRecord(
@@ -101,6 +102,8 @@ export function createSandboxDetailGetHandler(
                 {
                   expectedSandboxId: record.sandbox_id,
                   fromStatuses: record.status,
+                  expectedLastBootStartedAt:
+                    record.last_boot_started_at ?? null,
                 }
               ));
           if (!updated) {

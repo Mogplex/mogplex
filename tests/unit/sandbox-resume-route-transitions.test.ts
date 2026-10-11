@@ -366,6 +366,7 @@ test("POST /api/sandbox/[id]/resume guards bootstrap error writes after late sto
   assert.deepEqual(errorWrite?.options, {
     expectedSandboxId: "vm_123",
     fromStatuses: ["installing", "running"],
+    expectedLastBootStartedAt: updateCalls[0].updates.last_boot_started_at,
   });
   assert.match(body, /"type":"cancelled"/);
   assert.doesNotMatch(body, /"type":"error"/);

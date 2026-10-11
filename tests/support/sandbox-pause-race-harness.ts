@@ -16,6 +16,7 @@ export async function withDatabase(
     await pg.exec(`create table sandboxes (
       id text primary key, sandbox_id text, status text, health_status text,
       persistent boolean, snapshot_id text, stop_reason text,
+      last_boot_started_at timestamptz, last_boot_completed_at timestamptz,
       last_active_at timestamptz default now() - interval '1 day'
     );`);
     await pg.query(

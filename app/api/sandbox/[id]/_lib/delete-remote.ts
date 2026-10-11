@@ -142,9 +142,12 @@ export function resolveSandboxDetailLiveStatus(
     "status" | "persistent"
   >,
   sdkStatus: unknown
-): "running" | "stopped" | "paused" | "pausing" {
+): "running" | "stopped" | "paused" | "pausing" | "creating" | "installing" {
   // A provider probe cannot supersede an in-flight lifecycle operation.
   if (record.status === "pausing") return "pausing";
+  if (record.status === "creating" || record.status === "installing") {
+    return record.status;
+  }
   if (sdkStatus === "running") return "running";
   // The VM probe only exposes "running" here; every other value means the VM
   // was absent/unusable. Paused is DB state for persistent sandboxes, so a

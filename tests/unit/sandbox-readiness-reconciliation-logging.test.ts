@@ -150,91 +150,99 @@ test("reconcileSandboxReadiness still stores dev log for genuinely running sandb
   assert.equal(result.sandbox.dev_log, "fresh dev log");
 });
 
-test("reconcileSandboxReadiness preserves vm_gone stop_reason writes", async () => {
-  const { reconcileSandboxReadiness } =
-    await loadSandboxReadinessReconciliation();
-  const clientFixture = sandboxRecord({
-    status: "running",
-    healthStatus: "starting",
-  });
-  const record = buildSandboxReconcileRecord({
-    id: clientFixture.id,
-    sandbox_id: clientFixture.sandbox_id,
-    status: "running",
-    health_status: "starting",
-    preview_url: clientFixture.runtime_summary.preview_url,
-    dev_log: "previous log",
-  });
-  const stopCalls: Array<{
-    id: string;
-    options?: {
-      stopReason?: string | null;
-      additionalUpdates?: Record<string, unknown>;
-    };
-  }> = [];
+for (const status of ["creating", "installing", "running"] as const) {
+  test(`reconcileSandboxReadiness respects ${status} ownership when the VM is stopped`, async () => {
+    const { reconcileSandboxReadiness } =
+      await loadSandboxReadinessReconciliation();
+    const clientFixture = sandboxRecord({
+      status: "running",
+      healthStatus: "starting",
+    });
+    const record = buildSandboxReconcileRecord({
+      id: clientFixture.id,
+      sandbox_id: clientFixture.sandbox_id,
+      status,
+      health_status: "starting",
+      preview_url: clientFixture.runtime_summary.preview_url,
+      dev_log: "previous log",
+    });
+    const stopCalls: Array<{
+      id: string;
+      options?: {
+        stopReason?: string | null;
+        additionalUpdates?: Record<string, unknown>;
+      };
+    }> = [];
 
-  const result = await reconcileSandboxReadiness(
-    {
-      sandboxRecordId: record.id,
-      expectedSandboxId: record.sandbox_id,
-      source: "health",
-    },
-    {},
-    {
-      loadSandboxRecord: async () => record,
-      loadLatestSandboxRecord: async () => ({
-        ...record,
-        status: "stopped",
-        health_status: "stopped",
-        stop_reason: "vm_gone",
-      }),
-      loadUserVercelCredentials: async () => ({
-        userVercelToken: null,
-        userVercelTeamId: null,
-        accountDefaultVercelProjectId: null,
-        accountDefaultVercelTeamId: null,
-      }),
-      loadUserPlatformAccess: async () => ({
-        allowPlatformAi: false,
-        allowPlatformSandbox: false,
-      }),
-      resolveSandboxRecordContext: async () => buildResolvedContext(),
-      getSandbox: async () =>
-        ({
+    const result = await reconcileSandboxReadiness(
+      {
+        sandboxRecordId: record.id,
+        expectedSandboxId: record.sandbox_id,
+        source: "health",
+      },
+      {},
+      {
+        loadSandboxRecord: async () => record,
+        loadLatestSandboxRecord: async () => ({
+          ...record,
           status: "stopped",
-          sandboxId: record.sandbox_id,
-          readFile: async () => {
-            throw new Error("readFile should not run for stopped VMs");
-          },
-        }) as never,
-      checkSandboxHealth: async () => {
-        throw new Error("health check should not run for stopped VMs");
-      },
-      loadSandboxVercelDiagnostics: async () => null,
-      stopSandboxRecord: async (id, options) => {
-        stopCalls.push({ id, options });
-        return null;
-      },
-      updateSandboxRecord: async () => {
-        throw new Error("updateSandboxRecord should not run for stopped VMs");
-      },
-    }
-  );
+          health_status: "stopped",
+          stop_reason: "vm_gone",
+        }),
+        loadUserVercelCredentials: async () => ({
+          userVercelToken: null,
+          userVercelTeamId: null,
+          accountDefaultVercelProjectId: null,
+          accountDefaultVercelTeamId: null,
+        }),
+        loadUserPlatformAccess: async () => ({
+          allowPlatformAi: false,
+          allowPlatformSandbox: false,
+        }),
+        resolveSandboxRecordContext: async () => buildResolvedContext(),
+        getSandbox: async () =>
+          ({
+            status: "stopped",
+            sandboxId: record.sandbox_id,
+            readFile: async () => {
+              throw new Error("readFile should not run for stopped VMs");
+            },
+          }) as never,
+        checkSandboxHealth: async () => {
+          throw new Error("health check should not run for stopped VMs");
+        },
+        loadSandboxVercelDiagnostics: async () => null,
+        stopSandboxRecord: async (id, options) => {
+          stopCalls.push({ id, options });
+          return null;
+        },
+        updateSandboxRecord: async () => {
+          throw new Error("updateSandboxRecord should not run for stopped VMs");
+        },
+      }
+    );
 
-  assert.ok(result);
-  assert.equal(stopCalls.length, 1);
-  assert.equal(stopCalls[0].id, record.id);
-  assert.equal(stopCalls[0].options?.stopReason, "vm_gone");
-  assert.equal(
-    stopCalls[0].options?.additionalUpdates?.last_preview_error,
-    "Sandbox is no longer running"
-  );
-  assert.equal(
-    stopCalls[0].options?.additionalUpdates?.dev_log,
-    "previous log"
-  );
-  assert.equal(result.rawRecord.stop_reason, "vm_gone");
-});
+    assert.ok(result);
+    if (status !== "running") {
+      assert.equal(stopCalls.length, 0);
+      assert.equal(result.rawRecord.status, status);
+      assert.equal(result.isSettled, false);
+      return;
+    }
+    assert.equal(stopCalls.length, 1);
+    assert.equal(stopCalls[0].id, record.id);
+    assert.equal(stopCalls[0].options?.stopReason, "vm_gone");
+    assert.equal(
+      stopCalls[0].options?.additionalUpdates?.last_preview_error,
+      "Sandbox is no longer running"
+    );
+    assert.equal(
+      stopCalls[0].options?.additionalUpdates?.dev_log,
+      "previous log"
+    );
+    assert.equal(result.rawRecord.stop_reason, "vm_gone");
+  });
+}
 
 test("reconcileSandboxReadiness skips project-level Vercel diagnostics while sandbox bootstrap is still transient", async () => {
   const { reconcileSandboxReadiness } =

@@ -26,6 +26,46 @@ export async function checkSchemaCompatibility(
   const client = createPostgrestShim(db);
   const adminClient = client as unknown as SupabaseClient;
   if (phase === "verify") {
+    const savedSandbox = await client
+      .from("sandboxes")
+      .select("sandbox_id,working_branch,snapshot_id,status")
+      .eq("id", BEFORE_USER)
+      .single();
+    assert.equal(savedSandbox.error, null, JSON.stringify(savedSandbox.error));
+    assert.deepEqual(savedSandbox.data, {
+      sandbox_id: "compatibility-saved-workspace",
+      working_branch: "saved-work",
+      snapshot_id: "snapshot-saved-work",
+      status: "paused",
+    });
+    // Retained releases can still resume and explicitly stop the same record.
+    const resumeSandbox = await client
+      .from("sandboxes")
+      .update({
+        status: "installing",
+        health_status: "starting",
+        last_boot_started_at: new Date().toISOString(),
+        last_boot_completed_at: null,
+      })
+      .eq("id", BEFORE_USER)
+      .select("id")
+      .single();
+    assert.equal(
+      resumeSandbox.error,
+      null,
+      JSON.stringify(resumeSandbox.error)
+    );
+    const stopSandbox = await client
+      .from("sandboxes")
+      .update({
+        status: "stopped",
+        health_status: "stopped",
+        stop_reason: "manual",
+      })
+      .eq("id", BEFORE_USER)
+      .select("id")
+      .single();
+    assert.equal(stopSandbox.error, null, JSON.stringify(stopSandbox.error));
     const team = await client
       .from("teams")
       .select("name,slug,owner_user_id")
@@ -239,6 +279,21 @@ export async function checkSchemaCompatibility(
     .select("id,workspace_id")
     .single();
   assert.equal(repo.error, null, JSON.stringify(repo.error));
+  const sandbox = await client.from("sandboxes").insert({
+    id: userId,
+    user_id: userId,
+    repo_id: (repo.data as { id: string }).id,
+    sandbox_id:
+      phase === "seed"
+        ? "compatibility-saved-workspace"
+        : "compatibility-new-workspace",
+    working_branch: "saved-work",
+    snapshot_id: "snapshot-saved-work",
+    status: "paused",
+    health_status: "paused",
+    persistent: true,
+  });
+  assert.equal(sandbox.error, null, JSON.stringify(sandbox.error));
   // Exercise the serving app's session writes and the old Slack worker's
   // external-run insert without depending on any candidate-only columns.
   const conversation = await client.from("control_sessions").insert({
