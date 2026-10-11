@@ -36,6 +36,7 @@ export function createRow(
     gateway_generation_ids: null,
     cost_source: "trigger",
     completed_at: "2026-05-16T10:00:00.000Z",
+    started_at: "2026-05-16T09:00:00.000Z",
     metadata: null,
     ...overrides,
   };
@@ -79,7 +80,7 @@ export function createReconcileSupabase(
           }
           assert.equal(
             columns,
-            "id, user_id, model, gateway_generation_id, gateway_generation_ids, cost_source, completed_at, metadata"
+            "id, user_id, model, gateway_generation_id, gateway_generation_ids, cost_source, started_at, completed_at, metadata"
           );
           return builder;
         },

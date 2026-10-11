@@ -1,3 +1,5 @@
+import { harnessGatewayHeaders } from "./gateway-accounting";
+
 const GATEWAY_OPENAI_BASE_URL = "https://ai-gateway.vercel.sh/v1";
 export const CODEX_GATEWAY_PROVIDER_ID = "mogplex_gateway";
 
@@ -6,7 +8,10 @@ export const CODEX_GATEWAY_PROVIDER_ID = "mogplex_gateway";
  * Returns the gateway provider settings when the run is gateway-billed, or
  * null for a direct OpenAI key or a user-configured provider.
  */
-export function codexProviderConfig(env: Record<string, string>) {
+export function codexProviderConfig(
+  env: Record<string, string>,
+  aiCallId?: string
+) {
   if (env.OPENAI_BASE_URL !== GATEWAY_OPENAI_BASE_URL) return null;
 
   // The compatibility endpoint supplies Codex models and tool capabilities as
@@ -20,14 +25,18 @@ export function codexProviderConfig(env: Record<string, string>) {
         base_url: "https://ai-gateway.vercel.sh/codex/v1",
         env_key: "CODEX_API_KEY",
         wire_api: "responses",
+        ...(aiCallId ? { http_headers: harnessGatewayHeaders(aiCallId) } : {}),
       },
     },
   };
 }
 
 /** The provider as `codex -c` overrides for the one-shot `codex exec` path. */
-export function codexProviderArgs(env: Record<string, string>): string[] {
-  const config = codexProviderConfig(env);
+export function codexProviderArgs(
+  env: Record<string, string>,
+  aiCallId?: string
+): string[] {
+  const config = codexProviderConfig(env, aiCallId);
   if (!config) return [];
 
   // Command-scoped overrides leave persisted sessions/config untouched and keep
@@ -41,6 +50,10 @@ export function codexProviderArgs(env: Record<string, string>): string[] {
     `${prefix}.base_url="${provider.base_url}"`,
     `${prefix}.env_key="${provider.env_key}"`,
     `${prefix}.wire_api="${provider.wire_api}"`,
+    ...Object.entries(provider.http_headers ?? {}).map(
+      ([key, value]) =>
+        `${prefix}.http_headers.${JSON.stringify(key)}=${JSON.stringify(value)}`
+    ),
   ].flatMap((value) => ["-c", value]);
 }
 

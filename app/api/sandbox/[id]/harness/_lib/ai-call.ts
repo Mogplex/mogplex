@@ -75,6 +75,11 @@ export async function setupAiCall(
     repo: input.repoFullName,
     product_team_id: input.productTeamId,
     ai_billing_source: input.aiBillingSource,
+    gateway_cost_tracking:
+      input.aiBillingSource === "platform_ai_gateway" &&
+      input.harnessId === "codex"
+        ? "report-v1"
+        : null,
   };
 
   const createdAiCallMetadata = {

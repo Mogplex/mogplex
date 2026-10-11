@@ -6,6 +6,7 @@ import type {
 } from "./types";
 import { fetchAggregateGatewayCost, isNotFoundError } from "./gateway";
 import { persistGatewayAiCallCost } from "./persistence";
+import { reconcileHarnessReportCost } from "./harness-report";
 import {
   captureStaleWarning,
   captureUpdateGuardNoop,
@@ -40,11 +41,9 @@ export async function reconcileAiCallCostRow(
   now: Date
 ): Promise<AiCallCostReconciliationOutcome> {
   const generationIds = getEffectiveGenerationIds(row);
-  if (generationIds.length === 0) {
-    return "skipped";
-  }
-
   try {
+    if (generationIds.length === 0)
+      return await reconcileHarnessReportCost(deps, gateway, row, now);
     // W11: Fetch cost for ALL generation IDs and sum them
     const result = await fetchAggregateGatewayCost(gateway, generationIds);
 

@@ -1,17 +1,19 @@
 import * as Sentry from "@sentry/nextjs";
 import type { meterReconciledTokenUsage } from "@/lib/billing/token-usage";
 import type { supabaseAdmin } from "@/lib/supabase/admin";
+import type { ObservabilityGatewayClient } from "@/lib/observability/gateway-client";
 
 export type AiCallCostReconciliationRow = {
   id: string;
   user_id: string;
   model: string;
   /** @deprecated Use gateway_generation_ids array instead. Kept for backward compat. */
-  gateway_generation_id: string;
+  gateway_generation_id: string | null;
   /** All gateway generation IDs across tool-loop steps. W11 sums cost across all. */
   gateway_generation_ids: string[] | null;
   cost_source: "trigger" | "gateway" | "manual" | null;
   completed_at: string;
+  started_at: string;
   metadata: Record<string, unknown> | null;
 };
 
@@ -24,6 +26,7 @@ export type AiCallCostReconciliationSummary = {
 
 export type GatewayGenerationInfoClient = {
   getGenerationInfo: (params: { id: string }) => Promise<unknown>;
+  getSpendReport?: ObservabilityGatewayClient["getSpendReport"];
 };
 
 export type SentryClient = {
