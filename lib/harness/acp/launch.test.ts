@@ -146,6 +146,7 @@ describe("runHarness through ACP", () => {
         resumeSessionId: " earlier-session ",
         mcpConfigPath: ".mogplex/mcp.json",
         runtimeEnv: { MOGPLEX_TEST_RUNTIME: "kept" },
+        gatewayCallId: "fixture-call",
         acpAgent: HARNESSES.codex.acp,
       }
     );
@@ -194,6 +195,9 @@ describe("runHarness through ACP", () => {
         baseUrl: "https://ai-gateway.vercel.sh/codex/v1",
         providerName: "Mogplex AI Gateway",
         apiKeyEnv: "CODEX_API_KEY",
+        headers: {
+          "ai-reporting-tags": "surface:harness,ai-call:fixture-call",
+        },
       },
     });
     // The prompt and key stay out of argv.

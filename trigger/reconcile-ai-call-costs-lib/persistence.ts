@@ -22,9 +22,11 @@ export async function loadAiCallCostReconciliationRows(
   const { data, error } = await deps.supabase
     .from("ai_calls")
     .select(
-      "id, user_id, model, gateway_generation_id, gateway_generation_ids, cost_source, completed_at, metadata"
+      "id, user_id, model, gateway_generation_id, gateway_generation_ids, cost_source, started_at, completed_at, metadata"
     )
-    .not("gateway_generation_id", "is", null)
+    .or(
+      "gateway_generation_id.not.is.null,metadata->>gateway_cost_tracking.eq.report-v1"
+    )
     .isDistinct("cost_source", "gateway")
     .gt("completed_at", windowStart.toISOString())
     .lt("completed_at", cutoff.toISOString())

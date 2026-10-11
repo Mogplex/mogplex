@@ -31,110 +31,129 @@ test("closed sandbox streams are recognized for lifecycle reconciliation", () =>
   );
 });
 
-test("POST /api/sandbox/[id]/harness persists classified failures and returns them in the done event", async () => {
-  const { createSandboxHarnessPostHandler } =
-    await loadSandboxHarnessRouteModule();
-  const aiCall = buildAiCall();
-  let persistedStatus: string | undefined;
-  let persistedError: string | null | undefined;
-  let billingResumeHookAttached = false;
-  let executionLeaseMs: number | undefined;
+for (const aiBillingSource of [
+  "user_ai_gateway",
+  "platform_ai_gateway",
+] as const) {
+  test(`POST /api/sandbox/[id]/harness preserves attribution on a failed ${aiBillingSource} run`, async () => {
+    const { createSandboxHarnessPostHandler } =
+      await loadSandboxHarnessRouteModule();
+    const aiCall = buildAiCall();
+    let persistedStatus: string | undefined;
+    let persistedError: string | null | undefined;
+    let billingResumeHookAttached = false;
+    let executionLeaseMs: number | undefined;
 
-  const handler = createSandboxHarnessPostHandler({
-    ...buildHarnessGitDeliveryDeps(),
-    getSandboxServiceCredentials: async () => buildSandboxServiceRouteAuth(),
-    loadOwnedSandboxRecord: async () =>
-      buildOwnedSandboxServiceRecord({
-        repo: buildSandboxServiceRecordRepo({
-          github_installation_id: 123,
+    const handler = createSandboxHarnessPostHandler({
+      ...buildHarnessGitDeliveryDeps(),
+      getSandboxServiceCredentials: async () => buildSandboxServiceRouteAuth(),
+      loadOwnedSandboxRecord: async () =>
+        buildOwnedSandboxServiceRecord({
+          repo: buildSandboxServiceRecordRepo({
+            github_installation_id: 123,
+          }),
         }),
-      }),
-    resolveSandboxAiAccess: async () =>
-      buildSandboxServiceAiAccess({
-        aiBillingSource: "user_ai_gateway",
-        gatewayApiKey: "gateway-key",
-      }),
-    getSandbox: async (_name, _credentials, options) => {
-      billingResumeHookAttached = typeof options?.onResume === "function";
-      return {} as never;
-    },
-    runHarness: async () => {
-      assert.equal(executionLeaseMs, 35 * 60_000);
-      return {
-        installed: false,
-        installLogs: "",
-        command: {
-          cmdId: "cmd-123",
-          async *logs() {
-            yield {
-              stream: "stderr" as const,
-              data: "API Error: HTTP 429 rate limit exceeded\n",
-            };
-          },
-          wait: async () => ({ exitCode: 1 }),
-          kill: async () => {},
-        },
-      } as never;
-    },
-    renewSandboxActivityLease: async (_sandbox, _now, leaseMs) => {
-      executionLeaseMs = leaseMs;
-      return 0;
-    },
-    stopSandboxRecord: async () => null,
-    touchSandboxLastActive: async () => {},
-    resolveRepoSandboxEnv: async () => ({
-      envVars: {},
-      sync: { mode: "sandbox-only", source: "manual", warning: null },
-    }),
-    createAiCall: async () => aiCall,
-    loadOwnedAiCall: async () => aiCall,
-    mergeAiCallMetadata: async () => {
-      throw new Error("mergeAiCallMetadata should not be called");
-    },
-    updateAiCall: async () => {},
-    finalizeAiCallAsCancelledIfActive: async () => {
-      throw new Error("cancel finalization should not be called");
-    },
-    finalizeAiCallIfNotCancelled: async (_aiCallId, update) => {
-      persistedStatus = update.status;
-      persistedError = update.error;
-      return buildAiCall({
-        status: update.status ?? "failed",
-        error: update.error ?? null,
-      });
-    },
-    safeAppendAiCallEvent: async () => null,
-    loadHarnessPromptWithMemoryContext: async (_userId, prompt) => prompt,
-    persistHarnessMemory: async () => {},
-  });
-
-  const response = await handler(
-    buildSandboxRouteRequest({
-      method: "POST",
-      suffix: "/harness",
-      init: {
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ harness: "codex", prompt: "Review this repo" }),
+      resolveSandboxAiAccess: async () =>
+        buildSandboxServiceAiAccess({
+          aiBillingSource,
+          gatewayApiKey: "gateway-key",
+        }),
+      getSandbox: async (_name, _credentials, options) => {
+        billingResumeHookAttached = typeof options?.onResume === "function";
+        return {} as never;
       },
-    }),
-    buildSandboxRouteParams()
-  );
+      runHarness: async (_sandbox, _harness, _prompt, _auth, options) => {
+        assert.equal(executionLeaseMs, 35 * 60_000);
+        assert.equal(
+          options?.gatewayCallId,
+          aiBillingSource === "platform_ai_gateway" ? aiCall.id : undefined
+        );
+        return {
+          installed: false,
+          installLogs: "",
+          command: {
+            cmdId: "cmd-123",
+            async *logs() {
+              yield {
+                stream: "stderr" as const,
+                data: "API Error: HTTP 429 rate limit exceeded\n",
+              };
+            },
+            wait: async () => ({ exitCode: 1 }),
+            kill: async () => {},
+          },
+        } as never;
+      },
+      renewSandboxActivityLease: async (_sandbox, _now, leaseMs) => {
+        executionLeaseMs = leaseMs;
+        return 0;
+      },
+      stopSandboxRecord: async () => null,
+      touchSandboxLastActive: async () => {},
+      resolveRepoSandboxEnv: async () => ({
+        envVars: {},
+        sync: { mode: "sandbox-only", source: "manual", warning: null },
+      }),
+      createAiCall: async (input) => {
+        aiCall.metadata = input.metadata ?? {};
+        assert.equal(
+          aiCall.metadata.gateway_cost_tracking,
+          aiBillingSource === "platform_ai_gateway" ? "report-v1" : null
+        );
+        return aiCall;
+      },
+      loadOwnedAiCall: async () => aiCall,
+      mergeAiCallMetadata: async () => {
+        throw new Error("mergeAiCallMetadata should not be called");
+      },
+      updateAiCall: async () => {},
+      finalizeAiCallAsCancelledIfActive: async () => {
+        throw new Error("cancel finalization should not be called");
+      },
+      finalizeAiCallIfNotCancelled: async (_aiCallId, update) => {
+        persistedStatus = update.status;
+        persistedError = update.error;
+        return buildAiCall({
+          status: update.status ?? "failed",
+          error: update.error ?? null,
+        });
+      },
+      safeAppendAiCallEvent: async () => null,
+      loadHarnessPromptWithMemoryContext: async (_userId, prompt) => prompt,
+      persistHarnessMemory: async () => {},
+    });
 
-  assert.equal(response.status, 200);
-  const events = parseSseEvents(await response.text());
-  const done = events.find((event) => event.type === "done");
-  const expectedError =
-    "OpenAI rate-limited this run. Wait a moment, then try again.";
-  assert.equal(persistedStatus, "failed");
-  assert.equal(persistedError, expectedError);
-  assert.equal(billingResumeHookAttached, true);
-  assert.deepEqual(done, {
-    type: "done",
-    exitCode: 1,
-    error: expectedError,
-    failureCode: "rate_limited",
+    const response = await handler(
+      buildSandboxRouteRequest({
+        method: "POST",
+        suffix: "/harness",
+        init: {
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            harness: "codex",
+            prompt: "Review this repo",
+          }),
+        },
+      }),
+      buildSandboxRouteParams()
+    );
+
+    assert.equal(response.status, 200);
+    const events = parseSseEvents(await response.text());
+    const done = events.find((event) => event.type === "done");
+    const expectedError =
+      "OpenAI rate-limited this run. Wait a moment, then try again.";
+    assert.equal(persistedStatus, "failed");
+    assert.equal(persistedError, expectedError);
+    assert.equal(billingResumeHookAttached, true);
+    assert.deepEqual(done, {
+      type: "done",
+      exitCode: 1,
+      error: expectedError,
+      failureCode: "rate_limited",
+    });
   });
-});
+}
 
 test("POST /api/sandbox/[id]/harness delivers successful changes through a pull request", async () => {
   const { createSandboxHarnessPostHandler } =

@@ -262,7 +262,7 @@ async function authenticate() {
   if (!key) throw new Error(auth.apiKeyEnv + " is not set");
   await request("authenticate", {
     methodId: "gateway",
-    _meta: { gateway: { baseUrl: auth.baseUrl, providerName: auth.providerName, headers: { Authorization: "Bearer " + key } } },
+    _meta: { gateway: { baseUrl: auth.baseUrl, providerName: auth.providerName, headers: { ...auth.headers, Authorization: "Bearer " + key } } },
   });
 }
 

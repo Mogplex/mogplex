@@ -363,6 +363,10 @@ export function createSandboxHarnessPostHandler(
           runtimeEnv,
           ...mcpConfig,
           acpAgent,
+          gatewayCallId:
+            aiCall.metadata?.gateway_cost_tracking === "report-v1"
+              ? aiCall.id
+              : undefined,
           shouldCancel: async () =>
             isCancellationRequested(await loadCurrentCall()),
         }

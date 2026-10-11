@@ -163,6 +163,7 @@ async function runBridge(
       baseUrl: "https://gateway.example.test/codex/v1",
       providerName: "Test Gateway",
       apiKeyEnv: "CODEX_API_KEY",
+      headers: { "ai-reporting-tags": "surface:harness,ai-call:fixture-call" },
     },
     ...overrides,
   };
@@ -259,7 +260,10 @@ describe("ACP bridge script", () => {
         gateway: {
           baseUrl: "https://gateway.example.test/codex/v1",
           providerName: "Test Gateway",
-          headers: { Authorization: "Bearer model-key-fixture" },
+          headers: {
+            "ai-reporting-tags": "surface:harness,ai-call:fixture-call",
+            Authorization: "Bearer model-key-fixture",
+          },
         },
       },
     });
