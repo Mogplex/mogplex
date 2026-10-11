@@ -52,6 +52,7 @@ type AiCallUpdate = Partial<
     | "cache_creation_input_tokens"
     | "reasoning_tokens"
     | "gateway_generation_id"
+    | "gateway_generation_ids"
     | "duration_ms"
     | "completed_at"
     | "runtime_command_id"
@@ -317,6 +318,7 @@ export function buildAiCallCompletionUpdate(input: {
   cacheCreationInputTokens?: number | null;
   reasoningTokens?: number | null;
   gatewayGenerationId?: string | null;
+  gatewayGenerationIds?: readonly string[] | null;
   error?: string | null;
   cancelRequestedAt?: string | null;
   controlState?: AiCall["control_state"];
@@ -334,7 +336,13 @@ export function buildAiCallCompletionUpdate(input: {
     cache_read_input_tokens: input.cacheReadInputTokens ?? null,
     cache_creation_input_tokens: input.cacheCreationInputTokens ?? null,
     reasoning_tokens: input.reasoningTokens ?? null,
-    gateway_generation_id: input.gatewayGenerationId ?? null,
+    gateway_generation_id:
+      input.gatewayGenerationIds?.[0] ?? input.gatewayGenerationId ?? null,
+    // Omit when an older caller has no array so finalization cannot erase a
+    // checkpoint that already recorded the complete tool loop.
+    ...(input.gatewayGenerationIds === undefined
+      ? {}
+      : { gateway_generation_ids: input.gatewayGenerationIds }),
     duration_ms: Date.now() - new Date(input.startedAt).getTime(),
     completed_at: completedAt,
     error: input.error ?? null,

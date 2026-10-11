@@ -155,6 +155,7 @@ export async function finalizeCancelledControlRun(input: {
       cacheCreationInputTokens: input.activeCall.cache_creation_input_tokens,
       reasoningTokens: input.activeCall.reasoning_tokens,
       gatewayGenerationId: input.activeCall.gateway_generation_id,
+      gatewayGenerationIds: input.activeCall.gateway_generation_ids,
       toolCalls,
       metadata: input.activeCall.metadata,
     })
@@ -223,6 +224,12 @@ export async function finalizeFinishedControlRun(input: {
         usage.reasoningTokens ?? input.activeCall.reasoning_tokens,
       gatewayGenerationId:
         usage.generationId ?? input.activeCall.gateway_generation_id,
+      gatewayGenerationIds: [
+        ...new Set([
+          ...(input.activeCall.gateway_generation_ids ?? []),
+          ...usage.generationIds,
+        ]),
+      ],
       error: completion.error,
       toolCalls,
       metadata: input.activeCall.metadata,

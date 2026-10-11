@@ -44,6 +44,8 @@ export type AiCall = {
   cache_creation_input_tokens: number | null;
   reasoning_tokens: number | null;
   gateway_generation_id: string | null;
+  /** Older list projections omit this column; full call records include it. */
+  gateway_generation_ids?: readonly string[] | null;
   cost_source: "trigger" | "gateway" | "manual" | null;
   total_tokens: number | null;
   cost_usd: number | null;

@@ -7,12 +7,34 @@ import {
   safeAppendAiCallEvent,
   sanitizeAiCallEventInput,
   updateAiCallIfActive,
+  buildAiCallCompletionUpdate,
 } from "./interactive-runs";
 
 vi.hoisted(() => {
   process.env.NEXT_PUBLIC_SUPABASE_URL ||= "https://example.supabase.co";
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||= "test-anon-key";
   process.env.SUPABASE_SERVICE_ROLE_KEY ||= "test-service-role-key";
+});
+
+it("completion preserves complete Gateway IDs without clearing older callers' checkpoints", () => {
+  const input = {
+    startedAt: "2026-10-01T00:00:00Z",
+    status: "success" as const,
+  };
+  const complete = buildAiCallCompletionUpdate({
+    ...input,
+    gatewayGenerationIds: ["gen_first", "gen_last"],
+    gatewayGenerationId: "gen_last",
+  });
+  expect(complete.gateway_generation_id).toBe("gen_first");
+  expect(complete.gateway_generation_ids).toEqual(["gen_first", "gen_last"]);
+  const legacy = buildAiCallCompletionUpdate({
+    ...input,
+    gatewayGenerationId: "gen_single",
+  });
+  expect(legacy.gateway_generation_id).toBe("gen_single");
+  expect(legacy).not.toHaveProperty("gateway_generation_ids");
+  expect(buildAiCallCompletionUpdate(input).gateway_generation_id).toBeNull();
 });
 
 describe("active call updates", () => {
