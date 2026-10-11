@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireUserId } from "@/lib/auth";
+import { stopSandboxCommand } from "@/lib/sandbox/stop-command";
 import {
   appendAiCallEvent,
   buildAiCallCompletionUpdate,
@@ -181,7 +182,7 @@ export function createObservabilityCallCancelPostHandler(
       const command = await sandboxData.sandbox.getCommand(
         currentCall.runtime_command_id
       );
-      await command.kill();
+      await stopSandboxCommand(command);
 
       const cancelledCall = await deps.finalizeAiCallAsCancelledIfActive(
         aiCall.id,

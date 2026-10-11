@@ -170,9 +170,11 @@ export function createTerminalExec(
 ) {
   let selectedSandboxId = sandboxBinding?.sandboxId ?? sandboxId;
   // Track the selected/resolved sandbox across calls within this tool instance.
-  let cachedSandbox: SandboxResolution | null = selectedSandboxId
-    ? { sandboxId: selectedSandboxId, status: "running", source: "selected" }
-    : null;
+  let cachedSandbox: SandboxResolution | null =
+    selectedSandboxId &&
+    (!sandboxBinding || sandboxBinding.status === "running")
+      ? { sandboxId: selectedSandboxId, status: "running", source: "selected" }
+      : null;
 
   return defineTool({
     description:
@@ -208,6 +210,7 @@ export function createTerminalExec(
           }
         : null;
     }
+    if (sandboxBinding?.status === "unavailable") cachedSandbox = null;
     const requestHeaders = getSandboxRequestHeaders(userId);
     if ("error" in requestHeaders) {
       return {

@@ -1,5 +1,7 @@
-import type { Sandbox } from "@vercel/sandbox";
+import type { Command, Sandbox } from "@vercel/sandbox";
 import { observeShellCommand } from "./observed-shell";
+import { superviseSandboxCommand } from "./command-supervisor";
+import { stopSandboxCommand } from "./stop-command";
 
 export async function executeSandboxCommand(
   sandbox: Sandbox,
@@ -18,9 +20,11 @@ export async function executeSandboxCommand(
     !input.args && input.captureFailures
       ? observeShellCommand(input.command)
       : null;
-  const result = await sandbox.runCommand({
-    cmd: input.args ? input.command : (observed?.cmd ?? "sh"),
-    args: input.args ?? observed?.args ?? ["-lc", input.command],
+  const cmd = input.args ? input.command : (observed?.cmd ?? "sh");
+  const args = input.args ?? observed?.args ?? ["-lc", input.command];
+  input.signal?.throwIfAborted();
+  const result: Command = await sandbox.runCommand({
+    ...(input.onStarted ? superviseSandboxCommand(cmd, args) : { cmd, args }),
     cwd: input.cwd,
     env: input.env,
     ...(input.onStarted ? { detached: true } : {}),
@@ -28,19 +32,22 @@ export async function executeSandboxCommand(
   let exitCode = result.exitCode;
   let removeAbort = () => {};
   if (input.onStarted) {
+    let stopping: Promise<void> | undefined;
+    const stop = () => (stopping ??= stopSandboxCommand(result));
     try {
-      await input.onStarted(result.cmdId);
       const abort = () => {
-        void result.kill().catch(() => undefined);
+        void stop().catch(() => undefined);
       };
       input.signal?.addEventListener("abort", abort, { once: true });
       removeAbort = () => input.signal?.removeEventListener("abort", abort);
       if (input.signal?.aborted) abort();
-      exitCode = (await result.wait()).exitCode;
-      await input.onFinished?.(result.cmdId);
+      await input.onStarted(result.cmdId);
+      exitCode = (await result.wait({ signal: input.signal })).exitCode;
+      await stopping;
       input.signal?.throwIfAborted();
+      await input.onFinished?.(result.cmdId);
     } catch (error) {
-      await result.kill().catch(() => undefined);
+      await stop();
       throw error;
     } finally {
       removeAbort();

@@ -7,7 +7,9 @@ import { buildLimitResponse, enforceChatLimits } from "@/lib/request-limits";
 import {
   ALLOWLIST_UNAVAILABLE_RETRY_AFTER_SECONDS,
   isModelAllowlistUnavailableError,
+  readActiveTeamIdHeader,
 } from "@/lib/team-capabilities";
+import { restoreControlApprovalContext } from "./approval-context";
 import {
   ControlChatSessionContextError,
   getControlChatRunScope,
@@ -81,9 +83,33 @@ export async function runAuthorizedControlChat(
     mode: rawBody.mode ?? null,
     permissions: (permissions ?? null) as MissionPermissions | null,
   };
+  let normalizedMessages;
+  try {
+    normalizedMessages = await validateControlChatMessages(hintedBody.messages);
+  } catch (error) {
+    if (error instanceof ControlChatValidationError) {
+      return Response.json({ error: error.message }, { status: 400 });
+    }
+    throw error;
+  }
   let body: ControlChatRequestBody;
   try {
-    body = await resolveControlChatSessionContext(userId, hintedBody);
+    const executionContext = await restoreControlApprovalContext(
+      userId,
+      hintedBody,
+      normalizedMessages,
+      readActiveTeamIdHeader(req)
+    );
+    body = await resolveControlChatSessionContext(userId, executionContext);
+    if (executionContext !== hintedBody) body.model = executionContext.model;
+    if (
+      executionContext !== hintedBody &&
+      body.repoId !== executionContext.repoId
+    )
+      throw new ControlChatSessionContextError(
+        "The approval repository changed. Reload before continuing.",
+        409
+      );
     if (options.background) {
       const expected = options.background.expectedContext;
       if (
@@ -106,15 +132,6 @@ export async function runAuthorizedControlChat(
         ? error.message
         : "Could not load the Control session context.";
     return Response.json({ error: message }, { status });
-  }
-  let normalizedMessages;
-  try {
-    normalizedMessages = await validateControlChatMessages(body.messages);
-  } catch (error) {
-    if (error instanceof ControlChatValidationError) {
-      return Response.json({ error: error.message }, { status: 400 });
-    }
-    throw error;
   }
   const latestUserText = readLatestControlUserText(normalizedMessages);
   const infrastructureDiagnosticScope =

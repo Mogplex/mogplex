@@ -97,51 +97,8 @@ export function createSandboxResumeHandler(
     if (!limitDecision.allowed) return buildLimitResponse(limitDecision);
     const limitClaimId = limitDecision.claimId ?? null;
 
-    // Wake the VM. Filesystem is restored from the auto-snapshot; the
-    // dev server process is not — we restart it via bootstrap below.
-    const sandbox = await deps
-      .getSandbox(record.sandbox_id, context.credentials, {
-        resume: true,
-        onResume: async (resumedSandbox) => {
-          await deps.requireSandboxBillingSession(record.id, resumedSandbox);
-        },
-      })
-      .catch((err: unknown) => {
-        const billingError = presentSandboxBillingAdmissionError(err);
-        return {
-          __error:
-            billingError?.message ??
-            (err instanceof Error ? err.message : "Failed to resume sandbox"),
-          __status: billingError?.status ?? 502,
-        } as const;
-      });
-
-    if ("__error" in sandbox) {
-      await releaseSandboxBootLimitClaim(deps, auth.userId, limitClaimId);
-      return NextResponse.json(
-        { error: sandbox.__error },
-        { status: sandbox.__status }
-      );
-    }
-
-    try {
-      await deps.requireSandboxBillingSession(record.id, sandbox);
-    } catch (error) {
-      await releaseSandboxBootLimitClaim(deps, auth.userId, limitClaimId);
-      const billingError = presentSandboxBillingAdmissionError(error);
-      return NextResponse.json(
-        {
-          error:
-            billingError?.message ??
-            "Sandbox billing is temporarily unavailable",
-        },
-        { status: billingError?.status ?? 503 }
-      );
-    }
-
-    // Transition to installing so UI overlays/spinners kick in while
-    // the dev server restarts. Clear stop_reason so a previously-stopped
-    // record doesn't carry a stale reason while it is actively running.
+    // Claim before waking the VM: a concurrent loser must never stop the
+    // workspace that the winner has just resumed.
     let installingRecord: SandboxResumeRecord | null;
     try {
       installingRecord = (await deps.updateSandboxRecord(
@@ -165,17 +122,72 @@ export function createSandboxResumeHandler(
       await releaseSandboxBootLimitClaim(deps, auth.userId, limitClaimId);
       throw error;
     }
-
     if (!installingRecord) {
       await releaseSandboxBootLimitClaim(deps, auth.userId, limitClaimId);
+      return buildLifecycleConflictResponse(
+        "Sandbox resume was cancelled before it started."
+      );
+    }
+
+    const releaseResumeClaim = async () => {
+      await deps.updateSandboxRecord(
+        record.id,
+        {
+          status: record.status,
+          health_status: record.health_status,
+          stop_reason: record.stop_reason,
+          limit_claim_id: null,
+        },
+        { expectedSandboxId: record.sandbox_id, fromStatuses: "installing" }
+      );
+      await releaseSandboxBootLimitClaim(deps, auth.userId, limitClaimId);
+    };
+
+    // Wake the VM. Filesystem is restored from the auto-snapshot; the
+    // dev server process is not — we restart it via bootstrap below.
+    const sandbox = await deps
+      .getSandbox(record.sandbox_id, context.credentials, {
+        resume: true,
+        onResume: async (resumedSandbox) => {
+          await deps.requireSandboxBillingSession(record.id, resumedSandbox);
+        },
+      })
+      .catch((err: unknown) => {
+        const billingError = presentSandboxBillingAdmissionError(err);
+        return {
+          __error:
+            billingError?.message ??
+            (err instanceof Error ? err.message : "Failed to resume sandbox"),
+          __status: billingError?.status ?? 502,
+        } as const;
+      });
+
+    if ("__error" in sandbox) {
+      await releaseResumeClaim();
+      return NextResponse.json(
+        { error: sandbox.__error },
+        { status: sandbox.__status }
+      );
+    }
+
+    try {
+      await deps.requireSandboxBillingSession(record.id, sandbox);
+    } catch (error) {
       await stopSandboxAfterLifecycleConflict(
         sandbox,
         record.id,
-        "resume",
+        "billing failure",
         deps
       );
-      return buildLifecycleConflictResponse(
-        "Sandbox resume was cancelled before it started."
+      await releaseResumeClaim();
+      const billingError = presentSandboxBillingAdmissionError(error);
+      return NextResponse.json(
+        {
+          error:
+            billingError?.message ??
+            "Sandbox billing is temporarily unavailable",
+        },
+        { status: billingError?.status ?? 503 }
       );
     }
 
@@ -208,18 +220,32 @@ export function createSandboxResumeHandler(
     // subsets of the Repo shape; Supabase returns the row typed as
     // Record<string, unknown> via the wildcard select so we cast at
     // the boundary.
-    const envResolution = await deps.resolveRepoSandboxEnv({
-      repo: repo as unknown as Parameters<
-        typeof resolveRepoSandboxEnv
-      >[0]["repo"],
-      userId: auth.userId,
-    });
+    let envResolution: Awaited<ReturnType<typeof resolveRepoSandboxEnv>>;
+    try {
+      envResolution = await deps.resolveRepoSandboxEnv({
+        repo: repo as unknown as Parameters<
+          typeof resolveRepoSandboxEnv
+        >[0]["repo"],
+        userId: auth.userId,
+      });
+    } catch (error) {
+      await stopSandboxAfterLifecycleConflict(
+        sandbox,
+        record.id,
+        "environment failure",
+        deps
+      );
+      await releaseResumeClaim();
+      throw error;
+    }
 
     const encoder = new TextEncoder();
+    let disconnected = false;
 
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
         const emit = (event: SandboxEvent | SandboxLifecycleConflictEvent) => {
+          if (disconnected) return;
           controller.enqueue(encoder.encode(sseEncode(event)));
         };
 
@@ -407,8 +433,13 @@ export function createSandboxResumeHandler(
           }
           emit({ type: "error", message, phase: "dev" });
         } finally {
-          controller.close();
+          if (!disconnected) controller.close();
         }
+      },
+      cancel() {
+        // The caller may stop reading after ready. That is not a bootstrap
+        // failure and must never stop the restored workspace.
+        disconnected = true;
       },
     });
 

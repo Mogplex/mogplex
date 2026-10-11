@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import type { Sandbox } from "@vercel/sandbox";
-import { executeSandboxCommand } from "../../lib/sandbox/exec-result";
+import { executeSandboxCommand } from "./exec-result";
 
 function fixture() {
   let saved = false;
@@ -10,7 +10,7 @@ function fixture() {
     cmdId: "cmd-one",
     exitCode: null,
     wait: async () => {
-      assert.equal(saved, true);
+      if (!killed) assert.equal(saved, true);
       return { exitCode: 137 };
     },
     kill: async () => {
@@ -55,13 +55,17 @@ test("a command is killed when durable ownership cannot be saved or cancellation
   );
   assert.equal(f.killed(), true);
   const cancelled = fixture();
+  const controller = new AbortController();
   await assert.rejects(
     executeSandboxCommand(cancelled.sandbox, {
       command: "build",
       cwd: "/repo",
       env: {},
-      onStarted: cancelled.onStarted,
-      signal: AbortSignal.abort(),
+      onStarted: async () => {
+        await cancelled.onStarted();
+        controller.abort();
+      },
+      signal: controller.signal,
     }),
     /abort/i
   );

@@ -129,7 +129,12 @@ export async function executeControlChatRequest(input: {
       OrchestratorToolContext["sandboxBinding"]
     > = {
       sandboxId: selectedSandboxId,
-      status: selectedSandboxId ? "running" : "unavailable",
+      status: sandboxContext.sandboxes.some(
+        (sandbox) =>
+          sandbox.id === selectedSandboxId && sandbox.status === "running"
+      )
+        ? "running"
+        : "unavailable",
     };
     // Lifecycle tools mutate this single request-local source of truth so
     // every sandbox-bound closure below observes the same selection.

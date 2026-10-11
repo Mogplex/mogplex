@@ -6,7 +6,10 @@ import {
   buildSandboxRouteParams,
   buildSandboxRouteRequest,
 } from "./sandbox-record-route-test-harness";
-import { buildLoadedResumeContext } from "./helpers/sandbox-resume-route-fixtures";
+import {
+  buildLoadedResumeContext,
+  buildPersistedResumeRecord,
+} from "./helpers/sandbox-resume-route-fixtures";
 
 test("POST /api/sandbox/[id]/resume rejects non-paused sandboxes", async () => {
   const { createSandboxResumeHandler } = await loadSandboxResumeRouteModule();
@@ -145,6 +148,7 @@ test("POST /api/sandbox/[id]/resume denies active-limit conflicts before waking 
 test("POST /api/sandbox/[id]/resume returns 502 when Sandbox.get throws", async () => {
   const { createSandboxResumeHandler } = await loadSandboxResumeRouteModule();
   const releasedClaims: string[] = [];
+  const statuses: string[] = [];
 
   const handler = createSandboxResumeHandler({
     loadOwnedSandboxRouteContext: (async () =>
@@ -154,8 +158,13 @@ test("POST /api/sandbox/[id]/resume returns 502 when Sandbox.get throws", async 
       claimId: "claim-resume-1",
     })) as never,
     getSandbox: async () => {
+      assert.deepEqual(statuses, ["installing"]);
       throw new Error("vm unavailable");
     },
+    updateSandboxRecord: (async (_id: string, updates: { status: string }) => {
+      statuses.push(updates.status);
+      return buildPersistedResumeRecord(updates);
+    }) as never,
     releaseLimitClaim: (async (input: { claimId: string }) => {
       releasedClaims.push(input.claimId);
       return true;
@@ -171,4 +180,5 @@ test("POST /api/sandbox/[id]/resume returns 502 when Sandbox.get throws", async 
   const payload = await response.json();
   assert.match(payload.error, /vm unavailable/);
   assert.deepEqual(releasedClaims, ["claim-resume-1"]);
+  assert.deepEqual(statuses, ["installing", "paused"]);
 });

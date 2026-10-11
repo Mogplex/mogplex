@@ -107,7 +107,7 @@ async function findRunningSandboxes(
   return (data ?? []) as RunningSandboxChoice[];
 }
 
-async function isOwnedRunningSandbox(
+async function loadOwnedSandbox(
   userId: string,
   sandboxId: string,
   repoId?: string
@@ -115,18 +115,17 @@ async function isOwnedRunningSandbox(
   const { supabaseAdmin } = await import("@/lib/supabase/admin");
   let query = supabaseAdmin
     .from("sandboxes")
-    .select("id")
+    .select("id,status,persistent")
     .eq("id", sandboxId)
-    .eq("user_id", userId)
-    .eq("status", "running");
+    .eq("user_id", userId);
   if (repoId) query = query.eq("repo_id", repoId);
   const { data, error } = await query.maybeSingle();
-  return !error && data?.id === sandboxId;
+  return !error && data?.id === sandboxId ? data : null;
 }
 
 async function readReusedSandboxResponse(
   response: Response,
-  runningSource: Extract<SandboxResolutionSource, "reused_running" | "created">
+  runningSource: SandboxResolutionSource
 ): Promise<SandboxResolution | SandboxResolutionFailure> {
   if (!response.ok) {
     const data = (await response.json().catch(() => ({}))) as {
@@ -235,6 +234,7 @@ function readSandboxCreationEvent(
     event.sandbox?.runtime_summary?.status ?? event.status;
   if (
     event.type === "error" ||
+    event.type === "cancelled" ||
     lifecycleStatus === "stopped" ||
     lifecycleStatus === "error"
   ) {
@@ -345,6 +345,37 @@ async function requestSandboxStart(
     : consumeSandboxCreationStream(response, signal);
 }
 
+/** Resume only the selected persisted workspace; never replace it on failure. */
+async function resumeSelectedSandbox(
+  userId: string,
+  sandboxId: string,
+  signal?: AbortSignal
+): Promise<SandboxResolution | SandboxResolutionFailure> {
+  const auth = getSandboxRequestHeaders(userId);
+  if ("error" in auth)
+    return {
+      error: auth.error ?? "Internal sandbox auth is not configured",
+      reason: "auth_unavailable",
+    };
+  const response = await fetch(
+    `${resolveAppBaseUrl()}/api/sandbox/${encodeURIComponent(sandboxId)}/resume`,
+    { method: "POST", headers: auth.headers, signal }
+  );
+  const result =
+    !response.ok ||
+    (response.headers.get("Content-Type") ?? "").includes("application/json")
+      ? await readReusedSandboxResponse(response, "selected")
+      : await consumeSandboxCreationStream(response, signal);
+  if ("error" in result) return result;
+  if (!("sandboxId" in result) || result.sandboxId !== sandboxId)
+    return {
+      error:
+        "The selected workspace has not finished resuming. Its saved files have not been replaced.",
+      reason: "sandbox_unavailable",
+    };
+  return { ...result, source: "selected" };
+}
+
 /** Resolve selected or unique repo compute, starting it only when absent. */
 export async function resolveOrCreateSandbox(
   userId?: string,
@@ -362,14 +393,25 @@ export async function resolveOrCreateSandbox(
   const resolved = await resolveRepoUuid(userId, repoId);
   if (!resolved.ok) return repoResolutionFailure(resolved.reason);
   if (selectedSandboxId) {
-    if (
-      !(await isOwnedRunningSandbox(userId, selectedSandboxId, resolved.repoId))
-    ) {
+    const selected = await loadOwnedSandbox(
+      userId,
+      selectedSandboxId,
+      resolved.repoId
+    );
+    if (!selected) {
       return {
         error: "The selected sandbox is unavailable.",
         reason: "sandbox_unavailable",
       };
     }
+    if (selected.status === "stopped" || selected.status === "paused")
+      return resumeSelectedSandbox(userId, selectedSandboxId, signal);
+    if (selected.status !== "running")
+      return {
+        error:
+          "The selected sandbox is not ready. Its saved workspace has not been replaced.",
+        reason: "sandbox_unavailable",
+      };
     return {
       sandboxId: selectedSandboxId,
       status: "running",
