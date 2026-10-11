@@ -3,6 +3,8 @@ import {
   selectNodeRuntime,
   detectNodeRuntimeFromFiles,
   selectNodeVersion,
+  satisfiesNodeRequirements,
+  readNodeRequirements,
 } from "./node-version";
 import { getStrategy } from "./index";
 import { normalizeRuntime } from "@/lib/repo-settings";
@@ -79,4 +81,59 @@ it("requires every workspace engine and keeps the selected runtime major", () =>
       engines: [">=26.5.0 <27"],
     })
   ).toThrow(/No published Node.js/);
+});
+
+it("selects the newest stable compatible release and ignores invalid entries", () => {
+  expect(
+    selectNodeVersion(
+      ["bogus", "v26.5.1", "v26.6.0-rc.1", "v26.5.9", "v24.9.0"],
+      "node26",
+      { engines: [">=26.5 <27"] }
+    )
+  ).toBe("26.5.9");
+});
+
+it.each([
+  ["v26.5.0", "node26", [">=26.5 <27"], "26.5.0", true],
+  ["v26.5.1", "node26", [">=26.5 <27"], "26.5.0", false],
+  ["v24.5.0", "node26", [">=22"], null, false],
+  ["v26.5.0", "node26", [">=26", "<26.5"], null, false],
+  ["v24.5.0", "node24", [], " node ", true],
+  ["v24.5.0", "node24", [], " lts/* ", true],
+] as const)(
+  "validates %s on %s against every declaration",
+  (version, runtime, engines, versionFile, expected) => {
+    expect(
+      satisfiesNodeRequirements(version, runtime, {
+        engines: [...engines],
+        versionFile,
+      })
+    ).toBe(expected);
+  }
+);
+
+it("reads .node-version through empty nearest pins and collects ancestor engines", async () => {
+  const files: Record<string, string> = {
+    "apps/web/package.json": '{"engines":{"node":">=26.5"}}',
+    "apps/web/.nvmrc": "  ",
+    "apps/web/.node-version": "  v26.5.0\n",
+    "apps/package.json": '{"engines":{"node":27}}',
+    "package.json": '{"engines":{"node":"<27"}}',
+    ".nvmrc": "24",
+  };
+  expect(
+    await readNodeRequirements(
+      {
+        readText: async (path) => files[path] ?? null,
+        listDirectories: async () => [],
+      },
+      "apps/web"
+    )
+  ).toEqual({ engines: [">=26.5", "<27"], versionFile: "v26.5.0" });
+  expect(
+    await readNodeRequirements({
+      readText: async () => null,
+      listDirectories: async () => [],
+    })
+  ).toEqual({ engines: [], versionFile: undefined });
 });
