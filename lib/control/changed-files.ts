@@ -14,6 +14,8 @@ import type { UIMessage } from "ai";
 import { isToolUIPart } from "ai";
 import { extractPatchFromValue } from "./diff-text";
 import { collectFileMutations } from "./activity-stream";
+import { workspaceSnapshotSchema } from "./workspace-snapshot";
+import { controlToolOutcome } from "./tool-outcome";
 
 export type ChangedFile = {
   /** Repo-relative path as the agent reported it. */
@@ -24,6 +26,19 @@ export type ChangedFile = {
   patch: string | null;
   state: "running" | "done" | "failed";
 };
+
+export function workspaceSnapshotWarning(messages: UIMessage[]): string | null {
+  for (const message of [...messages].reverse()) {
+    if (message.role !== "assistant") continue;
+    const metadata = message.metadata as Record<string, unknown> | undefined;
+    if (metadata && "workspace_snapshot_error" in metadata) {
+      return typeof metadata.workspace_snapshot_error === "string"
+        ? "The latest changes could not be checked. Saved diffs may be out of date."
+        : null;
+    }
+  }
+  return null;
+}
 
 export type ChangedDirNode = {
   /** Single path segment ("" for the root). */
@@ -105,9 +120,12 @@ function toolState(part: unknown): "running" | "done" | "failed" {
     typeof part === "object" && part !== null && "state" in part
       ? String((part as { state: unknown }).state)
       : "";
-  if (raw === "output-available") return "done";
-  if (raw === "output-error") return "failed";
-  return "running";
+  return controlToolOutcome(
+    raw,
+    typeof part === "object" && part !== null && "output" in part
+      ? part.output
+      : undefined
+  );
 }
 
 /**
@@ -117,6 +135,17 @@ function toolState(part: unknown): "running" | "done" | "failed" {
  * tab still reflects them.
  */
 export function collectChangedFiles(messages: UIMessage[]): ChangedFile[] {
+  for (const message of [...messages].reverse()) {
+    if (message.role !== "assistant") continue;
+    const metadata = message.metadata as
+      | { workspace_changes?: unknown }
+      | undefined;
+    const snapshot = workspaceSnapshotSchema.safeParse(
+      metadata?.workspace_changes
+    );
+    if (snapshot.success)
+      return snapshot.data.files.map((file) => ({ ...file, state: "done" }));
+  }
   const byPath = new Map<string, ChangedFile>();
   const order: string[] = [];
   const patchedCallIds = new Set<string>();

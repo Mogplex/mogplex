@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { reconcileControlContinuationWorker } from "@/lib/control/continuation-supervisor";
+import { reconcileControlTurn } from "@/lib/control/turn-supervisor";
 import { killRuntimeCommand } from "@/lib/mogplex-api/run-control";
 import { runtimeCompletion } from "@/lib/mogplex-api/run-runtime";
 import {
@@ -28,6 +29,7 @@ export type IdleWorkerDeps = {
     payload: { userId: string; continuationId: string },
     supervisorRunId: string
   ) => Promise<unknown>;
+  reconcileTurn: typeof reconcileControlTurn;
 };
 
 type Client = Pick<SupabaseClient, "from">;
@@ -45,6 +47,7 @@ const defaultDeps: IdleWorkerDeps = {
   finalizeRun: finalizeRunAfterWorkerExit,
   reconcileContinuation: (payload, supervisorRunId) =>
     reconcileControlContinuationWorker(payload, supervisorRunId),
+  reconcileTurn: reconcileControlTurn,
 };
 
 const isFinished = (status: string) => runtimeCompletion(status) !== null;
@@ -193,6 +196,32 @@ export async function stopIdleWorker(
     status: string;
     runtime_run_id: string | null;
   } | null;
+  if (!continuation) {
+    const { data: turn, error } = await client
+      .from("control_turns")
+      .select("ai_call_id,user_id,runtime_run_id")
+      .eq("ai_call_id", call.id)
+      .eq("user_id", call.user_id)
+      .maybeSingle();
+    if (error?.code === "42P01" || error?.code === "PGRST205") return false;
+    if (error) throw readFailure("the Control turn", error);
+    if (!turn?.runtime_run_id) return false;
+    const supervisor = await deps.retrieveRun(turn.runtime_run_id);
+    if (supervisor.taskIdentifier !== TRIGGER_TASK_IDS.controlTurn)
+      return false;
+    if (!isFinished(supervisor.status))
+      return cancelWorkerChildren(
+        supervisor,
+        TRIGGER_TASK_IDS.controlTurnWorker,
+        deps
+      );
+    await deps.reconcileTurn(
+      { userId: call.user_id, aiCallId: call.id },
+      turn.runtime_run_id,
+      client as SupabaseClient
+    );
+    return true;
+  }
   if (!continuation || !["ready", "running"].includes(continuation.status)) {
     return false;
   }

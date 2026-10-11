@@ -6,6 +6,30 @@ import {
   sanitizeObservabilityToolEntry,
 } from "./user-facing-errors";
 
+it("retains Control execution context when a call fails while hiding provider errors", () => {
+  const metadata = {
+    surface: "control",
+    control_runtime: "background",
+    repo_owner: "example",
+    repo_name: "website",
+    mode: "run",
+    scope: "repository",
+    target: "homepage",
+    permissions: "skip-permissions",
+  };
+  const result = sanitizeObservabilityPayload(
+    {
+      status: "failed",
+      metadata,
+      error: "Vercel failed: insufficient funds. Add credits to your account.",
+    },
+    "CALL",
+    "test"
+  );
+  expect(result.metadata).toEqual(metadata);
+  expect(result.error).not.toMatch(/Vercel|funds|credits/);
+});
+
 it("preserves ordinary provider documentation links", () => {
   const event = {
     id: "event-1",

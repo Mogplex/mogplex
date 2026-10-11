@@ -113,6 +113,12 @@ export function createObservabilityCallCancelPostHandler(
         buildAiCallCompletionUpdate({
           startedAt: aiCall.started_at,
           status: "cancelled",
+          inputTokens: currentCall.input_tokens,
+          outputTokens: currentCall.output_tokens,
+          cacheReadInputTokens: currentCall.cache_read_input_tokens,
+          cacheCreationInputTokens: currentCall.cache_creation_input_tokens,
+          reasoningTokens: currentCall.reasoning_tokens,
+          gatewayGenerationId: currentCall.gateway_generation_id,
           cancelRequestedAt,
           controlState: "cancelled",
           metadata: currentCall.metadata,
@@ -185,6 +191,12 @@ export function createObservabilityCallCancelPostHandler(
           cancelRequestedAt,
           controlState: "cancelled",
           runtimeCommandId: currentCall.runtime_command_id,
+          inputTokens: currentCall.input_tokens,
+          outputTokens: currentCall.output_tokens,
+          cacheReadInputTokens: currentCall.cache_read_input_tokens,
+          cacheCreationInputTokens: currentCall.cache_creation_input_tokens,
+          reasoningTokens: currentCall.reasoning_tokens,
+          gatewayGenerationId: currentCall.gateway_generation_id,
           metadata: currentCall.metadata,
         })
       );

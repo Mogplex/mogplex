@@ -8,7 +8,7 @@ export const EXEC_STDERR_LIMIT = 5000;
 export async function postSandboxExec(
   sandboxId: string,
   headers: HeadersInit,
-  body: { command: string; cwd?: string }
+  body: { command: string; cwd?: string; captureFailures?: boolean }
 ): Promise<Response> {
   const streamHeaders = new Headers(headers);
   streamHeaders.set("Accept", "text/event-stream");
@@ -31,6 +31,7 @@ export async function postSandboxExec(
   let exitCode: number | null = null;
   let cwd = body.cwd;
   let error: string | undefined;
+  let failures: number[] | undefined;
   try {
     await consumeTerminalExecStream(response, (event) => {
       switch (event.type) {
@@ -44,6 +45,7 @@ export async function postSandboxExec(
         case "done": {
           exitCode = event.exitCode;
           cwd = event.cwd;
+          failures = event.failures;
 
           break;
         }
@@ -69,6 +71,6 @@ export async function postSandboxExec(
   // Observation failures are not sandbox-loss responses: never recreate the
   // sandbox or replay a command whose effects may already have happened.
   return error === undefined
-    ? Response.json({ stdout, stderr, exitCode, cwd })
+    ? Response.json({ stdout, stderr, exitCode, cwd, failures })
     : Response.json({ error }, { status: 500 });
 }

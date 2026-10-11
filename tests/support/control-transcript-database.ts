@@ -36,7 +36,7 @@ export async function controlTranscriptDatabase() {
         unknown
       >[],
     }),
-  }) as unknown as Parameters<typeof saveControlTranscript>[1];
+  }) as unknown as NonNullable<Parameters<typeof saveControlTranscript>[1]>;
   return {
     db,
     owner,

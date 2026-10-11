@@ -18,6 +18,7 @@ import type {
   ControlPromptWorktreeContext,
 } from "./context";
 import type { ActiveControlCall, ControlChatRunScope } from "./types";
+import { controlToolOutcome } from "@/lib/control/tool-outcome";
 
 /**
  * Summarize tool calls from steps for the AI call completion record.
@@ -68,13 +69,16 @@ export function createToolCallFinishPayload(
   const resourceDecision = resourceScope
     ? buildResourceDecisionTelemetry(event, resourceScope)
     : null;
-  const message = event.success
+  const succeeded =
+    event.success &&
+    controlToolOutcome("output-available", event.output) !== "failed";
+  const message = succeeded
     ? `Tool finished: ${event.toolCall.toolName}`
     : `Tool failed: ${event.toolCall.toolName}`;
   const commonPayload = {
     tool_call_id: event.toolCall.toolCallId,
     duration_ms: event.durationMs,
-    success: event.success,
+    success: succeeded,
     step_number: event.stepNumber ?? null,
     ...(resourceDecision ? { resource_decision: resourceDecision } : {}),
   };

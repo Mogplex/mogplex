@@ -16,6 +16,7 @@ import {
 } from "./context";
 import { persistControlStartupFailure } from "./lifecycle";
 import { executeControlChatRequest } from "./execute";
+import { queueControlTurn } from "@/lib/control/turn-dispatch";
 import {
   ControlChatValidationError,
   validateControlChatMessages,
@@ -135,7 +136,10 @@ export async function runAuthorizedControlChat(
   const resolvedModel = await resolveControlChatModelId(userId, body.model);
 
   try {
-    const result = await executeControlChatRequest({
+    const execute = options.background
+      ? executeControlChatRequest
+      : queueControlTurn;
+    const result = await execute({
       req,
       userId,
       body,

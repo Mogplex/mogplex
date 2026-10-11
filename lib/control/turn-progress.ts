@@ -1,5 +1,5 @@
 import { getToolOrDynamicToolName, isToolUIPart, type UIMessage } from "ai";
-import { sanitizeAgentUserFacingText } from "@/lib/agents/user-facing-output";
+import { redactSecretsInText } from "@/lib/ai-telemetry";
 import { controlToolOutcome } from "./tool-outcome";
 
 export function currentTurnMessages(messages: UIMessage[]): UIMessage[] {
@@ -32,7 +32,7 @@ export function toolActivityDetail(input: unknown): string | null {
   const value =
     record.command ?? record.path ?? record.filePath ?? record.query;
   return typeof value === "string"
-    ? sanitizeAgentUserFacingText(value).slice(0, 180)
+    ? redactSecretsInText(value).slice(0, 180)
     : null;
 }
 

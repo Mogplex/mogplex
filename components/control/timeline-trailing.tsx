@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import type { UIMessage } from "ai";
 import { GitCompare, Terminal } from "iconoir-react";
-import { collectChangedFiles } from "@/lib/control/changed-files";
+import { collectChangedFiles, workspaceSnapshotWarning } from "@/lib/control/changed-files";
 import { buildTerminalActivityEntries } from "@/lib/control/activity-stream";
 import { MissionExecutionStatus } from "./coordinator-followup";
 import type { useControlWorkers } from "./use-control-workers";
@@ -19,8 +19,10 @@ export function TimelineTrailing({ messages, chatPending, sandboxId, sessionId, 
   onOpenCommands: () => void;
 }) {
   const changed = useMemo(() => collectChangedFiles(messages), [messages]);
+  const snapshotWarning = workspaceSnapshotWarning(messages);
   const commands = useMemo(() => buildTerminalActivityEntries([...messages, ...workers.messages]), [messages, workers.messages]);
   return <>
+    {snapshotWarning && <p role="status" className="mt-3 text-xs text-muted-foreground">{snapshotWarning}</p>}
     {(sandboxId || changed.length > 0 || commands.length > 0) && <div className="mt-4 flex flex-wrap gap-2" role="group" aria-label="Task results">
       {(sandboxId || changed.length > 0) && <button type="button" onClick={onOpenChanges} className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"><GitCompare className="size-4" />Review changes{changed.length > 0 ? ` (${changed.length})` : ""}</button>}
       {commands.length > 0 && <button type="button" onClick={onOpenCommands} className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"><Terminal className="size-4" />Agent commands ({commands.length})</button>}

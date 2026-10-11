@@ -42,6 +42,11 @@ export type ExecSandboxRecord = {
 };
 
 export type SandboxExecPostDeps = {
+  onCommandStarted?: (input: {
+    sandboxId: string;
+    commandId: string;
+  }) => Promise<void>;
+  onCommandFinished?: (commandId: string) => Promise<void>;
   resolveSandboxGitAuthor: typeof resolveSandboxGitAuthor;
   getSandboxServiceCredentials: typeof getSandboxServiceCredentials;
   loadOwnedSandboxRecord: (

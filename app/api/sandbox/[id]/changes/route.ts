@@ -10,6 +10,10 @@ import type { Sandbox } from "@vercel/sandbox";
 import { renewSandboxActivityLease } from "@/lib/sandbox/activity-lease";
 import { touchSandboxLastActive } from "@/lib/sandbox/records";
 import {
+  buildWorkspaceDiffsScript,
+  parseWorkspaceDiffs,
+} from "@/lib/sandbox/changes-snapshot";
+import {
   buildSandboxRouteErrorResponse,
   loadOwnedSandboxRouteContext,
 } from "@/lib/sandbox/route-context";
@@ -225,6 +229,29 @@ export function createSandboxChangesGetHandler(
       }
       const changes = await readStatus(ctx.sandbox, ctx.cwd, ctx.baseBranch);
       await deps.touchSandboxLastActive(id);
+      if (new URL(request.url).searchParams.get("snapshot") === "1") {
+        const result =
+          changes.files.length > 0
+            ? await runShell(
+                ctx.sandbox,
+                buildWorkspaceDiffsScript(
+                  changes.files.map((file) => file.path)
+                ),
+                ctx.cwd
+              )
+            : { exitCode: 0, stdout: "" };
+        if (result.exitCode !== 0)
+          throw new Error("Could not save the workspace diff.");
+        const patches = parseWorkspaceDiffs(
+          result.stdout,
+          changes.files.length
+        );
+        const files = changes.files.map((file, index) => ({
+          ...file,
+          patch: patches[index],
+        }));
+        return NextResponse.json({ ...changes, files });
+      }
       return NextResponse.json(changes);
     } catch (error) {
       const message =
