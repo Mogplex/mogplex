@@ -42,6 +42,7 @@ export type WorkspaceFixture = {
 };
 
 export type RepoFixture = {
+  runtime: string | null;
   id: string;
   user_id: string;
   workspace_id: string;
@@ -118,6 +119,7 @@ export function buildRepo(
 ): RepoFixture {
   return {
     id: "repo-1",
+    runtime: null,
     user_id: "user-1",
     workspace_id: workspace.id,
     full_name: "acme/credit-renew",
@@ -267,6 +269,10 @@ export async function installBaseMocks(page: Page, state: BillingState) {
       state.repoPatchBodies.push(payload);
       state.repo = {
         ...state.repo,
+        runtime:
+          "runtime" in payload
+            ? (payload.runtime as string | null)
+            : state.repo.runtime,
         default_branch:
           (payload.default_branch as string | undefined) ||
           state.repo.default_branch,

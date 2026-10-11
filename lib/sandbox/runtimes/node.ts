@@ -196,6 +196,12 @@ export const node24Strategy: RuntimeStrategy = {
   name: "Node.js 24",
 };
 
+export const node26Strategy: RuntimeStrategy = {
+  ...nodeStrategy,
+  id: "node26",
+  name: "Node.js 26",
+};
+
 async function detectNodePackageManager(
   sandbox: Sandbox,
   rootDir?: string | null

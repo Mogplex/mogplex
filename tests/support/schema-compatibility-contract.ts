@@ -28,7 +28,7 @@ export async function checkSchemaCompatibility(
   if (phase === "verify") {
     const savedSandbox = await client
       .from("sandboxes")
-      .select("sandbox_id,working_branch,snapshot_id,status")
+      .select("sandbox_id,working_branch,snapshot_id,status,runtime")
       .eq("id", BEFORE_USER)
       .single();
     assert.equal(savedSandbox.error, null, JSON.stringify(savedSandbox.error));
@@ -37,6 +37,7 @@ export async function checkSchemaCompatibility(
       working_branch: "saved-work",
       snapshot_id: "snapshot-saved-work",
       status: "paused",
+      runtime: "node24",
     });
     // Retained releases can still resume and explicitly stop the same record.
     const resumeSandbox = await client
@@ -275,10 +276,12 @@ export async function checkSchemaCompatibility(
       ...owner,
       full_name: `compatibility/${phase}`,
       workspace_id: workspaceId,
+      runtime: "node24",
     })
-    .select("id,workspace_id")
+    .select("id,workspace_id,runtime")
     .single();
   assert.equal(repo.error, null, JSON.stringify(repo.error));
+  assert.equal((repo.data as { runtime: string }).runtime, "node24");
   const sandbox = await client.from("sandboxes").insert({
     id: userId,
     user_id: userId,
@@ -292,6 +295,7 @@ export async function checkSchemaCompatibility(
     status: "paused",
     health_status: "paused",
     persistent: true,
+    runtime: "node24",
   });
   assert.equal(sandbox.error, null, JSON.stringify(sandbox.error));
   // Exercise the serving app's session writes and the old Slack worker's

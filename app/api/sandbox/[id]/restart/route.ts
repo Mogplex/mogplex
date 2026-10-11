@@ -114,7 +114,7 @@ async function handlePersistentRestart(
       const billingClose = await deps.prepareSandboxBillingClose(record.id);
       let stopSucceeded = false;
       try {
-        await currentVm.stop({ blocking: true });
+        await currentVm.stop();
         stopSucceeded = true;
       } catch (stopErr) {
         // Already stopped (e.g. user paused first) is fine; surface anything else.

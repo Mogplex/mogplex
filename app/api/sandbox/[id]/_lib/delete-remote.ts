@@ -101,7 +101,7 @@ export async function deleteRemoteSandboxBestEffort<
   }
 
   try {
-    await sandbox.stop({ blocking: true });
+    await sandbox.stop();
     const session = sandbox.currentSession();
     const endedAt = session.stoppedAt ?? session.updatedAt ?? new Date();
     if (loaded.record.persistent === true) {

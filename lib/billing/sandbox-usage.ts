@@ -223,7 +223,7 @@ async function stopSandboxAfterBillingAdmissionFailure(input: {
 }) {
   let confirmedStopped: boolean;
   try {
-    await input.sandbox.stop({ blocking: true });
+    await input.sandbox.stop();
     confirmedStopped = true;
   } catch (stopError) {
     try {

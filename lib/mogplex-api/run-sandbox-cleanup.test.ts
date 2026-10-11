@@ -48,8 +48,8 @@ function fixture(failStop = false) {
         stopSandbox(sandbox, credentials, options, {
           getSandbox: async () =>
             ({
-              stop: async (input: { blocking: boolean }) => {
-                expect(input.blocking).toBe(true);
+              stop: async (...args: unknown[]) => {
+                expect(args).toEqual([]);
                 if (failStop) throw new Error("provider unavailable");
                 stopped = true;
               },

@@ -285,6 +285,12 @@ test("bootstrapFromSnapshotStreaming retries preview health after a ready log", 
 
     assert.equal(attempts, 2);
     assert.deepEqual(events, [
+      {
+        type: "log",
+        phase: "install",
+        data: "Checking repository runtime requirements...\n",
+      },
+      { type: "log", phase: "install", data: "Runtime requirements ready.\n" },
       { type: "preview_url", url: "https://preview.example.test" },
       { type: "log", phase: "dev", data: "ready in 375ms\n" },
       { type: "status", status: "running" },
@@ -373,9 +379,9 @@ test("bootstrapFromSnapshotStreaming installs Bun and puts it on PATH when the r
       {
         type: "log",
         phase: "install",
-        data: "Ensuring Bun runtime is available...\n",
+        data: "Checking repository runtime requirements...\n",
       },
-      { type: "log", phase: "install", data: "Bun runtime ready.\n" },
+      { type: "log", phase: "install", data: "Runtime requirements ready.\n" },
     ]);
     assert.deepEqual(events.at(-1), { type: "status", status: "running" });
   } finally {

@@ -135,7 +135,7 @@ export function createSandboxPauseHandler(
       // Sandbox.get({ name, resume: true }) wakes it from the same state.
       // We still capture currentSnapshotId for backward compat with the
       // existing resume-from-snapshot path, which creates a fresh sandbox.
-      await sandbox.stop({ blocking: true });
+      await sandbox.stop();
       const providerSession = sandbox.currentSession();
       providerEndedAt =
         providerSession.stoppedAt ?? providerSession.updatedAt ?? new Date();
