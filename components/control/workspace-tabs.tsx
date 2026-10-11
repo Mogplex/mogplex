@@ -195,7 +195,8 @@ export function WorkspaceTabs({ view, onViewChange, sandboxes, worktrees, reposi
   onFocusSandbox: (sandboxId: string) => void;
 }) {
   const { current, history } = partitionControlSandboxes(sandboxes);
-  const choices = sandboxChoices(current, repositoryName);
+  const selectedHistory = history.find(sandbox => sandbox.id === selectedSandboxId);
+  const choices = sandboxChoices(selectedHistory ? [selectedHistory, ...current] : current, repositoryName);
   const selectedChoice = choices.find(choice => choice.sandbox.id === selectedSandboxId) ?? null;
   return <div className="flex min-w-0 items-center gap-1" role="group" aria-label="Task environment">
     <button type="button" data-task-tool="worktrees" aria-label={`Worktrees, ${countLabel(worktrees.length, "checkout")}`} aria-pressed={view === "worktrees"} onClick={() => onViewChange("worktrees")} className={`${TAB_BASE} ${view === "worktrees" ? TAB_ON : TAB_OFF}`}>

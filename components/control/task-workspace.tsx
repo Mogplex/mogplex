@@ -65,7 +65,10 @@ export function TaskWorkspace({ sessionId, repo, sandbox, messages, terminalMess
   const inactiveMessage = !repo ? "Connect a repository to use its workspace tools." : sandbox ? "Resume this sandbox in Preview to access its files." : "Start or select a sandbox to access its files.";
   const panel = (tool: TaskTool) => {
     switch (tool) {
-      case "preview": return <TaskPreview key={sandbox?.id ?? repo?.id} activeRepo={repo} sandboxId={sandbox?.id} sandboxRecordId={sandbox?.id} previewUrl={previewUrl} onSandboxChange={onSelectSandbox} onFeedback={onFeedback} />;
+      case "preview": return sandbox ? <TaskPreview key={sandbox.id} activeRepo={repo} sandboxId={sandbox.id} sandboxRecordId={sandbox.id} previewUrl={previewUrl} onSandboxChange={onSelectSandbox} onFeedback={onFeedback} /> : <div className="space-y-3 p-5 text-sm text-muted-foreground">
+        <p>{repo ? "Select a sandbox for this task to open its preview." : "Connect a repository to use its workspace tools."}</p>
+        {repo && <button type="button" onClick={() => tools.openTool("sandboxes")} className="rounded-md border border-border px-3 py-2 text-foreground hover:bg-muted">Choose sandbox</button>}
+      </div>;
       case "files": return running && sandbox ? <TaskFiles key={sandbox.id} sandboxId={sandbox.id} rootLabel={sandbox.root_directory ?? repo?.root_directory ?? "/"} /> : <p className="p-5 text-sm text-muted-foreground">{inactiveMessage}</p>;
       case "changes": return <div className="min-h-0 flex-1 overflow-auto">
         {running && sandbox ? <ChangedFilesBar sandboxId={sandbox.id} disabled={pending} refreshToken={refreshToken} defaultCommitMessage={lastUserMessageText(messages).split("\n")[0]?.slice(0, 72) ?? ""} presentation="panel" /> : changed.length ? <ChangedFilesCard messages={messages} /> : <p className="p-5 text-sm text-muted-foreground">{sandbox ? "Resume the sandbox to inspect its working changes." : "No changes recorded for this task yet."}</p>}

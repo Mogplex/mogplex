@@ -86,38 +86,96 @@ test("mobile tools use a full-width view and return to the same conversation", a
   ).toBeLessThanOrEqual(390);
 });
 
-test("paused task previews show saved-state controls without loading a stopped provider page", async ({
-  page,
-}) => {
-  const { sandboxes } = await mockControlWorkspace(page);
-  const sandbox = sandboxes[0];
-  sandbox.status = "paused";
-  sandbox.health_status = "paused";
-  sandbox.runtime_summary = {
-    ...sandbox.runtime_summary!,
-    status: "paused",
-    health_status: "paused",
-    persistent: true,
-  };
-  await page.route("**/api/sandbox/*/health", (route) =>
-    route.fulfill({
-      json: { status: "paused", healthStatus: "paused", sandbox },
-    })
-  );
-  let providerRequests = 0;
-  page.on("request", (request) => {
-    if (request.url().startsWith("https://preview.example.test/"))
-      providerRequests++;
+for (const state of ["paused", "stopped"] as const) {
+  test(`${state} task previews show recovery controls without loading a stopped provider page`, async ({
+    page,
+  }) => {
+    const { sandboxes } = await mockControlWorkspace(page);
+    const sandbox = sandboxes[0];
+    sandbox.status = state;
+    sandbox.health_status = state;
+    sandbox.runtime_summary = {
+      ...sandbox.runtime_summary!,
+      status: state,
+      health_status: state,
+      persistent: true,
+    };
+    await page.route("**/api/sandbox/*/health", (route) =>
+      route.fulfill({
+        json: { status: state, healthStatus: state, sandbox },
+      })
+    );
+    let providerRequests = 0;
+    page.on("request", (request) => {
+      if (request.url().startsWith("https://preview.example.test/"))
+        providerRequests++;
+    });
+    await page.reload();
+    await expect(
+      page.getByRole("button", {
+        name: new RegExp(
+          `Selected sandbox acme/widgets, branch work/one, ${state === "paused" ? "Paused" : "Stopped"}`
+        ),
+      })
+    ).toBeVisible();
+    await page
+      .getByRole("button", { name: "Open preview", exact: true })
+      .click();
+    const panel = page.getByRole("complementary", { name: "Task tools" });
+    await expect(
+      panel.getByRole("button", {
+        name: state === "paused" ? "Resume preview" : "Restart on this branch",
+        exact: true,
+      })
+    ).toBeVisible();
+    await expect(panel.locator("iframe")).toHaveCount(0);
+    expect(providerRequests).toBe(0);
   });
-  await page.reload();
-  await page.getByRole("button", { name: "Open preview", exact: true }).click();
-  const panel = page.getByRole("complementary", { name: "Task tools" });
-  await expect(
-    panel.getByRole("button", { name: "Resume preview", exact: true })
-  ).toBeVisible();
-  await expect(panel.locator("iframe")).toHaveCount(0);
-  expect(providerRequests).toBe(0);
-});
+}
+
+for (const missingBinding of [false, true]) {
+  test(`preview requires a task environment when ${missingBinding ? "the saved sandbox is missing" : "multiple sandboxes are available"}`, async ({
+    page,
+  }) => {
+    const { sessions, mutations } = await mockControlWorkspace(page);
+    if (missingBinding)
+      sessions[1].messages = [
+        {
+          id: "old-execution",
+          role: "assistant",
+          parts: [
+            {
+              type: "dynamic-tool",
+              toolName: "run_command",
+              toolCallId: "old-command",
+              state: "output-available",
+              input: { command: "pwd" },
+              output: { sandboxId: "missing-sandbox", stdout: "/workspace" },
+            },
+          ],
+        },
+      ];
+    let providerRequests = 0;
+    page.on("request", (request) => {
+      if (request.url().startsWith("https://preview.example.test/"))
+        providerRequests++;
+    });
+    await page.getByRole("button", { name: /^Review billing flow/ }).click();
+    await page
+      .getByRole("button", { name: "Open preview", exact: true })
+      .click();
+    const panel = page.getByRole("complementary", { name: "Task tools" });
+    await expect(panel.locator("iframe")).toHaveCount(0);
+    await expect(panel).toContainText("Select a sandbox for this task");
+    await panel
+      .getByRole("button", { name: "Choose sandbox", exact: true })
+      .click();
+    await expect(panel).toContainText("work/one");
+    await expect(panel).toContainText("work/two");
+    expect(providerRequests).toBe(0);
+    expect(mutations).toEqual([]);
+  });
+}
 
 test("sandbox choices and drafts stay attached to their task across switches", async ({
   page,
