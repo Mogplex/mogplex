@@ -1,10 +1,9 @@
 "use client";
-import { useMemo } from "react";
-import { useParams } from "next/navigation";
+import { useEffect, useMemo, useRef } from "react";
 import type { UIMessage } from "ai";
-import { ExternalRunPane } from "@/components/pane-content/agent-pane/external-run-pane";
+import { ExternalRunPane, type ExternalRunWorkspaceRenderer } from "@/components/pane-content/agent-pane/external-run-pane";
 import type { ControlSessionSummary } from "@/lib/control/session-types";
-import { scopedHref } from "@/lib/scoped-href";
+import { fetchJsonObject } from "@/lib/client-fetch";
 import { buildCombinedTimeline } from "./build-combined-timeline";
 import { Timeline } from "./timeline";
 
@@ -28,16 +27,17 @@ function ControlTranscript({ messages, running }: { messages: UIMessage[]; runni
 }
 
 /** Show the original durable run; selecting a Slack conversation never launches work. */
-export function ExternalRunConversation({ session }: {
+export function ExternalRunConversation({ session, renderWorkspace, onContinued }: {
   session: ControlSessionSummary & { external_run_id: string };
+  renderWorkspace: ExternalRunWorkspaceRenderer;
+  onContinued: (draft: string) => Promise<void>;
 }) {
-  const { scope } = useParams<{ scope: string }>();
-  const workspaceHref = scopedHref(scope, `/projects/workspace?run=${session.external_run_id}`);
+  const active = useRef(true);
+  useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   return <div className="flex min-h-0 min-w-0 flex-1 flex-col" data-testid="control-external-run">
     <header className="flex items-center gap-3 border-b border-border px-4 py-3 text-sm">
       <span className="text-muted-foreground">{session.project}</span>
       <h1 className="min-w-0 flex-1 truncate font-medium">{session.title}</h1>
-      <a href={workspaceHref} className="shrink-0 underline">Open workspace</a>
     </header>
     <ExternalRunPane
       key={session.external_run_id}
@@ -46,7 +46,11 @@ export function ExternalRunConversation({ session }: {
         type: "agent", name: session.title, lines: [], status: "idle",
       }}
       onStreamingChange={reportStreaming}
-      workspaceHref={workspaceHref}
+      renderWorkspace={renderWorkspace}
+      onContinue={async draft => {
+        await fetchJsonObject(`/api/control/runs/${session.external_run_id}`, "Could not continue this chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ continue: true }) });
+        if (active.current) await onContinued(draft);
+      }}
       renderTranscript={renderControlTranscript}
     />
   </div>;

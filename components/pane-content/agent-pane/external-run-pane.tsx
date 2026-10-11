@@ -16,12 +16,16 @@ import { useExternalRun } from "./use-external-run";
 import { getActiveTeamRequestHeaders } from "@/components/active-scope-provider";
 import { fetchJsonObject } from "@/lib/client-fetch";
 
-export function ExternalRunPane({ pane, onStreamingChange, onUpdatePane, workspaceHref, renderTranscript }: {
+export type ExternalRunWorkspaceRenderer = (input: { messages: UIMessage[]; running: boolean; children: ReactNode; onFeedback: (text: string) => void }) => ReactNode;
+
+export function ExternalRunPane({ pane, onStreamingChange, onUpdatePane, workspaceHref, renderTranscript, renderWorkspace, onContinue }: {
   pane: PaneNode & { externalRunId: string };
   onStreamingChange: (value: boolean) => void;
   onUpdatePane?: (updates: Partial<PaneNode>) => void;
   workspaceHref?: string;
   renderTranscript?: (messages: UIMessage[], running: boolean) => ReactNode;
+  renderWorkspace?: ExternalRunWorkspaceRenderer;
+  onContinue?: (draft: string) => Promise<void>;
 }) {
   const { scope } = useParams<{ scope: string }>();
   const { user } = useUser();
@@ -60,6 +64,7 @@ export function ExternalRunPane({ pane, onStreamingChange, onUpdatePane, workspa
     setSending(true);
     setReceipt(null);
     try {
+    if (onContinue) { await onContinue(text); return; }
     // Resolve before creating or saving the conversation. The store may still
     // contain a startup constant or another workspace's previous selection.
     const settings = await fetchJsonObject<{ default_model?: string }>(
@@ -86,7 +91,7 @@ export function ExternalRunPane({ pane, onStreamingChange, onUpdatePane, workspa
     } finally { setSending(false); }
   }
 
-  return <>
+  const content = <>
     <div className="border-border flex items-center gap-2 border-b px-2 py-1.5 text-xs">
       <span role="status">{status === "success" ? "Run complete" : status === "failed" ? "Run failed" : status === "cancelled" ? "Run cancelled" : status === "awaiting_input" ? "Waiting for input" : "Agent is working"}</span>
       <span className="text-muted-foreground">{connection}</span>
@@ -100,7 +105,8 @@ export function ExternalRunPane({ pane, onStreamingChange, onUpdatePane, workspa
       <Button type="submit" size="sm" disabled={sending || !text.trim()}>{sending ? "Sending…" : "Send guidance"}</Button>
     </form> : !running && status !== "awaiting_input" && context ? <div className="border-border border-t p-2">
       {!historyReady && <p role="status" className="text-muted-foreground mb-2 text-xs">Loading run history before continuing…</p>}
-      {workspaceHref ? <Button size="sm" asChild><a href={workspaceHref}>Continue in workspace chat</a></Button> : <Button size="sm" onClick={() => void continueChat()} disabled={sending || !user || !historyReady}>Continue in workspace chat</Button>}
+      {workspaceHref ? <Button size="sm" asChild><a href={workspaceHref}>Continue in workspace chat</a></Button> : <Button size="sm" onClick={() => void continueChat()} disabled={sending || !user || !historyReady}>{onContinue ? "Continue in this chat" : "Continue in workspace chat"}</Button>}
     </div> : <p className="text-muted-foreground p-2 text-xs">{status === "awaiting_input" ? "Open run details to review the checkpoint." : "Watching this run. Open run details for controls."}</p>}
   </>;
+  return renderWorkspace ? renderWorkspace({ messages, running, children: content, onFeedback: feedback => setText(current => [current, feedback].filter(Boolean).join("\n\n")) }) : content;
 }

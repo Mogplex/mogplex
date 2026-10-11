@@ -8,19 +8,24 @@ import {
   latestTaskSandbox,
   resolveTaskSandbox,
   type TaskSandboxSelection,
+  type TaskSandboxBinding,
 } from "@/lib/control/task-sandbox";
 
 export function useTaskSandbox(
   sessionId: string | null,
   sandboxes: SandboxRecord[],
-  messages: UIMessage[]
+  messages: UIMessage[],
+  runBinding?: TaskSandboxBinding | null
 ) {
   const { scope } = useParams<{ scope: string }>();
   const storageKey = `mogplex.control.sandbox.${scope}.${sessionId}`;
   const [selections, setTaskSandboxSelections] = useState<
     Record<string, TaskSandboxSelection | null | undefined>
   >({});
-  const binding = useMemo(() => latestTaskSandbox(messages), [messages]);
+  const binding = useMemo(
+    () => latestTaskSandbox(messages) ?? runBinding ?? null,
+    [messages, runBinding]
+  );
   useEffect(() => {
     let selection: TaskSandboxSelection | null = null;
     try {
@@ -61,7 +66,8 @@ export function useTaskSandbox(
   );
   const selected = selections[storageKey];
   const activeSandbox =
-    selected === undefined
+    selected === undefined ||
+    (runBinding !== undefined && !binding && !selected)
       ? null
       : resolveTaskSandbox(sandboxes, selected, binding);
   return { activeSandbox, selectSandbox };

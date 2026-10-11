@@ -37,7 +37,7 @@ export function MissionWorkers({ workers, error, loading, onRefresh, compact = f
           <div className="flex min-w-0 gap-3">
             <span className="text-foreground min-w-0 flex-1 break-words">{worker.branch.split("/").at(-1)?.replaceAll("-", " ")}</span>
             <span className={worker.status === "failed" ? "text-accent-red" : "text-ink-300"}>{LABELS[worker.status]}</span>
-            <Link href={scopedHref(scope, `/projects/workspace?run=${encodeURIComponent(worker.id)}`)} className="text-accent-blue shrink-0 underline underline-offset-4" aria-label={`View work for ${worker.branch}`}>View work</Link>
+            <Link href={scopedHref(scope, `/control?run=${encodeURIComponent(worker.id)}`)} className="text-accent-blue shrink-0 underline underline-offset-4" aria-label={`View work for ${worker.branch}`}>View work</Link>
           </div>
           {worker.error && !commonError && <p className="text-accent-red mt-1 max-w-prose">{worker.error}</p>}
         </li>)}

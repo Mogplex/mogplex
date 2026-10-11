@@ -12,6 +12,79 @@ const team = {
   iconUrl: null,
 };
 
+test("a team repository opens and starts its Control task in the same team scope", async ({
+  page,
+}) => {
+  await installTeamRepositories(page);
+  const session = {
+    id: "team-task",
+    title: "Review the team project",
+    project: "acme/team-project",
+    repo_id: "team-repo",
+    model_id: null,
+    orchestration_run_id: null,
+    messages: [],
+    pinned: false,
+    archived: false,
+    updated_at: "2026-10-10T12:00:00Z",
+  };
+  let created = false;
+  await page.route("**/api/control/sessions**", (route) => {
+    const request = route.request();
+    if (request.method() === "POST") {
+      if (request.headers()["x-mogplex-team-id"] !== team.id)
+        return fulfillJson(
+          route,
+          { error: "Repository not found in personal scope" },
+          404
+        );
+      created = true;
+      return fulfillJson(route, session);
+    }
+    if (request.method() === "PUT") return fulfillJson(route, { session });
+    return fulfillJson(
+      route,
+      new URL(request.url()).searchParams.has("id")
+        ? session
+        : created
+          ? [session]
+          : []
+    );
+  });
+  await page.route("**/api/control/chat", (route) =>
+    route.fulfill({
+      headers: {
+        "content-type": "text/event-stream",
+        "x-vercel-ai-ui-message-stream": "v1",
+      },
+      body:
+        [
+          { type: "start", messageId: "reply" },
+          { type: "text-start", id: "text" },
+          { type: "text-delta", id: "text", delta: "Team task ready." },
+          { type: "text-end", id: "text" },
+          { type: "finish" },
+        ]
+          .map((event) => `data: ${JSON.stringify(event)}\n\n`)
+          .join("") + "data: [DONE]\n\n",
+    })
+  );
+  await page.goto("/acme/control?repo=team-repo");
+  await expect(
+    page.getByRole("combobox", { name: "Project", exact: true })
+  ).toHaveText("acme/team-project");
+  await page
+    .getByPlaceholder("Ask anything or run a command...")
+    .fill("Review the team project");
+  await page
+    .getByRole("button", { name: "Start mission", exact: true })
+    .click();
+  await expect(page.getByRole("log", { name: "Conversation" })).toContainText(
+    "Team task ready."
+  );
+  await expect(page).toHaveURL(/\/acme\/control\?mission=team-task/);
+});
+
 async function installTeamRepositories(page: Page, canManage = true) {
   await page.context().setExtraHTTPHeaders({
     ...buildE2EAuthHeaders(E2E_SCOPE_USER.id),

@@ -10,6 +10,6 @@ export function runDeepLinkDestination(
     scope,
     view === "details"
       ? `/observability?call_id=${encodeURIComponent(aiCallId)}`
-      : `/projects/workspace?run=${encodeURIComponent(runId)}`
+      : `/control?run=${encodeURIComponent(runId)}`
   );
 }

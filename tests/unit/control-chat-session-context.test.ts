@@ -99,3 +99,45 @@ test("control chat rejects a conversation outside the authenticated user", async
       error instanceof ControlChatSessionContextError && error.status === 404
   );
 });
+
+test("a linked run must finish before the same chat can start a follow-up", async () => {
+  for (const status of [
+    "pending",
+    "streaming",
+    "awaiting_input",
+    "success",
+    "failed",
+    "cancelled",
+    null,
+  ]) {
+    const request = resolveControlChatSessionContext(
+      "user-1",
+      { messages: [], conversationId: "session-1" },
+      {
+        loadSession: async () => ({
+          id: "session-1",
+          user_id: "user-1",
+          title: "Slack task",
+          repo_id: null,
+          model_id: null,
+          external_run_id: "run-1",
+        }),
+        loadRepo: async () => null,
+        loadExternalRunStatus: async (user, run) => {
+          assert.equal(user, "user-1");
+          assert.equal(run, "run-1");
+          return status;
+        },
+      }
+    );
+    if (status && ["success", "failed", "cancelled"].includes(status))
+      assert.equal((await request).missionId, "session-1");
+    else
+      await assert.rejects(
+        request,
+        (error) =>
+          error instanceof ControlChatSessionContextError &&
+          error.status === (status ? 409 : 404)
+      );
+  }
+});

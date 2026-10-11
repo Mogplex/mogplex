@@ -1,6 +1,5 @@
 import { expect, test } from "@playwright/test";
 import { setupControlSidebar } from "./helpers/control-sidebar-fixture";
-import { scopedPath } from "./helpers/auth";
 import type {
   RunWorkspaceContext,
   RunWorkspaceEvent,
@@ -137,8 +136,8 @@ for (const withGuidance of [false, true]) {
       conversation.getByText("Run failed", { exact: true })
     ).toBeVisible();
     await expect(
-      conversation.getByRole("link", { name: "Continue in workspace chat" })
-    ).toHaveAttribute("href", scopedPath(`projects/workspace?run=${runId}`));
+      conversation.getByRole("button", { name: "Continue in this chat" })
+    ).toBeEnabled();
     await sidebar.getByRole("button", { name: /^Fix 6 / }).click();
     await expect(conversation).toHaveCount(0);
     await sidebar

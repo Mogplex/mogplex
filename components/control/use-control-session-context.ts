@@ -7,6 +7,7 @@ import { resolveControlSessionRepo } from "@/lib/control/session-project";
 import type { ControlChatRequestContext } from "./control-chat-request";
 import type { ControlSessionSummary } from "@/lib/control/session-types";
 import { useTaskSandbox } from "./use-task-sandbox";
+import { useRunTaskBinding } from "./use-run-task-binding";
 
 const EMPTY_MESSAGES: UIMessage[] = [];
 
@@ -86,10 +87,12 @@ export function useControlSessionContext({
     () => selectControlSessionSandboxes(activeRepo, allSandboxes),
     [activeRepo, allSandboxes]
   );
+  const runBinding = useRunTaskBinding(activeSession?.external_run_id);
   const { activeSandbox, selectSandbox } = useTaskSandbox(
     sessionId,
     sandboxes,
-    messages
+    messages,
+    activeSession?.external_run_id ? runBinding : undefined
   );
 
   const requestContext = useMemo(
