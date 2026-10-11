@@ -33,9 +33,7 @@ it("completion preserves complete Gateway IDs without clearing older callers' ch
     gatewayGenerationId: "gen_single",
   });
   expect(legacy.gateway_generation_id).toBe("gen_single");
-  expect(JSON.parse(JSON.stringify(legacy))).not.toHaveProperty(
-    "gateway_generation_ids"
-  );
+  expect(legacy).not.toHaveProperty("gateway_generation_ids");
   expect(buildAiCallCompletionUpdate(input).gateway_generation_id).toBeNull();
 });
 

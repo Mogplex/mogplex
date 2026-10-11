@@ -340,7 +340,9 @@ export function buildAiCallCompletionUpdate(input: {
       input.gatewayGenerationIds?.[0] ?? input.gatewayGenerationId ?? null,
     // Omit when an older caller has no array so finalization cannot erase a
     // checkpoint that already recorded the complete tool loop.
-    gateway_generation_ids: input.gatewayGenerationIds,
+    ...(input.gatewayGenerationIds === undefined
+      ? {}
+      : { gateway_generation_ids: input.gatewayGenerationIds }),
     duration_ms: Date.now() - new Date(input.startedAt).getTime(),
     completed_at: completedAt,
     error: input.error ?? null,
