@@ -80,7 +80,10 @@ test("workspace snapshots include file patches and fail visibly if a patch canno
   const { sandbox } = fakeSandbox((script) =>
     script.includes("MOGPLEX_STATUS_BEGIN")
       ? { exitCode: 0, stdout: STATUS_STDOUT }
-      : { exitCode: failed ? 1 : 0, stdout: patch }
+      : {
+          exitCode: failed ? 1 : 0,
+          stdout: `0\t${Buffer.from(patch).toString("base64")}\n`,
+        }
   );
   const handler = createSandboxChangesGetHandler({
     loadOwnedSandboxRouteContext: loadedContext(sandbox),

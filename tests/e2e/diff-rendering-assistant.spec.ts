@@ -225,6 +225,31 @@ test("assistant tool parts render nested diff output through the shared viewer",
           toolCallId: "tool-call-1",
           output: { stdout: patch },
         },
+        {
+          type: "tool-input-available",
+          toolCallId: "tool-diagnostics",
+          toolName: "inspect_result",
+          input: {},
+        },
+        {
+          type: "tool-output-available",
+          toolCallId: "tool-diagnostics",
+          output: {
+            path: "lib/supabase/run-gallery.tsx",
+            detail: "Vercel Sandbox failed: positive credit balance required",
+          },
+        },
+        {
+          type: "tool-input-available",
+          toolCallId: "tool-error",
+          toolName: "inspect_failure",
+          input: {},
+        },
+        {
+          type: "tool-output-error",
+          toolCallId: "tool-error",
+          errorText: "Vercel Sandbox failed: positive credit balance required",
+        },
       ]),
     });
   });
@@ -243,4 +268,12 @@ test("assistant tool parts render nested diff output through the shared viewer",
   await expect(page.getByText("Diff source: stdout")).toBeVisible();
   await expect(page.getByText("src/tool.ts")).toBeVisible();
   await expect(page.getByText("export const toolState = 'done'")).toBeVisible();
+  await page.getByText("inspect_result", { exact: true }).click();
+  await expect(page.getByText(/lib\/supabase\/run-gallery.tsx/)).toBeVisible();
+  await page.getByText("inspect_failure", { exact: true }).click();
+  await expect(page.getByText(/positive credit balance required/)).toHaveCount(
+    0
+  );
+  await expect(page.getByText(/Vercel Sandbox failed/)).toHaveCount(0);
+  await expect(page.getByText(/MOG-TOOL-TOOLERROR/)).toBeVisible();
 });

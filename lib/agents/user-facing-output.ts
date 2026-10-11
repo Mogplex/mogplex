@@ -340,7 +340,8 @@ export function sanitizeAgentUserFacingError(
 /**
  * The SDK records transformed tool chunks as next-step model context. Only
  * redact credentials here: provider names, paths, URLs and identifiers can
- * all be literal source data. Failure presentation belongs to the UI boundary.
+ * all be literal source data. Failure presentation belongs to the Control
+ * activity/timeline presenters and the shared MessageContent tool viewer.
  */
 function redactToolPayload(value: unknown): unknown {
   return redactSecretsInValue(value instanceof Error ? value.message : value);

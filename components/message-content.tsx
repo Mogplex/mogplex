@@ -4,6 +4,8 @@ import { memo, useState } from "react"
 import type { UIMessage } from "ai"
 import { MessageResponse } from "@/components/ai-elements/message"
 import { StructuredValueViewer } from "@/components/diffs/structured-value-viewer"
+import { sanitizeObservabilityPayload } from "@/lib/observability/user-facing-errors"
+import { redactSecretsInValue } from "@/lib/ai-telemetry"
 
 interface ToolPart {
   type: string
@@ -24,6 +26,9 @@ function ToolCallPart({ part }: { part: ToolPart }) {
   const [open, setOpen] = useState(false)
   const done = part.state === "output-available" || part.state === "output-error" || part.state === "output-denied"
   const name = part.toolName || part.title || part.type.replace(/^tool-/, "")
+  // Working data stays literal in model history; provider diagnostics are
+  // presented safely here, including the workspace and Flow assistant panes.
+  const present = (value: unknown) => sanitizeObservabilityPayload(redactSecretsInValue(value), "TOOL", part.toolCallId)
 
   return (
     <div className="my-1.5 border border-border text-[10px] rounded-sm overflow-hidden">
@@ -34,7 +39,7 @@ function ToolCallPart({ part }: { part: ToolPart }) {
       </button>
       {open && (
         <div className="p-2 space-y-1">
-          {part.state === "output-error" && part.errorText && <p className="text-accent-red">{part.errorText}</p>}
+          {part.state === "output-error" && part.errorText && <p className="text-accent-red">{String(present(part.errorText))}</p>}
           <div>
             <span className="text-muted-foreground">INPUT: </span>
             <StructuredValueViewer value={part.input} className="my-1" stringLanguage="language-json" />
@@ -42,7 +47,7 @@ function ToolCallPart({ part }: { part: ToolPart }) {
           {done && part.output !== undefined && (
             <div>
               <span className="text-muted-foreground">OUTPUT: </span>
-              <StructuredValueViewer value={part.output} className="my-1" />
+              <StructuredValueViewer value={present(part.output)} className="my-1" />
             </div>
           )}
         </div>

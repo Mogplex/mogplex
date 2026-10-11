@@ -56,6 +56,8 @@ export async function controlResponseStream(input: {
       await input.onFailure();
       throw error;
     }) ?? null;
+  // The caller observes the original promise. Attach a handler immediately
+  // so a failure before that caller starts awaiting cannot be unhandled.
   void completion?.catch(() => undefined);
   return {
     response: createUIMessageStreamResponse({ stream: durable.stream }),
