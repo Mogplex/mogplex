@@ -46,7 +46,9 @@ test("does not capture Sentry when local cost is within five percent of Gateway"
     gateway: {
       getSpendReport: async (params) => {
         gatewayParams.push(params);
-        return { results: [{ day: "2026-05-15", totalCost: 100 }] };
+        return {
+          results: params.tags ? [] : [{ day: "2026-05-15", totalCost: 100 }],
+        };
       },
     },
   });
@@ -58,6 +60,12 @@ test("does not capture Sentry when local cost is within five percent of Gateway"
   assert.equal(captured.length, 0);
   assert.deepEqual(gatewayParams, [
     { startDate: "2026-05-15", endDate: "2026-05-15", groupBy: "day" },
+    {
+      startDate: "2026-05-15",
+      endDate: "2026-05-15",
+      groupBy: "day",
+      tags: ["surface:quality", "surface:decisions"],
+    },
   ]);
   assert.deepEqual(rpcCalls, [
     {
@@ -85,14 +93,16 @@ test("captures one Sentry warning when Gateway and local totals diverge", async 
       },
     },
     gateway: {
-      getSpendReport: async () => ({
-        results: [
-          {
-            day: "2026-05-15",
-            totalCost: 100,
-            provider: "provider-not-forwarded",
-          },
-        ],
+      getSpendReport: async (params) => ({
+        results: params.tags
+          ? []
+          : [
+              {
+                day: "2026-05-15",
+                totalCost: 100,
+                provider: "provider-not-forwarded",
+              },
+            ],
       }),
     },
   });
@@ -128,8 +138,8 @@ test("skips divergence math when Gateway has spend but local cost is zero", asyn
       },
     },
     gateway: {
-      getSpendReport: async () => ({
-        results: [{ day: "2026-05-15", totalCost: 100 }],
+      getSpendReport: async (params) => ({
+        results: params.tags ? [] : [{ day: "2026-05-15", totalCost: 100 }],
       }),
     },
   });
@@ -160,8 +170,8 @@ test("skips divergence math when both Gateway and local cost are zero", async ()
       },
     },
     gateway: {
-      getSpendReport: async () => ({
-        results: [{ day: "2026-05-15", totalCost: 0 }],
+      getSpendReport: async (params) => ({
+        results: params.tags ? [] : [{ day: "2026-05-15", totalCost: 0 }],
       }),
     },
   });
@@ -188,8 +198,8 @@ test("uses Gateway as the denominator when local cost is higher", async () => {
       },
     },
     gateway: {
-      getSpendReport: async () => ({
-        results: [{ day: "2026-05-15", totalCost: 100 }],
+      getSpendReport: async (params) => ({
+        results: params.tags ? [] : [{ day: "2026-05-15", totalCost: 100 }],
       }),
     },
   });
@@ -214,8 +224,8 @@ test("captures drift when local cost exists but Gateway reports zero", async () 
       },
     },
     gateway: {
-      getSpendReport: async () => ({
-        results: [{ day: "2026-05-15", totalCost: 0 }],
+      getSpendReport: async (params) => ({
+        results: params.tags ? [] : [{ day: "2026-05-15", totalCost: 0 }],
       }),
     },
   });
@@ -245,8 +255,8 @@ test("captures drift when local cost is negative", async () => {
       },
     },
     gateway: {
-      getSpendReport: async () => ({
-        results: [{ day: "2026-05-15", totalCost: 100 }],
+      getSpendReport: async (params) => ({
+        results: params.tags ? [] : [{ day: "2026-05-15", totalCost: 100 }],
       }),
     },
   });
@@ -270,8 +280,8 @@ test("propagates local cost query failures for scheduled run visibility", async 
         captureMessage: () => "event-id",
       },
       gateway: {
-        getSpendReport: async () => ({
-          results: [{ day: "2026-05-15", totalCost: 100 }],
+        getSpendReport: async (params) => ({
+          results: params.tags ? [] : [{ day: "2026-05-15", totalCost: 100 }],
         }),
       },
     }),
@@ -291,8 +301,8 @@ test("rejects non-numeric local cost totals instead of silently using zero", asy
         captureMessage: () => "event-id",
       },
       gateway: {
-        getSpendReport: async () => ({
-          results: [{ day: "2026-05-15", totalCost: 100 }],
+        getSpendReport: async (params) => ({
+          results: params.tags ? [] : [{ day: "2026-05-15", totalCost: 100 }],
         }),
       },
     }),
@@ -320,3 +330,116 @@ test("propagates Gateway spend report failures for scheduled run visibility", as
     /gateway unavailable/
   );
 });
+
+for (const localTotal of [70, 65]) {
+  test(`separates internal overhead while retaining unknown spend (${localTotal})`, async () => {
+    const { runAiSpendDivergenceCheck } = await loadSpendModule();
+    const { client } = createSpendSupabase(localTotal);
+    const warnings: unknown[] = [];
+    const queries: unknown[] = [];
+    const summary = await runAiSpendDivergenceCheck({
+      supabase: client as never,
+      now: () => new Date("2026-05-16T12:00:00Z"),
+      gateway: {
+        getSpendReport: async (params) => {
+          queries.push(params);
+          return {
+            results: [
+              { day: "2026-05-15", totalCost: "tags" in params ? 30 : 100 },
+            ],
+          };
+        },
+      },
+      sentry: {
+        captureMessage: (_message, context) => {
+          warnings.push(context);
+        },
+      },
+    });
+    assert.equal(summary.gatewayTotal, 100);
+    assert.equal(summary.internalOverheadTotal, 30);
+    assert.equal(summary.trackedGatewayTotal, 70);
+    assert.equal(summary.divergent, localTotal === 65);
+    assert.equal(warnings.length, localTotal === 65 ? 1 : 0);
+    assert.equal(summary.divergenceRatio, (70 - localTotal) / 70);
+    assert.deepEqual(queries[1], {
+      startDate: "2026-05-15",
+      endDate: "2026-05-15",
+      groupBy: "day",
+      tags: ["surface:quality", "surface:decisions"],
+    });
+    if (warnings.length > 0)
+      assert.match(JSON.stringify(warnings), /internal_overhead_total/);
+  });
+}
+
+test("internal-only days do not produce missing-run warnings", async () => {
+  const { runAiSpendDivergenceCheck } = await loadSpendModule();
+  const { client } = createSpendSupabase(0);
+  const summary = await runAiSpendDivergenceCheck({
+    supabase: client as never,
+    now: () => new Date("2026-05-16T12:00:00Z"),
+    gateway: { getSpendReport: async () => ({ results: [{ totalCost: 30 }] }) },
+    sentry: {
+      captureMessage: () => {
+        assert.fail("No customer run cost is missing");
+      },
+    },
+  });
+  assert.equal(summary.trackedGatewayTotal, 0);
+  assert.equal(summary.internalOverheadTotal, 30);
+  assert.equal(summary.skipped, true);
+});
+
+test("clamps sub-precision floating-point noise without hiding invalid reports", async () => {
+  const { runAiSpendDivergenceCheck } = await loadSpendModule();
+  const { client } = createSpendSupabase(0);
+  for (const internal of [0.1 + 0.2, 0.3000001]) {
+    const check = runAiSpendDivergenceCheck({
+      supabase: client as never,
+      now: () => new Date("2026-05-16T12:00:00Z"),
+      gateway: {
+        getSpendReport: async (params) => ({
+          results: [{ totalCost: params.tags ? internal : 0.3 }],
+        }),
+      },
+      sentry: {
+        captureMessage: () => {
+          assert.fail("No unknown run spend");
+        },
+      },
+    });
+    if (internal > 0.30000001) await assert.rejects(check, /exceeds the total/);
+    else {
+      const summary = await check;
+      assert.equal(summary.trackedGatewayTotal, 0);
+      assert.equal(summary.internalOverheadTotal, internal);
+      assert.equal(summary.skipped, true);
+    }
+  }
+});
+
+for (const [total, internal] of [
+  [Number.NaN, 0],
+  [-1, 0],
+  [100, -1],
+  [100, 101],
+]) {
+  test(`fails visibly for inconsistent Gateway reports (${total}, ${internal})`, async () => {
+    const { runAiSpendDivergenceCheck } = await loadSpendModule();
+    const { client } = createSpendSupabase(70);
+    await assert.rejects(
+      runAiSpendDivergenceCheck({
+        supabase: client as never,
+        now: () => new Date("2026-05-16T12:00:00Z"),
+        gateway: {
+          getSpendReport: async (params) => ({
+            results: [{ totalCost: params.tags ? internal : total }],
+          }),
+        },
+        sentry: { captureMessage: () => {} },
+      }),
+      /Gateway spend/
+    );
+  });
+}
