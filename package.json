@@ -8,9 +8,9 @@
   "engines": {
     "node": ">=22.22.0 <23"
   },
-  "homepage": "https://github.com/webrenew/mogplex#readme",
+  "homepage": "https://github.com/Mogplex/mogplex#readme",
   "bugs": {
-    "url": "https://github.com/webrenew/mogplex/issues"
+    "url": "https://github.com/Mogplex/mogplex/issues"
   },
   "repository": {
     "type": "git",

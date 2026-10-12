@@ -1,5 +1,6 @@
 import { aptGet, syncVercelEnvVars } from "@trigger.dev/build/extensions/core";
 import { defineConfig } from "@trigger.dev/sdk/v3";
+import { resolveTriggerProjectRef } from "./lib/trigger/project-ref";
 import { resolveTriggerVercelBuildEnv } from "./lib/trigger/vercel-build-env";
 
 const {
@@ -8,12 +9,10 @@ const {
   vercelTeamId,
   envSyncEnabled: vercelEnvSyncEnabled,
 } = resolveTriggerVercelBuildEnv();
-// The project ref is a public identifier, not a secret — Trigger.dev's GitHub
-// check publicly displays it in the check name, and putting it in source is
-// Trigger's documented pattern. It must stay inline because Trigger's cloud
-// builds evaluate this config without our env vars.
-const triggerProjectRef =
-  process.env.TRIGGER_PROJECT_REF?.trim() || "proj_ssjnkodxhnnukrwiymaf";
+// Trigger's GitHub integration builds evaluate this config without our env
+// vars, so the hosted ref stays the default here. Human-run deploys go through
+// `pnpm trigger:*`, which refuses to fall back (scripts/trigger-cli.ts).
+const { ref: triggerProjectRef } = resolveTriggerProjectRef();
 
 export default defineConfig({
   project: triggerProjectRef,

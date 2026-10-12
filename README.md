@@ -57,7 +57,7 @@ flowchart LR
 
 ### Prerequisites
 
-- Node.js `20+` and `pnpm`
+- Node.js `22.22.x` (see `.nvmrc`) and `pnpm`
 - A Postgres 17 database with the `vector` and `pg_trgm` extensions available. [Neon](https://neon.tech) ships both and is what production runs on; locally, the `pgvector/pgvector:pg17` Docker image works.
 - Optional, for the full product: a GitHub App, a Vercel token for sandboxes, an AI Gateway or provider key, and a Trigger.dev project. Each unlocks a feature area; none is needed to boot the app shell.
 
