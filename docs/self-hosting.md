@@ -66,11 +66,34 @@ Set the Slack OAuth redirect URL to `https://<your-domain>/api/integrations/slac
 
 Register a Slack slash command named `/mogplex` with the request URL `https://<your-domain>/api/webhooks/slack`, and grant the bot the `commands` OAuth scope. Existing workspace installations must reconnect after this scope is added. Linked users can run `/mogplex model` to see their current and available models, or `/mogplex model <model-id>` to change the model used for their next eligible response. The selection applies only to that Slack user in that channel, including its threads; it does not change another participant's selection. A run already in progress keeps the model it started with. If a saved model later becomes unavailable to that user or team, Mogplex falls back to the conversation or account default instead of attempting the unavailable model.
 
+## Self-hosted Trigger.dev
+
+Mogplex's background jobs run on Trigger.dev. You can use Trigger.dev Cloud or run the open-source Trigger.dev v4 stack yourself. Nothing in Mogplex changes between the two; only the URL and keys do.
+
+1. **Run Trigger.dev.** Follow [Trigger.dev self-hosting](https://trigger.dev/docs/self-hosting/overview) (Docker Compose or Kubernetes). The stack includes the webapp, Postgres, Redis, ClickHouse, object storage, a container registry, and supervisor/worker nodes. Workers need outbound access to your Mogplex deployment and to the services your tasks call.
+2. **Create a project** in your Trigger.dev webapp. Copy its project ref and the production secret key.
+3. **Configure Mogplex** in the app environment and in `.env.local` for CLI use:
+
+   ```bash
+   TRIGGER_API_URL=https://trigger.example.com   # your Trigger.dev webapp URL
+   TRIGGER_PROJECT_REF=proj_...
+   TRIGGER_SECRET_KEY=tr_prod_...
+   ```
+
+   The Trigger.dev SDK reads `TRIGGER_API_URL`, so every task the app starts goes to your instance. Always set `TRIGGER_PROJECT_REF`; `trigger.config.ts` falls back to the hosted Mogplex project when it is unset.
+4. **Log in the CLI** against your instance: `pnpm exec tsx scripts/trigger-cli.ts login`. In CI, set `TRIGGER_ACCESS_TOKEN` to a personal access token from your instance instead.
+5. **Deploy the tasks** with `pnpm trigger:deploy`. When `TRIGGER_API_URL` is set, the wrapper passes `--api-url` to the Trigger.dev CLI for `deploy`, `dev`, `login`, and the other commands that accept it. An explicit `--api-url` argument wins.
+
+   A self-hosted instance without a remote build server builds the worker image on your machine, so the deploy machine needs Docker with `buildx`, and it must be logged in (`docker login`) to the container registry your Trigger.dev instance pulls from. Pass extra CLI flags after `--`, for example `pnpm trigger:deploy -- --local-build`.
+6. **Give the tasks their environment.** Tasks import the same server code as the app, so copy the app's server variables (database URLs, AI keys, `CRON_SECRET`, GitHub and Slack credentials) into the project's environment variables in your Trigger.dev webapp. Vercel env sync runs only when a Vercel token and project ID are present, so a non-Vercel deploy skips it.
+
+For local task development against your instance, run `pnpm trigger:dev` with the same variables.
+
 ## Operating it
 
 - **Check the setup.** Run `pnpm setup:doctor` after you set the environment, and again after each upgrade. It reports each service as pass, warn, or fail, never prints secret values, and links to the guide that fixes each problem. Add `--live` to also validate the Trigger.dev and Vercel credentials against their APIs. It exits non-zero when a check fails, so it also works as a deploy gate.
 - **Migrations.** The image never touches your schema. Run `pnpm exec tsx scripts/apply-neon-migrations.ts` with `DATABASE_URL` exported (or pass `--env-file=.env`) before first boot and after each upgrade. On an empty database it applies `neon/baseline.sql` first, then any pending files from `neon/migrations/`, and records what ran. Run it as the database owner: it creates schemas, the `vector` and `pg_trgm` extensions, and the `service_role` and `supabase_auth_admin` roles that the row-level-security policies reference. (Legacy Supabase installations use `supabase/migrations/` instead.)
-- **Trigger deploys.** Trigger.dev tasks in `trigger/` deploy separately with `pnpm trigger:deploy` against your own Trigger project.
+- **Trigger deploys.** Trigger.dev tasks in `trigger/` deploy separately with `pnpm trigger:deploy` against your own Trigger project. For a self-hosted Trigger.dev instance, see [Self-hosted Trigger.dev](#self-hosted-triggerdev).
 - **TLS, domains, OAuth callbacks.** Every OAuth integration (GitHub, Vercel, Slack, MCP clients) needs your deployment URL registered on your own apps, with exact-match redirect/resource URLs.
 - **Secrets.** Generate random values for `CRON_SECRET`, `INTERNAL_API_SECRET`, `CONNECTIONS_ENCRYPTION_KEY`, and `EMAIL_UNSUBSCRIBE_SECRET`, and store them in your platform secret store.
 - **Upgrades.** Pull `main` or a tagged release, apply migrations, redeploy. Release notes on the [releases page](https://github.com/Mogplex/mogplex/releases) call out breaking env or migration changes.

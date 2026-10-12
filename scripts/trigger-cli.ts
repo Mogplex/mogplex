@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { applyTriggerVercelBuildEnv } from "../lib/trigger/vercel-build-env";
+import { resolveTriggerCliArgs } from "../lib/trigger/cli-args";
 import { resolveTriggerCliPackage } from "../lib/trigger/cli-package";
 import { assertTriggerProjectRefConfigured } from "../lib/trigger/project-ref";
 import {
@@ -35,7 +36,7 @@ const triggerCliPackage = resolveTriggerCliPackage({
     new URL("../node_modules/@trigger.dev/build/package.json", import.meta.url)
   ),
 });
-const args = process.argv.slice(2).filter((arg) => arg !== "--");
+const args = resolveTriggerCliArgs(process.argv.slice(2));
 if (args[0] === "deploy" || args[0] === "dev") {
   try {
     assertTriggerProjectRefConfigured(process.env, args);
