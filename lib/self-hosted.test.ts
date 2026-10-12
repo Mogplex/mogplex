@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { resolveSelfHostedMode, selfHostedModeGrants } from "./self-hosted";
+import { HOSTED_TRIGGER_PROJECT_REF } from "./trigger/project-ref";
 
 function env(values: Record<string, string>): NodeJS.ProcessEnv {
   return values as NodeJS.ProcessEnv;
@@ -48,5 +49,24 @@ describe("self-host mode", () => {
     expect(mode.active).toBe(false);
     expect(mode.refusedReason).toBe("stripe_configured");
     expect(selfHostedModeGrants(mode, "dev@example.com")).toBe(false);
+  });
+
+  it("refuses inside the hosted Trigger.dev project, where workers hold no Stripe key", () => {
+    const mode = resolveSelfHostedMode(
+      env({
+        MOGPLEX_SELF_HOSTED: "1",
+        TRIGGER_PROJECT_REF: HOSTED_TRIGGER_PROJECT_REF,
+      })
+    );
+    expect(mode.active).toBe(false);
+    expect(mode.refusedReason).toBe("hosted_deployment");
+    expect(selfHostedModeGrants(mode, "dev@example.com")).toBe(false);
+  });
+
+  it("activates in a self-hoster's own Trigger.dev project", () => {
+    const mode = resolveSelfHostedMode(
+      env({ MOGPLEX_SELF_HOSTED: "1", TRIGGER_PROJECT_REF: "proj_selfhosted" })
+    );
+    expect(mode.active).toBe(true);
   });
 });

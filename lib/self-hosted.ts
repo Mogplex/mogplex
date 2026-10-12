@@ -6,15 +6,20 @@
  *
  * The mode never activates while `STRIPE_SECRET_KEY` is set: a deployment with
  * hosted billing configured must keep billing-backed access, so a stray flag
- * cannot hand out free usage.
+ * cannot hand out free usage. Trigger.dev workers never hold the Stripe key, so
+ * the mode also refuses in any process of the hosted Mogplex project: the
+ * managed run controller sets `TRIGGER_PROJECT_REF` to the running project in
+ * every task process, overriding synced env.
  */
+
+import { HOSTED_TRIGGER_PROJECT_REF } from "@/lib/trigger/project-ref";
 
 export type SelfHostedMode = {
   active: boolean;
   /** Empty when every signed-in user qualifies. */
   allowedEmailDomains: ReadonlySet<string>;
   /** Set when the flag is on but refused. */
-  refusedReason: "stripe_configured" | null;
+  refusedReason: "stripe_configured" | "hosted_deployment" | null;
 };
 
 const ENABLED_VALUES = new Set(["1", "true", "yes", "on"]);
@@ -40,6 +45,13 @@ export function resolveSelfHostedMode(env: NodeJS.ProcessEnv): SelfHostedMode {
   if (!isFlagEnabled(env.MOGPLEX_SELF_HOSTED)) {
     return { active: false, allowedEmailDomains, refusedReason: null };
   }
+  if (env.TRIGGER_PROJECT_REF?.trim() === HOSTED_TRIGGER_PROJECT_REF) {
+    return {
+      active: false,
+      allowedEmailDomains,
+      refusedReason: "hosted_deployment",
+    };
+  }
   if (env.STRIPE_SECRET_KEY?.trim()) {
     return {
       active: false,
@@ -59,6 +71,10 @@ export function getSelfHostedMode(): SelfHostedMode {
   if (processMode.refusedReason === "stripe_configured") {
     console.warn(
       "[self-hosted] MOGPLEX_SELF_HOSTED is set but STRIPE_SECRET_KEY is configured; self-host mode stays off and billing-backed access applies."
+    );
+  } else if (processMode.refusedReason === "hosted_deployment") {
+    console.warn(
+      "[self-hosted] MOGPLEX_SELF_HOSTED is set in the hosted Mogplex Trigger.dev project; self-host mode stays off and billing-backed access applies."
     );
   }
   return processMode;

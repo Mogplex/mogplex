@@ -73,3 +73,20 @@ test("self-host mode is refused while Stripe billing is configured", async () =>
   });
   assert.equal(billingLookups, 1);
 });
+
+test("self-host mode is refused in hosted Trigger.dev workers without a Stripe key", async () => {
+  const { derivePlatformAccess } = await loadPlatformAccess();
+  const { HOSTED_TRIGGER_PROJECT_REF } =
+    await import("../../lib/trigger/project-ref");
+
+  assert.deepEqual(
+    derivePlatformAccess(
+      profile,
+      env({
+        MOGPLEX_SELF_HOSTED: "1",
+        TRIGGER_PROJECT_REF: HOSTED_TRIGGER_PROJECT_REF,
+      })
+    ),
+    { allowPlatformAi: false, allowPlatformSandbox: false }
+  );
+});
