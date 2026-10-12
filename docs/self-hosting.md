@@ -68,6 +68,7 @@ Register a Slack slash command named `/mogplex` with the request URL `https://<y
 
 ## Operating it
 
+- **Check the setup.** Run `pnpm setup:doctor` after you set the environment, and again after each upgrade. It reports each service as pass, warn, or fail, never prints secret values, and links to the guide that fixes each problem. Add `--live` to also validate the Trigger.dev and Vercel credentials against their APIs. It exits non-zero when a check fails, so it also works as a deploy gate.
 - **Migrations.** The image never touches your schema. Run `pnpm exec tsx scripts/apply-neon-migrations.ts` with `DATABASE_URL` exported (or pass `--env-file=.env`) before first boot and after each upgrade. On an empty database it applies `neon/baseline.sql` first, then any pending files from `neon/migrations/`, and records what ran. Run it as the database owner: it creates schemas, the `vector` and `pg_trgm` extensions, and the `service_role` and `supabase_auth_admin` roles that the row-level-security policies reference. (Legacy Supabase installations use `supabase/migrations/` instead.)
 - **Trigger deploys.** Trigger.dev tasks in `trigger/` deploy separately with `pnpm trigger:deploy` against your own Trigger project.
 - **TLS, domains, OAuth callbacks.** Every OAuth integration (GitHub, Vercel, Slack, MCP clients) needs your deployment URL registered on your own apps, with exact-match redirect/resource URLs.
