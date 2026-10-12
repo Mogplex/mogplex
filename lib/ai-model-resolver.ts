@@ -40,6 +40,7 @@ import {
 } from "@/lib/team-capabilities";
 import type { generateText } from "ai";
 import type { Provider } from "@/lib/vault";
+import { readAppUrlEnv } from "@/lib/app-url";
 
 export type ResolvedLanguageModel = Parameters<typeof generateText>[0]["model"];
 export type ResolveUserLanguageModelOptions = {
@@ -149,8 +150,7 @@ type ResolveUserLanguageModelDeps = {
 };
 
 export function getOpenRouterAppUrl() {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
-  return appUrl || undefined;
+  return readAppUrlEnv();
 }
 
 const defaultResolveUserLanguageModelDeps: ResolveUserLanguageModelDeps = {

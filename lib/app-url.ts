@@ -1,5 +1,24 @@
 const FALLBACK_REDIRECT_ORIGIN = "https://mogplex.local";
 
+/**
+ * Reads an environment variable when the code runs. Next.js replaces a static
+ * `process.env.NEXT_PUBLIC_*` member with its build-time value in server
+ * bundles too, which would lock a published image to the domain it was built
+ * for. A computed key is never inlined.
+ */
+export function readRuntimeEnv(name: string) {
+  const value = process.env[name]?.trim();
+  return value || undefined;
+}
+
+/**
+ * The configured public app URL, read at runtime: `APP_URL` first, then
+ * `NEXT_PUBLIC_APP_URL`. Returns `undefined` when neither is set.
+ */
+export function readAppUrlEnv() {
+  return readRuntimeEnv("APP_URL") ?? readRuntimeEnv("NEXT_PUBLIC_APP_URL");
+}
+
 function parseHttpUrl(value: string, envName: string) {
   let url: URL;
   try {
@@ -16,8 +35,7 @@ function parseHttpUrl(value: string, envName: string) {
 }
 
 function getConfiguredAppUrl() {
-  const explicitAppUrl =
-    process.env.APP_URL?.trim() || process.env.NEXT_PUBLIC_APP_URL?.trim();
+  const explicitAppUrl = readAppUrlEnv();
   if (explicitAppUrl) {
     return parseHttpUrl(explicitAppUrl, "APP_URL or NEXT_PUBLIC_APP_URL");
   }
@@ -44,7 +62,7 @@ export function getCanonicalAppUrl(request?: Request) {
   }
 
   throw new Error(
-    "NEXT_PUBLIC_APP_URL or VERCEL_URL must be configured to build app URLs"
+    "APP_URL, NEXT_PUBLIC_APP_URL, or VERCEL_URL must be configured to build app URLs"
   );
 }
 

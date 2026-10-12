@@ -6,6 +6,7 @@ import {
   prepareGitHubTextFile,
   type GitHubFileContent,
 } from "@/lib/agents/github-file-content";
+import { readAppUrlEnv } from "@/lib/app-url";
 
 export function buildRefactorTools(config: {
   skillId: string;
@@ -20,7 +21,7 @@ export function buildRefactorTools(config: {
       inputSchema: z.object({ skillId: z.string() }),
       execute: async ({ skillId }) => {
         const baseUrl =
-          process.env.NEXT_PUBLIC_APP_URL ||
+          readAppUrlEnv() ||
           (process.env.VERCEL_URL
             ? `https://${process.env.VERCEL_URL}`
             : "http://localhost:3000");

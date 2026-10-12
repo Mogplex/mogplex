@@ -18,6 +18,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { readAppUrlEnv, readRuntimeEnv } from "@/lib/app-url";
 
 // Read the secret per-call rather than capturing at module load. If this
 // module is evaluated during the Next.js build step (a 'use server' import
@@ -75,8 +76,8 @@ export function verifyUnsubscribeToken(
 
 function siteOrigin(): string {
   const base =
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    process.env.NEXT_PUBLIC_APP_URL ||
+    readRuntimeEnv("NEXT_PUBLIC_SITE_URL") ||
+    readAppUrlEnv() ||
     "https://mogplex.com";
   return base.replace(/\/$/, "");
 }

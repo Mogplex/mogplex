@@ -1,5 +1,6 @@
 import { buildInternalApiHeaders } from "@/lib/internal-api-auth";
 import { buildAgentGitSyncScript } from "@/lib/sandbox/agent-git-sync";
+import { readAppUrlEnv } from "@/lib/app-url";
 
 type ChatGitDeliveryInput = {
   userId: string;
@@ -15,7 +16,7 @@ type ChatGitDeliveryDeps = {
 
 function resolveAppBaseUrl() {
   return (
-    process.env.NEXT_PUBLIC_APP_URL ||
+    readAppUrlEnv() ||
     (process.env.VERCEL_URL
       ? `https://${process.env.VERCEL_URL}`
       : "http://localhost:3000")

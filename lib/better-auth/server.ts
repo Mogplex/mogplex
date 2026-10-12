@@ -21,11 +21,10 @@ import { Pool } from "pg";
 import { createProfileForBetterAuthUser } from "@/lib/auth/better-auth-profile";
 import { sendAuthActionEmail } from "@/lib/email/send-auth-action-email";
 import { getRuntimeDatabaseUrl } from "@/lib/db/connection-urls";
+import { readAppUrlEnv } from "@/lib/app-url";
 
 const baseURL =
-  process.env.BETTER_AUTH_URL ||
-  process.env.NEXT_PUBLIC_APP_URL ||
-  "http://localhost:3000";
+  process.env.BETTER_AUTH_URL || readAppUrlEnv() || "http://localhost:3000";
 const mcpResource =
   process.env.MOGPLEX_MCP_RESOURCE_URL?.trim() ||
   new URL("/api/v1/mogplex/mcp", baseURL).toString();
@@ -64,7 +63,7 @@ function isLocalDevOrigin(origin: string) {
 function getTrustedOrigins(request?: Request) {
   const configured = [
     baseURL,
-    process.env.NEXT_PUBLIC_APP_URL,
+    readAppUrlEnv(),
     process.env.BETTER_AUTH_URL,
   ].filter(Boolean);
   const origin = request?.headers.get("origin");

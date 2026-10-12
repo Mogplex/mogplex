@@ -14,6 +14,7 @@ import {
   subscriptionCheckoutIdempotencyKey,
   topupCheckoutIdempotencyKey,
 } from "@/lib/billing/stripe-checkout";
+import { readAppUrlEnv } from "@/lib/app-url";
 
 // Checkout flows (pricing-plan 02 §3): mode=subscription for plan sign-up,
 // mode=payment for top-ups. Top-up credit posts on payment_intent.succeeded
@@ -25,7 +26,7 @@ import {
 // charges are outside the MoR consent — all top-ups stay Checkout-initiated.
 
 function appUrl(path: string): string {
-  const base = process.env.NEXT_PUBLIC_APP_URL ?? "https://mogplex.com";
+  const base = readAppUrlEnv() ?? "https://mogplex.com";
   return `${base.replace(/\/$/, "")}${path}`;
 }
 
