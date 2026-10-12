@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { applyTriggerVercelBuildEnv } from "../lib/trigger/vercel-build-env";
 import { resolveTriggerCliPackage } from "../lib/trigger/cli-package";
+import { assertTriggerProjectRefConfigured } from "../lib/trigger/project-ref";
 import {
   loadLocalEnvFiles,
   resolveTriggerCliEnvFiles,
@@ -35,6 +36,14 @@ const triggerCliPackage = resolveTriggerCliPackage({
   ),
 });
 const args = process.argv.slice(2).filter((arg) => arg !== "--");
+if (args[0] === "deploy" || args[0] === "dev") {
+  try {
+    assertTriggerProjectRefConfigured(process.env, args);
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : error);
+    process.exit(1);
+  }
+}
 const child = spawn("pnpm", ["dlx", triggerCliPackage, ...args], {
   stdio: "inherit",
   env: process.env,
