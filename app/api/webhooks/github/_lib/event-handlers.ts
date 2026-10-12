@@ -360,6 +360,10 @@ const eventHandlers: Record<
   dependabot_alert: (body) => handleDependabotAlert(body),
 };
 
+/** Webhook events that can start work. The GitHub App must subscribe to each. */
+export const HANDLED_GITHUB_WEBHOOK_EVENTS: readonly string[] =
+  Object.keys(eventHandlers);
+
 export function getWebhookEventResults(
   event: string | null,
   body: Record<string, unknown>

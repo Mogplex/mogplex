@@ -66,6 +66,7 @@ const UNSCOPED_AUTHED_ROUTE_PATHS: readonly RoutePolicyEntry[] = [
   { path: "/new", match: "subtree" },
   { path: "/invite", match: "subtree" },
   { path: "/checkout", match: "subtree" },
+  { path: "/admin/setup", match: "subtree" },
 ] as const;
 
 const DELEGATED_INTERNAL_API_PATHS: readonly RoutePolicyEntry[] = [

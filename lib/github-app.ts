@@ -46,11 +46,11 @@ function normalizePrivateKey(privateKey: string) {
     : privateKey;
 }
 
-export function hasGithubAppConfig() {
+export function hasGithubAppConfig(env: NodeJS.ProcessEnv = process.env) {
   return Boolean(
-    process.env.GITHUB_APP_ID?.trim() &&
-    process.env.GITHUB_APP_PRIVATE_KEY?.trim() &&
-    process.env.GITHUB_APP_NAME?.trim()
+    env.GITHUB_APP_ID?.trim() &&
+    env.GITHUB_APP_PRIVATE_KEY?.trim() &&
+    env.GITHUB_APP_NAME?.trim()
   );
 }
 

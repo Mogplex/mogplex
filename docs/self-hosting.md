@@ -54,11 +54,17 @@ docker run --env-file .env -p 3000:3000 mogplex
 
 ## GitHub App setup
 
+[`github-app-manifest.json`](../github-app-manifest.json) lists the permissions, events, and URLs the App needs. To create the App from it, sign in to your deployment and open `/admin/setup/github` while `GITHUB_APP_*` is unset. Outside production it is always available; in production, set `MOGPLEX_SETUP_ENABLED=1` first and remove it after setup. GitHub creates the App on your account or organization and returns to `/admin/setup/github/complete`, which shows `GITHUB_APP_ID`, `GITHUB_APP_NAME`, `GITHUB_APP_PRIVATE_KEY`, and `GITHUB_WEBHOOK_SECRET` once. Mogplex does not store them. Copy them into your environment and Trigger.dev, then redeploy.
+
+Repository import also needs `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` from a classic GitHub OAuth App with the callback URL `https://<your-domain>/api/auth/github/callback`. The App's own client credentials do not work there: that flow requests OAuth scopes, and App user tokens expire.
+
 Mogplex can create a remediation PR when GitHub reports a new Dependabot alert.
 GitHub continues to detect vulnerable dependencies.
 See [Dependabot remediation](./dependabot-remediation.md) for permissions, setup, and run behavior.
 
 ## Slack app setup
+
+Create the app from [`slack-app-manifest.yml`](../slack-app-manifest.yml): open [api.slack.com/apps](https://api.slack.com/apps), choose **Create New App → From a manifest**, and replace `mogplex.example.com` with your domain. A unit test keeps its bot scopes equal to the scopes the install flow requests. The details below describe what the manifest configures.
 
 Set the Slack OAuth redirect URL to `https://<your-domain>/api/integrations/slack/callback`. The bot OAuth flow requests these scopes: `app_mentions:read`, `channels:history`, `channels:read`, `chat:write`, `files:read`, `groups:history`, `groups:read`, `im:history`, `im:read`, `mpim:history`, `mpim:read`, `users:read`, and `users:read.email`.
 
