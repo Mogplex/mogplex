@@ -49,6 +49,7 @@ function formatContextLength(value: number | null | undefined) {
 function formatProviderLabel(provider: string) {
   if (provider === "openai") return "OpenAI";
   if (provider === "openrouter") return "OpenRouter";
+  if (provider === "openai-compatible") return "OpenAI-compatible";
   if (provider === "xai") return "xAI";
 
   return provider

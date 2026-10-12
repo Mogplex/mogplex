@@ -80,3 +80,24 @@ test("a user with no provider access reaches nothing", () => {
   assert.equal(isModelReachable("openrouter/openai/gpt-5", noAccess), false);
   assert.equal(isModelReachable("moonshotai/kimi-k2.6", noAccess), false);
 });
+
+test("openai-compatible/* is reachable only when the deployment configures the endpoint", () => {
+  const configured = {
+    MOGPLEX_OPENAI_COMPATIBLE_BASE_URL: "https://litellm.example/v1",
+  } as unknown as NodeJS.ProcessEnv;
+  const unconfigured = {} as unknown as NodeJS.ProcessEnv;
+
+  assert.equal(
+    isModelReachable("openai-compatible/llama3.1:8b", noAccess, configured),
+    true
+  );
+  // Gateway access does not make the operator's endpoint models reachable.
+  assert.equal(
+    isModelReachable(
+      "openai-compatible/llama3.1:8b",
+      { ...noAccess, hasGateway: true },
+      unconfigured
+    ),
+    false
+  );
+});

@@ -95,6 +95,22 @@ Mogplex's background jobs run on Trigger.dev. You can use Trigger.dev Cloud or r
 
 For local task development against your instance, run `pnpm trigger:dev` with the same variables.
 
+## Self-hosted models (OpenAI-compatible endpoint)
+
+Air-gapped or cost-sensitive deployments can serve models from their own endpoint instead of AI Gateway or provider keys. Any server that implements the OpenAI chat completions API works, for example [LiteLLM](https://docs.litellm.ai/), [vLLM](https://docs.vllm.ai/), or [Ollama](https://ollama.com/).
+
+```bash
+MOGPLEX_OPENAI_COMPATIBLE_BASE_URL=http://litellm:4000/v1   # the URL that ends before /chat/completions
+MOGPLEX_OPENAI_COMPATIBLE_API_KEY=sk-...                    # optional; omit for servers without auth
+MOGPLEX_OPENAI_COMPATIBLE_MODELS=llama3.1:8b=Llama 3.1 8B,qwen2.5-coder
+```
+
+- Each listed model appears in the model pickers as `openai-compatible/<id>` for every user. The text after `=` is the display name. Users can still turn a model off in **Settings → Models**, and team model allowlists accept these ids.
+- Requests go straight to your endpoint, never through AI Gateway, and do not need platform AI access. Mogplex sends only `MOGPLEX_OPENAI_COMPATIBLE_API_KEY` to the endpoint, never the platform `OPENAI_API_KEY`.
+- The endpoint has no pricing data, so usage is recorded without a cost, like direct provider keys.
+- Scope: the native Mogplex agent and chat surfaces. The Claude Code and Codex harnesses keep their own model access.
+- Set the same variables in Trigger.dev so automation runs can use these models.
+
 ## Operating it
 
 - **Check the setup.** Run `pnpm setup:doctor` after you set the environment, and again after each upgrade. It reports each service as pass, warn, or fail, never prints secret values, and links to the guide that fixes each problem. Add `--live` to also validate the Trigger.dev and Vercel credentials against their APIs. It exits non-zero when a check fails, so it also works as a deploy gate.

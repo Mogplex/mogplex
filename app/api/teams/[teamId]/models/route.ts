@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireProfileId } from "@/lib/auth";
+import { openAiCompatibleCatalogRows } from "@/lib/models/openai-compatible-config";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { loadTeamMembershipAuth } from "@/lib/team-management";
 import { recordTeamAuditEvent } from "@/lib/team-audit";
@@ -28,7 +29,13 @@ export function createTeamModelHandlers(
       .select("id")
       .in("id", [...modelIds]);
     if (error) throw new Error(error.message);
-    return new Set((data ?? []).map((row) => row.id as string));
+    const catalogIds = (data ?? []).map((row) => row.id as string);
+    // Operator-configured endpoint models are not stored in ai_models.
+    const requested = new Set(modelIds);
+    for (const row of openAiCompatibleCatalogRows()) {
+      if (requested.has(row.id)) catalogIds.push(row.id);
+    }
+    return new Set(catalogIds);
   }
 
   async function GET(

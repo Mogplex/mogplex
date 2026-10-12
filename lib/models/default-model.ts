@@ -3,6 +3,7 @@ import {
   DEFAULT_NEW_AGENT_MODEL_ID,
 } from "@/lib/agents/model-options";
 import { filterVisibleModelCatalog } from "@/lib/models/catalog-visibility";
+import { withOpenAiCompatibleModels } from "@/lib/models/openai-compatible-config";
 import { loadScopedUserProviderAccess } from "@/lib/models/provider-access";
 import { isModelReachable } from "@/lib/models/provider-reachability";
 import {
@@ -155,7 +156,10 @@ async function loadUserModelCatalogState(userId: string) {
   }
 
   return {
-    catalog: (catalog ?? []) as ModelAvailabilityRow[],
+    catalog: withOpenAiCompatibleModels(
+      (catalog ?? []) as ModelAvailabilityRow[],
+      (row): ModelAvailabilityRow => row
+    ),
     preferences: (preferences ?? []) as UserModelPreferenceRow[],
     policy: buildNewModelDefaultPolicy(profile as ProfileModelSettings | null),
     storedDefaultModel:
