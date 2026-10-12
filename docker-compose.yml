@@ -1,28 +1,98 @@
-# Self-hosted Mogplex: the web app container.
+# Self-hosted Mogplex.
 #
-# The database (Neon/Postgres), Trigger.dev, and Vercel Sandbox are external
-# services, the same ones the Vercel deployment uses, so they are not bundled
-# here. docs/self-hosting.md lists each one, what it unlocks, and the env
-# vars it needs. Questions: https://github.com/Mogplex/mogplex/discussions
+#   cp .env.example .env    # set APP_URL, BETTER_AUTH_SECRET, CRON_SECRET, ...
+#   docker compose up -d
+#
+# Services:
+#   postgres  Postgres 17 with pgvector. Used unless .env sets DATABASE_URL.
+#   migrate   Applies neon/baseline.sql and neon/migrations, then exits.
+#   app       The Next.js web app on port 3000, started after migrate succeeds.
+#   cron      Calls the vercel.json cron routes on schedule with CRON_SECRET.
+#
+# Trigger.dev, Vercel Sandbox, the GitHub App, and model providers are still
+# external services. https://docs.mogplex.com/self-hosting lists each one and
+# the env vars it needs. Questions: https://github.com/Mogplex/mogplex/discussions
+
+x-app-build: &app-build
+  context: .
+  args:
+    # Optional build-time values, inlined into the client bundle. Changing
+    # any of these requires `docker compose build`, not just a restart.
+    NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-}
+    NEXT_PUBLIC_MOGPLEX_DATA_BACKEND: ${NEXT_PUBLIC_MOGPLEX_DATA_BACKEND:-neon}
+    NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}
+    NEXT_PUBLIC_C15T_URL: ${NEXT_PUBLIC_C15T_URL:-}
+    NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
+    NEXT_PUBLIC_VERCEL_APP_CLIENT_ID: ${NEXT_PUBLIC_VERCEL_APP_CLIENT_ID:-}
+
+x-database-env: &database-env
+  # An external database in .env (DATABASE_URL / DATABASE_URL_UNPOOLED) wins
+  # over the bundled postgres service.
+  DATABASE_URL: ${DATABASE_URL:-postgres://mogplex:${POSTGRES_PASSWORD:-mogplex}@postgres:5432/mogplex}
+  DATABASE_URL_UNPOOLED: ${DATABASE_URL_UNPOOLED:-postgres://mogplex:${POSTGRES_PASSWORD:-mogplex}@postgres:5432/mogplex}
 
 services:
-  app:
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: mogplex
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mogplex}
+      POSTGRES_DB: mogplex
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mogplex -d mogplex"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  migrate:
     build:
       context: .
-      args:
-        # Inlined into the client bundle at build time — changing any of
-        # these requires an image rebuild, not just a restart.
-        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:?set in .env}
-        NEXT_PUBLIC_MOGPLEX_DATA_BACKEND: ${NEXT_PUBLIC_MOGPLEX_DATA_BACKEND:-neon}
-        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
-        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}
-        NEXT_PUBLIC_C15T_URL: ${NEXT_PUBLIC_C15T_URL:-}
-        NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
-        NEXT_PUBLIC_VERCEL_APP_CLIENT_ID: ${NEXT_PUBLIC_VERCEL_APP_CLIENT_ID:-}
+      target: migrate
+    environment:
+      <<: *database-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  app:
+    build: *app-build
+    image: mogplex-app
     # Server-side runtime env. Copy .env.example to .env and fill in the
     # values for the services you provisioned.
     env_file:
       - .env
+    # Set APP_URL there: the app reads its public URL at runtime, so one
+    # image serves any domain.
+    environment:
+      <<: *database-env
     ports:
       - "3000:3000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
+
+  cron:
+    # Reuses the image the app service builds; never pulled from a registry.
+    image: mogplex-app
+    pull_policy: never
+    command: ["node", "scripts/self-host-cron.mjs"]
+    environment:
+      CRON_SECRET: ${CRON_SECRET:?set CRON_SECRET in .env}
+      CRON_TARGET_URL: http://app:3000
+    # The image's healthcheck probes the web server, which this service does
+    # not run.
+    healthcheck:
+      disable: true
+    depends_on:
+      app:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
