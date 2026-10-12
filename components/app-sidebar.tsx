@@ -38,6 +38,7 @@ import type { CapacityBillingSummaryV2 } from "@/lib/billing/capacity-summary-ty
 import { scopedHref } from "@/lib/scoped-href";
 import { SettingsNavigation } from "@/components/settings/settings-navigation";
 import { useSettingsNavigation } from "@/hooks/use-settings-navigation";
+import { useSelfHostedMode } from "@/components/self-hosted-provider";
 
 const SIDEBAR_WIDTH_KEY = "mogplex.appSidebar.width";
 const SIDEBAR_COLLAPSED_KEY = "mogplex.appSidebar.collapsed";
@@ -146,8 +147,9 @@ export function AppSidebar() {
   // personal-scope billing.
   const scopeResolved =
     Boolean(providedActiveTeamId) || routeIsPersonalScope || Boolean(routeTeam);
+  const selfHosted = useSelfHostedMode();
   const shouldLoadBilling =
-    Boolean(scope) && !membershipsLoading && scopeResolved;
+    !selfHosted && Boolean(scope) && !membershipsLoading && scopeResolved;
   // "sidebar" isolates this SWR entry from the settings-page billing summary.
   const { data: billingSummary, error: billingError, isLoading: billingLoading } =
     useSWR<CapacityBillingSummaryV2>(
@@ -157,7 +159,7 @@ export function AppSidebar() {
       loadBillingSummary
     );
   const showBillingCard =
-    Boolean(scope) && (membershipsLoading || scopeResolved);
+    !selfHosted && Boolean(scope) && (membershipsLoading || scopeResolved);
   const billingPending = membershipsLoading || billingLoading;
   const [width, setWidth] = useState(DEFAULT_WIDTH);
   const [controlExpanded, setControlExpanded] = useState(false);

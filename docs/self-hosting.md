@@ -30,6 +30,10 @@ Each row is independent. Mogplex boots with only the first row configured; every
 
 Every one of these has its own signup, billing, and credential rotation. Budget an afternoon for a full setup; the app shell alone takes a few minutes.
 
+## Give users access
+
+Platform AI and sandboxes are gated per user. On mogplex.com that gate is a funded billing account. A self-hosted deployment without Stripe has no balances, so set `MOGPLEX_SELF_HOSTED=1`. It grants platform AI and sandbox access to every signed-in user and hides the billing screens. To limit the grant, set `MOGPLEX_SELF_HOSTED_ALLOWED_EMAIL_DOMAINS=example.com`. Self-host mode never activates while `STRIPE_SECRET_KEY` is set. For finer control, use the `PLATFORM_ACCESS_*` allowlists or the `profiles.allow_platform_*` flags. Full guide: [docs.mogplex.com/self-hosting](https://docs.mogplex.com/self-hosting).
+
 ## Build
 
 `NEXT_PUBLIC_*` values are inlined into the client bundle **at build time**. You cannot set them when the container starts — you bake them in with build args and rebuild whenever they change.

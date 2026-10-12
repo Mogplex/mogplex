@@ -23,10 +23,12 @@ export type SettingsSection =
 export function buildSettingsNavItems(
   slug: string,
   kind: "personal" | "team",
-  canManageTeam = false
+  canManageTeam = false,
+  { hideBilling = false }: { hideBilling?: boolean } = {}
 ) {
   return (kind === "team" ? TEAM_SETTINGS : PERSONAL_SETTINGS)
     .filter((item) => item.id !== "audit" || canManageTeam)
+    .filter((item) => item.id !== "billing" || !hideBilling)
     .map((item) => ({
       ...item,
       href: scopedHref(slug, `/settings/${item.id}`),

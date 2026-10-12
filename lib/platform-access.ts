@@ -2,6 +2,11 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { findBillingAccountForScope } from "@/lib/billing/accounts";
 import { getBillingBalance } from "@/lib/billing/ledger";
 import { resolveActiveTeamCapabilities } from "@/lib/team-capabilities";
+import {
+  getSelfHostedMode,
+  resolveSelfHostedMode,
+  selfHostedModeGrants,
+} from "@/lib/self-hosted";
 
 export type PlatformAccess = {
   allowPlatformAi: boolean;
@@ -132,7 +137,11 @@ export function derivePlatformAccess(
     : parseDomainAllowlist(env[PLATFORM_ACCESS_EMAIL_DOMAINS_ENV]);
   const email = profile?.email?.trim().toLowerCase() || null;
   const emailDomain = getEmailDomain(email);
+  const selfHostedMode = usesDefaultEnv
+    ? getSelfHostedMode()
+    : resolveSelfHostedMode(env);
   const allowlisted =
+    selfHostedModeGrants(selfHostedMode, email) ||
     (profile?.id ? allowlistedUserIds.has(profile.id) : false) ||
     (email ? allowlistedEmails.has(email) : false) ||
     (emailDomain ? allowlistedEmailDomains.has(emailDomain) : false);

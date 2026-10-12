@@ -432,4 +432,4 @@ upstream provider's balance failure must not ask the customer to change settings
 
 ## Billing posture
 
-Billing posture: all usage is billed — there is no free tier and no default allowlist. Platform-access exemptions (`PLATFORM_ACCESS_*` env vars, `profiles.allow_platform_ai`) are granted only by Charles's explicit instruction; never add built-in allowlist entries in code.
+Billing posture: all usage is billed — there is no free tier and no default allowlist. Platform-access exemptions (`PLATFORM_ACCESS_*` env vars, `profiles.allow_platform_ai`) are granted only by Charles's explicit instruction; never add built-in allowlist entries in code. The one self-host exemption is the opt-in `MOGPLEX_SELF_HOSTED` env flag (`lib/self-hosted.ts`), which never activates while `STRIPE_SECRET_KEY` is set.
