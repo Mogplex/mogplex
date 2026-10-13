@@ -12,11 +12,17 @@ export function readRuntimeEnv(name: string) {
 }
 
 /**
- * The configured public app URL, read at runtime: `APP_URL` first, then
- * `NEXT_PUBLIC_APP_URL`. Returns `undefined` when neither is set.
+ * The configured public app URL: `APP_URL` at runtime, then
+ * `NEXT_PUBLIC_APP_URL` at runtime, then the `NEXT_PUBLIC_APP_URL` value the
+ * build inlined. The last step keeps deployments that set the URL only at build
+ * time working. Returns `undefined` when none is set.
  */
 export function readAppUrlEnv() {
-  return readRuntimeEnv("APP_URL") ?? readRuntimeEnv("NEXT_PUBLIC_APP_URL");
+  return (
+    readRuntimeEnv("APP_URL") ??
+    readRuntimeEnv("NEXT_PUBLIC_APP_URL") ??
+    (process.env.NEXT_PUBLIC_APP_URL?.trim() || undefined)
+  );
 }
 
 function parseHttpUrl(value: string, envName: string) {
