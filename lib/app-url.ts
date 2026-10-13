@@ -2,7 +2,7 @@ const FALLBACK_REDIRECT_ORIGIN = "https://mogplex.local";
 
 /**
  * Reads an environment variable when the code runs. Next.js replaces a static
- * `process.env.NEXT_PUBLIC_*` member with its build-time value in server
+ * member read of a `NEXT_PUBLIC_*` variable with its build-time value in server
  * bundles too, which would lock a published image to the domain it was built
  * for. A computed key is never inlined.
  */
