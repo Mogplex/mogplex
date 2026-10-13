@@ -40,7 +40,7 @@ function base64UrlEncode(value: Buffer | string) {
     .replace(/[=]+$/g, "");
 }
 
-function normalizePrivateKey(privateKey: string) {
+export function normalizePrivateKey(privateKey: string) {
   return privateKey.includes(String.raw`\n`)
     ? privateKey.replace(/\\n/g, "\n")
     : privateKey;
