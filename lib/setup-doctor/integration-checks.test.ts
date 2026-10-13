@@ -1,10 +1,10 @@
 import { generateKeyPairSync } from "node:crypto";
 import { describe, expect, it } from "vitest";
+import { HOSTED_TRIGGER_PROJECT_REF } from "@/lib/trigger/project-ref";
 import {
   checkGithubApp,
   checkSandboxes,
   checkTrigger,
-  HOSTED_TRIGGER_PROJECT_REF,
 } from "./integration-checks";
 
 const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });

@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { normalizePrivateKey } from "@/lib/github-app";
+import { HOSTED_TRIGGER_PROJECT_REF } from "@/lib/trigger/project-ref";
 import {
   configured,
   DOCS,
@@ -7,9 +8,6 @@ import {
   type DoctorEnv,
   missing,
 } from "./types";
-
-/** trigger.config.ts falls back to this hosted ref when TRIGGER_PROJECT_REF is unset. */
-export const HOSTED_TRIGGER_PROJECT_REF = "proj_ssjnkodxhnnukrwiymaf";
 
 const GITHUB_APP_VARS = [
   "GITHUB_APP_ID",
