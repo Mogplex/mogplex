@@ -17,6 +17,9 @@ const testServerEnv =
   `BETTER_AUTH_SECRET=playwright-better-auth-secret-at-least-32-chars ` +
   `BETTER_AUTH_URL=${baseURL} NEXT_PUBLIC_APP_URL=${baseURL} ` +
   `SLACK_SIGNING_SECRET=${slackSigningFixture} ` +
+  // Self-hosting setup runs only while no GitHub App is configured. Clear the
+  // App so .env.local cannot hide the setup page, as CI already runs.
+  `MOGPLEX_SETUP_ENABLED=1 GITHUB_APP_ID= GITHUB_APP_PRIVATE_KEY= GITHUB_APP_NAME= ` +
   // Production builds load .env.local, including real Sentry DSNs. Explicitly
   // clear both ingestion paths so fixture-only localhost failures cannot be
   // reported as production incidents.

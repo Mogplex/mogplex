@@ -14,6 +14,15 @@ describe("authenticated root route policy", () => {
     expect(isUnscopedAuthedRoutePath("/checkout/complete")).toBe(true);
     expect(isUnscopedAuthedRoutePath("/checkout-old")).toBe(false);
   });
+
+  it("keeps self-hosting setup authenticated and outside workspace scope resolution", () => {
+    expect(isPublicRoutePath("/admin/setup/github")).toBe(false);
+    expect(isUnscopedAuthedRoutePath("/admin/setup/github")).toBe(true);
+    expect(isUnscopedAuthedRoutePath("/admin/setup/github/complete")).toBe(
+      true
+    );
+    expect(isUnscopedAuthedRoutePath("/admin")).toBe(false);
+  });
 });
 
 describe("hosted CLI bearer route policy", () => {

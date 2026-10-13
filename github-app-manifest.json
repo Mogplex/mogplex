@@ -1,0 +1,38 @@
+{
+  "name": "Mogplex",
+  "url": "https://mogplex.example.com",
+  "description": "Run Mogplex agents against this account's repositories.",
+  "hook_attributes": {
+    "url": "https://mogplex.example.com/api/webhooks/github",
+    "active": true
+  },
+  "redirect_url": "https://mogplex.example.com/admin/setup/github/complete",
+  "callback_urls": ["https://mogplex.example.com/api/auth/github/callback"],
+  "setup_url": "https://mogplex.example.com/api/auth/github/callback",
+  "setup_on_update": true,
+  "public": true,
+  "request_oauth_on_install": false,
+  "default_permissions": {
+    "actions": "read",
+    "checks": "write",
+    "contents": "write",
+    "issues": "write",
+    "members": "read",
+    "metadata": "read",
+    "pull_requests": "write",
+    "statuses": "write",
+    "vulnerability_alerts": "read"
+  },
+  "default_events": [
+    "check_run",
+    "commit_comment",
+    "dependabot_alert",
+    "issue_comment",
+    "issues",
+    "pull_request",
+    "pull_request_review_comment",
+    "push",
+    "repository",
+    "workflow_run"
+  ]
+}
