@@ -198,6 +198,10 @@ function replaceInternalCapabilityDetails(text: string) {
       "GitHub issue access"
     )
     .replace(/\bgithub_merge_pull_request\b/gi, "GitHub pull request access")
+    .replace(
+      /\bgithub_(?:list|delete)_branches\b|\bgithub_create_branch\b/gi,
+      "GitHub branch access"
+    )
     .replace(/\b(?:run_command|virtual_exec)\b/gi, "command execution")
     .replace(
       /\b(?:sandbox_start|start_sandbox)\b/gi,

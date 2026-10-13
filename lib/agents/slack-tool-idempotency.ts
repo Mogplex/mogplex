@@ -38,6 +38,7 @@ export const SLACK_STATIC_READ_ONLY_TOOL_NAMES: ReadonlySet<string> = new Set([
   "browse_skills",
   "browse_vercel_docs",
   "find_skills",
+  "github_list_branches",
   "github_list_repos",
   "github_pr_search",
   "github_pull_request_status",
@@ -53,7 +54,9 @@ export const SLACK_STATIC_READ_ONLY_TOOL_NAMES: ReadonlySet<string> = new Set([
 export const SLACK_STATIC_MUTATION_TOOL_NAMES: ReadonlySet<string> = new Set([
   "add_memory",
   "bash",
+  "github_create_branch",
   "github_create_issue",
+  "github_delete_branches",
   "github_create_pull_request",
   "github_update_issue",
   "github_comment_issue",

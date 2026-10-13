@@ -11,6 +11,7 @@ import {
   type ExternalAgentRunRow,
 } from "./runs-types";
 import { cleanupTerminalRunSandbox } from "./run-sandbox-cleanup";
+import { cleanupTerminalRunBranches } from "./run-branch-cleanup";
 import { recordTerminalCommitWithTimeout } from "./run-terminal-commit";
 
 export type WorkerCompletion = {
@@ -25,6 +26,7 @@ export type RuntimeFinalizationDeps = {
   appendEvent: typeof safeAppendAiCallEvent;
   notifyTerminal: typeof notifyTerminalSlackRunOnce;
   cleanupSandbox: typeof cleanupTerminalRunSandbox;
+  cleanupBranches: typeof cleanupTerminalRunBranches;
   recordTerminalCommit: typeof recordTerminalCommitWithTimeout;
 };
 const defaultDeps: RuntimeFinalizationDeps = {
@@ -35,6 +37,7 @@ const defaultDeps: RuntimeFinalizationDeps = {
   appendEvent: safeAppendAiCallEvent,
   notifyTerminal: notifyTerminalSlackRunOnce,
   cleanupSandbox: cleanupTerminalRunSandbox,
+  cleanupBranches: cleanupTerminalRunBranches,
   recordTerminalCommit: recordTerminalCommitWithTimeout,
 };
 
@@ -125,9 +128,11 @@ export async function finalizeRunAfterWorkerExit(
 
   // Propagate notification errors so the supervisor retries delivery without
   // executing the agent again. A terminal row alone is not successful delivery.
+  // Branch cleanup never rejects; a run's empty boot branch is best-effort.
   const results = await Promise.allSettled([
     deps.cleanupSandbox(run),
     deps.notifyTerminal(run, run.status),
+    deps.cleanupBranches(run, call),
   ]);
   for (const result of results) {
     if (result.status === "rejected") throw result.reason;

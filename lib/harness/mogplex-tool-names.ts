@@ -30,5 +30,6 @@ export const MOGPLEX_READ_ONLY_TOOLS: ReadonlySet<string> = new Set([
   "load_skill",
   "github_pr_search",
   "github_list_repos",
+  "github_list_branches",
   "github_pull_request_status",
 ]);

@@ -53,6 +53,7 @@ import { handleAutomationJobFailure } from "@/lib/workflows/automation-job-failu
 import { supersedeIfVanishedPr } from "@/lib/workflows/automation-job-pr-liveness";
 import type { AutomationJobExecutorDeps } from "@/lib/workflows/automation-job-executor-deps";
 import { executeAutomationContext } from "@/lib/workflows/automation-job-context-executor";
+import { withTaskBranchCleanup } from "@/lib/workflows/automation-task-branch-cleanup";
 
 /**
  * Execute an automation job run with full orchestration.
@@ -278,10 +279,15 @@ export async function runAutomationJob(
       deps: {
         ...deps,
         executeAutomationContext: (execInput) =>
-          executeAutomationContext({
-            ...execInput,
-            deps,
-          }),
+          withTaskBranchCleanup(execInput.context, execInput.githubToken, () =>
+            executeAutomationContext({ ...execInput, deps })
+          ),
+        runAutomationHarnessAgent: (
+          harnessInput: Parameters<typeof deps.runAutomationHarnessAgent>[0]
+        ) =>
+          withTaskBranchCleanup(harnessInput.context, githubToken, () =>
+            deps.runAutomationHarnessAgent(harnessInput)
+          ),
       } as FlowExecutorDeps,
     });
     if (!flowExecution.success) {

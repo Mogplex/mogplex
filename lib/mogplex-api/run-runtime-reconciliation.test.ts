@@ -25,8 +25,16 @@ function fixture() {
   const notified: string[] = [];
   const events: string[] = [];
   const terminalCommitsRecorded: string[] = [];
+  const branchCleanups: Array<{ status: string; callStatus: string | null }> =
+    [];
   const deps: RuntimeFinalizationDeps = {
     cleanupSandbox: async () => {},
+    cleanupBranches: async (terminal, terminalCall) => {
+      branchCleanups.push({
+        status: terminal.status,
+        callStatus: (terminalCall as typeof call | null)?.status ?? null,
+      });
+    },
     loadRun: async () => run,
     loadCall: async () => call,
     finishCall: async (expected, status, error) => {
@@ -66,6 +74,7 @@ function fixture() {
     notified,
     events,
     terminalCommitsRecorded,
+    branchCleanups,
     setRun: (patch: Partial<typeof run>) => {
       run = { ...run, ...patch };
     },
@@ -91,6 +100,21 @@ it("finalizes both records and replaces stale Slack controls after a hard timeou
   });
   expect(f.notified).toEqual(["failed"]);
   expect(f.events).toEqual(["failed"]);
+});
+
+it("cleans up the run's boot branch once the run is terminal", async () => {
+  const f = fixture();
+  await finalizeRunAfterWorkerExit(f.run(), timeout, f.deps);
+  expect(f.branchCleanups).toEqual([
+    { status: "failed", callStatus: "failed" },
+  ]);
+});
+
+it("leaves the branch of a run awaiting input for its resume", async () => {
+  const f = fixture();
+  f.setRun({ status: "awaiting_input" });
+  await finalizeRunAfterWorkerExit(f.run(), timeout, f.deps);
+  expect(f.branchCleanups).toEqual([]);
 });
 
 it("preserves completed work when a worker dies after persisting its result", async () => {
