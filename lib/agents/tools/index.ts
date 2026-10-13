@@ -39,6 +39,7 @@ import {
   createGithubIssueUpdateTool,
 } from "./github-issue-mutation";
 import { createGithubPullRequestMergeTool } from "./github-pr-merge";
+import { createGithubBranchTools } from "./github-branches";
 import { createGithubPullRequestStatusTool } from "./github-pr-status";
 import { createMemoryTools, type MemoryToolContext } from "./memory";
 import { createSkillTools } from "./skills";
@@ -162,6 +163,16 @@ export function buildStaticTools(
           }),
           github_comment_issue: createGithubIssueCommentTool({
             userId,
+          }),
+          ...createGithubBranchTools({
+            userId,
+            teamId,
+            aiCallId,
+            requestId,
+            defaultRepo: {
+              owner: repoDefaults?.owner,
+              repo: repoDefaults?.repo,
+            },
           }),
           github_merge_pull_request: createGithubPullRequestMergeTool({
             userId,

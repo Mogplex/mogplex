@@ -13,11 +13,18 @@ import {
 /**
  * The branch a task run works on. An API-triggered run uses the branch fixed
  * when it was triggered, so a retry of the same run returns to the same work
- * and the caller can read its output from a known place. Other task runs get
- * a fresh branch.
+ * and the caller can read its output from a known place. Other task runs use
+ * the fresh branch `withTaskBranchCleanup` assigned, which it deletes again if
+ * the run leaves it empty.
  */
 export function taskWorkingBranch(context: Pick<JobContext, "metadata">) {
-  return apiRunBranch(context) ?? `mogplex/task-${randomUUID()}`;
+  const assigned = context.metadata.task_working_branch;
+  return (
+    apiRunBranch(context) ??
+    (typeof assigned === "string" && assigned.startsWith("mogplex/task-")
+      ? assigned
+      : `mogplex/task-${randomUUID()}`)
+  );
 }
 
 /**

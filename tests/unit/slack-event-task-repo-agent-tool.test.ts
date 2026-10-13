@@ -417,4 +417,13 @@ test("DM system guidance tells the agent to delegate code changes", async () => 
     systemSuffix ?? "",
     /Do not investigate the code yourself, post findings, or propose a plan/
   );
+  // Branch pruning is done in the turn, not handed back as local git commands.
+  assert.match(
+    systemSuffix ?? "",
+    /delete every branch it marks safeToDelete with github_delete_branches in the same turn/
+  );
+  assert.match(
+    systemSuffix ?? "",
+    /Never tell the user to run git commands themselves/
+  );
 });
