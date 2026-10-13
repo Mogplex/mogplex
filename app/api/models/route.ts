@@ -7,6 +7,7 @@ import { NextResponse } from "next/server";
 import { getUserId, requireUserId } from "@/lib/auth";
 import { getDefaultNewAgentModel } from "@/lib/agents/model-options";
 import { normalizeCatalogModel } from "@/lib/models/catalog-normalization";
+import { withOpenAiCompatibleModels } from "@/lib/models/openai-compatible-config";
 import { filterVisibleModelCatalog } from "@/lib/models/catalog-visibility";
 import { toCliModelInfoList } from "@/lib/models/cli-format";
 import { loadScopedUserProviderAccess } from "@/lib/models/provider-access";
@@ -238,7 +239,9 @@ export function createModelsGetHandler(overrides: Partial<ModelsGetDeps> = {}) {
 
       // `created_at` is an internal resolution input; keep it out of the wire.
       const visibleCatalog = filterVisibleModelCatalog(
-        (data ?? []).map(normalizeCatalogModel)
+        withOpenAiCompatibleModels(data, (row) => row).map(
+          normalizeCatalogModel
+        )
       ).map(({ created_at: _created_at, ...model }) => model);
       if (format === "cli") {
         return NextResponse.json(
@@ -316,7 +319,7 @@ export function createModelsGetHandler(overrides: Partial<ModelsGetDeps> = {}) {
     // model is not served as enabled before the new-arrivals hook reconciles.
     const policy = buildNewModelDefaultPolicy(profileSettings);
 
-    const catalog = (allModels ?? [])
+    const catalog = withOpenAiCompatibleModels(allModels, (row) => row)
       .map(normalizeCatalogModel)
       .map((model) => toCatalogEntry(model, prefMap, policy));
 

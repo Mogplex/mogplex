@@ -318,3 +318,37 @@ test("team models PATCH reports write failure without an audit", async () => {
   assert.equal(f.writes.length, 1);
   assert.deepEqual(f.audits, []);
 });
+
+test("team models PATCH accepts the operator's OpenAI-compatible endpoint models", async () => {
+  const original = process.env.MOGPLEX_OPENAI_COMPATIBLE_BASE_URL;
+  const originalModels = process.env.MOGPLEX_OPENAI_COMPATIBLE_MODELS;
+  process.env.MOGPLEX_OPENAI_COMPATIBLE_BASE_URL = "https://litellm.example/v1";
+  process.env.MOGPLEX_OPENAI_COMPATIBLE_MODELS = "llama3.1:8b";
+  try {
+    // ai_models knows only model-a; the endpoint model is not stored there.
+    const f = fixture({ missingIds: true });
+    const response = await f.handlers.PATCH(
+      request({
+        model_allowlist: ["model-a", "openai-compatible/llama3.1:8b"],
+      }),
+      context()
+    );
+    assert.equal(response.status, 200);
+    assert.deepEqual(f.writes, [
+      { model_allowlist: ["model-a", "openai-compatible/llama3.1:8b"] },
+    ]);
+
+    const unconfigured = await f.handlers.PATCH(
+      request({ model_allowlist: ["openai-compatible/qwen2.5-coder"] }),
+      context()
+    );
+    assert.equal(unconfigured.status, 422);
+  } finally {
+    if (original === undefined)
+      delete process.env.MOGPLEX_OPENAI_COMPATIBLE_BASE_URL;
+    else process.env.MOGPLEX_OPENAI_COMPATIBLE_BASE_URL = original;
+    if (originalModels === undefined)
+      delete process.env.MOGPLEX_OPENAI_COMPATIBLE_MODELS;
+    else process.env.MOGPLEX_OPENAI_COMPATIBLE_MODELS = originalModels;
+  }
+});

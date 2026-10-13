@@ -1,5 +1,6 @@
 import { normalizeCatalogModel } from "@/lib/models/catalog-normalization";
 import { filterVisibleModelCatalog } from "@/lib/models/catalog-visibility";
+import { withOpenAiCompatibleModels } from "@/lib/models/openai-compatible-config";
 import {
   buildUserProviderAccess,
   isModelReachable,
@@ -69,7 +70,9 @@ export async function listMogplexApiModels(
   );
 
   return filterVisibleModelCatalog(
-    (catalogResult.data ?? []).map(normalizeCatalogModel)
+    withOpenAiCompatibleModels(catalogResult.data, (row) => row).map(
+      normalizeCatalogModel
+    )
   )
     .filter(
       (model) =>

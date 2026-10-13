@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireUserId } from "@/lib/auth";
 import { filterVisibleModelCatalog } from "@/lib/models/catalog-visibility";
+import { withOpenAiCompatibleModels } from "@/lib/models/openai-compatible-config";
 import {
   buildNewModelDefaultPolicy,
   buildUserModelPreferenceMap,
@@ -195,7 +196,7 @@ export function createRepoModelsGetHandler(
     // Honor the auto-enable-off switch here too: a new model must not leak
     // into a repo's resolved model set before the new-arrivals hook pins it.
     const resolved = resolveRepoModels(
-      allModelsRes.data ?? [],
+      withOpenAiCompatibleModels(allModelsRes.data, (row) => row),
       buildUserModelPreferenceMap(prefsRes.data ?? []),
       buildNewModelDefaultPolicy(profileRes.data),
       overrides

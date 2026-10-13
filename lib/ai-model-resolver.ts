@@ -15,6 +15,11 @@ import {
   type GatewayProviderOptions,
 } from "@/lib/models/gateway-provider-routing";
 import { applyOpenRouterNitro } from "@/lib/models/openrouter-variants";
+import {
+  isOpenAiCompatibleModelId,
+  OPENAI_COMPATIBLE_PROVIDER,
+} from "@/lib/models/openai-compatible-config";
+import { resolveOpenAiCompatibleModel } from "@/lib/models/openai-compatible";
 import { loadUsableFallbackModelIds } from "@/lib/models/fallback-preferences";
 import { deferTeamAuditEvent, recordTeamAuditEvent } from "@/lib/team-audit";
 import { getScopedProviderKey } from "@/lib/vault";
@@ -194,7 +199,9 @@ export function createResolveUserLanguageModel(
     const normalizedModel = modelId.trim();
     const [provider, ...modelParts] = normalizedModel.split("/");
     const providerModelId = modelParts.join("/");
-    const isOpenRouterModel = provider === "openrouter" && providerModelId;
+    const bypassesGateway =
+      (provider === "openrouter" || provider === OPENAI_COMPATIBLE_PROVIDER) &&
+      Boolean(providerModelId);
     const teamId = options?.teamId ?? null;
 
     // Capability + allowlist gates (no-ops for solo scope). Resolved lazily
@@ -327,7 +334,7 @@ export function createResolveUserLanguageModel(
       deps.getProviderKey(userId, "ai_gateway", teamId),
     ]);
     const usesGateway =
-      !isOpenRouterModel &&
+      !bypassesGateway &&
       Boolean(
         userGatewayKey || (process.env.AI_GATEWAY_API_KEY && allowPlatformAi)
       );
@@ -341,6 +348,7 @@ export function createResolveUserLanguageModel(
               // Gateway access is already established; reuse this request's policy
               // rather than reading credentials, capabilities and allowlist again.
               !candidate.startsWith("openrouter/") &&
+              !isOpenAiCompatibleModelId(candidate) &&
               hasCapability(capabilities, modelCapability(candidate)) &&
               (!teamId || allowlistPermitsModel(allowlistState, candidate))
           )
@@ -374,7 +382,7 @@ export function createResolveUserLanguageModel(
           fetch: options?.providerFetch,
         }),
       }));
-    if (userGatewayKey && !isOpenRouterModel) {
+    if (userGatewayKey && !bypassesGateway) {
       const providerOptions = gatewayProviderOptions(
         normalizedModel,
         options?.gatewayContext ?? { userId },
@@ -392,11 +400,7 @@ export function createResolveUserLanguageModel(
       };
     }
 
-    if (
-      process.env.AI_GATEWAY_API_KEY &&
-      allowPlatformAi &&
-      !isOpenRouterModel
-    ) {
+    if (process.env.AI_GATEWAY_API_KEY && allowPlatformAi && !bypassesGateway) {
       const providerOptions = gatewayProviderOptions(
         normalizedModel,
         options?.gatewayContext ?? { userId },
@@ -419,6 +423,13 @@ export function createResolveUserLanguageModel(
         };
       }
       return { model: normalizedModel, providerOptions };
+    }
+
+    if (provider === OPENAI_COMPATIBLE_PROVIDER && providerModelId) {
+      const fetch = options?.providerFetch;
+      return {
+        model: resolveOpenAiCompatibleModel(providerModelId, { fetch }),
+      };
     }
 
     if (provider === "openai" && providerModelId) {

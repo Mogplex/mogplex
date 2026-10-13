@@ -6,6 +6,13 @@
 //   - openai/* and anthropic/* are also reachable via direct provider keys
 //   - other labs (xai, moonshotai, deepseek, minimax, google, …) are
 //     gateway-only at the moment
+//   - openai-compatible/* is reachable for everyone when the deployment
+//     configures MOGPLEX_OPENAI_COMPATIBLE_BASE_URL, and never via the gateway
+
+import {
+  OPENAI_COMPATIBLE_PROVIDER,
+  readOpenAiCompatibleConfig,
+} from "@/lib/models/openai-compatible-config";
 
 export type UserProviderAccess = {
   hasGateway: boolean;
@@ -16,10 +23,14 @@ export type UserProviderAccess = {
 
 export function isModelReachable(
   modelId: string,
-  access: UserProviderAccess
+  access: UserProviderAccess,
+  env: NodeJS.ProcessEnv = process.env
 ): boolean {
   const provider = modelId.split("/")[0];
   if (provider === "openrouter") return access.hasOpenRouter;
+  if (provider === OPENAI_COMPATIBLE_PROVIDER) {
+    return readOpenAiCompatibleConfig(env) !== null;
+  }
   if (access.hasGateway) return true;
   if (provider === "openai") return access.hasOpenAi;
   if (provider === "anthropic") return access.hasAnthropic;
