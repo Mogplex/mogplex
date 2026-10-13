@@ -4,6 +4,7 @@ import Link from "next/link";
 import { NavArrowLeft } from "iconoir-react";
 import { useParams, usePathname } from "next/navigation";
 import { useMemberships } from "@/hooks/use-memberships";
+import { useSelfHostedMode } from "@/components/self-hosted-provider";
 import { buildSettingsNavItems } from "@/lib/settings-navigation";
 
 export function SettingsNavigation({ onBack, onNavigate }: {
@@ -13,10 +14,11 @@ export function SettingsNavigation({ onBack, onNavigate }: {
   const { scope } = useParams<{ scope: string }>();
   const pathname = usePathname();
   const { memberships, isLoading } = useMemberships();
+  const selfHosted = useSelfHostedMode();
   const team = memberships.teams.find((item) => item.slug === scope);
   const personal = memberships.personal.slug === scope;
   const items = team || personal
-    ? buildSettingsNavItems(scope, team ? "team" : "personal", team?.role === "owner" || team?.role === "admin")
+    ? buildSettingsNavItems(scope, team ? "team" : "personal", team?.role === "owner" || team?.role === "admin", { hideBilling: selfHosted })
     : [];
 
   return (

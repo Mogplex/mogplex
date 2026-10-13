@@ -1,3 +1,4 @@
+import { HOSTED_TRIGGER_PROJECT_REF } from "@/lib/trigger/project-ref";
 import { describe, expect, it } from "vitest";
 import {
   checkAccess,
@@ -124,6 +125,15 @@ describe("checkModels", () => {
 });
 
 describe("checkAccess", () => {
+  it("should fail when self-host mode is refused in the hosted Trigger project", () => {
+    expect(
+      checkAccess({
+        MOGPLEX_SELF_HOSTED: "1",
+        TRIGGER_PROJECT_REF: HOSTED_TRIGGER_PROJECT_REF,
+      })
+    ).toMatchObject({ status: "fail" });
+  });
+
   it("should warn when nothing grants platform access", () => {
     expect(checkAccess({}).status).toBe("warn");
     expect(checkAccess({ MOGPLEX_SELF_HOSTED: "0" }).status).toBe("warn");

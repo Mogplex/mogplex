@@ -21,4 +21,16 @@ describe("Settings navigation", () => {
       buildSettingsNavItems("acme", "team", true).map((item) => item.id)
     ).toEqual(["members", "keys", "models", "audit", "billing"]);
   });
+  it("hides Billing in personal and team navigation on self-hosted deployments", () => {
+    expect(
+      buildSettingsNavItems("alex", "personal", false, {
+        hideBilling: true,
+      }).map((item) => item.id)
+    ).toEqual(["account", "teams", "keys", "mogplex-keys"]);
+    expect(
+      buildSettingsNavItems("acme", "team", true, { hideBilling: true }).map(
+        (item) => item.id
+      )
+    ).toEqual(["members", "keys", "models", "audit"]);
+  });
 });
