@@ -35,6 +35,9 @@ test("isPublicRoutePath preserves exact, child-path, and sibling boundary behavi
   );
   assert.equal(isPublicRoutePath("/.well-known/openid-configuration"), true);
 
+  assert.equal(isPublicRoutePath("/api/health"), true);
+  assert.equal(isPublicRoutePath("/api/health/details"), false);
+
   assert.equal(isPublicRoutePath("/install.shXXX"), false);
   assert.equal(isPublicRoutePath("/slack/link/anything"), false);
   assert.equal(isPublicRoutePath("/loginfoo"), false);

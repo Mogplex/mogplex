@@ -1,5 +1,6 @@
 import { tool } from "ai";
 import type { Tool } from "ai";
+import { readAppUrlEnv } from "@/lib/app-url";
 
 export type RepoToolDefaults = {
   owner?: string;
@@ -16,7 +17,7 @@ export type RepoToolDefaults = {
  */
 export function resolveAppBaseUrl(): string {
   return (
-    process.env.NEXT_PUBLIC_APP_URL ||
+    readAppUrlEnv() ||
     (process.env.VERCEL_URL
       ? `https://${process.env.VERCEL_URL}`
       : "http://localhost:3000")

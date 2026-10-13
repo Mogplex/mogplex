@@ -16,6 +16,7 @@ import {
   resolveCatalogPriceId,
 } from "@/lib/billing/stripe-checkout";
 import { sanitizeReturnPath } from "@/lib/billing/checkout";
+import { readAppUrlEnv } from "@/lib/app-url";
 
 export const CAPACITY_HOSTED_USAGE_PRODUCT_KEY = `${CAPACITY_CATALOG_VERSION}_hosted_usage`;
 
@@ -221,7 +222,7 @@ function defaultCheckoutDeps(): HostedUsageCheckoutDeps {
     createCheckoutSession: (params, options) =>
       stripe.checkout.sessions.create(params, options),
     appUrl: (path) => {
-      const base = process.env.NEXT_PUBLIC_APP_URL ?? "https://mogplex.com";
+      const base = readAppUrlEnv() ?? "https://mogplex.com";
       return `${base.replace(/\/$/, "")}${path}`;
     },
   };

@@ -30,6 +30,8 @@ const PUBLIC_ROUTE_PATHS: readonly RoutePolicyEntry[] = [
   { path: "/api/harness-research/mcp", match: "exact" },
   { path: "/api/internal/exa", match: "exact" },
   { path: "/api/webhooks/", match: "prefix" },
+  // Container health probe: reports configuration presence only, no values.
+  { path: "/api/health", match: "exact" },
   // Neon-backend object serving (provider icons); mirrors Supabase Storage's
   // public-bucket semantics, so it is public by definition.
   { path: "/storage/v1/object/public/", match: "prefix" },

@@ -12,6 +12,7 @@ import {
   formatFailureDurationLabel,
 } from "@/lib/workflows/automation-job-utils";
 import { GITHUB_PR_ACCESS_FAILURE_PREFIX } from "@/lib/workflows/automation-job-types";
+import { readAppUrlEnv } from "@/lib/app-url";
 
 export function buildAutomationFailureDisplayMessage(input: {
   message: string;
@@ -119,7 +120,7 @@ export function classifyPrReviewFailureReason(
 }
 
 export function buildPrReviewCheckDetailsUrl() {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
+  const appUrl = readAppUrlEnv();
   if (!appUrl) return null;
 
   return `${appUrl.replace(/\/+$/, "")}/observability`;

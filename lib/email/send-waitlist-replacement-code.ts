@@ -11,6 +11,7 @@ import {
   oneClickUnsubscribePostUrl,
   unsubscribeUrl as buildUnsubscribeUrl,
 } from "@/lib/email/unsubscribe";
+import { readAppUrlEnv, readRuntimeEnv } from "@/lib/app-url";
 
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
 
@@ -20,8 +21,8 @@ type SendResult =
 
 function loginUrl(): string {
   const base =
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    process.env.NEXT_PUBLIC_APP_URL ||
+    readRuntimeEnv("NEXT_PUBLIC_SITE_URL") ||
+    readAppUrlEnv() ||
     "https://mogplex.com";
   return `${base.replace(/\/$/, "")}/login`;
 }

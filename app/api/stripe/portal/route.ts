@@ -4,6 +4,7 @@ import { resolveProductResourceScope } from "@/lib/team-resource-scope";
 import { getStripe, isBillingEnabled } from "@/lib/billing/stripe";
 import { getOrCreateBillingAccount } from "@/lib/billing/accounts";
 import { sanitizeReturnPath } from "@/lib/billing/checkout";
+import { readAppUrlEnv } from "@/lib/app-url";
 
 // Customer Portal entry point (pricing-plan 02 §7): plan switches, payment
 // method updates, cancellation, and invoice history all happen in Stripe's
@@ -48,7 +49,7 @@ export async function POST(request: Request) {
   } catch {
     // no body — default return path
   }
-  const base = process.env.NEXT_PUBLIC_APP_URL ?? "https://mogplex.com";
+  const base = readAppUrlEnv() ?? "https://mogplex.com";
   const session = await getStripe().billingPortal.sessions.create({
     customer: account.stripe_customer_id,
     return_url: `${base.replace(/\/$/, "")}${returnPath}`,

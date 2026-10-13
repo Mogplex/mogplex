@@ -1,5 +1,6 @@
 import { buildInternalApiHeaders } from "@/lib/internal-api-auth";
 import type { WorktreeCommandResult } from "./types";
+import { readAppUrlEnv } from "@/lib/app-url";
 
 export class WorktreeExecutorError extends Error {
   constructor(
@@ -14,7 +15,7 @@ export class WorktreeExecutorError extends Error {
 
 function resolveAppBaseUrl(): string {
   return (
-    process.env.NEXT_PUBLIC_APP_URL ||
+    readAppUrlEnv() ||
     (process.env.VERCEL_URL
       ? `https://${process.env.VERCEL_URL}`
       : "http://localhost:3000")

@@ -16,6 +16,7 @@ import {
   ensureStripeCustomer,
   resolveCatalogPriceId,
 } from "@/lib/billing/stripe-checkout";
+import { readAppUrlEnv } from "@/lib/app-url";
 
 export class CapacityPlanCheckoutError extends Error {
   constructor(
@@ -139,7 +140,7 @@ function defaultCheckoutDeps(): IndividualPlanCheckoutDeps {
     createCheckoutSession: (params, options) =>
       stripe.checkout.sessions.create(params, options),
     appUrl: (path) => {
-      const base = process.env.NEXT_PUBLIC_APP_URL ?? "https://mogplex.com";
+      const base = readAppUrlEnv() ?? "https://mogplex.com";
       return `${base.replace(/\/$/, "")}${path}`;
     },
   };

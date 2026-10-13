@@ -11,7 +11,7 @@ Self-hosting is community-supported. There is no SLA, but questions in [GitHub D
 
 ## What the Docker image contains
 
-The Next.js web application. The database, auth, job runner, and sandbox runtime are external services (the same ones the Vercel deployment uses), so `docker compose up` gives you a web server that needs the services below configured before it is useful.
+The Next.js web application. `docker compose up` also starts Postgres 17 with pgvector, applies the migrations, and runs the cron routes on schedule. The job runner (Trigger.dev), sandbox runtime, GitHub App, and model providers are external services (the same ones the Vercel deployment uses), so configure the services below to unlock agent work.
 
 ## What you need to provide
 
@@ -34,26 +34,30 @@ Every one of these has its own signup, billing, and credential rotation. Budget 
 
 Platform AI and sandboxes are gated per user. On mogplex.com that gate is a funded billing account. A self-hosted deployment without Stripe has no balances, so set `MOGPLEX_SELF_HOSTED=1`. It grants platform AI and sandbox access to every signed-in user and hides the billing screens. To limit the grant, set `MOGPLEX_SELF_HOSTED_ALLOWED_EMAIL_DOMAINS=example.com`. Self-host mode never activates while `STRIPE_SECRET_KEY` is set. For finer control, use the `PLATFORM_ACCESS_*` allowlists or the `profiles.allow_platform_*` flags. Full guide: [docs.mogplex.com/self-hosting](https://docs.mogplex.com/self-hosting).
 
-## Build
-
-`NEXT_PUBLIC_*` values are inlined into the client bundle **at build time**. You cannot set them when the container starts — you bake them in with build args and rebuild whenever they change.
+## Build and run
 
 ```bash
-cp .env.example .env   # fill in everything you provisioned above
+cp .env.example .env   # set APP_URL, BETTER_AUTH_SECRET, CRON_SECRET, and the services you provisioned
 
-docker compose build   # reads the NEXT_PUBLIC_* values from .env
-docker compose up -d
+docker compose up -d   # postgres, migrate (one-shot), app on :3000, cron
 ```
 
-Or without compose:
+| Service | What it does |
+| --- | --- |
+| `postgres` | Postgres 17 with pgvector. Set `POSTGRES_PASSWORD` in `.env` to change the default password. To use an external database instead, set `DATABASE_URL` and `DATABASE_URL_UNPOOLED` in `.env`; they take precedence. |
+| `migrate` | Applies `neon/baseline.sql` and `neon/migrations/`, then exits. `app` starts only after it succeeds. |
+| `app` | The web app. Its health check calls `GET /api/health`, which returns 503 when the database is unreachable. |
+| `cron` | Calls each cron route in `vercel.json` on its schedule with `Authorization: Bearer $CRON_SECRET`. |
+
+The app reads its public URL from `APP_URL` at runtime, so one image serves any domain. Other `NEXT_PUBLIC_*` values (Sentry DSN, consent backend, Vercel sign-in client ID, legacy Supabase keys) are still inlined into the client bundle **at build time**; set them in `.env` and run `docker compose build` after changing them.
+
+Prebuilt images are published to `ghcr.io/mogplex/mogplex:<release tag>` and `:latest`. To use one, point `app` and `cron` at it in a `docker-compose.override.yml`.
+
+Without compose:
 
 ```bash
-docker build \
-  --build-arg NEXT_PUBLIC_APP_URL=https://mogplex.example.com \
-  --build-arg NEXT_PUBLIC_MOGPLEX_DATA_BACKEND=neon \
-  -t mogplex .
-
-docker run --env-file .env -p 3000:3000 mogplex
+docker build -t mogplex .
+docker run --env-file .env -e APP_URL=https://mogplex.example.com -p 3000:3000 mogplex
 ```
 
 ## GitHub App setup
@@ -127,5 +131,5 @@ MOGPLEX_OPENAI_COMPATIBLE_MODELS=llama3.1:8b=Llama 3.1 8B,qwen2.5-coder
 ## Known constraints
 
 - The sandbox terminal bridge reads `lib/sandbox/terminal-bridge-runtime.mjs` from disk at runtime; standalone output tracing normally carries it, but the sandbox feature set as a whole requires Vercel Sandbox regardless.
-- Cron routes (`vercel.json`) are scheduled by Vercel. Self-hosting means scheduling them yourself (curl + your `CRON_SECRET` from your own cron).
+- Cron routes (`vercel.json`) are scheduled by Vercel. With Docker Compose, the `cron` service schedules them. Elsewhere, run `node scripts/self-host-cron.mjs` with `CRON_SECRET` and `CRON_TARGET_URL`, or call the routes from your own cron with `Authorization: Bearer $CRON_SECRET`.
 - Sandboxes require Vercel Sandbox today. A pluggable sandbox backend is a natural contribution if you need to run compute elsewhere; open a discussion before starting so the interface lands in one piece.
