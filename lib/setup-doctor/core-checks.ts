@@ -3,9 +3,9 @@ import {
   DOCS,
   type DoctorCheckResult,
   type DoctorEnv,
-  isTruthyFlag,
   missing,
 } from "./types";
+import { resolveSelfHostedMode } from "@/lib/self-hosted";
 
 const REQUIRED_SECRETS = [
   "CRON_SECRET",
@@ -157,8 +157,17 @@ export function checkAccess(env: DoctorEnv): DoctorCheckResult {
       summary: "Stripe billing grants access by balance",
     };
   }
-  if (isTruthyFlag(env.MOGPLEX_SELF_HOSTED)) {
+  const selfHosted = resolveSelfHostedMode(env);
+  if (selfHosted.active) {
     return { ...result, status: "pass", summary: "MOGPLEX_SELF_HOSTED is set" };
+  }
+  if (selfHosted.refusedReason === "hosted_deployment") {
+    return {
+      ...result,
+      status: "fail",
+      summary:
+        "MOGPLEX_SELF_HOSTED is ignored: TRIGGER_PROJECT_REF is the hosted Mogplex project",
+    };
   }
   const allowlists = [
     "PLATFORM_ACCESS_USER_IDS",

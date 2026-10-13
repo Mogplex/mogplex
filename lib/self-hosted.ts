@@ -38,7 +38,9 @@ function parseEmailDomains(value: string | undefined): Set<string> {
 }
 
 /** Resolves self-host mode from an environment without side effects. */
-export function resolveSelfHostedMode(env: NodeJS.ProcessEnv): SelfHostedMode {
+export function resolveSelfHostedMode(
+  env: Readonly<Record<string, string | undefined>>
+): SelfHostedMode {
   const allowedEmailDomains = parseEmailDomains(
     env.MOGPLEX_SELF_HOSTED_ALLOWED_EMAIL_DOMAINS
   );

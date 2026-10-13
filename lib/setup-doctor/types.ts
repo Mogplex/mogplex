@@ -29,7 +29,3 @@ export function configured(env: DoctorEnv, name: string): boolean {
 export function missing(env: DoctorEnv, names: readonly string[]): string[] {
   return names.filter((name) => !configured(env, name));
 }
-
-export function isTruthyFlag(value: string | undefined): boolean {
-  return ["1", "true", "yes", "on"].includes(value?.trim().toLowerCase() ?? "");
-}
