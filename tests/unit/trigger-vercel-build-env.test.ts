@@ -53,3 +53,27 @@ test("applyTriggerVercelBuildEnv writes the standard Trigger/Vercel env names wh
   assert.equal(env.VERCEL_TEAM_ID, "team-from-platform");
   assert.equal(resolved.envSyncEnabled, true);
 });
+
+test("resolveTriggerVercelBuildEnv disables Vercel env sync for a deploy with no Vercel credentials", async () => {
+  const { resolveTriggerVercelBuildEnv } = await loadTriggerVercelBuildEnv();
+  const dir = mkdtempSync(join(tmpdir(), "mogplex-trigger-env-"));
+
+  try {
+    const resolved = resolveTriggerVercelBuildEnv(
+      {
+        TRIGGER_API_URL: "https://trigger.example.com",
+        TRIGGER_SECRET_KEY: "tr_prod_self_hosted",
+      } as unknown as NodeJS.ProcessEnv,
+      join(dir, "missing-project.json")
+    );
+
+    assert.deepEqual(resolved, {
+      vercelAccessToken: null,
+      vercelProjectId: null,
+      vercelTeamId: null,
+      envSyncEnabled: false,
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
