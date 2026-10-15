@@ -11,7 +11,7 @@ import {
   oneClickUnsubscribePostUrl,
   unsubscribeUrl as buildUnsubscribeUrl,
 } from "@/lib/email/unsubscribe";
-import { readAppUrlEnv, readRuntimeEnv } from "@/lib/app-url";
+import { getPublicSiteOrigin } from "@/lib/app-url";
 
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
 
@@ -20,11 +20,7 @@ type SendResult =
   | { ok: false; reason: "resend_error" };
 
 function loginUrl(): string {
-  const base =
-    readRuntimeEnv("NEXT_PUBLIC_SITE_URL") ||
-    readAppUrlEnv() ||
-    "https://mogplex.com";
-  return `${base.replace(/\/$/, "")}/login`;
+  return `${getPublicSiteOrigin()}/login`;
 }
 
 export async function sendWaitlistReplacementCode(

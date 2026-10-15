@@ -25,6 +25,20 @@ export function readAppUrlEnv() {
   );
 }
 
+/**
+ * The public site origin used in email links, without a trailing slash:
+ * `NEXT_PUBLIC_SITE_URL` at runtime, then its build-time inlined value, then
+ * the app URL, then `https://mogplex.com`.
+ */
+export function getPublicSiteOrigin() {
+  const base =
+    readRuntimeEnv("NEXT_PUBLIC_SITE_URL") ??
+    (process.env.NEXT_PUBLIC_SITE_URL?.trim() || undefined) ??
+    readAppUrlEnv() ??
+    "https://mogplex.com";
+  return base.replace(/\/$/, "");
+}
+
 function parseHttpUrl(value: string, envName: string) {
   let url: URL;
   try {
