@@ -10,7 +10,10 @@
 #   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 #
 # Services:
-#   postgres  Postgres 17 with pgvector. Used unless .env sets DATABASE_URL.
+#   postgres  Postgres 17 with pgvector. Runs only with the `postgres` profile,
+#             which .env.example turns on (COMPOSE_PROFILES=postgres). To use
+#             an external database, set DATABASE_URL and DATABASE_URL_UNPOOLED
+#             in .env and remove COMPOSE_PROFILES; no local Postgres starts.
 #   migrate   Applies neon/baseline.sql and neon/migrations, then exits.
 #   app       The Next.js web app on port 3000, started after migrate succeeds.
 #   cron      Calls the vercel.json cron routes on schedule with CRON_SECRET.
@@ -31,6 +34,7 @@ x-database-env: &database-env
 services:
   postgres:
     image: pgvector/pgvector:pg17
+    profiles: [postgres]
     environment:
       POSTGRES_USER: mogplex
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mogplex}
@@ -53,9 +57,13 @@ services:
     # not run.
     healthcheck:
       disable: true
+    # Waits for the bundled postgres when its profile is on. With an external
+    # database the service is not started, and required: false lets migrate
+    # run without it.
     depends_on:
       postgres:
         condition: service_healthy
+        required: false
     restart: "no"
 
   app:

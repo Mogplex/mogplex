@@ -3,7 +3,8 @@ name: self-host-smoke
 # Builds the self-host image from this commit on both published architectures
 # and boots docker-compose.yml against it (scripts/self-host-smoke.mjs):
 # migrations apply to a fresh database, /api/health reports the database ok,
-# cron runs, and migrations re-run cleanly. It runs on PRs that touch the image
+# cron runs, and migrations re-run cleanly. It runs once with the bundled
+# postgres and once against an external database. It runs on PRs that touch the image
 # or its inputs, nightly to catch everything else, and on demand.
 on:
   pull_request:
@@ -80,6 +81,25 @@ jobs:
 
       - name: Boot the compose stack
         run: node scripts/self-host-smoke.mjs
+        env:
+          MOGPLEX_IMAGE: mogplex
+          MOGPLEX_VERSION: local
+
+      # Same checks with DATABASE_URL pointing outside compose: the postgres
+      # profile stays off, so no bundled database may start.
+      - name: Boot against an external database
+        run: |
+          docker run -d --name external-pg -p 55432:5432 \
+            -e POSTGRES_USER=external -e POSTGRES_DB=external \
+            -e POSTGRES_HOST_AUTH_METHOD=trust pgvector/pgvector:pg17
+          for _ in $(seq 1 60); do
+            docker exec external-pg pg_isready -h 127.0.0.1 -U external -d external && break
+            sleep 1
+          done
+          # Containers reach the runner's own address, not localhost.
+          host_ip=$(hostname -I | awk '{print $1}')
+          SMOKE_EXTERNAL_DATABASE_URL="postgres://external@${host_ip}:55432/external" \
+            node scripts/self-host-smoke.mjs
         env:
           MOGPLEX_IMAGE: mogplex
           MOGPLEX_VERSION: local
