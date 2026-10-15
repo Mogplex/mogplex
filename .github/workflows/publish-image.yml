@@ -1,11 +1,17 @@
 name: publish-image
 
-# Publishes the self-hosted web app image to GHCR for each release, so
-# self-hosters can pull instead of building. The image reads its public URL
-# from APP_URL at runtime (see Dockerfile and docs/self-hosting.md).
+# Publishes the self-hosted image to GHCR for each release, so self-hosters
+# can pull instead of building. The image runs the web app, migrations, and
+# cron (see Dockerfile and docker-compose.yml) and reads its public URL from
+# APP_URL at runtime.
+#
+# Each architecture builds on a native runner (an emulated arm64 Next.js build
+# is too slow), pushes by digest, and the merge job publishes one multi-arch
+# tag over both digests.
+#
+# Publishing a GitHub release creates its tag, which fires the tag push below;
+# a separate `release` trigger would build the same tag twice.
 on:
-  release:
-    types: [published]
   push:
     tags: ["v*"]
   workflow_dispatch:
@@ -23,13 +29,78 @@ env:
   IMAGE: ghcr.io/mogplex/mogplex
 
 jobs:
-  publish:
-    name: publish
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+  build:
+    name: build (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - platform: linux/amd64
+            arch: amd64
+            runner: blacksmith-4vcpu-ubuntu-2404
+          - platform: linux/arm64
+            arch: arm64
+            runner: blacksmith-4vcpu-ubuntu-2404-arm
     steps:
       - name: Check out repository
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Derive labels
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.IMAGE }}
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=publish-${{ matrix.arch }}
+          cache-to: type=gha,scope=publish-${{ matrix.arch }},mode=max
+
+      - name: Record digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p "${RUNNER_TEMP}/digests"
+          touch "${RUNNER_TEMP}/digests/${DIGEST#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: digest-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    name: publish
+    needs: build
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 10
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digest-*
+          merge-multiple: true
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
@@ -48,15 +119,21 @@ jobs:
           images: ${{ env.IMAGE }}
           tags: |
             type=ref,event=tag
-            type=raw,value=latest,enable=${{ github.event_name != 'workflow_dispatch' }}
+            # Prereleases (v1.2.0-rc.1) never move latest.
+            type=raw,value=latest,enable=${{ github.event_name == 'push' && !contains(github.ref_name, '-') }}
             type=sha,enable=${{ github.event_name == 'workflow_dispatch' }}
 
-      - name: Build and push
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - name: Publish multi-arch tags
+        working-directory: ${{ runner.temp }}/digests
+        env:
+          TAGS_JSON: ${{ steps.meta.outputs.json }}
+        run: |
+          tag_args=$(jq -r '.tags | map("-t " + .) | join(" ")' <<< "$TAGS_JSON")
+          # shellcheck disable=SC2046,SC2086
+          docker buildx imagetools create $tag_args \
+            $(printf "${IMAGE}@sha256:%s " *)
+
+      - name: Inspect
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: docker buildx imagetools inspect "${IMAGE}:${VERSION}"

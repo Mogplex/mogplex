@@ -4,14 +4,14 @@ Mogplex is built to be self-hosted. The code in this repository is exactly what 
 
 Two deployment shapes are supported:
 
-1. **Vercel (recommended).** Fork the repo, import it into your own Vercel team, point it at your own Neon project and Trigger.dev project, and set the environment variables below. This is the path we test in production every day.
-2. **Docker.** Build the image in this repo and run it anywhere that can run a container. You provision the backing services yourself.
+1. **Containers.** Pull the published multi-arch image (`ghcr.io/mogplex/mogplex`, amd64 and arm64) and run it with Docker Compose, Kubernetes, or any platform that runs OCI images, on any cloud or your own hardware. You provision the backing services yourself.
+2. **Vercel.** Fork the repo and import it into your own Vercel team. This is how mogplex.com runs.
 
 Self-hosting is community-supported. There is no SLA, but questions in [GitHub Discussions](https://github.com/Mogplex/mogplex/discussions) and bugs filed as [issues](https://github.com/Mogplex/mogplex/issues) are welcome, and friction in the self-hosting path is treated as a bug worth fixing.
 
 ## What the Docker image contains
 
-The Next.js web application. `docker compose up` also starts Postgres 17 with pgvector, applies the migrations, and runs the cron routes on schedule. The job runner (Trigger.dev), sandbox runtime, GitHub App, and model providers are external services (the same ones the Vercel deployment uses), so configure the services below to unlock agent work.
+One image runs the web app, the migration runner, and the cron scheduler. `docker compose up` also starts Postgres 17 with pgvector. The job runner (Trigger.dev), sandbox runtime, GitHub App, and model providers are external services, so configure the services below to unlock agent work.
 
 ## What you need to provide
 
@@ -34,31 +34,40 @@ Every one of these has its own signup, billing, and credential rotation. Budget 
 
 Platform AI and sandboxes are gated per user. On mogplex.com that gate is a funded billing account. A self-hosted deployment without Stripe has no balances, so set `MOGPLEX_SELF_HOSTED=1`. It grants platform AI and sandbox access to every signed-in user and hides the billing screens. To limit the grant, set `MOGPLEX_SELF_HOSTED_ALLOWED_EMAIL_DOMAINS=example.com`. Self-host mode never activates while `STRIPE_SECRET_KEY` is set. For finer control, use the `PLATFORM_ACCESS_*` allowlists or the `profiles.allow_platform_*` flags. Full guide: [docs.mogplex.com/self-hosting](https://docs.mogplex.com/self-hosting).
 
-## Build and run
+## Run with Docker Compose
 
 ```bash
-cp .env.example .env   # set APP_URL, BETTER_AUTH_SECRET, CRON_SECRET, and the services you provisioned
+curl -fsSLO https://raw.githubusercontent.com/Mogplex/mogplex/main/docker-compose.yml
+curl -fsSL https://raw.githubusercontent.com/Mogplex/mogplex/main/.env.example -o .env
+# edit .env: set APP_URL, BETTER_AUTH_SECRET, CRON_SECRET, and the services you provisioned
 
 docker compose up -d   # postgres, migrate (one-shot), app on :3000, cron
 ```
 
+This pulls `ghcr.io/mogplex/mogplex:latest`. Pin a release with `MOGPLEX_VERSION=v0.2.0` in `.env`, and upgrade by changing it and running `docker compose up -d` again; `migrate` applies any new migrations before the new `app` starts. Set `MOGPLEX_PORT` to serve on a host port other than 3000.
+
 | Service | What it does |
 | --- | --- |
 | `postgres` | Postgres 17 with pgvector. Set `POSTGRES_PASSWORD` in `.env` to change the default password. To use an external database instead, set `DATABASE_URL` and `DATABASE_URL_UNPOOLED` in `.env`; they take precedence. |
-| `migrate` | Applies `neon/baseline.sql` and `neon/migrations/`, then exits. `app` starts only after it succeeds. |
+| `migrate` | Runs `node scripts/migrate.cjs`: applies `neon/baseline.sql` and `neon/migrations/`, then exits. `app` starts only after it succeeds. |
 | `app` | The web app. Its health check calls `GET /api/health`, which returns 503 when the database is unreachable. |
-| `cron` | Calls each cron route in `vercel.json` on its schedule with `Authorization: Bearer $CRON_SECRET`. |
+| `cron` | Runs `node scripts/self-host-cron.mjs`: calls each cron route in `vercel.json` on its schedule with `Authorization: Bearer $CRON_SECRET`. |
 
-The app reads its public URL from `APP_URL` at runtime, so one image serves any domain. Other `NEXT_PUBLIC_*` values (Sentry DSN, consent backend, Vercel sign-in client ID, legacy Supabase keys) are still inlined into the client bundle **at build time**; set them in `.env` and run `docker compose build` after changing them.
-
-Prebuilt images are published to `ghcr.io/mogplex/mogplex:<release tag>` and `:latest`. To use one, point `app` and `cron` at it in a `docker-compose.override.yml`.
-
-Without compose:
+The app reads its public URL from `APP_URL` at runtime, so one image serves any domain. Other `NEXT_PUBLIC_*` values (Sentry DSN, consent backend, Vercel sign-in client ID, legacy Supabase keys) are inlined into the client bundle **at build time**, so the published image leaves them unset. To set them, or to run unreleased code, build from a checkout:
 
 ```bash
-docker build -t mogplex .
-docker run --env-file .env -e APP_URL=https://mogplex.example.com -p 3000:3000 mogplex
+docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 ```
+
+Without compose, run the same image three ways:
+
+```bash
+docker run --rm --env-file .env ghcr.io/mogplex/mogplex node scripts/migrate.cjs
+docker run -d --env-file .env -p 3000:3000 ghcr.io/mogplex/mogplex
+docker run -d -e CRON_SECRET -e CRON_TARGET_URL=https://mogplex.example.com ghcr.io/mogplex/mogplex node scripts/self-host-cron.mjs
+```
+
+CI boots this compose stack on both architectures for every change to the image (`.github/workflows/self-host-smoke.yml`). To run the same check locally: `docker build -t mogplex:local . && MOGPLEX_IMAGE=mogplex MOGPLEX_VERSION=local node scripts/self-host-smoke.mjs`.
 
 ## GitHub App setup
 

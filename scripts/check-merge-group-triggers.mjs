@@ -23,6 +23,8 @@ const WORKFLOWS_DIR = path.resolve(CURRENT_DIR, "../.github/workflows");
 /** @type {Record<string, string>} */
 export const ALLOWED_WITHOUT_MERGE_GROUP = {
   "mutation.yml": "advisory path-filtered check; not required by the ruleset",
+  "self-host-smoke.yml":
+    "advisory path-filtered check; not required by the ruleset",
 };
 
 function extractTriggers(source) {

@@ -16,7 +16,7 @@ If you have used a hosted agent-development platform and wished you could inspec
 - **Every run is inspectable.** Tool calls, diffs, token usage, cost, and sandbox health are recorded and visible while the run is happening, not reconstructed afterwards.
 - **Bring your own model.** Route through Vercel AI Gateway, OpenRouter, or your own provider keys. Defaults are per user, per team, and per automation.
 - **Triggers, not just prompts.** Start work from Control chat, a Slack thread, the CLI, the public API and MCP server, a GitHub event, or a cron schedule.
-- **Open, Apache-2.0, self-hostable.** Read the harness. Run it on your own Vercel team, Neon database, and Trigger.dev project. Change what you do not like and send it back.
+- **Open, Apache-2.0, self-hostable.** Read the harness. Run it on your own infrastructure: the published container image runs on any cloud or server. Change what you do not like and send it back.
 
 ## What You Can Do
 
@@ -131,9 +131,9 @@ Run one unit test file with `pnpm exec tsx --test tests/unit/some-file.test.ts` 
 
 ## Self-Hosting
 
-Mogplex is built to be self-hosted. The same code that runs [mogplex.com](https://mogplex.com) runs on your own Vercel team, Neon project, and Trigger.dev project, and the Apache-2.0 license has no fee, no seat limit, and no feature gating.
+Mogplex is built to be self-hosted. The same code that runs [mogplex.com](https://mogplex.com) runs on your own infrastructure, from a published multi-arch container image (`ghcr.io/mogplex/mogplex`) or your own Vercel team, and the Apache-2.0 license has no fee, no seat limit, and no feature gating.
 
-Start with [docs/self-hosting.md](./docs/self-hosting.md). It lists every backing service, what each one unlocks, and the [`Dockerfile`](./Dockerfile) / [`docker-compose.yml`](./docker-compose.yml) path if you prefer containers over Vercel. If something in the self-hosting path is harder than it should be, open an issue or a discussion. Making that path smoother is a priority for the project.
+Start with [docs/self-hosting.md](./docs/self-hosting.md). It lists every backing service, what each one unlocks, and how to run it with [`docker-compose.yml`](./docker-compose.yml) on any host. If something in the self-hosting path is harder than it should be, open an issue or a discussion. Making that path smoother is a priority for the project.
 
 ## Deploy Model
 

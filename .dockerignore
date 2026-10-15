@@ -15,5 +15,5 @@ supabase/.temp
 *.log
 .DS_Store
 Dockerfile
-docker-compose.yml
+docker-compose*.yml
 .dockerignore

@@ -19,6 +19,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:migrate": "esbuild scripts/apply-neon-migrations.ts --bundle --platform=node --target=node22 --format=cjs --external:pg-native --log-level=warning --outfile=.next/migrate/migrate.cjs",
     "start": "next start",
     "lint": "node --max-old-space-size=6144 ./node_modules/eslint/bin/eslint.js --cache --cache-location node_modules/.cache/eslint/ --cache-strategy content --concurrency auto .",
     "lint:fix": "node --max-old-space-size=6144 ./node_modules/eslint/bin/eslint.js --cache --cache-location node_modules/.cache/eslint/ --cache-strategy content --concurrency auto --fix .",
@@ -225,6 +226,7 @@
     "@typescript-eslint/eslint-plugin": "^8.57.0",
     "@typescript-eslint/parser": "^8.57.0",
     "@vitest/coverage-v8": "^4.1.11",
+    "esbuild": "0.28.1",
     "eslint": "^10.2.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-import-resolver-typescript": "^4.4.4",
