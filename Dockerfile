@@ -1,12 +1,16 @@
 # syntax=docker/dockerfile:1
 
-# Self-hosted Mogplex web app image.
+# Self-hosted Mogplex image, published multi-arch (amd64, arm64) to
+# ghcr.io/mogplex/mogplex for every release. One image runs every role in
+# docker-compose.yml:
 #
-# This image contains ONLY the Next.js application. Every backing service is
-# bring-your-own and must be reachable from the container at runtime:
-# database + auth, Trigger.dev, sandbox infrastructure, AI providers, email,
-# GitHub App, and so on. Read docs/self-hosting.md before building — the
-# hosted product at https://mogplex.com is the supported way to use Mogplex.
+#   node server.js                   the Next.js web app (default command)
+#   node scripts/migrate.cjs         applies neon/baseline.sql + migrations
+#   node scripts/self-host-cron.mjs  calls the cron routes on schedule
+#
+# Every other backing service is bring-your-own and must be reachable from the
+# container at runtime: Trigger.dev, sandbox infrastructure, AI providers,
+# email, GitHub App, and so on. See docs/self-hosting.md.
 #
 # The public app URL is read at runtime from APP_URL, so one image serves any
 # domain. Other NEXT_PUBLIC_* variables (Sentry DSN, consent backend, Vercel
@@ -24,18 +28,6 @@ RUN corepack enable
 # install refuses to run.
 COPY package.json pnpm-lock.yaml .pnpmfile.cjs ./
 RUN pnpm install --frozen-lockfile
-
-# One-shot schema migrations, used by docker-compose's `migrate` service. It
-# keeps the dev dependency (tsx) that the runner needs; the runtime image
-# does not ship it.
-FROM node:${NODE_VERSION}-bookworm-slim AS migrate
-WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
-COPY package.json tsconfig.json ./
-COPY scripts/apply-neon-migrations.ts ./scripts/
-COPY lib/db ./lib/db
-COPY neon ./neon
-CMD ["node_modules/.bin/tsx", "scripts/apply-neon-migrations.ts"]
 
 FROM node:${NODE_VERSION}-bookworm-slim AS build
 WORKDIR /app
@@ -71,6 +63,9 @@ ENV NODE_OPTIONS=--max-old-space-size=6144
 
 # Runtime secrets come from the environment, never build-time placeholders.
 RUN pnpm build
+# Bundle the migration runner (and pg) into one file, so the runtime image can
+# apply migrations without dev dependencies.
+RUN pnpm build:migrate
 
 FROM node:${NODE_VERSION}-bookworm-slim AS runtime
 WORKDIR /app
@@ -89,6 +84,10 @@ COPY --from=build --chown=nextjs:nextjs /app/public ./public
 # image; it reads the cron routes from vercel.json.
 COPY --from=build --chown=nextjs:nextjs /app/vercel.json ./vercel.json
 COPY --from=build --chown=nextjs:nextjs /app/scripts/self-host-cron.mjs ./scripts/self-host-cron.mjs
+# The compose `migrate` service: the bundled runner reads SQL from ./neon.
+COPY --from=build --chown=nextjs:nextjs /app/.next/migrate/migrate.cjs ./scripts/migrate.cjs
+COPY --from=build --chown=nextjs:nextjs /app/neon/baseline.sql ./neon/baseline.sql
+COPY --from=build --chown=nextjs:nextjs /app/neon/migrations ./neon/migrations
 
 USER nextjs
 EXPOSE 3000

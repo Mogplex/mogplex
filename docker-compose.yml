@@ -3,28 +3,24 @@
 #   cp .env.example .env    # set APP_URL, BETTER_AUTH_SECRET, CRON_SECRET, ...
 #   docker compose up -d
 #
+# This pulls the published multi-arch image ghcr.io/mogplex/mogplex. Pin a
+# release with MOGPLEX_VERSION in .env (default: latest). To build from this
+# checkout instead, for example to bake in build-time NEXT_PUBLIC_* values:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+#
 # Services:
 #   postgres  Postgres 17 with pgvector. Used unless .env sets DATABASE_URL.
 #   migrate   Applies neon/baseline.sql and neon/migrations, then exits.
 #   app       The Next.js web app on port 3000, started after migrate succeeds.
 #   cron      Calls the vercel.json cron routes on schedule with CRON_SECRET.
 #
-# Trigger.dev, Vercel Sandbox, the GitHub App, and model providers are still
-# external services. https://docs.mogplex.com/self-hosting lists each one and
-# the env vars it needs. Questions: https://github.com/Mogplex/mogplex/discussions
+# Trigger.dev, the sandbox runtime, the GitHub App, and model providers are
+# still external services. https://docs.mogplex.com/self-hosting lists each
+# one and the env vars it needs. Questions:
+# https://github.com/Mogplex/mogplex/discussions
 
-x-app-build: &app-build
-  context: .
-  args:
-    # Optional build-time values, inlined into the client bundle. Changing
-    # any of these requires `docker compose build`, not just a restart.
-    NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-}
-    NEXT_PUBLIC_MOGPLEX_DATA_BACKEND: ${NEXT_PUBLIC_MOGPLEX_DATA_BACKEND:-neon}
-    NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
-    NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}
-    NEXT_PUBLIC_C15T_URL: ${NEXT_PUBLIC_C15T_URL:-}
-    NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
-    NEXT_PUBLIC_VERCEL_APP_CLIENT_ID: ${NEXT_PUBLIC_VERCEL_APP_CLIENT_ID:-}
+x-image: &image ${MOGPLEX_IMAGE:-ghcr.io/mogplex/mogplex}:${MOGPLEX_VERSION:-latest}
 
 x-database-env: &database-env
   # An external database in .env (DATABASE_URL / DATABASE_URL_UNPOOLED) wins
@@ -49,19 +45,21 @@ services:
     restart: unless-stopped
 
   migrate:
-    build:
-      context: .
-      target: migrate
+    image: *image
+    command: ["node", "scripts/migrate.cjs"]
     environment:
       <<: *database-env
+    # The image's healthcheck probes the web server, which this service does
+    # not run.
+    healthcheck:
+      disable: true
     depends_on:
       postgres:
         condition: service_healthy
     restart: "no"
 
   app:
-    build: *app-build
-    image: mogplex-app
+    image: *image
     # Server-side runtime env. Copy .env.example to .env and fill in the
     # values for the services you provisioned.
     env_file:
@@ -71,22 +69,18 @@ services:
     environment:
       <<: *database-env
     ports:
-      - "3000:3000"
+      - "${MOGPLEX_PORT:-3000}:3000"
     depends_on:
       migrate:
         condition: service_completed_successfully
     restart: unless-stopped
 
   cron:
-    # Reuses the image the app service builds; never pulled from a registry.
-    image: mogplex-app
-    pull_policy: never
+    image: *image
     command: ["node", "scripts/self-host-cron.mjs"]
     environment:
       CRON_SECRET: ${CRON_SECRET:?set CRON_SECRET in .env}
       CRON_TARGET_URL: http://app:3000
-    # The image's healthcheck probes the web server, which this service does
-    # not run.
     healthcheck:
       disable: true
     depends_on:

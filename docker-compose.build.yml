@@ -1,0 +1,34 @@
+# Build the image from this checkout instead of pulling it.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+#
+# The app service builds the image; migrate and cron reuse it, so it is built
+# once. Use this to run unreleased code or to bake build-time NEXT_PUBLIC_*
+# values into the client bundle. Changing any of those requires a rebuild,
+# not just a restart.
+
+x-local-image: &local-image mogplex:local
+
+services:
+  app:
+    image: *local-image
+    pull_policy: build
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-}
+        NEXT_PUBLIC_MOGPLEX_DATA_BACKEND: ${NEXT_PUBLIC_MOGPLEX_DATA_BACKEND:-neon}
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}
+        NEXT_PUBLIC_C15T_URL: ${NEXT_PUBLIC_C15T_URL:-}
+        NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
+        NEXT_PUBLIC_VERCEL_APP_CLIENT_ID: ${NEXT_PUBLIC_VERCEL_APP_CLIENT_ID:-}
+
+  # Reuse the image the app service builds; never pulled from a registry.
+  migrate:
+    image: *local-image
+    pull_policy: never
+
+  cron:
+    image: *local-image
+    pull_policy: never
