@@ -4,7 +4,7 @@
 
 import { render } from "@react-email/components";
 import { TeamInviteEmail } from "@/emails/team-invite";
-import { readAppUrlEnv, readRuntimeEnv } from "@/lib/app-url";
+import { getPublicSiteOrigin } from "@/lib/app-url";
 
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
 
@@ -14,11 +14,7 @@ type SendResult =
   | { ok: false; reason: "resend_error" };
 
 function appBaseUrl(): string {
-  const base =
-    readRuntimeEnv("NEXT_PUBLIC_SITE_URL") ||
-    readAppUrlEnv() ||
-    "https://mogplex.com";
-  return base.replace(/\/$/, "");
+  return getPublicSiteOrigin();
 }
 
 export function buildInviteAcceptUrl(token: string): string {

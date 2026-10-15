@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { buildAppUrl, readAppUrlEnv, readRuntimeEnv } from "./app-url";
+import {
+  buildAppUrl,
+  getPublicSiteOrigin,
+  readAppUrlEnv,
+  readRuntimeEnv,
+} from "./app-url";
 
 describe("readRuntimeEnv", () => {
   afterEach(() => {
@@ -58,5 +63,32 @@ describe("readAppUrlEnv", () => {
     expect(buildAppUrl("/api/auth/github/callback").toString()).toBe(
       "https://runtime.example/api/auth/github/callback"
     );
+  });
+});
+
+describe("getPublicSiteOrigin", () => {
+  beforeEach(() => {
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "");
+    vi.stubEnv("APP_URL", "");
+    vi.stubEnv("NEXT_PUBLIC_APP_URL", "");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("should prefer NEXT_PUBLIC_SITE_URL and drop its trailing slash", () => {
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://site.example/");
+    vi.stubEnv("APP_URL", "https://app.example");
+    expect(getPublicSiteOrigin()).toBe("https://site.example");
+  });
+
+  it("should fall back to the app URL when the site URL is unset", () => {
+    vi.stubEnv("APP_URL", "https://app.example");
+    expect(getPublicSiteOrigin()).toBe("https://app.example");
+  });
+
+  it("should default to mogplex.com when nothing is configured", () => {
+    expect(getPublicSiteOrigin()).toBe("https://mogplex.com");
   });
 });

@@ -381,6 +381,9 @@ boundary. The rules agents most often need:
 
 - Keep test fixtures typed
 - Prefer small builder helpers for repeated fixture shapes
+- Keep fixture connection strings passwordless (`postgres://owner@db/app`):
+  trufflehog cannot verify a fake `user:pw@host` URL, reports it as
+  `unknown`, and fails the required secret scan
 - When fixing a regression, add a test that would have failed before the fix
 - Before finalizing a new test, break the change under test and confirm the
   test fails; a test that has never gone red proves nothing

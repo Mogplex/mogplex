@@ -56,14 +56,32 @@ export function findEnvReads(source: string): Set<string> {
   return names;
 }
 
+const ENV_EXAMPLE_DECLARATION = /^#?\s*([A-Z][A-Z0-9_]+)=/;
+
 /** Names `.env.example` declares, as `NAME=` or commented `# NAME=`. */
 export function parseEnvExampleNames(contents: string): Set<string> {
   const names = new Set<string>();
   for (const line of contents.split("\n")) {
-    const match = /^#?\s*([A-Z][A-Z0-9_]+)=/.exec(line.trim());
+    const match = ENV_EXAMPLE_DECLARATION.exec(line.trim());
     if (match) names.add(match[1]);
   }
   return names;
+}
+
+/**
+ * Names `.env.example` declares more than once. Parallel branches that each
+ * add a variable tend to leave both copies behind after a merge.
+ */
+export function findDuplicateEnvExampleNames(contents: string): string[] {
+  const seen = new Set<string>();
+  const duplicates = new Set<string>();
+  for (const line of contents.split("\n")) {
+    const name = ENV_EXAMPLE_DECLARATION.exec(line.trim())?.[1];
+    if (!name) continue;
+    if (seen.has(name)) duplicates.add(name);
+    seen.add(name);
+  }
+  return [...duplicates].sort();
 }
 
 function listSourceFiles(root: string, path: string): string[] {
@@ -83,19 +101,25 @@ function listSourceFiles(root: string, path: string): string[] {
   );
 }
 
+/** Absolute paths of the non-test source files under `roots`. */
+export function listScanSourceFiles(
+  repoRoot: string,
+  roots: readonly string[] = ENV_SCAN_ROOTS
+): string[] {
+  return roots.flatMap((root) => listSourceFiles(repoRoot, root));
+}
+
 /** Every env name read under `roots`, mapped to the files that read it. */
 export function collectEnvReads(
   repoRoot: string,
   roots: readonly string[] = ENV_SCAN_ROOTS
 ): Map<string, string[]> {
   const reads = new Map<string, string[]>();
-  for (const root of roots) {
-    for (const file of listSourceFiles(repoRoot, root)) {
-      for (const name of findEnvReads(readFileSync(file, "utf8"))) {
-        const files = reads.get(name) ?? [];
-        files.push(relative(repoRoot, file));
-        reads.set(name, files);
-      }
+  for (const file of listScanSourceFiles(repoRoot, roots)) {
+    for (const name of findEnvReads(readFileSync(file, "utf8"))) {
+      const files = reads.get(name) ?? [];
+      files.push(relative(repoRoot, file));
+      reads.set(name, files);
     }
   }
   return reads;

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import test from "node:test";
 import {
   collectEnvReads,
+  findDuplicateEnvExampleNames,
   findEnvReads,
   parseEnvExampleNames,
 } from "../support/env-example-scan";
@@ -71,6 +72,26 @@ test("parseEnvExampleNames accepts set and commented declarations", () => {
     "SET_VALUE=1\n# COMMENTED_VALUE=off\n# Prose mentioning NOT_DECLARED.\n"
   );
   assert.deepEqual([...names].sort(), ["COMMENTED_VALUE", "SET_VALUE"]);
+});
+
+test("findDuplicateEnvExampleNames reports names declared twice", () => {
+  assert.deepEqual(
+    findDuplicateEnvExampleNames(
+      "API_URL=1\n# API_KEY=\nUNIQUE=\n# API_URL=2\nAPI_KEY=x\n"
+    ),
+    ["API_KEY", "API_URL"]
+  );
+});
+
+test(".env.example declares each name once", () => {
+  const duplicates = findDuplicateEnvExampleNames(
+    readFileSync(join(repoRoot, ".env.example"), "utf8")
+  );
+  assert.deepEqual(
+    duplicates,
+    [],
+    `Keep one declaration of each (a merge often leaves both copies): ${duplicates.join(", ")}`
+  );
 });
 
 test("every env var the app reads is declared in .env.example", () => {
