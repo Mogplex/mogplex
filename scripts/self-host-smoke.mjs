@@ -109,8 +109,11 @@ async function main() {
   let passed = false;
   try {
     step("docker compose up");
-    const pull = process.env.MOGPLEX_VERSION === "local" ? "never" : "missing";
-    docker(compose("up", "--detach", "--pull", pull), { stdio: "inherit" });
+    // "missing" uses a locally built app image as is and still fetches
+    // postgres on a clean runner; "never" would block that pull too.
+    docker(compose("up", "--detach", "--pull", "missing", "--quiet-pull"), {
+      stdio: "inherit",
+    });
 
     step("waiting for /api/health");
     const health = await waitForHealthyApp();
