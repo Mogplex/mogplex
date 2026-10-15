@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  describeMissingBundledPostgres,
   getRuntimeDatabaseUrl,
   getRuntimeUnpooledDatabaseUrl,
 } from "../../lib/db/connection-urls";
@@ -52,4 +53,38 @@ test("LISTEN clients fall back through direct then pooled connections", () => {
     }),
     "postgres://runtime-pooled"
   );
+});
+
+test("a missing compose postgres host explains how to enable or replace it", () => {
+  const notFound = Object.assign(new Error("getaddrinfo ENOTFOUND postgres"), {
+    code: "ENOTFOUND",
+  });
+  const hint = describeMissingBundledPostgres(
+    notFound,
+    "postgres://mogplex@postgres:5432/mogplex"
+  );
+
+  assert.match(hint ?? "", /COMPOSE_PROFILES=postgres/);
+  assert.match(hint ?? "", /DATABASE_URL/);
+});
+
+test("other connection failures keep their original error", () => {
+  const notFound = Object.assign(new Error("not found"), { code: "ENOTFOUND" });
+  const refused = Object.assign(new Error("refused"), { code: "ECONNREFUSED" });
+
+  assert.equal(
+    describeMissingBundledPostgres(
+      notFound,
+      "postgres://app@db.example.com/app"
+    ),
+    null
+  );
+  assert.equal(
+    describeMissingBundledPostgres(
+      refused,
+      "postgres://mogplex@postgres/mogplex"
+    ),
+    null
+  );
+  assert.equal(describeMissingBundledPostgres(notFound, "not a url"), null);
 });

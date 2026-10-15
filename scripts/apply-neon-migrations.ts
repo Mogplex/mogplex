@@ -3,6 +3,7 @@
 //
 // Usage: pnpm exec tsx --env-file=.env.local scripts/apply-neon-migrations.ts [--dry-run]
 import { Client } from "pg";
+import { describeMissingBundledPostgres } from "../lib/db/connection-urls";
 import { applyNeonMigrations } from "../lib/db/neon-migrations";
 
 async function main() {
@@ -18,7 +19,15 @@ async function main() {
   }
 
   const client = new Client({ connectionString });
-  await client.connect();
+  try {
+    await client.connect();
+  } catch (error) {
+    const hint = describeMissingBundledPostgres(error, connectionString);
+    if (!hint) throw error;
+    console.error(hint);
+    process.exitCode = 1;
+    return;
+  }
   try {
     const result = await applyNeonMigrations(
       {

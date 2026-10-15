@@ -33,3 +33,37 @@ export function getRuntimeUnpooledDatabaseUrl(
     env.mogplex_DATABASE_URL
   );
 }
+
+/** The host name of docker-compose.yml's bundled Postgres service. */
+export const BUNDLED_POSTGRES_HOST = "postgres";
+
+/**
+ * Explain a failed connection to Docker Compose's bundled Postgres when that
+ * service is not running: its `postgres` profile is off and no external
+ * DATABASE_URL is set, so the default URL points at a host that does not
+ * exist. Returns null for every other error.
+ */
+export function describeMissingBundledPostgres(
+  error: unknown,
+  connectionString: string
+): string | null {
+  const code =
+    error && typeof error === "object" && "code" in error
+      ? error.code
+      : undefined;
+  if (code !== "ENOTFOUND" && code !== "EAI_AGAIN") return null;
+
+  let hostname: string;
+  try {
+    hostname = new URL(connectionString).hostname;
+  } catch {
+    return null;
+  }
+  if (hostname !== BUNDLED_POSTGRES_HOST) return null;
+
+  return [
+    `Cannot reach the bundled Postgres at host "${BUNDLED_POSTGRES_HOST}".`,
+    "Set COMPOSE_PROFILES=postgres in .env to run it, or set DATABASE_URL",
+    "and DATABASE_URL_UNPOOLED to an external database.",
+  ].join(" ");
+}

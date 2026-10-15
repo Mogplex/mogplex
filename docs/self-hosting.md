@@ -48,7 +48,7 @@ This pulls `ghcr.io/mogplex/mogplex:latest`. Pin a release with `MOGPLEX_VERSION
 
 | Service | What it does |
 | --- | --- |
-| `postgres` | Postgres 17 with pgvector. Set `POSTGRES_PASSWORD` in `.env` to change the default password. To use an external database instead, set `DATABASE_URL` and `DATABASE_URL_UNPOOLED` in `.env`; they take precedence. |
+| `postgres` | Postgres 17 with pgvector. It runs because `.env.example` sets `COMPOSE_PROFILES=postgres`. Set `POSTGRES_PASSWORD` in `.env` to change the default password. To use an external database instead, set `DATABASE_URL` and `DATABASE_URL_UNPOOLED` in `.env` and remove `COMPOSE_PROFILES`; then no local Postgres starts. |
 | `migrate` | Runs `node scripts/migrate.cjs`: applies `neon/baseline.sql` and `neon/migrations/`, then exits. `app` starts only after it succeeds. |
 | `app` | The web app. Its health check calls `GET /api/health`, which returns 503 when the database is unreachable. |
 | `cron` | Runs `node scripts/self-host-cron.mjs`: calls each cron route in `vercel.json` on its schedule with `Authorization: Bearer $CRON_SECRET`. |

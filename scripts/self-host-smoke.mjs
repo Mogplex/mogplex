@@ -6,6 +6,11 @@
 //   3. cron is running
 //   4. migrate exits 0 again on the migrated database (idempotent upgrades)
 //
+// By default it uses the bundled postgres service. Set
+// SMOKE_EXTERNAL_DATABASE_URL to run against an external database instead;
+// the postgres profile stays off and the test also checks that no bundled
+// postgres container started.
+//
 // It writes a throwaway .env, so it refuses to run when one exists. The
 // self-host-smoke workflow runs it against an image built from the PR:
 //
@@ -21,6 +26,8 @@ const HEALTH_TIMEOUT_MS = 180_000;
 const POLL_INTERVAL_MS = 2000;
 const PROJECT = process.env.COMPOSE_PROJECT_NAME || "mogplex-smoke";
 const ENV_FILE = ".env";
+const EXTERNAL_DATABASE_URL =
+  process.env.SMOKE_EXTERNAL_DATABASE_URL?.trim() || "";
 
 const compose = (...args) => [
   "compose",
@@ -66,6 +73,12 @@ function writeEnvFile() {
       `CONNECTIONS_ENCRYPTION_KEY=${secret()}`,
       `POSTGRES_PASSWORD=${secret()}`,
       "MOGPLEX_SELF_HOSTED=1",
+      ...(EXTERNAL_DATABASE_URL
+        ? [
+            `DATABASE_URL=${EXTERNAL_DATABASE_URL}`,
+            `DATABASE_URL_UNPOOLED=${EXTERNAL_DATABASE_URL}`,
+          ]
+        : ["COMPOSE_PROFILES=postgres"]),
       "",
     ].join("\n")
   );
@@ -131,6 +144,12 @@ async function main() {
       compose("ps", "--status", "running", "--quiet", "cron")
     );
     if (!cron) throw new Error("cron is not running");
+
+    if (EXTERNAL_DATABASE_URL) {
+      step("no bundled postgres with an external database");
+      const bundled = docker(compose("ps", "--all", "--quiet", "postgres"));
+      if (bundled) throw new Error("the bundled postgres container started");
+    }
 
     step("migrate is idempotent");
     docker(compose("run", "--rm", "--no-deps", "migrate"), {
