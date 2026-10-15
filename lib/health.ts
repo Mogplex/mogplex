@@ -1,3 +1,5 @@
+import { hasOpenAiCompatibleModels } from "@/lib/models/openai-compatible-config";
+
 export type DatabaseHealth = "ok" | "error" | "unconfigured";
 export type SubsystemHealth = "configured" | "unconfigured";
 
@@ -47,7 +49,9 @@ export function readSubsystemHealth(
       hasAll(env, "PLATFORM_VERCEL_TOKEN") &&
         hasAny(env, "VERCEL_PROJECT_ID", "PLATFORM_VERCEL_PROJECT_ID")
     ),
-    models: subsystem(hasAll(env, "AI_GATEWAY_API_KEY")),
+    models: subsystem(
+      hasAll(env, "AI_GATEWAY_API_KEY") || hasOpenAiCompatibleModels(env)
+    ),
     slack: subsystem(
       hasAll(
         env,

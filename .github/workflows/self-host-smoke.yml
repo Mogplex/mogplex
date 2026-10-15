@@ -17,6 +17,8 @@ on:
       - lib/health.ts
       - app/api/health/**
       - scripts/apply-neon-migrations.ts
+      - scripts/doctor.ts
+      - lib/setup-doctor/**
       - scripts/self-host-cron.mjs
       - scripts/self-host-smoke.mjs
       - vercel.json

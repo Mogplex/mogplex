@@ -5,6 +5,10 @@ import {
   type DoctorEnv,
   missing,
 } from "./types";
+import {
+  hasOpenAiCompatibleModels,
+  readOpenAiCompatibleConfig,
+} from "@/lib/models/openai-compatible-config";
 import { resolveSelfHostedMode } from "@/lib/self-hosted";
 
 const REQUIRED_SECRETS = [
@@ -23,21 +27,30 @@ function normalizeHexKey(raw: string): string {
   return unquoted.replace(/\\n/g, "").replace(/\s+/g, "");
 }
 
+/**
+ * The app URL variable the deployment resolves, with the same precedence as
+ * readAppUrlEnv: APP_URL wins, which is all a prebuilt image needs.
+ */
+function resolveAppUrl(env: DoctorEnv) {
+  const name = env.APP_URL?.trim() ? "APP_URL" : "NEXT_PUBLIC_APP_URL";
+  return { name, value: env[name]?.trim() };
+}
+
 export function checkAppConfig(env: DoctorEnv): DoctorCheckResult {
   const result = { id: "app", docsUrl: DOCS.environmentVariables };
-  const appUrl = env.NEXT_PUBLIC_APP_URL?.trim();
+  const { name: appUrlName, value: appUrl } = resolveAppUrl(env);
   if (!appUrl) {
     return {
       ...result,
       status: "fail",
-      summary: "NEXT_PUBLIC_APP_URL is not set",
+      summary: "APP_URL (or NEXT_PUBLIC_APP_URL) is not set",
     };
   }
   if (!URL.canParse(appUrl)) {
     return {
       ...result,
       status: "fail",
-      summary: "NEXT_PUBLIC_APP_URL is not a valid URL",
+      summary: `${appUrlName} is not a valid URL`,
     };
   }
   const server = env.MOGPLEX_DATA_BACKEND?.trim() ?? "";
@@ -141,10 +154,26 @@ export function checkModels(env: DoctorEnv): DoctorCheckResult {
       summary: "Platform AI Gateway key is set",
     };
   }
+  if (hasOpenAiCompatibleModels(env)) {
+    return {
+      ...result,
+      status: "pass",
+      summary: "OpenAI-compatible endpoint serves the configured models",
+    };
+  }
+  if (readOpenAiCompatibleConfig(env)) {
+    return {
+      ...result,
+      status: "warn",
+      summary:
+        "MOGPLEX_OPENAI_COMPATIBLE_BASE_URL is set but MOGPLEX_OPENAI_COMPATIBLE_MODELS lists no models",
+    };
+  }
   return {
     ...result,
     status: "warn",
-    summary: "No AI_GATEWAY_API_KEY: each user must add a provider key",
+    summary:
+      "No AI_GATEWAY_API_KEY or OpenAI-compatible endpoint: each user must add a provider key",
   };
 }
 

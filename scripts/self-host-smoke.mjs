@@ -4,7 +4,8 @@
 //   1. migrate applies the baseline and every migration, then exits 0
 //   2. app answers /api/health with the database "ok"
 //   3. cron is running
-//   4. migrate exits 0 again on the migrated database (idempotent upgrades)
+//   4. the setup doctor runs inside the image and prints its report
+//   5. migrate exits 0 again on the migrated database (idempotent upgrades)
 //
 // By default it uses the bundled postgres service. Set
 // SMOKE_EXTERNAL_DATABASE_URL to run against an external database instead;
@@ -111,6 +112,46 @@ function migrateExitCode() {
   return Number(docker(["inspect", "--format", "{{.State.ExitCode}}", id]));
 }
 
+async function checkHealth() {
+  const health = await waitForHealthyApp();
+  if (health.checks?.database !== "ok") {
+    throw new Error(`database check is ${health.checks?.database}`);
+  }
+  log(JSON.stringify(health));
+}
+
+function checkMigrateExited() {
+  const exitCode = migrateExitCode();
+  if (exitCode !== 0) throw new Error(`migrate exited ${exitCode}`);
+}
+
+function checkCronRunning() {
+  const cron = docker(compose("ps", "--status", "running", "--quiet", "cron"));
+  if (!cron) throw new Error("cron is not running");
+}
+
+function checkNoBundledPostgres() {
+  const bundled = docker(compose("ps", "--all", "--quiet", "postgres"));
+  if (bundled) throw new Error("the bundled postgres container started");
+}
+
+// The doctor exits 1 here because the throwaway env leaves services
+// unconfigured; the check is that it runs and reports.
+function checkDoctorReports() {
+  const doctor = dockerStatus(
+    compose("exec", "-T", "app", "node", "scripts/doctor.cjs")
+  );
+  if (
+    !doctor.stdout.includes("STATUS") ||
+    !/\bdatabase\b/.test(doctor.stdout)
+  ) {
+    throw new Error(
+      `setup doctor did not report: ${doctor.stderr || doctor.stdout}`
+    );
+  }
+  log(doctor.stdout.trim());
+}
+
 async function main() {
   if (existsSync(ENV_FILE)) {
     throw new Error(
@@ -129,27 +170,21 @@ async function main() {
     });
 
     step("waiting for /api/health");
-    const health = await waitForHealthyApp();
-    if (health.checks?.database !== "ok") {
-      throw new Error(`database check is ${health.checks?.database}`);
-    }
-    log(JSON.stringify(health));
+    await checkHealth();
 
     step("migrate exited cleanly");
-    const firstExit = migrateExitCode();
-    if (firstExit !== 0) throw new Error(`migrate exited ${firstExit}`);
+    checkMigrateExited();
 
     step("cron is running");
-    const cron = docker(
-      compose("ps", "--status", "running", "--quiet", "cron")
-    );
-    if (!cron) throw new Error("cron is not running");
+    checkCronRunning();
 
     if (EXTERNAL_DATABASE_URL) {
       step("no bundled postgres with an external database");
-      const bundled = docker(compose("ps", "--all", "--quiet", "postgres"));
-      if (bundled) throw new Error("the bundled postgres container started");
+      checkNoBundledPostgres();
     }
+
+    step("setup doctor runs in the image");
+    checkDoctorReports();
 
     step("migrate is idempotent");
     docker(compose("run", "--rm", "--no-deps", "migrate"), {

@@ -7,6 +7,7 @@
 #   node server.js                   the Next.js web app (default command)
 #   node scripts/migrate.cjs         applies neon/baseline.sql + migrations
 #   node scripts/self-host-cron.mjs  calls the cron routes on schedule
+#   node scripts/doctor.cjs          checks the deployment's configuration
 #
 # Every other backing service is bring-your-own and must be reachable from the
 # container at runtime: Trigger.dev, sandbox infrastructure, AI providers,
@@ -63,9 +64,9 @@ ENV NODE_OPTIONS=--max-old-space-size=6144
 
 # Runtime secrets come from the environment, never build-time placeholders.
 RUN pnpm build
-# Bundle the migration runner (and pg) into one file, so the runtime image can
-# apply migrations without dev dependencies.
-RUN pnpm build:migrate
+# Bundle the migration runner and setup doctor (with pg) into single files, so
+# the runtime image runs them without dev dependencies.
+RUN pnpm build:self-host-scripts
 
 FROM node:${NODE_VERSION}-bookworm-slim AS runtime
 WORKDIR /app
@@ -84,8 +85,9 @@ COPY --from=build --chown=nextjs:nextjs /app/public ./public
 # image; it reads the cron routes from vercel.json.
 COPY --from=build --chown=nextjs:nextjs /app/vercel.json ./vercel.json
 COPY --from=build --chown=nextjs:nextjs /app/scripts/self-host-cron.mjs ./scripts/self-host-cron.mjs
-# The compose `migrate` service: the bundled runner reads SQL from ./neon.
-COPY --from=build --chown=nextjs:nextjs /app/.next/migrate/migrate.cjs ./scripts/migrate.cjs
+# The compose `migrate` service and the setup doctor; both read ./neon.
+COPY --from=build --chown=nextjs:nextjs /app/.next/self-host/apply-neon-migrations.cjs ./scripts/migrate.cjs
+COPY --from=build --chown=nextjs:nextjs /app/.next/self-host/doctor.cjs ./scripts/doctor.cjs
 COPY --from=build --chown=nextjs:nextjs /app/neon/baseline.sql ./neon/baseline.sql
 COPY --from=build --chown=nextjs:nextjs /app/neon/migrations ./neon/migrations
 
