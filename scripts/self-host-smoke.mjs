@@ -72,6 +72,7 @@ function writeEnvFile() {
       `CRON_SECRET=${secret()}`,
       `INTERNAL_API_SECRET=${secret()}`,
       `CONNECTIONS_ENCRYPTION_KEY=${secret()}`,
+      `EMAIL_UNSUBSCRIBE_SECRET=${secret()}`,
       `POSTGRES_PASSWORD=${secret()}`,
       "MOGPLEX_SELF_HOSTED=1",
       ...(EXTERNAL_DATABASE_URL
@@ -135,12 +136,25 @@ function checkNoBundledPostgres() {
   if (bundled) throw new Error("the bundled postgres container started");
 }
 
+// Doctor rows the image itself must satisfy. Others fail by design here: the
+// throwaway env configures no sign-in method or external services.
+const DOCTOR_ROWS_THAT_MUST_NOT_FAIL = ["app", "secrets", "database"];
+
 // The doctor exits 1 here because the throwaway env leaves services
-// unconfigured; the check is that it runs and reports.
+// unconfigured; the check is that it runs, reports, and finds nothing wrong
+// with what the image and compose provide.
 function checkDoctorReports() {
   const doctor = dockerStatus(
     compose("exec", "-T", "app", "node", "scripts/doctor.cjs")
   );
+  const failedRows = DOCTOR_ROWS_THAT_MUST_NOT_FAIL.filter((row) =>
+    new RegExp(String.raw`^FAIL\s+${row}\s`, "m").test(doctor.stdout)
+  );
+  if (failedRows.length > 0) {
+    throw new Error(
+      `setup doctor failed ${failedRows.join(", ")}:\n${doctor.stdout}`
+    );
+  }
   if (
     !doctor.stdout.includes("STATUS") ||
     !/\bdatabase\b/.test(doctor.stdout)

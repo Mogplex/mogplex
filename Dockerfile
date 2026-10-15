@@ -70,8 +70,12 @@ RUN pnpm build:self-host-scripts
 
 FROM node:${NODE_VERSION}-bookworm-slim AS runtime
 WORKDIR /app
+# Both backend flags come from the build arg the client bundle was built with,
+# so the server, the bundle, and the setup doctor agree on the backend.
+ARG NEXT_PUBLIC_MOGPLEX_DATA_BACKEND=neon
 ENV NODE_ENV=production \
-    MOGPLEX_DATA_BACKEND=neon \
+    MOGPLEX_DATA_BACKEND=${NEXT_PUBLIC_MOGPLEX_DATA_BACKEND} \
+    NEXT_PUBLIC_MOGPLEX_DATA_BACKEND=${NEXT_PUBLIC_MOGPLEX_DATA_BACKEND} \
     NEXT_TELEMETRY_DISABLED=1 \
     PORT=3000 \
     HOSTNAME=0.0.0.0
