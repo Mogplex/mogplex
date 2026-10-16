@@ -47,6 +47,11 @@ async function loadRunAnyOwner(runId: string) {
   return (data as ExternalAgentRunRow | null) ?? null;
 }
 
+/**
+ * The repository's name, only while the run's owner still has it. The run
+ * row is loaded across owners, so the owner filter keeps a repository that
+ * was transferred to another user from being named on this run.
+ */
 async function loadRepoName(run: ExternalAgentRunRow) {
   const { supabaseAdmin } = await import("@/lib/supabase/admin");
   const { data } = await supabaseAdmin
