@@ -4,7 +4,10 @@ import type { PostSlackMessageInput, UpdateSlackMessageInput } from "./client";
 import { emptyRunResultEvidence } from "./run-result-evidence";
 import { createRunProgressState, applyRunProgress } from "./run-progress-state";
 import { serializeRunProgress } from "./run-progress-store";
-import { buildRunResultMessage } from "./run-result-presentation";
+import {
+  buildRunResultDetails,
+  buildRunResultMessage,
+} from "./run-result-presentation";
 
 process.env.NEXT_PUBLIC_APP_URL ||= "https://mogplex.com";
 
@@ -143,7 +146,8 @@ it.each(["failed", "cancelled"] as const)(
     expect(message.text).toContain("Changed the header");
     expect(message.text).toContain("Remote branch verified");
     expect(message.text).toContain("Uncommitted changes are not included");
-    expect(message.text).toContain("contents have not been checked");
+    expect(message.text).not.toContain("contents have not been checked");
+    expect(JSON.stringify(message.blocks)).toContain("mogplex_run_details");
     expect(JSON.stringify(message.blocks)).not.toContain("mogplex-cancel-run");
     expect(JSON.stringify(message.blocks)).not.toContain("Resume run");
   }
@@ -179,9 +183,9 @@ it("reports actual check exits without turning a finished command into passed te
   expect(message.text).toContain("Recorded checks");
 });
 
-it("renders verified artifact navigation and guidance in the Slack blocks", () => {
+it("keeps artifacts, workspace and guidance in Details and navigation on the card", () => {
   const prUrl = "https://github.com/acme/app/pull/42";
-  const message = buildRunResultMessage({
+  const input = {
     run,
     status: "success",
     output: "Changed the header.",
@@ -206,18 +210,23 @@ it("renders verified artifact navigation and guidance in the Slack blocks", () =
         created_at: new Date(0).toISOString(),
       },
     ],
-  });
+  } satisfies Parameters<typeof buildRunResultMessage>[0];
+  const details = buildRunResultDetails(input);
+  expect(details.sections).toContain(`*Artifacts*\nPR #42 · open\n${prUrl}`);
+  expect(details.sections).toContain(
+    "*Your guidance*\nSupplied to agent step 2: Keep desktop unchanged"
+  );
+  expect(details.text).toContain("a snapshot is recorded");
+  expect(details.text).toContain("with persistent storage");
+  const message = buildRunResultMessage(input);
   expect(message.blocks).toContainEqual({
     type: "section",
-    text: { type: "mrkdwn", text: `*Artifacts*\nPR #42 · open\n${prUrl}` },
+    text: { type: "mrkdwn", text: `*Pull request:* <${prUrl}|#42 · open>` },
   });
-  expect(message.blocks).toContainEqual({
-    type: "section",
-    text: {
-      type: "mrkdwn",
-      text: "*Your guidance*\nSupplied to agent step 2: Keep desktop unchanged",
-    },
-  });
+  expect(message.text).toContain(
+    "*Your guidance*\nSupplied to agent step 2: Keep desktop unchanged"
+  );
+  expect(message.text).not.toContain("a snapshot is recorded");
   expect(message.blocks.find((block) => block.type === "actions")).toEqual({
     type: "actions",
     elements: [
@@ -235,20 +244,18 @@ it("renders verified artifact navigation and guidance in the Slack blocks", () =
       },
       {
         type: "button",
+        text: { type: "plain_text", text: "Details" },
+        action_id: "mogplex_run_details",
+        value: "run-1",
+      },
+      {
+        type: "button",
         text: { type: "plain_text", text: "View run details" },
         url: `${process.env.NEXT_PUBLIC_APP_URL}/runs/run-1?view=details`,
         action_id: "mogplex-view-run",
       },
-      {
-        type: "button",
-        text: { type: "plain_text", text: "Inspect workspaces" },
-        url: `${process.env.NEXT_PUBLIC_APP_URL}/sandboxes`,
-        action_id: "mogplex-view-workspaces",
-      },
     ],
   });
-  expect(JSON.stringify(message.blocks)).toContain("a snapshot is recorded");
-  expect(JSON.stringify(message.blocks)).toContain("with persistent storage");
 });
 
 it("offers only verified branch navigation and keeps missing-work recovery explicit", () => {
@@ -263,31 +270,33 @@ it("offers only verified branch navigation and keeps missing-work recovery expli
   };
   const state = createRunProgressState(1000);
   state.summary = "Inspected the header; edits are unfinished.";
-  const message = buildRunResultMessage({
+  const input = {
     run: { ...run, slack_progress: serializeRunProgress(state) },
     status: "failed",
     output: null,
     evidence,
     guidance: [],
-  });
+  };
+  const message = buildRunResultMessage(input);
   expect(message.blocks).toContainEqual({
     type: "section",
     text: {
       type: "mrkdwn",
-      text: "*Last agent update*\nInspected the header; edits are unfinished.",
+      text: "*❌ Run failed · Work may be incomplete*\n*Last agent update*\nInspected the header; edits are unfinished.",
     },
   });
-  expect(message.text).toContain(
+  expect(message.text).toContain("Remote branch verified at aaaaaaaaaaaa.");
+  const details = buildRunResultDetails(input);
+  expect(details.text).toContain(
     "No pull request was found for this working branch."
   );
-  expect(JSON.stringify(message.blocks)).toContain(
-    "No recoverable workspace has been verified."
-  );
+  expect(details.text).toContain("No recoverable workspace has been verified.");
   expect(
     message.blocks.find((block) => block.type === "actions")
   ).toMatchObject({
     elements: [
       { action_id: "mogplex-view-branch", url: evidence.github.branch?.url },
+      { action_id: "mogplex_run_details", value: "run-1" },
       {
         action_id: "mogplex-view-run",
         url: `${process.env.NEXT_PUBLIC_APP_URL}/runs/run-1?view=details`,
@@ -313,7 +322,7 @@ it("renders the agent's Markdown report as Slack formatting with its line breaks
     type: "section",
     text: {
       type: "mrkdwn",
-      text: "*Agent’s closing report*\n*Summary*\n• *Fixed* the `agent-loop` timeout\n• See PR #7 (https://github.com/acme/app/pull/7)",
+      text: "*✅ Run finished · Review results*\n*Agent’s closing report*\n*Summary*\n• *Fixed* the `agent-loop` timeout\n• See PR #7 (https://github.com/acme/app/pull/7)",
     },
   });
   expect(JSON.stringify(message.blocks)).not.toContain("**");

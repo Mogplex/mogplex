@@ -1,11 +1,8 @@
 import { buildAppUrl } from "@/lib/app-url";
-import {
-  buildTextSectionBlocks,
-  readSlackRunControlsMetadata,
-} from "@/lib/slack/run-controls";
+import { readSlackRunControlsMetadata } from "@/lib/slack/run-controls";
 import type { HarnessCheckpoint } from "@/lib/harness/checkpoint";
 import type { PostSlackMessageInput } from "@/lib/slack/client";
-import { progressText } from "./run-progress-state";
+import { buildRunCheckpointMessage } from "./run-checkpoint-presentation";
 
 type SlackNotifiableRun = {
   id: string;
@@ -33,33 +30,19 @@ async function loadSlackRunCheckpointNotifyDeps(): Promise<SlackRunCheckpointNot
   };
 }
 
-/** The user-facing checkpoint message: what happened, where to look, how to steer. */
+/** The checkpoint message text (notification and accessibility fallback). */
 export function buildRunCheckpointText(input: {
   runId: string;
   runUrl: string;
   checkpoint: HarnessCheckpoint;
 }): string {
-  const lines = ["⏸️ *Paused for your review.*"];
-  if (input.checkpoint.summary) {
-    lines.push("", progressText(input.checkpoint.summary, 1000));
-  }
-  if (input.checkpoint.previewUrl) {
-    const url = input.checkpoint.previewUrl;
-    if (/^https:\/\/[^\s<>]+$/.test(url))
-      lines.push("", `*Agent-reported preview:* ${url}`);
-  }
-  lines.push(
-    "",
-    "Review the work in Mogplex before continuing. Slack replies do not restart a paused run.",
-    `<${input.runUrl}|View run>`
-  );
-  return lines.join("\n");
+  return buildRunCheckpointMessage(input).text;
 }
 
 /**
  * If `run` was started from Slack, post a thread reply announcing that the run
- * paused at a checkpoint: the agent's summary, the dev-server preview URL, and
- * a link to inspect it. The serialized writer also updates the originating card
+ * paused at a checkpoint: the agent's plan or summary, the preview URL, and
+ * buttons to approve or revise it (a thread reply works too). The serialized writer also updates the originating card
  * to remove its active-work state. A marker is not proof of saved files.
  *
  * No Slack metadata or bot token is a no-op; the caller wraps this best-effort
@@ -81,11 +64,11 @@ export async function notifySlackRunCheckpoint(
   const botToken = await slackDeps.getSlackBotToken(slack.teamId);
   if (!botToken) return;
   const runUrl = buildAppUrl(`/runs/${run.id}`).toString();
-  const text = buildRunCheckpointText({ runId: run.id, runUrl, checkpoint });
-  const blocks = buildTextSectionBlocks(text);
-  if (!blocks) {
-    throw new Error("Checkpoint Slack text unexpectedly empty");
-  }
+  const { text, blocks } = buildRunCheckpointMessage({
+    runId: run.id,
+    runUrl,
+    checkpoint,
+  });
   await slackDeps.postSlackMessage(botToken, {
     channel: slack.channelId,
     thread_ts:

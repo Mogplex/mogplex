@@ -2,6 +2,7 @@ import { buildAppUrl } from "@/lib/app-url";
 import { sanitizeAgentUserFacingText } from "@/lib/agents/user-facing-output";
 import { escapeMrkdwn, markdownToMrkdwn } from "./markdown-to-mrkdwn";
 import type { SlackBlock } from "./client";
+import { SLACK_RUN_DETAILS_ACTION_ID } from "./command-actions";
 import type {
   RunResultContext,
   RunResultEvidence,
@@ -16,83 +17,159 @@ import {
   viewChangesButton,
 } from "./run-changes-presentation";
 
-/** User-facing outcomes distinguish observed work from the agent's own claims. */
-export function buildRunResultMessage(input: {
+export type RunResultInput = {
   run: RunResultContext;
   status: string;
   output: string | null;
   evidence: RunResultEvidence;
   guidance: readonly RunGuidance[];
-}) {
-  const { run, status, output, evidence, guidance } = input;
-  const title = runProgressTitle({
-    id: run.id,
-    metadata: run.metadata,
-    prompt: run.prompt,
-  });
-  const result =
-    status === "success"
-      ? "✅ Run finished · Review results"
-      : status === "cancelled"
-        ? "⏹️ Run cancelled"
-        : "❌ Run failed · Work may be incomplete";
+};
+
+const CHECK_TITLES = new Set([
+  "Running tests",
+  "Checking the build and code quality",
+]);
+
+/** What the card and the details view both say about one result. */
+function resultFacts(input: RunResultInput) {
+  const { run, status, evidence } = input;
   const snapshot = readRunProgressSnapshot(run.slack_progress);
-  const report = closingReport({ status, output, summary: snapshot?.summary });
-  const sections = [`*${result}*`];
-  if (report)
-    sections.push(
-      `*${status === "success" ? "Agent’s closing report" : "Last agent update"}${report.excerpt ? " (excerpt)" : ""}*\n${report.mrkdwn}`
-    );
   const checks = [...(snapshot?.tasks.values() ?? [])]
-    .filter((task) =>
-      ["Running tests", "Checking the build and code quality"].includes(
-        task.title
+    .filter((task) => CHECK_TITLES.has(task.title))
+    .slice(-3)
+    .map((task) =>
+      escapeMrkdwn(
+        `${task.title}: ${task.status === "in_progress" ? "No completion recorded" : task.result || "No result recorded"}`
       )
-    )
-    .slice(-3);
+    );
+  const github = evidence.github;
+  return {
+    title: runProgressTitle({
+      id: run.id,
+      metadata: run.metadata,
+      prompt: run.prompt,
+    }),
+    outcome:
+      status === "success"
+        ? "✅ Run finished · Review results"
+        : status === "cancelled"
+          ? "⏹️ Run cancelled"
+          : "❌ Run failed · Work may be incomplete",
+    reportLabel:
+      status === "success" ? "Agent’s closing report" : "Last agent update",
+    summary: snapshot?.summary,
+    checks,
+    github,
+    branchLine: github.branch
+      ? `Remote branch verified at ${github.branch.sha.slice(0, 12)}. Uncommitted changes are not included.`
+      : null,
+    missingArtifacts: github.checked
+      ? github.pullRequests.length === 0
+        ? "No pull request was found for this working branch."
+        : null
+      : "Could not verify GitHub artifacts. This does not mean the work was lost.",
+    changes: evidence.changes ? changesSectionText(evidence.changes) : null,
+    runUrl: buildAppUrl(`/runs/${run.id}?view=details`).toString(),
+  };
+}
+
+function reportSection(
+  facts: ReturnType<typeof resultFacts>,
+  input: RunResultInput,
+  budget: number
+) {
+  const report = closingReport({
+    status: input.status,
+    output: input.output,
+    summary: facts.summary,
+    budget,
+  });
+  return report
+    ? `*${facts.reportLabel}${report.excerpt ? " (excerpt)" : ""}*\n${report.mrkdwn}`
+    : null;
+}
+
+/**
+ * The full result, shown behind the card's Details button: the agent's
+ * report, recorded checks with their caveat, artifacts, workspace state and
+ * guidance receipts. User-facing outcomes distinguish observed work from
+ * the agent's own claims.
+ */
+export function buildRunResultDetails(input: RunResultInput) {
+  const facts = resultFacts(input);
+  const { github } = facts;
+  const sections = [`*${facts.outcome}*`];
+  const report = reportSection(facts, input, REPORT_EXCERPT_CHARS);
+  if (report) sections.push(report);
   sections.push(
-    checks.length > 0
-      ? `*Recorded checks*\n${checks.map((task) => escapeMrkdwn(`${task.title}: ${task.status === "in_progress" ? "No completion recorded" : task.result || "No result recorded"}`)).join("\n")}\nA command result is not an independent verification of the requested behavior.`
+    facts.checks.length > 0
+      ? `*Recorded checks*\n${facts.checks.join("\n")}\nA command result is not an independent verification of the requested behavior.`
       : "*Verification*\nNo completed test or build result was recorded. Check the run details before relying on the agent’s report."
   );
-  const changes = evidence.changes
-    ? changesSectionText(evidence.changes)
-    : null;
-  if (changes) sections.push(changes);
-  const github = evidence.github;
+  if (facts.changes) sections.push(facts.changes);
   const artifacts = github.pullRequests.map(
     (pr) => `PR #${pr.number} · ${pr.state}\n${escapeMrkdwn(pr.url)}`
   );
-  if (github.branch)
-    artifacts.push(
-      `Remote branch verified at ${github.branch.sha.slice(0, 12)}. Uncommitted changes are not included.\n${escapeMrkdwn(github.branch.url)}`
-    );
-  if (!github.checked)
-    artifacts.push(
-      "Could not verify GitHub artifacts. This does not mean the work was lost."
-    );
-  else if (github.pullRequests.length === 0)
-    artifacts.push("No pull request was found for this working branch.");
+  if (github.branch && facts.branchLine)
+    artifacts.push(`${facts.branchLine}\n${escapeMrkdwn(github.branch.url)}`);
+  if (facts.missingArtifacts) artifacts.push(facts.missingArtifacts);
   sections.push(`*Artifacts*\n${artifacts.join("\n")}`);
-  const workspace = evidence.workspace;
+  const workspace = input.evidence.workspace;
   if (workspace) {
     sections.push(
       `*Workspace*\nRecorded as ${escapeMrkdwn(progressText(workspace.status, 40))}${workspace.persistent ? " with persistent storage" : ""}${workspace.snapshotRecorded ? "; a snapshot is recorded" : ""}. Its current availability and contents have not been checked. Inspect the workspace before resuming or starting new work.`
     );
-  } else if (status !== "success") {
+  } else if (input.status !== "success") {
     sections.push(
       "*Recovery*\nNo recoverable workspace has been verified. Review the run details and any remote branch before retrying. Nothing was restarted automatically."
     );
   }
-  const receipts = guidanceReceiptText(guidance);
+  const receipts = guidanceReceiptText(input.guidance);
   if (receipts) sections.push(`*Your guidance*\n${escapeMrkdwn(receipts)}`);
-  const runUrl = buildAppUrl(`/runs/${run.id}?view=details`).toString();
+  return {
+    title: facts.title,
+    sections,
+    text: capMessageText(
+      [
+        escapeMrkdwn(facts.title),
+        ...sections,
+        `View run details: ${facts.runUrl}`,
+      ].join("\n\n")
+    ),
+  };
+}
+
+/**
+ * The run card once a run ends: the outcome, a short excerpt of the agent's
+ * report, what changed and where it landed, guidance receipts, and one line
+ * on checks. The rest is one click away in Details.
+ */
+export function buildRunResultMessage(input: RunResultInput) {
+  const { run, evidence } = input;
+  const facts = resultFacts(input);
+  const { github } = facts;
+  const report = reportSection(facts, input, CARD_REPORT_CHARS);
+  const sections = [[`*${facts.outcome}*`, report].filter(Boolean).join("\n")];
+  if (facts.changes) sections.push(facts.changes);
+  const pr = github.pullRequests[0];
+  const artifact = pr
+    ? `*Pull request:* <${pr.url}|#${pr.number} · ${pr.state}>`
+    : (facts.branchLine ?? facts.missingArtifacts);
+  if (artifact) sections.push(artifact);
+  // Confirms the user's thread replies reached the agent.
+  const receipts = guidanceReceiptText(input.guidance);
+  if (receipts) sections.push(`*Your guidance*\n${escapeMrkdwn(receipts)}`);
+  const checks =
+    facts.checks.length > 0
+      ? `Recorded checks: ${facts.checks.join("; ")}. Not an independent verification.`
+      : "No completed test or build result was recorded.";
   const blocks: SlackBlock[] = [
-    { type: "header", text: { type: "plain_text", text: title } },
+    { type: "header", text: { type: "plain_text", text: facts.title } },
     ...sections.map((text) => ({
       type: "section",
       text: { type: "mrkdwn", text },
     })),
+    { type: "context", elements: [{ type: "mrkdwn", text: checks }] },
   ];
   const button = (text: string, url: string, action: string) => ({
     type: "button",
@@ -103,14 +180,8 @@ export function buildRunResultMessage(input: {
   blocks.push({
     type: "actions",
     elements: [
-      ...(github.pullRequests[0]
-        ? [
-            button(
-              "Review pull request",
-              github.pullRequests[0].url,
-              "mogplex-view-pr"
-            ),
-          ]
+      ...(pr
+        ? [button("Review pull request", pr.url, "mogplex-view-pr")]
         : github.branch
           ? [
               button(
@@ -120,19 +191,16 @@ export function buildRunResultMessage(input: {
               ),
             ]
           : []),
-      ...(evidence.changes?.length || workspace
+      ...(evidence.changes?.length || evidence.workspace
         ? [viewChangesButton(run.id)]
         : []),
-      button("View run details", runUrl, "mogplex-view-run"),
-      ...(workspace
-        ? [
-            button(
-              "Inspect workspaces",
-              buildAppUrl("/sandboxes").toString(),
-              "mogplex-view-workspaces"
-            ),
-          ]
-        : []),
+      {
+        type: "button",
+        text: { type: "plain_text", text: "Details" },
+        action_id: SLACK_RUN_DETAILS_ACTION_ID,
+        value: run.id,
+      },
+      button("View run details", facts.runUrl, "mogplex-view-run"),
     ],
   });
   if (run.working_branch)
@@ -147,15 +215,67 @@ export function buildRunResultMessage(input: {
     });
   return {
     text: capMessageText(
-      [escapeMrkdwn(title), ...sections, `View run details: ${runUrl}`].join(
-        "\n\n"
-      )
+      [
+        escapeMrkdwn(facts.title),
+        ...sections,
+        checks,
+        `View run details: ${facts.runUrl}`,
+      ].join("\n\n")
     ),
     blocks,
   };
 }
 
+/** Details as a modal: one section per part, plus links out. */
+export function buildRunResultDetailsModal(
+  input: { runId: string } & (
+    | { state: "loading" }
+    | { state: "message"; text: string }
+    | { state: "ready"; details: ReturnType<typeof buildRunResultDetails> }
+  )
+) {
+  const runUrl = buildAppUrl(`/runs/${input.runId}?view=details`).toString();
+  const sections =
+    input.state === "ready"
+      ? input.details.sections
+      : [
+          input.state === "loading"
+            ? "Loading the run’s details…"
+            : escapeMrkdwn(input.text),
+        ];
+  return {
+    type: "modal",
+    title: { type: "plain_text", text: "Run details" },
+    close: { type: "plain_text", text: "Close" },
+    private_metadata: input.runId,
+    blocks: [
+      ...(input.state === "ready"
+        ? [
+            {
+              type: "header",
+              text: { type: "plain_text", text: input.details.title },
+            },
+          ]
+        : []),
+      ...sections.map((text) => ({
+        type: "section",
+        text: { type: "mrkdwn", text },
+      })),
+      {
+        type: "context",
+        elements: [
+          {
+            type: "mrkdwn",
+            text: `<${runUrl}|View run details> · <${buildAppUrl("/sandboxes").toString()}|Inspect workspaces>`,
+          },
+        ],
+      },
+    ],
+  };
+}
+
 const REPORT_EXCERPT_CHARS = 1500;
+const CARD_REPORT_CHARS = 600;
 // Slack rejects a section over 3,000 characters and a message whose text is
 // over 4,000. Escaping can multiply the report's length, so the rendered
 // text is what gets budgeted.
@@ -177,6 +297,7 @@ function closingReport(input: {
   status: string;
   output: string | null;
   summary: string | undefined;
+  budget: number;
 }) {
   const full =
     input.status !== "success" && input.summary
@@ -186,7 +307,7 @@ function closingReport(input: {
         : input.summary;
   if (!full) return null;
   const characters = Array.from(full);
-  let budget = REPORT_EXCERPT_CHARS;
+  let budget = input.budget;
   for (;;) {
     const excerpt = characters.length > budget;
     const mrkdwn = markdownToMrkdwn(

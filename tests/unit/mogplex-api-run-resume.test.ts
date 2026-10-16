@@ -22,6 +22,7 @@ function baseDeps(overrides: Record<string, unknown> = {}) {
     appendEvent: async () => null,
     notifyRunReachedTerminalState: async () => {},
     notifyRunCheckpoint: async () => {},
+    recordCheckpoint: async () => {},
     ...overrides,
   };
 }
@@ -38,6 +39,70 @@ test("buildResumeContinuePrompt reconciles the branch, carries the steer, and in
   assert.doesNotMatch(prompt, / {2}make the header smaller/);
   // the checkpoint protocol is appended so the segment can pause again or ship
   assert.match(prompt, /<<<MOGPLEX_CHECKPOINT>>>/);
+});
+
+test("buildResumeContinuePrompt restates the original task and the checkpoint summary", () => {
+  const prompt = buildResumeContinuePrompt(
+    buildRunRow({
+      prompt:
+        "Add dark mode to settings\n\nPlan-first protocol for this run:\n1. Explore",
+      metadata: { checkpoint_summary: "- Add a theme toggle\n- Persist it" },
+    }),
+    "go"
+  );
+  assert.match(prompt, /The original task:\nAdd dark mode to settings\n/);
+  assert.doesNotMatch(prompt, /1\. Explore/);
+  assert.match(
+    prompt,
+    /What you reported at the checkpoint:\n- Add a theme toggle/
+  );
+});
+
+test("buildResumeContinuePrompt keeps a plan revision in planning", () => {
+  const prompt = buildResumeContinuePrompt(
+    buildRunRow(),
+    "use CSS variables",
+    "plan"
+  );
+  assert.match(prompt, /asked for changes:\nuse CSS variables/);
+  assert.match(prompt, /Do not change files yet/);
+  assert.match(prompt, /"kind":"plan"/);
+  assert.doesNotMatch(prompt, /Start the dev server/);
+});
+
+test("buildResumeContinuePrompt lets the agent read a free-form plan reply", () => {
+  const prompt = buildResumeContinuePrompt(
+    buildRunRow(),
+    "looks good",
+    "plan_reply"
+  );
+  assert.match(prompt, /If the reply approves the plan/);
+  assert.match(prompt, /Start the dev server/);
+  assert.match(prompt, /"kind":"plan"/);
+});
+
+test("queueResumeExternalAgentRun passes the resume mode to the task", async () => {
+  const payloads: unknown[] = [];
+  await queueResumeExternalAgentRun(
+    {
+      runId: "run-1",
+      userId: "user-1",
+      repoId: "repo-1",
+      steer: "fix the copy",
+      mode: "plan",
+      idempotencyKey: "key-1",
+    },
+    {
+      isRuntimeConfigured: () => true,
+      triggerTask: async (_taskId, payload) => {
+        payloads.push(payload);
+        return { id: "trigger-run" };
+      },
+    }
+  );
+  assert.deepEqual(payloads, [
+    { runId: "run-1", userId: "user-1", steer: "fix the copy", mode: "plan" },
+  ]);
 });
 
 test("resumeExternalAgentRun returns not_found for a missing run", async () => {

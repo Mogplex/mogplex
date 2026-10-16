@@ -416,3 +416,43 @@ test("returns a retryable error when event dispatch fails", async () => {
     console.error = originalError;
   }
 });
+
+test("acks Work Object events before handling them after the response", async () => {
+  const { createSlackWebhookPostHandler } = await loadSlackWebhookRoute();
+  const body = JSON.stringify({
+    type: "event_callback",
+    team_id: "T123",
+    event_id: "Ev-link",
+    event: {
+      type: "link_shared",
+      channel: "C1",
+      user: "U1",
+      message_ts: "1700000000.000100",
+      links: [{ url: "https://mogplex.com/runs/x", domain: "mogplex.com" }],
+    },
+  });
+  const order: string[] = [];
+  const deferred: Array<() => void | Promise<void>> = [];
+  const handler = createSlackWebhookPostHandler({
+    getSigningSecret: () => SIGNING_SECRET,
+    dispatch: () => {
+      order.push("dispatch");
+    },
+    scheduleAfterResponse: (work) => {
+      deferred.push(work);
+    },
+  });
+
+  const response = await handler(
+    new Request("http://localhost/api/webhooks/slack", {
+      method: "POST",
+      body,
+      headers: { ...signedHeaders(body), "content-type": "application/json" },
+    })
+  );
+  order.push("acked");
+  for (const work of deferred) await work();
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(order, ["acked", "dispatch"]);
+});

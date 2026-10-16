@@ -87,7 +87,40 @@ export type FinalizeDeps = HarnessPassNotifiers & {
   appendEvent: typeof safeAppendAiCallEvent;
   /** Optional terminal commit recording for artifact pinning. */
   recordTerminalCommit?: typeof recordTerminalCommitWithTimeout;
+  /** Records the checkpoint the run paused at, merged atomically. */
+  recordCheckpoint?: (
+    run: ExternalAgentRunRow,
+    values: CheckpointMetadata
+  ) => Promise<void>;
 };
+
+/** Run metadata a resume reads: what the agent paused on. */
+export type CheckpointMetadata = {
+  checkpoint_kind: "plan" | "review";
+  checkpoint_summary: string;
+};
+
+async function recordCheckpointInMetadata(
+  run: ExternalAgentRunRow,
+  values: CheckpointMetadata
+) {
+  const { mergeRunMetadataAtomic } = await import("./run-terminal-commit");
+  await mergeRunMetadataAtomic(run.user_id, run.id, values);
+}
+
+async function safeRecordCheckpoint(
+  deps: FinalizeDeps,
+  run: ExternalAgentRunRow,
+  values: CheckpointMetadata
+) {
+  try {
+    await (deps.recordCheckpoint ?? recordCheckpointInMetadata)(run, values);
+  } catch (error) {
+    // Without it a reply reads as review feedback and the resume prompt
+    // lacks the summary; Slack buttons still carry the kind themselves.
+    console.warn("[run-execution] checkpoint not recorded", run.id, error);
+  }
+}
 
 async function safeNotifyTerminal(
   deps: HarnessPassNotifiers,
@@ -139,10 +172,21 @@ export async function finalizeHarnessPass(
   if (status === "success") {
     const checkpoint = parseHarnessCheckpoint(harnessResult.output);
     if (checkpoint) {
-      const paused = await deps.updateRun(run.user_id, run.id, {
+      const updated = await deps.updateRun(run.user_id, run.id, {
         status: "awaiting_input",
         error: null,
       });
+      // Replies are read against the checkpoint they answer: a plan reply
+      // may approve or revise the plan, a review reply may ship or steer.
+      const recorded: CheckpointMetadata = {
+        checkpoint_kind: checkpoint.kind ?? "review",
+        checkpoint_summary: checkpoint.summary ?? "",
+      };
+      await safeRecordCheckpoint(deps, updated, recorded);
+      const paused = {
+        ...updated,
+        metadata: { ...updated.metadata, ...recorded },
+      };
       await safeNotifyCheckpoint(deps, paused, checkpoint);
       return {
         success: true,

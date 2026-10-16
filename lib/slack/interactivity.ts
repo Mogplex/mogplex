@@ -6,7 +6,6 @@ import {
   SLACK_MODEL_SELECT_ACTION_ID,
   SLACK_REFRESH_PRS_ACTION_ID,
   SLACK_REPO_SELECT_ACTION_ID,
-  SLACK_VIEW_CHANGES_ACTION_ID,
   SLACK_VIEW_RUN_ACTION_ID,
 } from "@/lib/slack/command-actions";
 import type { SlackCommandPayload } from "@/lib/slack/command";
@@ -25,6 +24,7 @@ import {
   MogplexApiRunControlError,
 } from "@/lib/mogplex-api/run-control";
 import { SLACK_CANCEL_RUN_ACTION_ID } from "@/lib/slack/run-controls";
+import { routeRunCardAction } from "@/lib/slack/run-card-interactions";
 
 export {
   buildCancelRunActionsBlock,
@@ -61,6 +61,8 @@ export type SlackBlockActionsPayload = {
 export type SlackInteractivityResult =
   | { outcome: "connection_recovery"; result: string }
   | { outcome: "run_changes"; result: string }
+  | { outcome: "checkpoint"; result: string }
+  | { outcome: "run_details"; result: string }
   | { outcome: "ignored"; reason: string }
   | { outcome: "not_linked" }
   | { outcome: "run_not_found"; runId: string }
@@ -420,18 +422,8 @@ export async function handleSlackBlockActions(
       };
   }
 
-  if (
-    payload.actions?.some(
-      (action) => action.action_id === SLACK_VIEW_CHANGES_ACTION_ID
-    )
-  ) {
-    const { handleViewRunChangesAction } =
-      await import("@/lib/slack/run-changes-interactions");
-    return {
-      outcome: "run_changes",
-      result: await handleViewRunChangesAction(payload),
-    };
-  }
+  const runCard = await routeRunCardAction(payload);
+  if (runCard) return runCard;
 
   const selectedModel = findModelSelection(payload);
   if (selectedModel !== undefined) {

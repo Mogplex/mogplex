@@ -8,6 +8,7 @@ import {
   buildSlackThreadConcurrencyKey,
   getSlackEventIdentityDiagnostics,
   hasCompleteSlackEventIdentity,
+  isSlackWorkObjectEvent,
   shouldDispatchSlackEvent,
   type SlackInteractivityPayload,
   type SlackEventPayload,
@@ -17,6 +18,7 @@ import {
 import type { SlackCommandPayload } from "@/lib/slack/command";
 import { parseCommand } from "@/lib/slack/command-parse";
 import { buildSlackCommandHelpResponse } from "@/lib/slack/command-help";
+import { SLACK_CHECKPOINT_REVISE_CALLBACK_ID } from "@/lib/slack/run-checkpoint-presentation";
 
 // Re-export types and functions that tests depend on
 export {
@@ -38,6 +40,12 @@ async function dispatchInteractivity(
   payload: SlackInteractivityPayload
 ): Promise<void> {
   if (payload.type === "view_submission") {
+    if (payload.view?.callback_id === SLACK_CHECKPOINT_REVISE_CALLBACK_ID) {
+      const { handleCheckpointReviseSubmission } =
+        await import("@/lib/slack/run-checkpoint-interactions");
+      await handleCheckpointReviseSubmission(payload);
+      return;
+    }
     const { handleSlackIssueModalSubmission } =
       await import("@/lib/slack/command-interactions");
     await handleSlackIssueModalSubmission(payload);
@@ -66,6 +74,12 @@ async function defaultDispatch(
   }
 
   const event = input.body.event;
+  if (isSlackWorkObjectEvent(event)) {
+    const { handleSlackWorkObjectEvent } =
+      await import("@/lib/slack/work-object-events");
+    await handleSlackWorkObjectEvent(input.body.team_id, event);
+    return;
+  }
   if (!event || !shouldDispatchSlackEvent(event)) {
     return;
   }
@@ -213,7 +227,8 @@ async function handleInteractivityRequest(
 
 async function handleEventRequest(
   rawBody: string,
-  dispatch: SlackWebhookDeps["dispatch"]
+  dispatch: SlackWebhookDeps["dispatch"],
+  scheduleAfterResponse: NonNullable<SlackWebhookDeps["scheduleAfterResponse"]>
 ) {
   const body = safeJsonParse<SlackEventPayload>(rawBody);
   if (!body || typeof body.type !== "string") {
@@ -241,6 +256,18 @@ async function handleEventRequest(
         teamId: body.team_id,
       });
       return jsonError("Dispatch unavailable", 503);
+    }
+    if (isSlackWorkObjectEvent(body.event)) {
+      // The flexpane's trigger_id expires within seconds and a late unfurl
+      // is useless: ack now and answer after the response.
+      scheduleAfterResponse(() =>
+        safeDispatch(
+          dispatch,
+          { kind: "event", body, rawBody },
+          { eventType: body.event.type }
+        )
+      );
+      return NextResponse.json({ ok: true });
     }
 
     try {
@@ -308,7 +335,7 @@ export function createSlackWebhookPostHandler(
       );
     }
 
-    return handleEventRequest(rawBody, deps.dispatch);
+    return handleEventRequest(rawBody, deps.dispatch, runAfterResponse);
   };
 }
 

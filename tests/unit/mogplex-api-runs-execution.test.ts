@@ -241,8 +241,13 @@ test("executeExternalAgentRun re-notifies when the run was already terminal", as
 test("executeExternalAgentRun pauses at a checkpoint instead of finishing", async () => {
   let currentRun = buildRunRow({ status: "pending" });
   const updates: Array<Partial<ExternalAgentRunRow>> = [];
-  const checkpoints: Array<{ runId: string; previewUrl: string | null }> = [];
+  const checkpoints: Array<{
+    runId: string;
+    previewUrl: string | null;
+    kind?: unknown;
+  }> = [];
   let terminalNotified = false;
+  const recorded: unknown[] = [];
 
   const result = await executeExternalAgentRun(
     { runId: "run-1", userId: "user-123" },
@@ -270,7 +275,11 @@ test("executeExternalAgentRun pauses at a checkpoint instead of finishing", asyn
         checkpoints.push({
           runId: run.id,
           previewUrl: checkpoint.previewUrl,
+          kind: run.metadata.checkpoint_kind,
         });
+      },
+      recordCheckpoint: async (_run, values) => {
+        recorded.push(values);
       },
     }
   );
@@ -280,7 +289,10 @@ test("executeExternalAgentRun pauses at a checkpoint instead of finishing", asyn
   assert.equal(currentRun.status, "awaiting_input");
   assert.equal(terminalNotified, false);
   assert.deepEqual(checkpoints, [
-    { runId: "run-1", previewUrl: "https://sb.vercel.run" },
+    { runId: "run-1", previewUrl: "https://sb.vercel.run", kind: "review" },
+  ]);
+  assert.deepEqual(recorded, [
+    { checkpoint_kind: "review", checkpoint_summary: "moved sign in" },
   ]);
   assert.deepEqual(
     updates.map((update) => update.status),

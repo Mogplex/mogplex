@@ -35,7 +35,15 @@ const TOOL_START_TEXT: Readonly<Record<string, string>> = {
   write_file: "Updating a file...",
 };
 
-type SlackProgressSanitizationContext = {
+/** A tool step's label for a streamed task card, e.g. "Checking GitHub". */
+export function slackToolTaskTitle(toolName: string) {
+  return (TOOL_START_TEXT[toolName] ?? "Using a connected tool...").replace(
+    /\.\.\.$/,
+    ""
+  );
+}
+
+export type SlackProgressSanitizationContext = {
   repoName?: string | null;
   userText?: string;
 };

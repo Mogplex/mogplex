@@ -18,6 +18,9 @@ import {
   postSlackMessage,
   stripSlackMention,
   updateSlackMessage,
+  startSlackStream,
+  appendSlackStream,
+  stopSlackStream,
 } from "@/lib/slack/client";
 import { runChatAgent } from "@/lib/agents/run-chat-agent";
 import { buildAppUrl } from "@/lib/app-url";
@@ -168,6 +171,9 @@ const defaultDeps: SlackEventTaskDeps = {
   postMessage: postSlackMessage,
   postEphemeral: postSlackEphemeral,
   updateMessage: updateSlackMessage,
+  startStream: startSlackStream,
+  appendStream: appendSlackStream,
+  stopStream: stopSlackStream,
   createUserLinkToken: createSlackUserLinkToken,
   buildSlackLinkUrl: (token) =>
     buildAppUrl(`/slack/link?token=${encodeURIComponent(token)}`).toString(),

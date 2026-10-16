@@ -18,6 +18,11 @@ export const CHECKPOINT_MARKER_END = "<<<END_MOGPLEX_CHECKPOINT>>>";
 export type HarnessCheckpoint = {
   previewUrl: string | null;
   summary: string | null;
+  /**
+   * `plan`: the agent proposed a plan and changed no files yet. Absent means
+   * a review checkpoint (work implemented, waiting for approval to ship).
+   */
+  kind?: "plan";
 };
 
 function normalizePreviewUrl(value: unknown): string | null {
@@ -30,6 +35,20 @@ function normalizeSummary(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed ? trimmed : null;
+}
+
+/**
+ * Agents often put raw line breaks inside the summary string, which strict
+ * JSON rejects. Strict parsing runs first, so a pretty-printed body still
+ * works; the fallback escapes the raw breaks.
+ */
+function parseCheckpointBody(body: string): Record<string, unknown> {
+  try {
+    return JSON.parse(body) as Record<string, unknown>;
+  } catch (error) {
+    if (!/[\r\n]/.test(body)) throw error;
+    return JSON.parse(body.replace(/\r?\n/g, "\\n")) as Record<string, unknown>;
+  }
 }
 
 /**
@@ -53,10 +72,11 @@ export function parseHarnessCheckpoint(
   if (!body) return { previewUrl: null, summary: null };
 
   try {
-    const parsed = JSON.parse(body) as Record<string, unknown>;
+    const parsed = parseCheckpointBody(body);
     return {
       previewUrl: normalizePreviewUrl(parsed.previewUrl),
       summary: normalizeSummary(parsed.summary),
+      ...(parsed.kind === "plan" ? { kind: "plan" as const } : {}),
     };
   } catch {
     return { previewUrl: null, summary: null };
@@ -80,5 +100,24 @@ export function buildCheckpointProtocolInstructions(): string {
     CHECKPOINT_MARKER_END,
     "5. Wait for the user's feedback. When they approve (for example they say 'ship it'), open the pull request; otherwise apply their guidance and reach the next checkpoint the same way.",
     "Never run a long-lived or interactive command in the foreground; it will stall the run.",
+  ].join("\n");
+}
+
+/**
+ * Instructions that make a run propose a plan and pause before changing any
+ * file. The plan arrives as a `plan` checkpoint; approving it resumes the run
+ * under the regular checkpoint protocol.
+ */
+export const PLAN_FIRST_PROTOCOL_HEADING = "Plan-first protocol for this run:";
+
+export function buildPlanFirstProtocolInstructions(): string {
+  return [
+    PLAN_FIRST_PROTOCOL_HEADING,
+    "1. Explore the repository and write a concise implementation plan: the files you will change, the approach, risks or open questions, and how you will verify the result.",
+    "2. Do NOT create, edit, or delete files, and do not commit or push, until the user approves the plan.",
+    "3. Print exactly this block, with the plan as the summary (short bullet lines, under 1,500 characters, as one-line JSON with line breaks written as \\n), and then end your turn:",
+    CHECKPOINT_MARKER_START,
+    '{"kind":"plan","previewUrl":null,"summary":"<the plan>"}',
+    CHECKPOINT_MARKER_END,
   ].join("\n");
 }
