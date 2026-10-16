@@ -10,7 +10,10 @@ import {
 import { listScanSourceFiles } from "../support/env-example-scan";
 
 const REPO_ROOT = path.resolve(import.meta.dirname, "../..");
-const SDK_IMPORT = /from\s+["']@vercel\/sandbox(?:\/[^"']*)?["']/;
+// An import or re-export statement, not a mention in a comment. `[^;]*` spans
+// multi-line import lists; statements end in `;` in this repo.
+const SDK_IMPORT =
+  /^\s*(?:import|export)\b[^;]*?\bfrom\s+["']@vercel\/sandbox(?:\/[^"']*)?["']/m;
 
 test("resolveSandboxProviderId defaults to vercel and normalizes case", () => {
   assert.equal(resolveSandboxProviderId({}), "vercel");
@@ -43,6 +46,23 @@ test("the vercel provider reports every capability", () => {
     persistentSandboxes: true,
     nestedSandbox: true,
   });
+});
+
+test("the SDK import pattern matches statements and ignores comments", () => {
+  assert.match('import type { Sandbox } from "@vercel/sandbox";', SDK_IMPORT);
+  assert.match(
+    'import {\n  Sandbox,\n  type Signal,\n} from "@vercel/sandbox/dist/x";',
+    SDK_IMPORT
+  );
+  assert.match('export type { Sandbox } from "@vercel/sandbox";', SDK_IMPORT);
+  assert.doesNotMatch(
+    '// moves from `import type { Sandbox } from "@vercel/sandbox"` later',
+    SDK_IMPORT
+  );
+  assert.doesNotMatch(
+    'import { a } from "./a";\n// see from "@vercel/sandbox"',
+    SDK_IMPORT
+  );
 });
 
 test("the Vercel SDK importer allowlist only lists files that still import it", () => {
