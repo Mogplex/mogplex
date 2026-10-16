@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { getGithubAccessTokenForRepo } from "@/lib/github-access";
+import type { BranchChangedFile } from "@/lib/sandbox/branch-changes";
+import { readGithubBranchChanges } from "./run-changes";
 
 export type RunResultContext = {
   id: string;
@@ -9,6 +11,7 @@ export type RunResultContext = {
   ai_call_id?: string | null;
   repo_id?: string;
   prompt?: string;
+  base_branch?: string;
   working_branch?: string;
   sandbox_record_id?: string | null;
   slack_progress?: unknown;
@@ -24,6 +27,8 @@ export type RunGithubEvidence = {
 };
 export type RunResultEvidence = {
   github: RunGithubEvidence;
+  /** Files changed on the pushed branch, without patches. */
+  changes?: Omit<BranchChangedFile, "patch">[] | null;
   workspace: {
     status: string;
     persistent: boolean;
@@ -37,6 +42,7 @@ const emptyGithub = (): RunGithubEvidence => ({
 });
 export const emptyRunResultEvidence = (): RunResultEvidence => ({
   github: emptyGithub(),
+  changes: null,
   workspace: null,
 });
 const repoSchema = z.object({
@@ -169,12 +175,24 @@ export async function loadRunResultEvidence(
   if (repoResult.error || !repo.success || !run.working_branch) return evidence;
   try {
     const token = await getGithubAccessTokenForRepo(repo.data);
-    if (token)
-      evidence.github = await readRunGithubEvidence({
-        repoFullName: repo.data.full_name,
-        branch: run.working_branch,
-        token,
-      });
+    if (token) {
+      const { full_name: repoFullName } = repo.data;
+      const branch = run.working_branch;
+      const base = run.base_branch;
+      const [github, changes] = await Promise.all([
+        readRunGithubEvidence({ repoFullName, branch, token }),
+        base && base !== branch
+          ? readGithubBranchChanges({ repoFullName, base, head: branch, token })
+              .then(
+                (found) =>
+                  found?.files.map(({ patch: _patch, ...file }) => file) ?? null
+              )
+              .catch(() => null)
+          : null,
+      ]);
+      evidence.github = github;
+      evidence.changes = changes;
+    }
   } catch {
     // Missing credentials/provider outages must not leave a finished card active.
   }

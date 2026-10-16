@@ -6,6 +6,7 @@ import {
   SLACK_MODEL_SELECT_ACTION_ID,
   SLACK_REFRESH_PRS_ACTION_ID,
   SLACK_REPO_SELECT_ACTION_ID,
+  SLACK_VIEW_CHANGES_ACTION_ID,
   SLACK_VIEW_RUN_ACTION_ID,
 } from "@/lib/slack/command-actions";
 import type { SlackCommandPayload } from "@/lib/slack/command";
@@ -59,6 +60,7 @@ export type SlackBlockActionsPayload = {
 
 export type SlackInteractivityResult =
   | { outcome: "connection_recovery"; result: string }
+  | { outcome: "run_changes"; result: string }
   | { outcome: "ignored"; reason: string }
   | { outcome: "not_linked" }
   | { outcome: "run_not_found"; runId: string }
@@ -416,6 +418,19 @@ export async function handleSlackBlockActions(
         outcome: "connection_recovery",
         result: await handleConnectionRecoveryAction(payload),
       };
+  }
+
+  if (
+    payload.actions?.some(
+      (action) => action.action_id === SLACK_VIEW_CHANGES_ACTION_ID
+    )
+  ) {
+    const { handleViewRunChangesAction } =
+      await import("@/lib/slack/run-changes-interactions");
+    return {
+      outcome: "run_changes",
+      result: await handleViewRunChangesAction(payload),
+    };
   }
 
   const selectedModel = findModelSelection(payload);

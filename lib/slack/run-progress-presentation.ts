@@ -5,6 +5,7 @@ import type { SlackBlock } from "./client";
 import { progressText, type RunProgressState } from "./run-progress-state";
 import type { RunGuidance } from "./run-guidance-store";
 import { guidanceReceiptText } from "./run-guidance-presentation";
+import { viewChangesButton } from "./run-changes-presentation";
 
 export type ProgressRun = {
   id: string;
@@ -146,6 +147,7 @@ export function buildRunProgressMessage(
         url: runUrl,
         action_id: "mogplex-view-run",
       },
+      viewChangesButton(run.id, "Changes so far"),
       ...(run.status === "awaiting_input"
         ? []
         : (actions.elements as Record<string, unknown>[])

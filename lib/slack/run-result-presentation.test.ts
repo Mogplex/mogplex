@@ -229,6 +229,12 @@ it("renders verified artifact navigation and guidance in the Slack blocks", () =
       },
       {
         type: "button",
+        text: { type: "plain_text", text: "View changes" },
+        action_id: "mogplex_view_changes",
+        value: "run-1",
+      },
+      {
+        type: "button",
         text: { type: "plain_text", text: "View run details" },
         url: `${process.env.NEXT_PUBLIC_APP_URL}/runs/run-1?view=details`,
         action_id: "mogplex-view-run",
@@ -424,3 +430,39 @@ it.each([
   else expect(posts[0]?.text).not.toContain("<@U123>");
 });
 // Idempotent announcement tests are in run-controls-notify-idempotent.test.ts
+
+it("shows what the pushed branch changed and offers the diff without a workspace", () => {
+  const evidence = emptyRunResultEvidence();
+  evidence.changes = [
+    { path: "app/page.tsx", status: "modified", additions: 12, deletions: 3 },
+    { path: "app/new.tsx", status: "added", additions: 40, deletions: 0 },
+  ];
+  const message = buildRunResultMessage({
+    run,
+    status: "success",
+    output: "Done.",
+    evidence,
+    guidance: [],
+  });
+
+  expect(message.blocks).toContainEqual({
+    type: "section",
+    text: {
+      type: "mrkdwn",
+      text: "*Changes*\n2 files changed · +52 −3\n`app/page.tsx` +12 −3\n`app/new.tsx` +40 −0 (new)",
+    },
+  });
+  expect(JSON.stringify(message.blocks)).toContain("mogplex_view_changes");
+});
+
+it("omits the changes button when nothing changed and no workspace was recorded", () => {
+  const message = buildRunResultMessage({
+    run,
+    status: "success",
+    output: "Done.",
+    evidence: emptyRunResultEvidence(),
+    guidance: [],
+  });
+
+  expect(JSON.stringify(message.blocks)).not.toContain("mogplex_view_changes");
+});
