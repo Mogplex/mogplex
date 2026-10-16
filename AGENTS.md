@@ -141,6 +141,7 @@ Recursive split-pane layout in `hooks/use-split-panes.ts`. Pane types: `agent`, 
 
 ## Sandbox System
 
+- Sandbox backends are pluggable. New code imports sandbox types from `@/lib/sandbox/provider/types` (`SandboxHandle`, `SandboxCommand`) and gets a backend from `getSandboxProvider()` in `@/lib/sandbox/provider` (`MOGPLEX_SANDBOX_PROVIDER`, default `vercel`). Only `lib/sandbox/provider/vercel/` may import `@vercel/sandbox`; lint enforces it. The files in `scripts/eslint-rules/vercel-sandbox-importers.mjs` predate the provider and move off the SDK during Track B. Remove an entry when you migrate it, and never add one. Check `provider.capabilities` (snapshots, preview URLs, detached commands) instead of catching provider-specific errors.
 - `lib/sandbox/client.ts` — SDK wrapper; `createSandboxForRepo()` bills to the user's Vercel account
 - `hooks/use-sandbox.ts` — Zustand store for sandbox lifecycle (launch, stop, refresh)
 - `hooks/use-pty-transport.ts` — PTY transport state machine (session, retry, stream, resize)
