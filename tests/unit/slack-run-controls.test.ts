@@ -252,7 +252,7 @@ test("stripSlackRunControlsForTerminalRun links the pull request from a successf
   assert.match(updates[0].text, /Run finished/);
   assert.match(
     updates[0].text,
-    /PR #7 · open\nhttps:\/\/github\.com\/acme\/widgets\/pull\/7/
+    /\*Pull request:\* <https:\/\/github\.com\/acme\/widgets\/pull\/7\|#7 · open>/
   );
   assert.match(updates[0].text, /Fixed it and opened/);
   assert.equal(updates[0].channel, "D1");

@@ -32,7 +32,10 @@ export function readSlackMessageRef(key: string): SlackPostedMessageRef | null {
   };
 }
 
-async function saveSlackMessageRef(key: string, ref: SlackPostedMessageRef) {
+export async function saveSlackMessageRef(
+  key: string,
+  ref: SlackPostedMessageRef
+) {
   try {
     await metadata.set(key, ref).flush();
   } catch {

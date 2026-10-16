@@ -258,6 +258,10 @@ export type SlackEventTaskDeps = {
   postMessage: typeof postSlackMessage;
   postEphemeral: typeof postSlackEphemeral;
   updateMessage: typeof updateSlackMessage;
+  /** Streamed replies; when absent, replies edit a placeholder instead. */
+  startStream?: typeof import("@/lib/slack/client").startSlackStream;
+  appendStream?: typeof import("@/lib/slack/client").appendSlackStream;
+  stopStream?: typeof import("@/lib/slack/client").stopSlackStream;
   createUserLinkToken: (input: {
     installationId: string;
     teamId: string;

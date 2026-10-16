@@ -138,6 +138,22 @@ function isBotOriginatedEvent(event: SlackEvent): boolean {
   );
 }
 
+/**
+ * Work Object events (link previews and their flexpane). Handled in the
+ * webhook after the ack rather than on Trigger: entity.presentDetails needs
+ * the event's trigger_id while it is still fresh.
+ */
+const WORK_OBJECT_EVENT_TYPES = new Set([
+  "link_shared",
+  "entity_details_requested",
+]);
+
+export function isSlackWorkObjectEvent(
+  event: SlackEvent | undefined
+): event is SlackEvent {
+  return Boolean(event && WORK_OBJECT_EVENT_TYPES.has(event.type));
+}
+
 export function isSupportedSlackEvent(event: SlackEvent): boolean {
   if (event.type === "app_mention") return true;
   if (event.type === "message") return isSupportedMessageEvent(event);

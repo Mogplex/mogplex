@@ -212,6 +212,87 @@ export async function updateSlackMessage(
   );
 }
 
+/** A chat.*Stream chunk: markdown_text, task_update, plan_update or blocks. */
+export type SlackStreamChunk = Record<string, unknown>;
+
+export type StartSlackStreamInput = {
+  channel: string;
+  thread_ts: string;
+  /** Required by Slack when streaming into a channel. */
+  recipient_user_id?: string;
+  recipient_team_id?: string;
+  chunks?: SlackStreamChunk[];
+  task_display_mode?: "timeline" | "plan";
+};
+
+/** Start a streamed reply (chat.startStream). */
+export async function startSlackStream(
+  botToken: string,
+  input: StartSlackStreamInput,
+  fetchImpl?: typeof fetch
+): Promise<SlackPostMessageResult> {
+  return slackApiCall<SlackPostMessageResult>(
+    "chat.startStream",
+    botToken,
+    input,
+    fetchImpl
+  );
+}
+
+/** Append chunks to a streamed reply (chat.appendStream). */
+export async function appendSlackStream(
+  botToken: string,
+  input: { channel: string; ts: string; chunks: SlackStreamChunk[] },
+  fetchImpl?: typeof fetch
+): Promise<void> {
+  await slackApiCall("chat.appendStream", botToken, input, fetchImpl);
+}
+
+/** Finish a streamed reply (chat.stopStream). */
+export async function stopSlackStream(
+  botToken: string,
+  input: { channel: string; ts: string; chunks?: SlackStreamChunk[] },
+  fetchImpl?: typeof fetch
+): Promise<void> {
+  await slackApiCall("chat.stopStream", botToken, input, fetchImpl);
+}
+
+/** A Work Object entity, as chat.unfurl and entity.presentDetails take it. */
+export type SlackWorkObjectEntity = Record<string, unknown>;
+
+/**
+ * Unfurl links as Work Objects (chat.unfurl with `metadata`). Pass the
+ * `unfurl_id` and `source` from the link_shared event, or its channel and
+ * message ts.
+ */
+export async function unfurlSlackLinks(
+  botToken: string,
+  input: (
+    | { unfurl_id: string; source: string }
+    | { channel: string; ts: string }
+  ) & { metadata: { entities: SlackWorkObjectEntity[] } },
+  fetchImpl?: typeof fetch
+): Promise<void> {
+  await slackApiCall("chat.unfurl", botToken, input, fetchImpl);
+}
+
+/** Fill a Work Object's flexpane (entity.presentDetails). */
+export async function presentSlackEntityDetails(
+  botToken: string,
+  input:
+    | { trigger_id: string; metadata: SlackWorkObjectEntity }
+    | {
+        trigger_id: string;
+        error: {
+          status: "restricted" | "not_found" | "internal_error" | "custom";
+          custom_message?: string;
+        };
+      },
+  fetchImpl?: typeof fetch
+): Promise<void> {
+  await slackApiCall("entity.presentDetails", botToken, input, fetchImpl);
+}
+
 export async function openSlackView(
   botToken: string,
   input: { trigger_id: string; view: Record<string, unknown> },

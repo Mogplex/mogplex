@@ -62,6 +62,7 @@ export type SlackInteractivityResult =
   | { outcome: "connection_recovery"; result: string }
   | { outcome: "run_changes"; result: string }
   | { outcome: "checkpoint"; result: string }
+  | { outcome: "run_details"; result: string }
   | { outcome: "ignored"; reason: string }
   | { outcome: "not_linked" }
   | { outcome: "run_not_found"; runId: string }

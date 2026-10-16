@@ -24,8 +24,17 @@ workspace or rewriting the completed harness pass.
 
 DM questions and channel mentions receive replies under the original question.
 Follow-ups, progress cards, failures, account-link notices, and run results stay
-in that thread. Each new DM root starts its own conversation; replies use that
+in that thread. Replies stream into the thread as the agent writes them, with
+each tool step (checking GitHub, reading a file) shown as a task card. If Slack
+does not accept a streamed reply, Mogplex edits a single message instead; set
+`SLACK_STREAMING_REPLIES=off` to always do that. Each new DM root starts its own conversation; replies use that
 root's conversation and history.
+
+A finished run's card is short: the outcome, an excerpt of the agent's report,
+what changed, where it landed, and one line on recorded checks. **Details**
+opens the full report, the recorded checks with their caveats, the workspace
+state, and guidance receipts. Anyone in the conversation can open Details,
+the same people who can read the card.
 
 Run cards show what changed without leaving Slack. While a run works, **Changes
 so far** opens a modal with the diff from the live workspace, including
@@ -50,6 +59,14 @@ Runs can pause in the thread for your answer instead of finishing on their own:
 Only the person who started the run can answer it. Each pause takes one answer:
 the first button press or reply resumes the run, and the buttons are replaced
 with who answered and how.
+
+Paste a run link (`https://mogplex.com/runs/<id>`) into Slack and it unfurls as
+a preview showing the run's status, latest progress, repository, branch and
+runner, with **View changes** and, once the run ends, **Details**. Clicking the
+preview opens the same facts in Slack's side panel. A link unfurls when the
+person who posted it started the run, or when it is posted in the conversation
+that already shows the run's card. Anywhere else it stays a plain link, and the
+side panel shows the run as restricted.
 
 [Slack does not support custom slash commands inside message threads](https://docs.slack.dev/interactivity/implementing-slash-commands/).
 Use the main composer for slash commands. Inside a thread, send `mogplex-cancel`
@@ -78,3 +95,9 @@ Keep `/mogplex` pointed at the same request URL, with usage hint
 These commands reuse the existing `commands` scope. Deploy the app and matching
 Trigger worker before registering the alias. `/mogplex cancel` requires no new
 command registration.
+
+Run link previews need the `links:read` and `links:write` scopes, the
+`link_shared` and `entity_details_requested` bot events, the deployment's
+domain under **App unfurl domains**, and **Work Object Previews** turned on with
+the **Task** entity type. Existing workspaces reinstall the app to grant the new
+scopes; until then run links stay plain.

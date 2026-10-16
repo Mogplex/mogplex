@@ -19,16 +19,7 @@ import {
   buildSlackRepoAgentPrompt,
   buildSlackUserMessage,
 } from "./attachments";
-import {
-  createDebouncedSlackUpdater,
-  finalizeSlackUpdaterBestEffort,
-  postOrReuseSlackMessage,
-  saveSlackTerminalState,
-} from "./messaging";
-import {
-  createSlackAgentProgressHandler,
-  SLACK_INITIAL_PROGRESS_TEXT,
-} from "./progress";
+import { saveSlackTerminalState } from "./messaging";
 import {
   getSlackReplyThreadTs,
   resolveSlackConversationLinkState,
@@ -50,6 +41,7 @@ import {
   getRunChatAgentMessageText,
 } from "./thread-context";
 import { getSlackConversationThreadTs } from "@/lib/slack/conversation-scope";
+import { openSlackConversationalReply } from "./reply-stream";
 
 // Trigger hard-stops this task at 15 minutes. Abort the model first so the
 // normal catch path still has time to replace the Slack placeholder.
@@ -116,7 +108,7 @@ async function loadConversationalConversation(input: {
   });
 }
 
-function formatFinalSlackText(input: {
+function sanitizeFinalReply(input: {
   finalText: string;
   repoName?: string | null;
   userText: string;
@@ -125,7 +117,7 @@ function formatFinalSlackText(input: {
     repoName: input.repoName,
     userRequestText: input.userText,
   });
-  return formatSlackConversationalReply(sanitized || "_(no response)_");
+  return sanitized || "_(no response)_";
 }
 
 export function buildSlackToolExecutionIdempotencyKey(
@@ -178,23 +170,17 @@ export async function runConversationalMode(input: {
     payload,
     channelLinkState,
   });
-  const postThreadTs = getSlackReplyThreadTs(payload);
-  const placeholder = await postOrReuseSlackMessage({
+  // Read on every progress event: the repository joins once it resolves.
+  const replyContext: { userText: string; repoName: string | null } = {
+    userText,
+    repoName: null,
+  };
+  const reply = await openSlackConversationalReply({
     deps,
     botToken,
-    channelId: payload.channelId,
-    threadTs: payload.threadTs,
-    postThreadTs,
-    eventId: payload.eventId,
-    metadataKey: "slackConversationalPlaceholder",
-    text: SLACK_INITIAL_PROGRESS_TEXT,
-  });
-  const progressUpdater = createDebouncedSlackUpdater({
-    botToken,
-    channel: payload.channelId,
-    ts: placeholder.ts,
-    updateMessage: deps.updateMessage,
-    now: () => deps.now().getTime(),
+    payload,
+    postThreadTs: getSlackReplyThreadTs(payload),
+    context: replyContext,
   });
 
   let completed: {
@@ -241,6 +227,7 @@ export async function runConversationalMode(input: {
       recoveryRepository: payload.connectionRecoveryRepository,
       recoveryRepoId: payload.connectionRecoveryRepoId,
     });
+    replyContext.repoName = agentInput.repoContext?.repoName ?? null;
     const repoAgentRun = createSlackStartRepoAgentRunTool({
       deps,
       payload,
@@ -299,10 +286,7 @@ export async function runConversationalMode(input: {
         .filter(Boolean)
         .join("\n\n"),
       abortSignal: AbortSignal.timeout(SLACK_CONVERSATIONAL_AGENT_TIMEOUT_MS),
-      onProgress: createSlackAgentProgressHandler(progressUpdater, {
-        repoName: agentInput.repoContext?.repoName ?? null,
-        userText,
-      }),
+      onProgress: reply.onProgress,
     });
     completed = {
       agentResult,
@@ -317,10 +301,8 @@ export async function runConversationalMode(input: {
       eventId: payload.eventId,
       error,
     });
-    const terminalFailureDelivered = await finalizeSlackUpdaterBestEffort(
-      progressUpdater,
-      ":warning: Mogplex hit an error while responding. Try again from Slack or open Mogplex for details.",
-      "agent error placeholder update"
+    const terminalFailureDelivered = await reply.fail(
+      ":warning: Mogplex hit an error while responding. Try again from Slack or open Mogplex for details."
     );
     if (terminalFailureDelivered) {
       await saveSlackTerminalState("failed");
@@ -331,14 +313,15 @@ export async function runConversationalMode(input: {
   const { agentResult, launchedRunId, attachments, userMessage, repoName } =
     completed;
 
-  const finalText = formatFinalSlackText({
+  const finalMarkdown = sanitizeFinalReply({
     finalText: agentResult.finalText,
     repoName,
     userText,
   });
+  const finalText = formatSlackConversationalReply(finalMarkdown);
   const slackFinalText = fitSlackMessageText(finalText);
 
-  await progressUpdater.finalize(slackFinalText);
+  await reply.finalize({ markdown: finalMarkdown, slackText: slackFinalText });
   await saveSlackTerminalState("delivered");
 
   await persistConversationTurn({
