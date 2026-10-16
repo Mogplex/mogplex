@@ -6,6 +6,11 @@ import {
   updateSlackView,
 } from "@/lib/slack/client";
 import { SLACK_RUN_DETAILS_ACTION_ID } from "@/lib/slack/command-actions";
+import { resolveSlackCommandUserId } from "@/lib/slack/command-identity";
+import {
+  getSlackInstallationByTeamId,
+  getSlackUserMapping,
+} from "@/lib/slack/installations";
 import type { SlackBlockActionsPayload } from "@/lib/slack/interactivity";
 import { readSlackRunControlsMetadata } from "./run-controls";
 import type { RunGuidance } from "./run-guidance-store";
@@ -43,6 +48,8 @@ async function loadGuidance(run: ExternalAgentRunRow): Promise<RunGuidance[]> {
 }
 
 const defaultDeps = {
+  getInstallation: getSlackInstallationByTeamId,
+  getUserMapping: getSlackUserMapping,
   getBotToken: getSlackBotToken,
   openView: openSlackView,
   updateView: updateSlackView,
@@ -60,11 +67,32 @@ export type RunDetailsOutcome =
   | "shown"
   | "failed";
 
+async function clickedByOwner(
+  deps: typeof defaultDeps,
+  payload: SlackBlockActionsPayload,
+  run: ExternalAgentRunRow
+) {
+  const teamId = payload.team?.id;
+  const slackUserId = payload.user?.id;
+  if (!teamId || !slackUserId) return false;
+  const installation = await deps.getInstallation(teamId);
+  if (!installation) return false;
+  const mapping = await deps.getUserMapping({
+    installationId: installation.id,
+    slackUserId,
+  });
+  return (
+    resolveSlackCommandUserId(installation, mapping, slackUserId) ===
+    run.user_id
+  );
+}
+
 /**
  * The run card's Details button: the full result that used to fill the
  * card. The card is visible to the channel, so the details are too, but only
  * for the card in that channel: a run id clicked from anywhere else (or
- * forged into another message) loads nothing.
+ * forged into another message) loads nothing. The run's owner can open them
+ * from anywhere, such as a run link preview shared in another channel.
  */
 export async function handleRunDetailsAction(
   payload: SlackBlockActionsPayload,
@@ -97,7 +125,9 @@ export async function handleRunDetailsAction(
   try {
     const run = await deps.loadRun(runId);
     const slack = run ? readSlackRunControlsMetadata(run.metadata) : null;
-    if (!run || slack?.teamId !== teamId || slack.channelId !== channelId)
+    const inCardChannel =
+      slack?.teamId === teamId && slack.channelId === channelId;
+    if (!run || (!inCardChannel && !(await clickedByOwner(deps, payload, run))))
       return await message(
         "These details belong to a run card in another conversation.",
         "not_in_channel"

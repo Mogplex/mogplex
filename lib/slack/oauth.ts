@@ -19,6 +19,10 @@ export const SLACK_BOT_SCOPES = [
   "groups:read",
   "im:history",
   "im:read",
+  // Run links unfurl as Work Objects (link_shared + chat.unfurl). Existing
+  // installs must re-auth to pick these up; until then links stay plain.
+  "links:read",
+  "links:write",
   "mpim:history",
   "mpim:read",
   "users:read",
