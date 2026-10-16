@@ -270,18 +270,10 @@ export async function unfurlSlackLinks(
   input: (
     | { unfurl_id: string; source: string }
     | { channel: string; ts: string }
-  ) & {
-    unfurls?: Record<string, unknown>;
-    metadata: { entities: SlackWorkObjectEntity[] };
-  },
+  ) & { metadata: { entities: SlackWorkObjectEntity[] } },
   fetchImpl?: typeof fetch
 ): Promise<void> {
-  await slackApiCall(
-    "chat.unfurl",
-    botToken,
-    { unfurls: {}, ...input },
-    fetchImpl
-  );
+  await slackApiCall("chat.unfurl", botToken, input, fetchImpl);
 }
 
 /** Fill a Work Object's flexpane (entity.presentDetails). */
