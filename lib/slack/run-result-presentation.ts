@@ -11,6 +11,10 @@ import { guidanceReceiptText } from "./run-guidance-presentation";
 import { runProgressTitle } from "./run-progress-presentation";
 import { progressText } from "./run-progress-state";
 import { readRunProgressSnapshot } from "./run-progress-store";
+import {
+  changesSectionText,
+  viewChangesButton,
+} from "./run-changes-presentation";
 
 /** User-facing outcomes distinguish observed work from the agent's own claims. */
 export function buildRunResultMessage(input: {
@@ -51,6 +55,10 @@ export function buildRunResultMessage(input: {
       ? `*Recorded checks*\n${checks.map((task) => escapeMrkdwn(`${task.title}: ${task.status === "in_progress" ? "No completion recorded" : task.result || "No result recorded"}`)).join("\n")}\nA command result is not an independent verification of the requested behavior.`
       : "*Verification*\nNo completed test or build result was recorded. Check the run details before relying on the agent’s report."
   );
+  const changes = evidence.changes
+    ? changesSectionText(evidence.changes)
+    : null;
+  if (changes) sections.push(changes);
   const github = evidence.github;
   const artifacts = github.pullRequests.map(
     (pr) => `PR #${pr.number} · ${pr.state}\n${escapeMrkdwn(pr.url)}`
@@ -112,6 +120,9 @@ export function buildRunResultMessage(input: {
               ),
             ]
           : []),
+      ...(evidence.changes?.length || workspace
+        ? [viewChangesButton(run.id)]
+        : []),
       button("View run details", runUrl, "mogplex-view-run"),
       ...(workspace
         ? [

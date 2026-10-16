@@ -27,6 +27,16 @@ Follow-ups, progress cards, failures, account-link notices, and run results stay
 in that thread. Each new DM root starts its own conversation; replies use that
 root's conversation and history.
 
+Run cards show what changed without leaving Slack. While a run works, **Changes
+so far** opens a modal with the diff from the live workspace, including
+uncommitted work. When it finishes, the result card lists the files changed on
+the pushed branch, with line counts, and **View changes** opens the same modal.
+A stopped workspace is never resumed to read changes; the pushed branch is used
+instead. Only the person who started the run sees the diff. Anyone else is
+pointed to the pull request, where GitHub enforces repository access. Secrets
+are redacted from diffs, and large change sets show the first files with a link
+to the full comparison on GitHub.
+
 [Slack does not support custom slash commands inside message threads](https://docs.slack.dev/interactivity/implementing-slash-commands/).
 Use the main composer for slash commands. Inside a thread, send `mogplex-cancel`
 as a plain reply (no slash). This immediately cancels your run in that exact

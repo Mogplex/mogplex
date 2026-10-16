@@ -141,6 +141,12 @@ it("keeps run navigation, neutral cancellation and the guidance receipt visible 
       },
       {
         type: "button",
+        text: { type: "plain_text", text: "Changes so far" },
+        action_id: "mogplex_view_changes",
+        value: run.id,
+      },
+      {
+        type: "button",
         text: { type: "plain_text", text: "Cancel run" },
         action_id: "mogplex-cancel-run",
         value: run.id,
@@ -159,6 +165,7 @@ it("keeps run navigation, neutral cancellation and the guidance receipt visible 
           action_id: "mogplex-view-run",
           url: `${process.env.NEXT_PUBLIC_APP_URL}/runs/run-1`,
         },
+        { action_id: "mogplex_view_changes", value: run.id },
       ],
     }
   );

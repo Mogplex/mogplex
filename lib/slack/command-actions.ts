@@ -5,6 +5,7 @@ export const SLACK_CREATE_ISSUE_ACTION_ID = "mogplex_create_issue";
 export const SLACK_REFRESH_PRS_ACTION_ID = "mogplex_refresh_prs";
 export const SLACK_MERGE_PR_ACTION_ID = "mogplex_merge_pr";
 export const SLACK_VIEW_RUN_ACTION_ID = "mogplex_view_run";
+export const SLACK_VIEW_CHANGES_ACTION_ID = "mogplex_view_changes";
 
 export const SLACK_ISSUE_MODAL_CALLBACK_ID = "mogplex_issue_create";
 export const SLACK_ISSUE_TITLE_BLOCK_ID = "mogplex_issue_title";
