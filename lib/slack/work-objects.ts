@@ -1,7 +1,6 @@
 import { buildAppUrl } from "@/lib/app-url";
 import type { ExternalAgentRunRow } from "@/lib/mogplex-api/runs-types";
 import { isUuid } from "@/lib/uuid";
-import type { SlackWorkObjectEntity } from "./client";
 import {
   SLACK_RUN_DETAILS_ACTION_ID,
   SLACK_VIEW_CHANGES_ACTION_ID,
@@ -10,7 +9,7 @@ import { runProgressTitle } from "./run-progress-presentation";
 import { progressText } from "./run-progress-state";
 import { readRunProgressSnapshot } from "./run-progress-store";
 
-export const RUN_WORK_OBJECT_TYPE = "agent_run";
+export const RUN_WORK_OBJECT_TYPE = "agent_run" as const;
 
 const RUN_PATH = /^\/(?:[^/]+\/)?runs\/([^/]+)\/?$/;
 const TERMINAL = new Set(["success", "failed", "cancelled"]);
@@ -76,6 +75,40 @@ export type WorkObjectRun = Pick<
   | "updated_at"
 > & { slack_progress?: unknown };
 
+type WorkObjectField = {
+  key: string;
+  label: string;
+  value: string;
+  type: "string";
+};
+type WorkObjectAction = { text: string; action_id: string; value: string };
+
+/** The task entity chat.unfurl and entity.presentDetails receive for a run. */
+export type RunWorkObject = {
+  app_unfurl_url?: string;
+  url: string;
+  external_ref: { id: string; type: typeof RUN_WORK_OBJECT_TYPE };
+  entity_type: "slack#/entities/task";
+  entity_payload: {
+    attributes: {
+      title: { text: string };
+      display_id: string;
+      display_type: string;
+      product_name: string;
+      metadata_last_modified: number;
+    };
+    fields: {
+      status: { value: string; tag_color: TagColor };
+      description?: { value: string };
+      date_created: { value: number };
+      date_updated: { value: number };
+    };
+    custom_fields: WorkObjectField[];
+    display_order: string[];
+    actions?: { primary_actions: WorkObjectAction[] };
+  };
+};
+
 /**
  * A run as a Slack Work Object (task entity): title, status chip, the latest
  * progress summary, repository, branch and runner, with View changes and,
@@ -87,7 +120,7 @@ export function buildRunWorkObject(input: {
   run: WorkObjectRun;
   repoFullName?: string | null;
   appUnfurlUrl?: string;
-}): SlackWorkObjectEntity {
+}): RunWorkObject {
   const { run } = input;
   const summary = readRunProgressSnapshot(run.slack_progress)?.summary;
   const customFields = [
@@ -104,8 +137,8 @@ export function buildRunWorkObject(input: {
       label: "Runner",
       value: HARNESS_LABELS[run.harness] ?? run.harness,
     },
-  ].map((field) => ({ ...field, type: "string" }));
-  const primaryActions = [
+  ].map((field): WorkObjectField => ({ ...field, type: "string" }));
+  const primaryActions: WorkObjectAction[] = [
     ...(run.status === "pending"
       ? []
       : [

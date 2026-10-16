@@ -106,6 +106,27 @@ it("should show the owner the details from a run link in another channel", async
   expect(JSON.stringify(views.at(-1))).toContain("Fixed the header.");
 });
 
+it("should not let another linked user use the owner path", async () => {
+  const { views, deps } = harness({
+    ...finishedRun,
+    metadata: {
+      slackRunControls: { teamId: "T1", channelId: "C-other", messageTs: "1" },
+    },
+  });
+  const linkedTeammate = {
+    ...deps,
+    getUserMapping: async () => ({
+      mogplex_user_id: "teammate",
+      link_status: "explicit",
+    }),
+  } as unknown as typeof deps;
+
+  expect(await handleRunDetailsAction(payload, linkedTeammate)).toBe(
+    "not_in_channel"
+  );
+  expect(JSON.stringify(views.at(-1))).not.toContain("Fixed the header.");
+});
+
 it("should point a still-running run back to its card", async () => {
   const { deps } = harness({ ...finishedRun, status: "streaming" });
 

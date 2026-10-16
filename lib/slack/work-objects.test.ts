@@ -40,17 +40,7 @@ describe("buildRunWorkObject", () => {
       run,
       repoFullName: "acme/web",
       appUnfurlUrl: `https://mogplex.com/runs/${RUN_ID}`,
-    }) as {
-      entity_type: string;
-      external_ref: { id: string };
-      app_unfurl_url: string;
-      entity_payload: {
-        attributes: { title: { text: string } };
-        fields: { status: { value: string; tag_color: string } };
-        custom_fields: { key: string; value: string }[];
-        actions: { primary_actions: { text: string; value: string }[] };
-      };
-    };
+    });
 
     expect(entity.entity_type).toBe("slack#/entities/task");
     expect(entity.external_ref.id).toBe(RUN_ID);
@@ -64,24 +54,23 @@ describe("buildRunWorkObject", () => {
       entity.entity_payload.custom_fields.map((field) => field.value)
     ).toEqual(["acme/web", "fix/header", "Codex"]);
     expect(
-      entity.entity_payload.actions.primary_actions.map((action) => action.text)
+      entity.entity_payload.actions?.primary_actions.map(
+        (action) => action.text
+      )
     ).toEqual(["Changes so far"]);
   });
 
   it("should offer Details once the run ends and leave out the unfurl url for the flexpane", () => {
     const entity = buildRunWorkObject({
       run: { ...run, status: "success" },
-    }) as Record<string, unknown> & {
-      entity_payload: {
-        fields: { status: { value: string } };
-        actions: { primary_actions: { text: string }[] };
-      };
-    };
+    });
 
     expect(entity.app_unfurl_url).toBeUndefined();
     expect(entity.entity_payload.fields.status.value).toBe("Finished");
     expect(
-      entity.entity_payload.actions.primary_actions.map((action) => action.text)
+      entity.entity_payload.actions?.primary_actions.map(
+        (action) => action.text
+      )
     ).toEqual(["View changes", "Details"]);
   });
 
@@ -95,13 +84,7 @@ describe("buildRunWorkObject", () => {
     (status, metadata, value, tagColor, buttons) => {
       const entity = buildRunWorkObject({
         run: { ...run, status, metadata, harness: "other" as "codex" },
-      }) as {
-        entity_payload: {
-          fields: { status: unknown };
-          custom_fields: { key: string; value: string }[];
-          actions?: { primary_actions: { text: string }[] };
-        };
-      };
+      });
 
       expect(entity.entity_payload.fields.status).toEqual({
         value,
@@ -127,7 +110,7 @@ describe("buildRunWorkObject", () => {
           sequence: 1,
         },
       },
-    }) as { entity_payload: { fields: { description?: { value: string } } } };
+    });
 
     expect(entity.entity_payload.fields.description?.value).toBe(
       "Updated the header styles"
@@ -141,7 +124,7 @@ describe("buildRunWorkObject", () => {
         status: "awaiting_input",
         metadata: { checkpoint_kind: "plan" },
       },
-    }) as { entity_payload: { fields: { status: unknown } } };
+    });
 
     expect(entity.entity_payload.fields.status).toEqual({
       value: "Plan ready for review",

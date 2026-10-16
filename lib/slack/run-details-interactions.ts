@@ -127,6 +127,7 @@ export async function handleRunDetailsAction(
     const slack = run ? readSlackRunControlsMetadata(run.metadata) : null;
     const inCardChannel =
       slack?.teamId === teamId && slack.channelId === channelId;
+    // Outside the card's channel, only the run's owner gets through.
     if (!run || (!inCardChannel && !(await clickedByOwner(deps, payload, run))))
       return await message(
         "These details belong to a run card in another conversation.",
