@@ -17,6 +17,7 @@ import {
 import type { SlackCommandPayload } from "@/lib/slack/command";
 import { parseCommand } from "@/lib/slack/command-parse";
 import { buildSlackCommandHelpResponse } from "@/lib/slack/command-help";
+import { SLACK_CHECKPOINT_REVISE_CALLBACK_ID } from "@/lib/slack/run-checkpoint-presentation";
 
 // Re-export types and functions that tests depend on
 export {
@@ -38,6 +39,12 @@ async function dispatchInteractivity(
   payload: SlackInteractivityPayload
 ): Promise<void> {
   if (payload.type === "view_submission") {
+    if (payload.view?.callback_id === SLACK_CHECKPOINT_REVISE_CALLBACK_ID) {
+      const { handleCheckpointReviseSubmission } =
+        await import("@/lib/slack/run-checkpoint-interactions");
+      await handleCheckpointReviseSubmission(payload);
+      return;
+    }
     const { handleSlackIssueModalSubmission } =
       await import("@/lib/slack/command-interactions");
     await handleSlackIssueModalSubmission(payload);

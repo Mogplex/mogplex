@@ -14,6 +14,7 @@ import {
 import { getSlackReplyThreadTs } from "./channel-state";
 import { launchSlackRepoAgentRun } from "./repo-agent-launch";
 import { connectionRecoveryTargetSchema } from "@/lib/slack/connection-recovery/presentation";
+import { buildPlanFirstProtocolInstructions } from "@/lib/harness/checkpoint";
 
 export const SLACK_START_REPO_AGENT_RUN_TOOL_NAME = "start_repo_agent_run";
 
@@ -37,6 +38,12 @@ const startRepoAgentRunParams = z.object({
     .optional()
     .describe(
       "Number of an open pull request in that repository to continue. Set it whenever the user wants an existing pull request fixed, finished or updated (for example after a failed check or review findings): the run checks out the pull request's branch and pushes there, so the pull request itself is updated. Omit it for new work, which gets its own branch and pull request."
+    ),
+  planFirst: z
+    .boolean()
+    .optional()
+    .describe(
+      "Set true when the user asks to see, review or approve a plan before any code changes, or when the request is broad or ambiguous enough that the approach should be agreed first. The run proposes a plan and pauses; the user approves or revises it in this Slack thread before any file changes, then reviews the work before a pull request is opened."
     ),
 });
 
@@ -208,13 +215,16 @@ export function createSlackStartRepoAgentRunTool(input: {
     }
 
     const attachments = prepareSlackRepoAgentAttachments(input.payload);
+    const delegated = buildSlackDelegatedRunPrompt({
+      task: branch.value
+        ? `${continuePullRequestPreamble(args.pullRequest, branch.value.working)}\n\n${args.task}`
+        : args.task,
+      userText: input.userText,
+    });
     const prompt = buildSlackRepoAgentPrompt({
-      text: buildSlackDelegatedRunPrompt({
-        task: branch.value
-          ? `${continuePullRequestPreamble(args.pullRequest, branch.value.working)}\n\n${args.task}`
-          : args.task,
-        userText: input.userText,
-      }),
+      text: args.planFirst
+        ? `${delegated}\n\n${buildPlanFirstProtocolInstructions()}`
+        : delegated,
       attachments,
     });
     const result = await launchSlackRepoAgentRun({

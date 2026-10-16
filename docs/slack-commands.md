@@ -37,6 +37,20 @@ pointed to the pull request, where GitHub enforces repository access. Secrets
 are redacted from diffs, and large change sets show the first files with a link
 to the full comparison on GitHub.
 
+Runs can pause in the thread for your answer instead of finishing on their own:
+
+- **Plan first.** Ask for a plan ("plan it first", "show me the approach") and
+  the run proposes one without changing any file. **Approve plan** starts the
+  work; **Revise plan** (or any thread reply) sends feedback, and the agent
+  comes back with a revised plan.
+- **Review.** When the work reaches a checkpoint, **Ship it** opens the pull
+  request, **Request changes** (or a thread reply) sends the agent back to
+  work, and **View changes** shows the diff.
+
+Only the person who started the run can answer it. Each pause takes one answer:
+the first button press or reply resumes the run, and the buttons are replaced
+with who answered and how.
+
 [Slack does not support custom slash commands inside message threads](https://docs.slack.dev/interactivity/implementing-slash-commands/).
 Use the main composer for slash commands. Inside a thread, send `mogplex-cancel`
 as a plain reply (no slash). This immediately cancels your run in that exact

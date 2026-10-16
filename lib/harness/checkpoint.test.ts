@@ -3,6 +3,7 @@ import {
   CHECKPOINT_MARKER_END,
   CHECKPOINT_MARKER_START,
   buildCheckpointProtocolInstructions,
+  buildPlanFirstProtocolInstructions,
   parseHarnessCheckpoint,
 } from "./checkpoint";
 
@@ -76,5 +77,44 @@ describe("buildCheckpointProtocolInstructions", () => {
     const text = buildCheckpointProtocolInstructions().toLowerCase();
     expect(text).toContain("commit");
     expect(text).toContain("push");
+  });
+});
+
+describe("plan checkpoints", () => {
+  it("should mark a plan checkpoint and keep review checkpoints unmarked", () => {
+    expect(
+      parseHarnessCheckpoint(
+        block('{"kind":"plan","previewUrl":null,"summary":"- Add a toggle"}')
+      )
+    ).toEqual({ previewUrl: null, summary: "- Add a toggle", kind: "plan" });
+    expect(
+      parseHarnessCheckpoint(block('{"kind":"other","summary":"done"}'))
+    ).toEqual({ previewUrl: null, summary: "done" });
+  });
+
+  it("should keep a plan whose summary has raw line breaks", () => {
+    const checkpoint = parseHarnessCheckpoint(
+      block('{"kind":"plan","summary":"- Add a toggle\n- Persist it"}')
+    );
+    expect(checkpoint).toEqual({
+      previewUrl: null,
+      summary: "- Add a toggle\n- Persist it",
+      kind: "plan",
+    });
+  });
+
+  it("should still parse a pretty-printed body", () => {
+    expect(
+      parseHarnessCheckpoint(
+        block('{\n  "kind": "plan",\n  "summary": "one line"\n}')
+      )
+    ).toEqual({ previewUrl: null, summary: "one line", kind: "plan" });
+  });
+
+  it("should forbid file changes until the plan is approved", () => {
+    const instructions = buildPlanFirstProtocolInstructions();
+    expect(instructions).toContain("Do NOT create, edit, or delete files");
+    expect(instructions).toContain('"kind":"plan"');
+    expect(instructions).toContain(CHECKPOINT_MARKER_START);
   });
 });

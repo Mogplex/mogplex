@@ -427,3 +427,52 @@ test("DM system guidance tells the agent to delegate code changes", async () => 
     /Never tell the user to run git commands themselves/
   );
 });
+
+test("repo-agent tool asks the run for a plan first when the agent requests one", async () => {
+  const { runSlackEventTask } = await loadSlackEventTask();
+  const prompts: string[] = [];
+
+  const runWith = async (args: Record<string, unknown>) =>
+    runSlackEventTask(
+      { ...dmPayload, eventId: `Ev-${prompts.length}` },
+      {
+        getInstallation: async () => baseInstallation,
+        getBotToken: async () => "xoxb-test",
+        resolveSlackAttribution: async () => mappedAttribution(),
+        resolveRepoContext: async () => widgetsRepo,
+        loadOrCreateConversation: async () => ({
+          id: "conv-dm",
+          user_id: "user-mogplex",
+          messages: [],
+          model: null,
+          title: null,
+        }),
+        persistConversation: async () => undefined,
+        runAgent: async (input) => {
+          await callTool(input.additionalTools, args);
+          return agentSuccess({ finalText: "ok" });
+        },
+        startRepoAgentRun: async (input) => {
+          prompts.push(input.prompt);
+          return { runId: "run-plan" };
+        },
+        buildRunUrl: (runId) => `https://example.test/runs/${runId}`,
+        postMessage: async (_token, input) => ({
+          channel: input.channel,
+          ts: "1700000000.000999",
+        }),
+        updateMessage: async (_token, input) => ({
+          channel: input.channel,
+          ts: input.ts,
+        }),
+      }
+    );
+
+  await runWith({ task: "Add dark mode", planFirst: true });
+  await runWith({ task: "Add dark mode" });
+
+  assert.match(prompts[0], /^Add dark mode/);
+  assert.match(prompts[0], /Plan-first protocol for this run:/);
+  assert.match(prompts[0], /"kind":"plan"/);
+  assert.doesNotMatch(prompts[1], /Plan-first protocol/);
+});

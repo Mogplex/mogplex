@@ -81,10 +81,16 @@ export async function deliverSlackRunUpdate(
     state.summary =
       "Your task is accepted. Waiting for the coding worker to start.";
   } else if (run.status === "awaiting_input") {
-    state.phase = "Waiting for your review";
-    state.summary =
-      "The run has paused at a review checkpoint. See the checkpoint message in this thread.";
-    state.next = "Review the work before continuing.";
+    const plan = run.metadata.checkpoint_kind === "plan";
+    state.phase = plan
+      ? "Waiting for plan approval"
+      : "Waiting for your review";
+    state.summary = plan
+      ? "The agent proposed a plan and has not changed any files. See the plan in this thread."
+      : "The run has paused at a review checkpoint. See the checkpoint message in this thread.";
+    state.next = plan
+      ? "Approve the plan or reply with changes."
+      : "Review the work, then ship it or reply with changes.";
     state.tasks.clear();
   }
   await deps.updateMessage(token, {

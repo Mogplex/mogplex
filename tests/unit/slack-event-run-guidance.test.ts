@@ -128,10 +128,74 @@ test("a thread lookup failure fails closed instead of starting duplicate work", 
   assert.equal(f.submitted.length, 0);
   assert.ok(f.posts.some((text) => text.includes("no new run was started")));
 });
-test("paused, legacy and ambiguous runs do not falsely accept live guidance", async () => {
+test("a reply to a paused run resumes it with the reply as its next instruction", async () => {
+  const { runSlackEventTask } = await loadSlackEventTask();
+  const resumes: unknown[] = [];
+  const f = fixture({
+    findGuidanceRuns: async () => [
+      { ...run, status: "awaiting_input" as const, ai_call_id: "call-9" },
+    ],
+    queueRunResume: async (input) => {
+      resumes.push(input);
+      return { runtimeProvider: "trigger", runtimeRunId: "t-1" };
+    },
+  });
+  const result = await runSlackEventTask(reply, f.deps);
+  assert.equal(result.outcome, "run_resumed");
+  assert.equal(f.submitted.length, 0);
+  assert.deepEqual(resumes, [
+    {
+      runId: run.id,
+      userId: "user-mogplex",
+      repoId: run.repo_id,
+      steer: reply.text,
+      mode: "review",
+      idempotencyKey: `checkpoint-resume:${run.id}:call-9`,
+    },
+  ]);
+  assert.ok(
+    f.posts.some((text) => text.includes("continuing with your reply"))
+  );
+});
+test("a reply to a proposed plan lets the agent decide between approving and revising", async () => {
+  const { runSlackEventTask } = await loadSlackEventTask();
+  const modes: unknown[] = [];
+  const f = fixture({
+    findGuidanceRuns: async () => [
+      {
+        ...run,
+        status: "awaiting_input" as const,
+        metadata: { ...run.metadata, checkpoint_kind: "plan" },
+      },
+    ],
+    queueRunResume: async (input) => {
+      modes.push(input.mode);
+      return { runtimeProvider: "trigger", runtimeRunId: null };
+    },
+  });
+  assert.equal((await runSlackEventTask(reply, f.deps)).outcome, "run_resumed");
+  assert.deepEqual(modes, ["plan_reply"]);
+  assert.ok(f.posts.some((text) => text.includes("revised plan")));
+});
+test("a paused run that cannot be resumed says nothing was changed", async () => {
+  const { runSlackEventTask } = await loadSlackEventTask();
+  const f = fixture({
+    findGuidanceRuns: async () => [
+      { ...run, status: "awaiting_input" as const },
+    ],
+    queueRunResume: async () => {
+      throw new Error("Trigger.dev runtime is not configured");
+    },
+  });
+  assert.equal(
+    (await runSlackEventTask(reply, f.deps)).outcome,
+    "run_guidance_unavailable"
+  );
+  assert.ok(f.posts.some((text) => text.includes("Nothing was changed")));
+});
+test("legacy and ambiguous runs do not falsely accept live guidance", async () => {
   const { runSlackEventTask } = await loadSlackEventTask();
   for (const rows of [
-    [{ ...run, status: "awaiting_input" as const }],
     [{ ...run, metadata: {} }],
     [run, { ...run, id: "run-2" }],
   ]) {

@@ -44,16 +44,16 @@ const fullCheckpoint: HarnessCheckpoint = {
 };
 
 describe("buildRunCheckpointText", () => {
-  it("should include the summary, preview URL and steering instructions", () => {
+  it("should include the summary, preview URL and how to answer", () => {
     const text = buildRunCheckpointText({
       runId: "run-1",
       runUrl: "https://mogplex.com/runs/run-1",
       checkpoint: fullCheckpoint,
     });
+    expect(text).toContain("Ready for your review");
     expect(text).toContain("Moved sign in into the menu.");
     expect(text).toContain("https://sb-abc.vercel.run");
-    expect(text).toContain("Review the work in Mogplex");
-    expect(text).not.toContain("ship it");
+    expect(text).toContain("Ship it to open the pull request");
   });
 
   it("should omit the preview line when there is no preview URL", () => {
@@ -62,8 +62,23 @@ describe("buildRunCheckpointText", () => {
       runUrl: "https://mogplex.com/runs/run-1",
       checkpoint: { previewUrl: null, summary: null },
     });
-    expect(text).not.toContain("Preview:");
-    expect(text).toContain("Review the work in Mogplex");
+    expect(text).not.toContain("preview:");
+    expect(text).toContain("reply in this thread with changes");
+  });
+
+  it("should present a plan for approval before any file changes", () => {
+    const text = buildRunCheckpointText({
+      runId: "run-1",
+      runUrl: "https://mogplex.com/runs/run-1",
+      checkpoint: {
+        previewUrl: null,
+        summary: "- Add a toggle\n- Persist it",
+        kind: "plan",
+      },
+    });
+    expect(text).toContain("Plan ready for your approval");
+    expect(text).toContain("No files have changed yet");
+    expect(text).toContain("• Add a toggle\n• Persist it");
   });
 });
 
@@ -78,6 +93,11 @@ describe("notifySlackRunCheckpoint", () => {
     expect(queued).toEqual(["run-1"]);
     expect(posts[0].text).toContain("https://sb-abc.vercel.run");
     expect(posts[0].blocks?.length).toBeGreaterThan(0);
+    const actions = posts[0].blocks?.find((block) => block.type === "actions");
+    expect(JSON.stringify(actions)).toContain("mogplex_checkpoint_approve");
+    expect(JSON.stringify(actions)).toContain("mogplex_checkpoint_revise");
+    expect(JSON.stringify(actions)).toContain("run-1|review");
+    expect(JSON.stringify(actions)).toContain("mogplex_view_changes");
   });
 
   it("should be a no-op for a run that did not come from Slack", async () => {

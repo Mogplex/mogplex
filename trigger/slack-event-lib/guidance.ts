@@ -7,6 +7,8 @@ import type {
   SlackEventTaskResult,
 } from "./types";
 import type { SlackInstallationRow } from "@/lib/slack/installations";
+import type { ExternalAgentRunRow } from "@/lib/mogplex-api/runs-types";
+import { checkpointResumeKey } from "@/lib/slack/run-checkpoint-presentation";
 
 /** A mention in an active run thread must not launch a matching automation. */
 export async function resolveGuidanceBeforeWorkflow(
@@ -104,8 +106,10 @@ export async function handleSlackRunGuidance(
       runId: run.id,
     };
   }
+  if (run.status === "awaiting_input") {
+    return resumePausedRun({ deps, run, userId, userText, reply });
+  }
   if (
-    run.status === "awaiting_input" ||
     run.harness !== "mogplex" ||
     run.metadata.slack_guidance_enabled !== true
   ) {
@@ -168,6 +172,56 @@ export async function handleSlackRunGuidance(
   );
   return {
     outcome: "run_guidance_received",
+    mogplexUserId: userId,
+    runId: run.id,
+  };
+}
+
+/**
+ * A reply to a run paused at a checkpoint answers it: the run resumes with
+ * the reply as its next instruction. A plan reply lets the agent decide
+ * whether it approves or revises the plan. One answer per pause: a button
+ * press and a reply share the resume key, so only the first one applies.
+ */
+async function resumePausedRun(input: {
+  deps: SlackEventTaskDeps;
+  run: ExternalAgentRunRow;
+  userId: string;
+  userText: string;
+  reply: (text: string) => Promise<unknown>;
+}): Promise<SlackEventTaskResult> {
+  const { deps, run, userId, userText, reply } = input;
+  const plan = run.metadata.checkpoint_kind === "plan";
+  try {
+    const queue =
+      deps.queueRunResume ??
+      (await import("@/lib/mogplex-api/run-resume"))
+        .queueResumeExternalAgentRun;
+    await queue({
+      runId: run.id,
+      userId,
+      repoId: run.repo_id,
+      steer: userText,
+      mode: plan ? "plan_reply" : "review",
+      idempotencyKey: checkpointResumeKey(run),
+    });
+  } catch {
+    await reply(
+      "I couldn’t continue the run with your reply. Nothing was changed; try again, or use the buttons on the checkpoint message."
+    );
+    return {
+      outcome: "run_guidance_unavailable",
+      mogplexUserId: userId,
+      runId: run.id,
+    };
+  }
+  await reply(
+    plan
+      ? "Got it. The agent is reading your reply to the plan: it will start the work if you approved it, or come back with a revised plan."
+      : "Got it. The agent is continuing with your reply and will check back here."
+  );
+  return {
+    outcome: "run_resumed",
     mogplexUserId: userId,
     runId: run.id,
   };

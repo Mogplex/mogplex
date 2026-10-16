@@ -60,6 +60,7 @@ export type SlackEventTaskResult = {
     | "connection_authorization_requested"
     | "connection_request_unavailable"
     | "run_guidance_received"
+    | "run_resumed"
     | "run_cancel_handled"
     | "run_guidance_not_applied"
     | "run_guidance_unavailable"
@@ -176,6 +177,8 @@ export type SlackEventTaskDeps = {
     userId: string;
   }) => Promise<void>;
   findGuidanceRuns: typeof findSlackGuidanceRuns;
+  /** Resume a run paused at a checkpoint with the reply. Defaults to Trigger. */
+  queueRunResume?: typeof import("@/lib/mogplex-api/run-resume").queueResumeExternalAgentRun;
   loadThreadRunContext: typeof loadSlackThreadRunContext;
   submitGuidance: typeof submitSlackRunGuidance;
   getInstallation: (teamId: string) => Promise<SlackInstallationRow | null>;

@@ -291,6 +291,22 @@ async function updateRunMetadataAtomic(
   }
 }
 
+/** Atomically merge several string keys into run metadata (jsonb ||). */
+export async function mergeRunMetadataAtomic(
+  userId: string,
+  runId: string,
+  values: Record<string, string>
+): Promise<void> {
+  const pool = getNeonPool();
+  await pool.query(
+    `UPDATE external_agent_runs
+     SET metadata = coalesce(metadata, '{}'::jsonb) || $1::jsonb,
+         updated_at = now()
+     WHERE id = $2 AND user_id = $3`,
+    [JSON.stringify(values), runId, userId]
+  );
+}
+
 const defaultDeps: RecordTerminalCommitDeps = {
   getSandboxHead: getSandboxHeadViaSdk,
   updateRunMetadata: updateRunMetadataAtomic,

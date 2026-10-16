@@ -1,5 +1,9 @@
 /** Resume a checkpoint in its saved workspace, preserving uncommitted files. */
-import { buildCheckpointProtocolInstructions } from "@/lib/harness/checkpoint";
+import {
+  buildCheckpointProtocolInstructions,
+  buildPlanFirstProtocolInstructions,
+  PLAN_FIRST_PROTOCOL_HEADING,
+} from "@/lib/harness/checkpoint";
 import {
   createAiCall,
   loadOwnedAiCall,
@@ -26,11 +30,20 @@ import { isTriggerRuntimeConfigured } from "@/lib/runtime-providers";
 import { TRIGGER_TASK_IDS } from "@/lib/trigger/task-ids";
 import type { ExternalAgentRunRow } from "@/lib/mogplex-api/runs";
 
+/**
+ * How the reply relates to the checkpoint. `review` (default): feedback on
+ * implemented work, or approval to ship. `plan`: revise the plan and pause
+ * again before changing files. `plan_reply`: a free-form reply to a plan;
+ * the agent decides whether it approves or revises.
+ */
+export type ResumeMode = "review" | "plan" | "plan_reply";
+
 export type ResumeExternalAgentRunPayload = {
   runId: string;
   userId: string;
   /** The user's steering reply that triggered this resume. */
   steer: string;
+  mode?: ResumeMode;
 };
 
 /**
@@ -66,6 +79,7 @@ export async function queueResumeExternalAgentRun(
     userId: string;
     repoId: string;
     steer: string;
+    mode?: ResumeMode;
     idempotencyKey: string;
   },
   overrides: Partial<QueueResumeDeps> = {}
@@ -86,6 +100,7 @@ export async function queueResumeExternalAgentRun(
       runId: input.runId,
       userId: input.userId,
       steer: input.steer,
+      ...(input.mode ? { mode: input.mode } : {}),
     },
     {
       idempotencyKey: input.idempotencyKey,
@@ -135,19 +150,67 @@ const defaultResumeDeps: ResumeExternalAgentRunDeps = {
   notifyRunCheckpoint: notifySlackRunCheckpoint,
 };
 
+const ORIGINAL_TASK_CHARS = 12_000;
+
+/** The run's task without its plan-first protocol, which no longer applies. */
+function originalTask(prompt: string) {
+  const task = prompt.split(PLAN_FIRST_PROTOCOL_HEADING)[0].trim();
+  return task.length > ORIGINAL_TASK_CHARS
+    ? `${task.slice(0, ORIGINAL_TASK_CHARS)}…`
+    : task;
+}
+
 /** Reconcile saved files and checkpoint evidence before applying the user's reply. */
 export function buildResumeContinuePrompt(
   run: ExternalAgentRunRow,
-  steer: string
+  steer: string,
+  mode: ResumeMode = "review"
 ): string {
   const trimmedSteer = steer.trim();
-  return [
+  const reply = trimmedSteer || "(no additional instructions — proceed)";
+  const summary =
+    typeof run.metadata.checkpoint_summary === "string"
+      ? run.metadata.checkpoint_summary.trim()
+      : "";
+  const header = [
     `You are resuming a paused repo-agent run in its saved workspace on branch \`${run.working_branch}\`.`,
     "The workspace can contain uncommitted work. Preserve those files.",
     "First inspect `git status --short`, `git diff`, and `git log --oneline -5`. Verify the saved work before continuing. Do not assume it was committed or pushed. If prior work is missing, stop and report it.",
     "",
+    // A resumed segment starts a fresh agent session: restate the task and
+    // what it paused on.
+    "The original task:",
+    originalTask(run.prompt),
+    "",
+    ...(summary
+      ? ["What you reported at the checkpoint:", summary.slice(0, 4_000), ""]
+      : []),
+  ];
+  if (mode === "plan")
+    return [
+      ...header,
+      "The user reviewed your plan and asked for changes:",
+      reply,
+      "",
+      "Revise the plan accordingly. Do not change files yet.",
+      buildPlanFirstProtocolInstructions(),
+    ].join("\n");
+  if (mode === "plan_reply")
+    return [
+      ...header,
+      "The user replied to your plan:",
+      reply,
+      "",
+      "If the reply approves the plan (for example 'looks good', 'go ahead', 'approved'), implement it and follow the checkpoint protocol below. If it asks for changes or questions the plan, revise the plan instead, do not change files, and pause again under the plan-first protocol below.",
+      "",
+      buildCheckpointProtocolInstructions(),
+      "",
+      buildPlanFirstProtocolInstructions(),
+    ].join("\n");
+  return [
+    ...header,
     "The user reviewed your last checkpoint and replied:",
-    trimmedSteer || "(no additional instructions — proceed)",
+    reply,
     "",
     buildCheckpointProtocolInstructions(),
   ].join("\n");
@@ -215,7 +278,7 @@ export async function resumeExternalAgentRun(
   const segmentRun: ExternalAgentRunRow = {
     ...repointed,
     create_branch: false,
-    prompt: buildResumeContinuePrompt(run, payload.steer),
+    prompt: buildResumeContinuePrompt(run, payload.steer, payload.mode),
   };
 
   try {
