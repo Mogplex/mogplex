@@ -85,6 +85,55 @@ describe("buildRunWorkObject", () => {
     ).toEqual(["View changes", "Details"]);
   });
 
+  it.each([
+    ["pending", {}, "Queued", "gray", []],
+    ["awaiting_input", {}, "Waiting for you", "yellow", ["Changes so far"]],
+    ["failed", {}, "Failed", "red", ["View changes", "Details"]],
+    ["cancelled", {}, "Cancelled", "gray", ["View changes", "Details"]],
+  ] as const)(
+    "should show a %s run with its status and buttons",
+    (status, metadata, value, tagColor, buttons) => {
+      const entity = buildRunWorkObject({
+        run: { ...run, status, metadata, harness: "other" as "codex" },
+      }) as {
+        entity_payload: {
+          fields: { status: unknown };
+          custom_fields: { key: string; value: string }[];
+          actions?: { primary_actions: { text: string }[] };
+        };
+      };
+
+      expect(entity.entity_payload.fields.status).toEqual({
+        value,
+        tag_color: tagColor,
+      });
+      expect(
+        entity.entity_payload.actions?.primary_actions.map((a) => a.text) ?? []
+      ).toEqual(buttons);
+      expect(entity.entity_payload.custom_fields.at(-1)?.value).toBe("other");
+    }
+  );
+
+  it("should include the latest progress summary as the description", () => {
+    const entity = buildRunWorkObject({
+      run: {
+        ...run,
+        slack_progress: {
+          phase: "Editing",
+          summary: "Updated the header styles",
+          next: "",
+          tasks: [],
+          lastActivityAt: 1,
+          sequence: 1,
+        },
+      },
+    }) as { entity_payload: { fields: { description?: { value: string } } } };
+
+    expect(entity.entity_payload.fields.description?.value).toBe(
+      "Updated the header styles"
+    );
+  });
+
   it("should call out a plan waiting for review", () => {
     const entity = buildRunWorkObject({
       run: {

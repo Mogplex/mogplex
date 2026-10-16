@@ -219,15 +219,17 @@ export async function handleEntityDetailsRequested(
 /** Route a Work Object event. Never throws. */
 export async function handleSlackWorkObjectEvent(
   teamId: string,
-  event: { type: string }
+  event: { type: string },
+  overrides: Partial<WorkObjectDeps> = {}
 ): Promise<void> {
   try {
     if (event.type === "link_shared")
-      await handleLinkShared(teamId, event as SlackLinkSharedEvent);
+      await handleLinkShared(teamId, event as SlackLinkSharedEvent, overrides);
     else if (event.type === "entity_details_requested")
       await handleEntityDetailsRequested(
         teamId,
-        event as SlackEntityDetailsRequestedEvent
+        event as SlackEntityDetailsRequestedEvent,
+        overrides
       );
   } catch (error) {
     console.error("[slack-work-objects] event failed", {

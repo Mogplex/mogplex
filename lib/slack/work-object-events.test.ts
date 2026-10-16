@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   handleEntityDetailsRequested,
   handleLinkShared,
+  handleSlackWorkObjectEvent,
   type WorkObjectDeps,
 } from "./work-object-events";
 
@@ -98,6 +99,27 @@ describe("handleLinkShared", () => {
     expect(unfurls).toHaveLength(0);
   });
 
+  it("should address the unfurl by channel and ts when there is no unfurl id", async () => {
+    const { deps, unfurls } = harness();
+    const {
+      unfurl_id: _id,
+      source: _source,
+      ...event
+    } = shared("U-owner", "C-else");
+
+    expect(await handleLinkShared("T1", event, deps)).toBe("unfurled");
+    expect(unfurls[0]).toMatchObject({ channel: "C-else", ts: "100.1" });
+  });
+
+  it("should skip a run that no longer exists", async () => {
+    const { deps, unfurls } = harness({ run: null });
+
+    expect(
+      await handleLinkShared("T1", shared("U-owner", "C-else"), deps)
+    ).toBe("not_visible");
+    expect(unfurls).toHaveLength(0);
+  });
+
   it("should ignore messages without run links", async () => {
     const { deps, unfurls } = harness();
     const event = { ...shared("U-owner", "C-else"), links: [] };
@@ -133,6 +155,23 @@ describe("handleEntityDetailsRequested", () => {
     expect(JSON.stringify(metadata)).toContain("acme/web");
   });
 
+  it("should find the run from the entity url and answer not_found without one", async () => {
+    const { deps, details } = harness();
+    const { external_ref: _ref, ...byUrl } = requested("U-owner", "C-else");
+    expect(await handleEntityDetailsRequested("T1", byUrl, deps)).toBe(
+      "presented"
+    );
+
+    const { entity_url: _url, ...neither } = byUrl;
+    expect(await handleEntityDetailsRequested("T1", neither, deps)).toBe(
+      "not_found"
+    );
+    expect(details.at(-1)).toEqual({
+      trigger_id: "trigger-1",
+      error: { status: "not_found" },
+    });
+  });
+
   it("should answer restricted for a run the viewer cannot see, and the same for a missing run", async () => {
     const hidden = harness();
     expect(
@@ -156,5 +195,39 @@ describe("handleEntityDetailsRequested", () => {
       )
     ).toBe("restricted");
     expect(missing.details[0]).toEqual(hidden.details[0]);
+  });
+});
+
+describe("handleSlackWorkObjectEvent", () => {
+  it("should route each event type and swallow failures", async () => {
+    const { deps, unfurls } = harness();
+    await handleSlackWorkObjectEvent("T1", shared("U-owner", "C-else"), deps);
+    expect(unfurls).toHaveLength(1);
+
+    const errors: unknown[] = [];
+    const original = console.error;
+    console.error = (...args: unknown[]) => errors.push(args);
+    try {
+      await expect(
+        handleSlackWorkObjectEvent(
+          "T1",
+          {
+            type: "entity_details_requested",
+            trigger_id: "t1",
+            external_ref: { id: RUN_ID },
+          } as { type: string },
+          {
+            ...deps,
+            getBotToken: async () => {
+              throw new Error("vault down");
+            },
+          }
+        )
+      ).resolves.toBeUndefined();
+      await handleSlackWorkObjectEvent("T1", { type: "other" }, deps);
+    } finally {
+      console.error = original;
+    }
+    expect(errors).toHaveLength(1);
   });
 });
