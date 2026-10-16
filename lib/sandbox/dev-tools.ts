@@ -5,7 +5,6 @@ import type { Sandbox } from "@vercel/sandbox";
 // releases CDN, fetched once per sandbox and reused via an idempotency
 // check on `gh --version`.
 const GH_CLI_VERSION = "2.65.0";
-const GH_CLI_ARCH = "linux_amd64"; // Vercel Sandbox is Linux x86_64
 
 const DEFAULT_AGENT_NAME = "mogplex-agent[bot]";
 const DEFAULT_AGENT_EMAIL = "mogplex-agent[bot]@users.noreply.github.com";
@@ -57,7 +56,6 @@ export async function ensureDevTools(
 
   const script = buildEnsureDevToolsScript({
     ghVersion: GH_CLI_VERSION,
-    ghArch: GH_CLI_ARCH,
     agentName,
     agentEmail,
     ensureTmux: options.ensureTmux ?? false,
@@ -108,6 +106,21 @@ export async function ensureTerminalTools(
   });
 }
 
+/**
+ * Why a failed terminal tools run blocks the PTY, or null when it should not.
+ * Without tmux the bridge falls back to a plain shell, so that alone never
+ * blocks. When tmux is ready the failure is elsewhere (git or gh, for
+ * example), which must not be reported as a tmux problem.
+ */
+export function terminalToolsFailureReason({
+  tmuxAvailable,
+}: {
+  tmuxAvailable?: boolean;
+}): "tmux_unavailable" | "terminal_tools_failed" | null {
+  if (tmuxAvailable === false) return null;
+  return tmuxAvailable ? "terminal_tools_failed" : "tmux_unavailable";
+}
+
 export function parseTmuxAvailability(logs: string): boolean | undefined {
   const match = logs.match(
     new RegExp(`${TMUX_AVAILABILITY_SENTINEL}=([01])(?!\\S)`, "g")
@@ -155,7 +168,8 @@ export async function syncTerminalRuntimeAuth(
 
 type BuildScriptArgs = {
   ghVersion: string;
-  ghArch: string;
+  /** Release asset arch, e.g. `linux_amd64`. Omit to detect it from `uname -m`. */
+  ghArch?: string;
   agentName: string;
   agentEmail: string;
   ensureTmux?: boolean;
@@ -276,7 +290,15 @@ fi
 `
     : ""
 }if [ ! -x ${dq(MOGPLEX_GH_REAL_BIN)} ] || ! ${dq(MOGPLEX_GH_REAL_BIN)} --version 2>/dev/null | grep -Fq ${q(`gh version ${ghVersion}`)}; then
-  tarball_name="gh_${ghVersion}_${ghArch}"
+${
+  ghArch
+    ? `  gh_arch=${q(ghArch)}`
+    : `  case "$(uname -m)" in
+    aarch64|arm64) gh_arch="linux_arm64" ;;
+    *) gh_arch="linux_amd64" ;;
+  esac`
+}
+  tarball_name="gh_${ghVersion}_\${gh_arch}"
   tarball_url="https://github.com/cli/cli/releases/download/v${ghVersion}/\${tarball_name}.tar.gz"
   work_dir="$(mktemp -d)"
   gh_downloaded=false

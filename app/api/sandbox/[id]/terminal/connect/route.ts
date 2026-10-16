@@ -13,6 +13,7 @@ import { resolveSandboxRecordContext } from "@/lib/sandbox/context";
 import {
   ensureTerminalTools,
   syncTerminalRuntimeAuth,
+  terminalToolsFailureReason,
 } from "@/lib/sandbox/dev-tools";
 import { resolveSandboxGitAuthor } from "@/lib/sandbox/git-author";
 import {
@@ -271,10 +272,11 @@ async function handleConnect(
         error: tools.error,
         tmuxAvailable: tools.tmuxAvailable,
       });
-      if (tools.tmuxAvailable !== false) {
+      const reason = terminalToolsFailureReason(tools);
+      if (reason) {
         return disabled({
           available: false,
-          reason: "tmux_unavailable",
+          reason,
           detail: summarizeTerminalToolFailure(
             tools.logs,
             tools.error ?? "terminal tools setup failed"

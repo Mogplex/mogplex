@@ -9,6 +9,7 @@ import {
   buildEnsureDevToolsScript,
   buildSyncTerminalRuntimeAuthScript,
   parseTmuxAvailability,
+  terminalToolsFailureReason,
   TMUX_AVAILABILITY_SENTINEL,
 } from "../../lib/sandbox/dev-tools";
 
@@ -55,10 +56,8 @@ test("buildEnsureDevToolsScript embeds the pinned gh version", () => {
     agentEmail: "bot@example.com",
   });
 
-  assert.match(
-    script,
-    /gh_\$\{?2\.65\.0\}?_linux_amd64|gh_2\.65\.0_linux_amd64/
-  );
+  assert.match(script, /gh_arch='linux_amd64'/);
+  assert.match(script, /tarball_name="gh_2\.65\.0_\$\{gh_arch\}"/);
   assert.match(
     script,
     /https:\/\/github\.com\/cli\/cli\/releases\/download\/v\$\{?ghVersion\}?|v2\.65\.0/
@@ -323,4 +322,49 @@ test("buildSyncTerminalRuntimeAuthScript removes managed auth when token missing
   assert.match(script, /rm -f "\$gh_hosts_file"/);
   assert.match(script, /tmux set-environment -gu GITHUB_TOKEN/);
   assert.match(script, /tmux set-environment -gu GH_TOKEN/);
+});
+
+test("buildEnsureDevToolsScript picks the gh arch from uname when none is pinned", async () => {
+  const script = buildEnsureDevToolsScript({
+    ghVersion: "2.65.0",
+    agentName: "bot",
+    agentEmail: "bot@example.com",
+  });
+  const detect = script.match(/case "\$\(uname -m\)" in[\s\S]*?esac/)?.[0];
+  assert.ok(detect, "expected a uname-based arch switch");
+
+  const binDir = await mkdtemp(path.join(tmpdir(), "fake-uname-"));
+  try {
+    const archFor = async (machine: string) => {
+      await writeFile(
+        path.join(binDir, "uname"),
+        `#!/bin/sh\necho ${machine}\n`
+      );
+      await chmod(path.join(binDir, "uname"), 0o755);
+      const { stdout } = await execFile(
+        "sh",
+        ["-c", `${detect}\nprintf %s "$gh_arch"`],
+        { env: { ...process.env, PATH: `${binDir}:${process.env.PATH}` } }
+      );
+      return stdout;
+    };
+
+    assert.equal(await archFor("aarch64"), "linux_arm64");
+    assert.equal(await archFor("arm64"), "linux_arm64");
+    assert.equal(await archFor("x86_64"), "linux_amd64");
+  } finally {
+    await rm(binDir, { recursive: true, force: true });
+  }
+});
+
+test("terminalToolsFailureReason blames tmux only when tmux was not prepared", () => {
+  // No tmux: the bridge falls back to a plain shell, so nothing blocks.
+  assert.equal(terminalToolsFailureReason({ tmuxAvailable: false }), null);
+  // tmux is ready, so the failure is elsewhere (git, gh).
+  assert.equal(
+    terminalToolsFailureReason({ tmuxAvailable: true }),
+    "terminal_tools_failed"
+  );
+  // The script failed before reporting tmux at all.
+  assert.equal(terminalToolsFailureReason({}), "tmux_unavailable");
 });
