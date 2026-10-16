@@ -1,8 +1,13 @@
 import assert from "node:assert/strict";
+import { execFile, execFileSync } from "node:child_process";
+import http from "node:http";
+import type { AddressInfo } from "node:net";
 import test from "node:test";
 import {
   __resetTerminalBridgeCacheForTesting,
   bridgeTokensMatch,
+  buildBridgeKillPattern,
+  buildHealthProbeScript,
   ensureTerminalBridgeInstalled,
   generateBridgeToken,
   installTerminalBridgeOnce,
@@ -213,4 +218,51 @@ test("bridgeTokensMatch is constant-time-ish on equal-length inputs", () => {
   assert.equal(bridgeTokensMatch(t, t.slice(0, -1) + "X"), false);
   assert.equal(bridgeTokensMatch(t, t + "X"), false);
   assert.equal(bridgeTokensMatch("", t), false);
+});
+
+test("the bridge kill pattern is derived from the script path and matches only the bridge", () => {
+  const pattern = buildBridgeKillPattern(TERMINAL_BRIDGE_SCRIPT_PATH);
+
+  assert.equal(
+    pattern,
+    String.raw`^([^ ]*/)?node /vercel/sandbox/\.mogplex/terminal-bridge\.mjs$`
+  );
+  const matcher = new RegExp(pattern);
+  assert.ok(matcher.test(`node ${TERMINAL_BRIDGE_SCRIPT_PATH}`));
+  assert.ok(matcher.test(`/usr/local/bin/node ${TERMINAL_BRIDGE_SCRIPT_PATH}`));
+  assert.ok(!matcher.test(`node ${TERMINAL_BRIDGE_SCRIPT_PATH}.bak`));
+  assert.ok(!matcher.test(`sh -lc pkill -f '${pattern}'`));
+});
+
+test("the health probe reads /health with node, not curl", async () => {
+  const server = http.createServer((_req, res) => {
+    res.end('{"ok":true}');
+  });
+  await new Promise<void>((resolve) => {
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const { port } = server.address() as AddressInfo;
+  try {
+    const script = buildHealthProbeScript(port);
+    assert.ok(!script.includes("curl"));
+
+    // Async, so this process's server can answer while the probe runs.
+    const stdout = await new Promise<string>((resolve, reject) => {
+      execFile("sh", ["-c", script], { encoding: "utf8" }, (error, out) => {
+        if (error) reject(error);
+        else resolve(out);
+      });
+    });
+    assert.equal(stdout, '{"ok":true}');
+  } finally {
+    server.close();
+  }
+});
+
+test("the health probe prints the error and still exits 0 when nothing listens", () => {
+  const stdout = execFileSync("sh", ["-c", buildHealthProbeScript(1)], {
+    encoding: "utf8",
+  });
+  assert.ok(stdout.length > 0);
+  assert.ok(!stdout.includes('"ok":true'));
 });

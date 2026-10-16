@@ -13,6 +13,7 @@ export type TerminalPtyUnavailableReason =
   | "bridge_not_ready"
   | "bridge_unreachable"
   | "tmux_unavailable"
+  | "terminal_tools_failed"
   | "bridge_install_failed";
 
 export type TerminalPtyConnectInfo =

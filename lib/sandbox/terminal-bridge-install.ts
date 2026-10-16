@@ -2,9 +2,9 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { loadTerminalBridgeSource } from "@/lib/sandbox/terminal-bridge-source";
 import { TERMINAL_PTY_PORT } from "@/lib/sandbox/terminal-pty-config";
 import { TERMINAL_BRIDGE_BOOTSTRAP } from "@/lib/sandbox/terminal-bridge-bootstrap";
+import { SANDBOX_WORKSPACE_ROOT } from "@/lib/sandbox/working-directory";
 
-export const TERMINAL_BRIDGE_SCRIPT_PATH =
-  "/vercel/sandbox/.mogplex/terminal-bridge.mjs";
+export const TERMINAL_BRIDGE_SCRIPT_PATH = `${SANDBOX_WORKSPACE_ROOT}/.mogplex/terminal-bridge.mjs`;
 export const TERMINAL_BRIDGE_LOG_PATH = "/tmp/mogplex-terminal-bridge.log";
 
 const BRIDGE_ENV_NAME_PATTERN = /^[A-Za-z_]\w*$/;
@@ -107,6 +107,33 @@ export function generateBridgeToken(bytes = 32): string {
   return randomBytes(bytes).toString("base64url");
 }
 
+const REGEX_SPECIAL_CHARACTERS = /[.*+?^${}()|[\]\\]/g;
+
+/**
+ * The `pkill -f` pattern that matches only the running bridge process. It is
+ * anchored to the whole command line, so it never matches the shell whose
+ * arguments contain the cleanup command (Linux pkill would kill its own
+ * launcher otherwise).
+ */
+export function buildBridgeKillPattern(scriptPath: string): string {
+  return `^([^ ]*/)?node ${scriptPath.replaceAll(REGEX_SPECIAL_CHARACTERS, String.raw`\$&`)}$`;
+}
+
+/**
+ * Fetches the bridge's /health with node, which every sandbox runtime has;
+ * curl is not guaranteed outside Vercel Sandbox images. Prints the body, or
+ * the error, and always exits 0 so the caller reads stdout.
+ */
+export function buildHealthProbeScript(port: number): string {
+  const probe = [
+    `fetch("http://127.0.0.1:${port}/health", { signal: AbortSignal.timeout(1000) })`,
+    ".then((r) => r.text())",
+    ".then((t) => process.stdout.write(t))",
+    ".catch((e) => process.stdout.write(String(e?.message ?? e)))",
+  ].join("");
+  return `node -e ${shellQuote(probe)} || true`;
+}
+
 async function healthProbe(
   sandbox: SandboxLike,
   port: number
@@ -114,10 +141,7 @@ async function healthProbe(
   try {
     const result = await sandbox.runCommand({
       cmd: "sh",
-      args: [
-        "-lc",
-        `curl -sS --max-time 1 http://127.0.0.1:${port}/health || true`,
-      ],
+      args: ["-lc", buildHealthProbeScript(port)],
     });
     const stdout = await result.stdout();
     if (stdout.includes('"ok":true')) {
@@ -166,7 +190,7 @@ export async function installTerminalBridgeOnce(
     `mkdir -p $(dirname ${TERMINAL_BRIDGE_LOG_PATH})`,
     // Match only the bridge process, never the shell whose arguments contain
     // this cleanup command. Linux pkill otherwise kills its own launcher.
-    `(pkill -f '^([^ ]*/)?node /vercel/sandbox/\\.mogplex/terminal-bridge\\.mjs$' 2>/dev/null || true)`,
+    `(pkill -f ${shellQuote(buildBridgeKillPattern(TERMINAL_BRIDGE_SCRIPT_PATH))} 2>/dev/null || true)`,
     `${bridgeEnv} node -e ${shellQuote(TERMINAL_BRIDGE_BOOTSTRAP)} ${shellQuote(TERMINAL_BRIDGE_SCRIPT_PATH)} ${shellQuote(TERMINAL_BRIDGE_LOG_PATH)}`,
   ].join(" && ");
 

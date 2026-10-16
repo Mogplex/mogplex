@@ -37,6 +37,10 @@ export function describeExecFallback(
       return normalizedDetail
         ? `PTY unavailable: ${normalizedDetail}.`
         : "PTY unavailable because tmux could not be prepared.";
+    case "terminal_tools_failed":
+      return normalizedDetail
+        ? `PTY unavailable: ${normalizedDetail}.`
+        : "PTY unavailable because terminal tools (git, gh) failed to install.";
     case "bridge_install_failed":
       return normalizedDetail
         ? `PTY unavailable: ${normalizedDetail}.`

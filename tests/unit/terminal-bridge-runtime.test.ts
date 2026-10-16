@@ -6,6 +6,7 @@ import {
   buildWsAccept,
   decodeWsFrame,
   encodeWsFrame,
+  isPtySlavePath,
   parseControlMessage,
   tokensMatch,
   WS_OPCODE_BINARY,
@@ -148,4 +149,13 @@ test("buildTmuxShellCommand attaches to a named session with quoted cwd", () => 
   );
   assert.match(command, /if \[ -n "\$SHELL" \]; then exec "\$SHELL" -il; fi/);
   assert.match(command, /exec \/bin\/sh -il/);
+});
+
+test("isPtySlavePath accepts pty slaves and rejects the Docker ptmx master", () => {
+  assert.equal(isPtySlavePath("/dev/pts/0"), true);
+  assert.equal(isPtySlavePath("/dev/pts/12"), true);
+  // Docker links /dev/ptmx to /dev/pts/ptmx; stty on it is a silent no-op.
+  assert.equal(isPtySlavePath("/dev/pts/ptmx"), false);
+  assert.equal(isPtySlavePath("/dev/null"), false);
+  assert.equal(isPtySlavePath("pipe:[1234]"), false);
 });
