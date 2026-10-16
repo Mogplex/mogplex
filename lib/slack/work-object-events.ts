@@ -111,6 +111,24 @@ function canSeeRun(input: {
 
 export type LinkSharedOutcome = "ignored" | "not_visible" | "unfurled";
 
+/** Run links in the event, keyed by the URL as posted, at most MAX_UNFURLS. */
+function runLinksIn(event: SlackLinkSharedEvent, origin: string) {
+  const runLinks = new Map<string, string>();
+  for (const { url } of event.links ?? []) {
+    const runId = url ? parseRunLink(url, origin) : null;
+    if (url && runId) runLinks.set(url, runId);
+  }
+  return [...runLinks].slice(0, MAX_UNFURLS);
+}
+
+function unfurlTarget(event: SlackLinkSharedEvent) {
+  if (event.unfurl_id && event.source)
+    return { unfurl_id: event.unfurl_id, source: event.source };
+  if (event.channel && event.message_ts)
+    return { channel: event.channel, ts: event.message_ts };
+  return null;
+}
+
 /** link_shared: unfurl run links as Work Objects (chat.unfurl). */
 export async function handleLinkShared(
   teamId: string,
@@ -118,30 +136,20 @@ export async function handleLinkShared(
   overrides: Partial<WorkObjectDeps> = {}
 ): Promise<LinkSharedOutcome> {
   const deps = { ...defaultDeps, ...overrides };
-  const origin = deps.appOrigin();
-  const runLinks = new Map<string, string>();
-  for (const link of event.links ?? []) {
-    const runId = link.url ? parseRunLink(link.url, origin) : null;
-    if (link.url && runId && !runLinks.has(link.url))
-      runLinks.set(link.url, runId);
-  }
-  if (runLinks.size === 0) return "ignored";
-  const target =
-    event.unfurl_id && event.source
-      ? { unfurl_id: event.unfurl_id, source: event.source }
-      : event.channel && event.message_ts
-        ? { channel: event.channel, ts: event.message_ts }
-        : null;
-  if (!target) return "ignored";
+  const runLinks = runLinksIn(event, deps.appOrigin());
+  const target = unfurlTarget(event);
+  if (runLinks.length === 0 || !target) return "ignored";
   const botToken = await deps.getBotToken(teamId);
   if (!botToken) return "ignored";
 
   const mogplexUserId = await mogplexUserFor(deps, teamId, event.user);
   const entities = [];
-  for (const [url, runId] of [...runLinks].slice(0, MAX_UNFURLS)) {
+  for (const [url, runId] of runLinks) {
     const run = await deps.loadRun(runId);
-    if (!run) continue;
-    if (!canSeeRun({ run, mogplexUserId, teamId, channelId: event.channel }))
+    if (
+      !run ||
+      !canSeeRun({ run, mogplexUserId, teamId, channelId: event.channel })
+    )
       continue;
     const repoFullName = await deps.loadRepoName(run).catch(() => null);
     entities.push(buildRunWorkObject({ run, repoFullName, appUnfurlUrl: url }));
@@ -157,6 +165,15 @@ export type EntityDetailsOutcome =
   | "restricted"
   | "presented";
 
+function requestedRunId(
+  event: SlackEntityDetailsRequestedEvent,
+  origin: string
+) {
+  const fromRef = event.external_ref?.id?.trim();
+  if (fromRef && isUuid(fromRef)) return fromRef.toLowerCase();
+  return event.entity_url ? parseRunLink(event.entity_url, origin) : null;
+}
+
 /** entity_details_requested: fill the flexpane for one viewer. */
 export async function handleEntityDetailsRequested(
   teamId: string,
@@ -166,13 +183,7 @@ export async function handleEntityDetailsRequested(
   const deps = { ...defaultDeps, ...overrides };
   const triggerId = event.trigger_id;
   if (!triggerId) return "ignored";
-  const fromRef = event.external_ref?.id?.trim();
-  const runId =
-    fromRef && isUuid(fromRef)
-      ? fromRef.toLowerCase()
-      : event.entity_url
-        ? parseRunLink(event.entity_url, deps.appOrigin())
-        : null;
+  const runId = requestedRunId(event, deps.appOrigin());
   const botToken = await deps.getBotToken(teamId);
   if (!botToken) return "ignored";
   if (!runId) {
