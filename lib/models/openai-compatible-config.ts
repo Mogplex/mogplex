@@ -19,6 +19,9 @@ export type OpenAiCompatibleModel = {
   name: string;
 };
 
+/** Read-only, so health and doctor checks can pass a plain env record. */
+type OpenAiCompatibleEnv = Readonly<Record<string, string | undefined>>;
+
 export type OpenAiCompatibleConfig = {
   baseURL: string;
   apiKey: string | null;
@@ -77,7 +80,7 @@ function parseModels(value: string | undefined): OpenAiCompatibleModel[] {
 
 /** Null when the base URL is unset or is not an absolute http(s) URL. */
 export function readOpenAiCompatibleConfig(
-  env: NodeJS.ProcessEnv = process.env
+  env: OpenAiCompatibleEnv = process.env
 ): OpenAiCompatibleConfig | null {
   const baseURL = parseBaseUrl(env.MOGPLEX_OPENAI_COMPATIBLE_BASE_URL);
   if (!baseURL) return null;
@@ -86,6 +89,16 @@ export function readOpenAiCompatibleConfig(
     apiKey: env.MOGPLEX_OPENAI_COMPATIBLE_API_KEY?.trim() || null,
     models: parseModels(env.MOGPLEX_OPENAI_COMPATIBLE_MODELS),
   };
+}
+
+/**
+ * True when the deployment's OpenAI-compatible endpoint can serve at least one
+ * model: a base URL alone lists nothing in the catalog.
+ */
+export function hasOpenAiCompatibleModels(
+  env: OpenAiCompatibleEnv = process.env
+): boolean {
+  return (readOpenAiCompatibleConfig(env)?.models.length ?? 0) > 0;
 }
 
 export function isOpenAiCompatibleModelId(modelId: string) {

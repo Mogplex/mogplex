@@ -39,6 +39,23 @@ describe("checkAppConfig", () => {
     ).toMatch(/not a valid URL/);
   });
 
+  it("should accept APP_URL alone and prefer it over NEXT_PUBLIC_APP_URL", () => {
+    const { NEXT_PUBLIC_APP_URL: _unused, ...withoutPublicUrl } = base;
+
+    expect(
+      checkAppConfig({
+        ...withoutPublicUrl,
+        APP_URL: "https://runtime.example.com",
+      })
+    ).toMatchObject({
+      status: "pass",
+      summary: "App URL https://runtime.example.com",
+    });
+    expect(checkAppConfig({ ...base, APP_URL: "not a url" }).summary).toMatch(
+      /^APP_URL is not a valid URL/
+    );
+  });
+
   it("should fail when the backend flags disagree", () => {
     expect(
       checkAppConfig({ ...base, NEXT_PUBLIC_MOGPLEX_DATA_BACKEND: "supabase" })
@@ -121,6 +138,26 @@ describe("checkModels", () => {
   it("should pass with a gateway key and warn without one", () => {
     expect(checkModels({ AI_GATEWAY_API_KEY: "k" }).status).toBe("pass");
     expect(checkModels({}).status).toBe("warn");
+  });
+
+  it("should pass with an OpenAI-compatible endpoint that lists models", () => {
+    expect(
+      checkModels({
+        MOGPLEX_OPENAI_COMPATIBLE_BASE_URL: "https://litellm.internal/v1",
+        MOGPLEX_OPENAI_COMPATIBLE_MODELS: "llama3",
+      }).status
+    ).toBe("pass");
+  });
+
+  it("should warn when the OpenAI-compatible endpoint lists no models", () => {
+    expect(
+      checkModels({
+        MOGPLEX_OPENAI_COMPATIBLE_BASE_URL: "https://litellm.internal/v1",
+      })
+    ).toMatchObject({
+      status: "warn",
+      summary: expect.stringContaining("MOGPLEX_OPENAI_COMPATIBLE_MODELS"),
+    });
   });
 });
 

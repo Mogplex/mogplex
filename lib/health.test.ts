@@ -89,6 +89,20 @@ describe("readSubsystemHealth", () => {
     expect(health.models).toBe("configured");
     expect(health.slack).toBe("configured");
   });
+
+  it("should report models configured from an OpenAI-compatible endpoint with models", () => {
+    const endpoint = {
+      MOGPLEX_OPENAI_COMPATIBLE_BASE_URL: "https://litellm.internal/v1",
+    };
+
+    expect(
+      readSubsystemHealth({
+        ...endpoint,
+        MOGPLEX_OPENAI_COMPATIBLE_MODELS: "llama3",
+      }).models
+    ).toBe("configured");
+    expect(readSubsystemHealth(endpoint).models).toBe("unconfigured");
+  });
 });
 
 describe("buildHealthReport", () => {
