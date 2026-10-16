@@ -24,8 +24,17 @@ workspace or rewriting the completed harness pass.
 
 DM questions and channel mentions receive replies under the original question.
 Follow-ups, progress cards, failures, account-link notices, and run results stay
-in that thread. Each new DM root starts its own conversation; replies use that
+in that thread. Replies stream into the thread as the agent writes them, with
+each tool step (checking GitHub, reading a file) shown as a task card. If Slack
+does not accept a streamed reply, Mogplex edits a single message instead; set
+`SLACK_STREAMING_REPLIES=off` to always do that. Each new DM root starts its own conversation; replies use that
 root's conversation and history.
+
+A finished run's card is short: the outcome, an excerpt of the agent's report,
+what changed, where it landed, and one line on recorded checks. **Details**
+opens the full report, the recorded checks with their caveats, the workspace
+state, and guidance receipts. Anyone in the conversation can open Details,
+the same people who can read the card.
 
 Run cards show what changed without leaving Slack. While a run works, **Changes
 so far** opens a modal with the diff from the live workspace, including

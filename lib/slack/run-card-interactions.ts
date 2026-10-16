@@ -1,12 +1,15 @@
-import { SLACK_VIEW_CHANGES_ACTION_ID } from "./command-actions";
+import {
+  SLACK_RUN_DETAILS_ACTION_ID,
+  SLACK_VIEW_CHANGES_ACTION_ID,
+} from "./command-actions";
 import type {
   SlackBlockActionsPayload,
   SlackInteractivityResult,
 } from "./interactivity";
 
 /**
- * Buttons on run cards and checkpoint messages: view changes, approve or
- * revise. Handlers load lazily so other interactions skip their imports.
+ * Buttons on run cards and checkpoint messages: view changes, details,
+ * approve or revise. Handlers load lazily so other interactions skip their imports.
  */
 export async function routeRunCardAction(
   payload: SlackBlockActionsPayload
@@ -18,6 +21,14 @@ export async function routeRunCardAction(
     return {
       outcome: "run_changes",
       result: await handleViewRunChangesAction(payload),
+    };
+  }
+  if (ids.includes(SLACK_RUN_DETAILS_ACTION_ID)) {
+    const { handleRunDetailsAction } =
+      await import("./run-details-interactions");
+    return {
+      outcome: "run_details",
+      result: await handleRunDetailsAction(payload),
     };
   }
   if (ids.some((id) => id.startsWith("mogplex_checkpoint_"))) {
