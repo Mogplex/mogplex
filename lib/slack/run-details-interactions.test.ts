@@ -20,6 +20,12 @@ const payload: SlackBlockActionsPayload = {
 function harness(run: Record<string, unknown> | null) {
   const views: unknown[] = [];
   const deps = {
+    getInstallation: async () => ({
+      id: "I1",
+      authed_user_slack_id: "U-owner",
+      installed_by_user_id: "owner",
+    }),
+    getUserMapping: async () => null,
     getBotToken: async () => "xoxb",
     openView: async (_token: string, input: { view: unknown }) => {
       views.push(input.view);
@@ -80,6 +86,24 @@ it("should not show a run whose card lives in another channel", async () => {
 
   expect(await handleRunDetailsAction(payload, deps)).toBe("not_in_channel");
   expect(JSON.stringify(views.at(-1))).not.toContain("Fixed the header.");
+});
+
+it("should show the owner the details from a run link in another channel", async () => {
+  const { views, deps } = harness({
+    ...finishedRun,
+    metadata: {
+      slackRunControls: { teamId: "T1", channelId: "C-other", messageTs: "1" },
+    },
+  });
+  const fromUnfurl: SlackBlockActionsPayload = {
+    ...payload,
+    user: { id: "U-owner" },
+    channel: undefined,
+    container: { channel_id: "C1" },
+  };
+
+  expect(await handleRunDetailsAction(fromUnfurl, deps)).toBe("shown");
+  expect(JSON.stringify(views.at(-1))).toContain("Fixed the header.");
 });
 
 it("should point a still-running run back to its card", async () => {

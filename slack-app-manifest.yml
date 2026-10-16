@@ -12,6 +12,11 @@ features:
   bot_user:
     display_name: mogplex
     always_online: true
+  # Run links (https://<domain>/runs/<id>) unfurl as Work Objects. Also turn on
+  # Work Object Previews with the Task entity type in the app settings; the
+  # manifest cannot set that toggle.
+  unfurl_domains:
+    - mogplex.example.com
   slash_commands:
     - command: /mogplex
       url: https://mogplex.example.com/api/webhooks/slack
@@ -43,6 +48,8 @@ oauth_config:
       - groups:read
       - im:history
       - im:read
+      - links:read
+      - links:write
       - mpim:history
       - mpim:read
       - users:read
@@ -52,6 +59,8 @@ settings:
     request_url: https://mogplex.example.com/api/webhooks/slack
     bot_events:
       - app_mention
+      - entity_details_requested
+      - link_shared
       - message.channels
       - message.groups
       - message.im
