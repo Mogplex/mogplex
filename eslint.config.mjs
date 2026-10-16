@@ -7,6 +7,10 @@ import reactHooks from "eslint-plugin-react-hooks";
 import core from "ultracite/eslint/core";
 import next from "ultracite/eslint/next";
 import noInternalMocks from "./scripts/eslint-rules/no-internal-mocks.mjs";
+import { VERCEL_SANDBOX_SDK_IMPORTERS } from "./scripts/eslint-rules/vercel-sandbox-importers.mjs";
+
+// Glob patterns read `[id]` as a character class; match route folders literally.
+const escapeGlob = (path) => path.replaceAll(/[[\]]/g, String.raw`\$&`);
 
 const sanitizedCore = core
   .map((config) => {
@@ -337,6 +341,39 @@ export default defineConfig([
           selector: "JSXOpeningElement[name.name=/^(select|datalist)$/]",
           message:
             "Project and workflow selection controls must use app-styled components instead of browser-native select or datalist elements.",
+        },
+      ],
+    },
+  },
+  {
+    // Sandbox backends are pluggable (lib/sandbox/provider). Only the Vercel
+    // adapter may use the Vercel SDK; the frozen list of older importers
+    // shrinks as Track B migrates them.
+    files: ["**/*.{ts,tsx,mjs}"],
+    ignores: [
+      "lib/sandbox/provider/vercel/**",
+      "**/*.test.{ts,tsx}",
+      "tests/**",
+      ...VERCEL_SANDBOX_SDK_IMPORTERS.map(escapeGlob),
+    ],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@vercel/sandbox",
+              message:
+                "Import sandbox types from @/lib/sandbox/provider/types and get a backend from @/lib/sandbox/provider. Only lib/sandbox/provider/vercel may use the Vercel SDK.",
+            },
+          ],
+          patterns: [
+            {
+              group: ["@vercel/sandbox/*"],
+              message:
+                "Only lib/sandbox/provider/vercel may use the Vercel SDK.",
+            },
+          ],
         },
       ],
     },
