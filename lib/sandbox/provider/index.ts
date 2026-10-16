@@ -7,6 +7,9 @@ import type {
 } from "@/lib/sandbox/provider/types";
 import { vercelSandboxProvider } from "@/lib/sandbox/provider/vercel/vercel-provider";
 
+// Static today, so importing this module loads the Vercel SDK. When a second
+// backend lands, resolve providers lazily (dynamic import) so a deployment
+// that never uses Vercel does not load its SDK.
 const PROVIDERS: Record<SandboxProviderId, SandboxProvider> = {
   vercel: vercelSandboxProvider,
 };

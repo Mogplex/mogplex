@@ -34,43 +34,67 @@ export function toSandboxHandle(sandbox: Sandbox): SandboxHandle {
   return sandbox;
 }
 
-export const vercelSandboxProvider: SandboxProvider = {
-  id: "vercel",
-  capabilities: VERCEL_SANDBOX_CAPABILITIES,
-
-  async createFromGit(opts) {
-    return toSandboxHandle(await createSandboxForRepo(opts));
-  },
-
-  async createFromSnapshot(opts) {
-    return toSandboxHandle(await createSandboxFromSnapshot(opts));
-  },
-
-  async get(name, credentials, opts = {}) {
-    return toSandboxHandle(
-      await getSandbox(name, credentials, { resume: opts.resume ?? false })
-    );
-  },
-
-  async getIfExists(name, credentials) {
-    try {
-      return toSandboxHandle(
-        await getSandbox(name, credentials, { resume: false })
-      );
-    } catch (error) {
-      if (isNotFoundError(error)) return null;
-      throw error;
-    }
-  },
-
-  async list(credentials, opts = {}) {
-    const sandboxes = await listVercelSandboxes(credentials, opts);
-    return sandboxes.map((sandbox) => ({
-      name: sandbox.name,
-      status: sandbox.status,
-      persistent: sandbox.persistent,
-      createdAt: sandbox.createdAt,
-      ...(sandbox.tags ? { tags: sandbox.tags } : {}),
-    }));
-  },
+/** The lifecycle helpers the adapter delegates to; injectable for tests. */
+export type VercelSandboxDeps = {
+  createSandboxForRepo: typeof createSandboxForRepo;
+  createSandboxFromSnapshot: typeof createSandboxFromSnapshot;
+  getSandbox: typeof getSandbox;
+  listVercelSandboxes: typeof listVercelSandboxes;
+  isNotFoundError: typeof isNotFoundError;
 };
+
+/** Build the Vercel provider over `deps` (the real helpers by default). */
+export function createVercelSandboxProvider(
+  deps: VercelSandboxDeps
+): SandboxProvider {
+  return {
+    id: "vercel",
+    capabilities: VERCEL_SANDBOX_CAPABILITIES,
+
+    async createFromGit(opts) {
+      return toSandboxHandle(await deps.createSandboxForRepo(opts));
+    },
+
+    async createFromSnapshot(opts) {
+      return toSandboxHandle(await deps.createSandboxFromSnapshot(opts));
+    },
+
+    async get(name, credentials, opts = {}) {
+      return toSandboxHandle(
+        await deps.getSandbox(name, credentials, {
+          resume: opts.resume ?? false,
+        })
+      );
+    },
+
+    async getIfExists(name, credentials) {
+      try {
+        return toSandboxHandle(
+          await deps.getSandbox(name, credentials, { resume: false })
+        );
+      } catch (error) {
+        if (deps.isNotFoundError(error)) return null;
+        throw error;
+      }
+    },
+
+    async list(credentials, opts = {}) {
+      const sandboxes = await deps.listVercelSandboxes(credentials, opts);
+      return sandboxes.map((sandbox) => ({
+        name: sandbox.name,
+        status: sandbox.status,
+        persistent: sandbox.persistent,
+        createdAt: sandbox.createdAt,
+        ...(sandbox.tags ? { tags: sandbox.tags } : {}),
+      }));
+    },
+  };
+}
+
+export const vercelSandboxProvider = createVercelSandboxProvider({
+  createSandboxForRepo,
+  createSandboxFromSnapshot,
+  getSandbox,
+  listVercelSandboxes,
+  isNotFoundError,
+});

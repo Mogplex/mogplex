@@ -10,6 +10,8 @@ import noInternalMocks from "./scripts/eslint-rules/no-internal-mocks.mjs";
 import { VERCEL_SANDBOX_SDK_IMPORTERS } from "./scripts/eslint-rules/vercel-sandbox-importers.mjs";
 
 // Glob patterns read `[id]` as a character class; match route folders literally.
+// Only `[` and `]` are escaped: allowlisted paths are source files, which never
+// contain `*`, `?`, `{`, `}` or a leading `!`. Extend this if one ever does.
 const escapeGlob = (path) => path.replaceAll(/[[\]]/g, String.raw`\$&`);
 
 const sanitizedCore = core

@@ -39,7 +39,6 @@ export const VERCEL_SANDBOX_SDK_IMPORTERS = [
   "lib/sandbox/health-status.ts",
   "lib/sandbox/lockfile-hash.ts",
   "lib/sandbox/node-prerequisite.ts",
-  "lib/sandbox/provider/types.ts",
   "lib/sandbox/repository-files.ts",
   "lib/sandbox/route-context.ts",
   "lib/sandbox/runtimes/index.ts",

@@ -5,8 +5,7 @@
 // `SandboxHandle` is deliberately the structural subset of the Vercel
 // `Sandbox` class that the app calls. A Vercel sandbox satisfies it as is
 // (the Vercel adapter checks this at compile time), which lets callers move
-// from `import type { Sandbox } from "@vercel/sandbox"` to these types with
-// no runtime change. See plans/self-hosting-and-byo-compute.md (Track B).
+// from the SDK's `Sandbox` type to these types with no runtime change. See plans/self-hosting-and-byo-compute.md (Track B).
 import type { Writable } from "node:stream";
 import type {
   CreateFromSnapshotOpts,
