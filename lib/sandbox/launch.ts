@@ -110,7 +110,7 @@ function isRestartablePersistentRecord(record: SandboxRecord | null) {
   );
 }
 
-async function loadMatchingSandboxRecord(input: {
+export async function loadMatchingSandboxRecord(input: {
   name: string;
   repoId: string;
   userId: string;

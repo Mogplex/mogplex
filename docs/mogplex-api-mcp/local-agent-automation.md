@@ -73,6 +73,27 @@ The graph contract is the same as the Flow editor: `nodes`, `edges`, and a valid
 - `mogplex_list_sandboxes` returns current and recent records.
 - `mogplex_get_sandbox_logs` returns install logs, dev-server logs, the current error, and persisted lifecycle events.
 
+Set `INTERNAL_API_SECRET` on self-hosted servers before sandbox launches through
+`POST /api/v1/mogplex/sandboxes` or `mogplex_create_sandbox`. Use a random secret.
+Keep this value on the server.
+
+External clients use their normal API key or OAuth token.
+They must not receive the internal secret.
+
+Without this secret, the API returns `503 SERVICE_UNAVAILABLE`. The response
+does not expose server configuration. Server logs name the setting to correct.
+
+The caller must own the repository. Its saved `product_team_id` selects the team
+scope. Headers from the client cannot change this scope.
+
+Team launches need a role that permits `tools.bash`.
+Creation and restart both check this capability. Personal repositories keep their
+personal scope.
+
+Older saved workspaces can retain a personal scope. If no team workspace exists,
+Mogplex can resume a personal workspace that belongs to the caller. The repository,
+branch, and root must match. The caller's role in the team still applies.
+
 ## Manual trigger input
 
 `mogplex_trigger_automation.input` is merged into the run metadata before Mogplex adds authoritative repo, installation, flow, version, and source fields. For a GitHub-oriented flow, pass the same fields its conditions and agent prompt expect, for example:

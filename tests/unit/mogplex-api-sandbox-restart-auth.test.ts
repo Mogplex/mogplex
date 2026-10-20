@@ -1,17 +1,21 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { NextRequest } from "next/server";
-import { getDelegatedUserIdFromRequest } from "../../lib/internal-api-auth";
 import { toSandboxClientRecord } from "../../lib/sandbox/summary";
 import {
   buildOwnedRepoWithGithubAccess,
-  buildSandboxServiceRouteAuth,
   createSandboxPostTestHandler,
 } from "./helpers/sandbox-route-fixtures";
 import { buildPersistedPersistentRestartRecord } from "./helpers/sandbox-restart-route-fixtures";
 import { loadSandboxRestartRouteModule } from "./sandbox-record-route-test-harness/loaders";
 
-async function buildRestartingLauncher(ownerId = "user-123") {
+const REPO_ID = "00000000-0000-4000-8000-000000000123";
+const TEAM_ID = "00000000-0000-4000-8000-000000000456";
+
+async function buildRestartingLauncher(
+  ownerId = "user-123",
+  beforeRestart?: () => void
+) {
   const { createSandboxRestartHandler } = await loadSandboxRestartRouteModule();
   const { loadOwnedSandboxRouteRecord, loadOwnedSandboxRouteContext } =
     await import("../../lib/sandbox/route-context");
@@ -19,15 +23,11 @@ async function buildRestartingLauncher(ownerId = "user-123") {
     await import("../../app/api/v1/mogplex/sandboxes/route");
   const saved = buildPersistedPersistentRestartRecord({
     user_id: ownerId,
-    repo_id: "repo-123",
+    repo_id: REPO_ID,
     status: "stopped",
   });
   const providerCalls: boolean[] = [];
   const recordDeps = {
-    getSandboxServiceCredentials: async (request?: Request) => {
-      const userId = request ? getDelegatedUserIdFromRequest(request) : null;
-      return userId ? buildSandboxServiceRouteAuth({ userId }) : null;
-    },
     loadOwnedSandboxRecord: async (id: string, userId: string) =>
       id === saved.id && userId === saved.user_id ? saved : null,
   };
@@ -75,11 +75,8 @@ async function buildRestartingLauncher(ownerId = "user-123") {
     },
   });
   const post = await createSandboxPostTestHandler({
-    // The v1 adapter already resolved the caller's credentials for CREATE.
-    // Restart must independently authenticate the delegated request.
-    getSandboxServiceCredentials: async () => buildSandboxServiceRouteAuth(),
     getOwnedRepoWithGithubAccessToken: async () =>
-      buildOwnedRepoWithGithubAccess(),
+      buildOwnedRepoWithGithubAccess({ repo: { id: REPO_ID } }),
     getActiveSandboxForRepo: async () => null,
     enforceSandboxBootLimits: async () => ({ allowed: true }),
     resolveNameCollision: async () => ({
@@ -91,8 +88,10 @@ async function buildRestartingLauncher(ownerId = "user-123") {
         stop_reason: null,
       }),
     }),
-    restartSandboxRecord: (request, id) =>
-      restart(request, { params: Promise.resolve({ id }) }),
+    restartSandboxRecord: (request, id) => {
+      beforeRestart?.();
+      return restart(request, { params: Promise.resolve({ id }) });
+    },
     createSandboxForRepo: async () => {
       throw new Error("Must preserve the saved workspace");
     },
@@ -108,24 +107,79 @@ async function buildRestartingLauncher(ownerId = "user-123") {
   };
 }
 
-async function withInternalSecret(runTest: () => Promise<void>) {
-  const previous = process.env.INTERNAL_API_SECRET;
-  const previousBackend = process.env.MOGPLEX_DATA_BACKEND;
+type SandboxApiFixture = {
+  teamId: string | null;
+  role: "developer" | "viewer" | null;
+  repoFound: boolean;
+  repoLookupFails: boolean;
+};
+
+async function withInternalSecret(
+  runTest: (fixture: SandboxApiFixture) => Promise<void>
+) {
+  const environment = {
+    INTERNAL_API_SECRET: "sandbox-restart-test-secret",
+    MOGPLEX_DATA_BACKEND: "supabase",
+    PLATFORM_VERCEL_TOKEN: "vercel-token",
+    VERCEL_PROJECT_ID: "project-123",
+    PLATFORM_VERCEL_TEAM_ID: "",
+    NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co",
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: "test-anon-key",
+    SUPABASE_SERVICE_ROLE_KEY: "test-service-role-key",
+  };
+  const previous = new Map(
+    Object.keys(environment).map((key) => [key, process.env[key]])
+  );
+  Object.assign(process.env, environment);
+  const fixture: SandboxApiFixture = {
+    teamId: null,
+    role: "developer",
+    repoFound: true,
+    repoLookupFails: false,
+  };
   const originalFetch = globalThis.fetch;
-  process.env.INTERNAL_API_SECRET = "sandbox-restart-test-secret";
-  process.env.MOGPLEX_DATA_BACKEND = "supabase";
   globalThis.fetch = async (input) => {
-    assert.match(String(input), /\/profiles\?/);
-    return Response.json({ allow_platform_sandbox: false });
+    const url = new URL(String(input));
+    if (url.pathname.endsWith("/profiles")) {
+      return Response.json({
+        id: "user-123",
+        allow_platform_ai: true,
+        allow_platform_sandbox: true,
+      });
+    }
+    if (url.pathname.endsWith("/repos")) {
+      assert.equal(url.searchParams.get("user_id"), "eq.user-123");
+      assert.equal(url.searchParams.get("id"), `eq.${REPO_ID}`);
+      return fixture.repoLookupFails
+        ? Response.json(
+            { message: "repository lookup failed" },
+            { status: 500 }
+          )
+        : Response.json(
+            fixture.repoFound ? { product_team_id: fixture.teamId } : null
+          );
+    }
+    if (url.pathname.endsWith("/team_members")) {
+      return Response.json(
+        url.searchParams.get("team_id") === `eq.${fixture.teamId}` &&
+          fixture.role
+          ? { id: "member-123", role: fixture.role }
+          : null
+      );
+    }
+    if (url.pathname.endsWith("/team_audit_events")) return Response.json(null);
+    if (url.pathname.endsWith("/rpc/get_oauth_token"))
+      return Response.json(null);
+    throw new Error(`Unexpected database boundary: ${url.pathname}`);
   };
   try {
-    await runTest();
+    await runTest(fixture);
   } finally {
     globalThis.fetch = originalFetch;
-    if (previousBackend === undefined) delete process.env.MOGPLEX_DATA_BACKEND;
-    else process.env.MOGPLEX_DATA_BACKEND = previousBackend;
-    if (previous === undefined) delete process.env.INTERNAL_API_SECRET;
-    else process.env.INTERNAL_API_SECRET = previous;
+    for (const [key, value] of previous) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
   }
 }
 
@@ -137,6 +191,7 @@ function sandboxRequest(body: unknown) {
       "content-type": "application/json",
       // Untrusted delegation headers from clients must never select the actor.
       "x-delegated-user-id": "other-user",
+      "x-mogplex-team-id": "00000000-0000-4000-8000-000000000999",
     },
     body: JSON.stringify(body),
   });
@@ -160,7 +215,7 @@ test("v1 sandbox creation restarts the caller's saved persistent workspace", asy
       }),
       loadTeamKeyAccess: async () => null,
     });
-    const response = await handler(sandboxRequest({ repoId: "repo-123" }));
+    const response = await handler(sandboxRequest({ repoId: REPO_ID }));
     const payload = await response.json();
     assert.equal(response.status, 202, JSON.stringify(payload));
     assert.equal(payload.data.sandbox.id, fixture.saved.id);
@@ -175,7 +230,7 @@ test("delegated v1 restart still rejects a workspace belonging to another user",
   await withInternalSecret(async () => {
     const fixture = await buildRestartingLauncher("other-user");
     const result = await fixture.launchSandbox("user-123", {
-      repoId: "repo-123",
+      repoId: REPO_ID,
     });
     assert.deepEqual(result, {
       ok: false,
@@ -210,7 +265,123 @@ test("v1 sandbox creation rejects invalid input and missing authentication befor
     resolveApiKey: async () => ({ ok: false, reason: "invalid" }),
   });
   assert.equal(
-    (await unauthenticated(sandboxRequest({ repoId: "repo-123" }))).status,
+    (await unauthenticated(sandboxRequest({ repoId: REPO_ID }))).status,
     401
   );
+});
+
+async function createAuthenticatedHandler(
+  launchSandbox: Awaited<
+    ReturnType<typeof buildRestartingLauncher>
+  >["launchSandbox"]
+) {
+  const { createMogplexApiSandboxesPostHandler } =
+    await import("../../app/api/v1/mogplex/sandboxes/route");
+  return createMogplexApiSandboxesPostHandler({
+    launchSandbox,
+    resolveApiKey: async () => ({
+      ok: true,
+      auth: {
+        userId: "user-123",
+        keyId: "key-1",
+        scopes: ["write"],
+        access: "full",
+      },
+    }),
+    loadTeamKeyAccess: async () => "full",
+  });
+}
+
+test("v1 launch returns a safe 503 when delegated authentication is not configured", async () => {
+  await withInternalSecret(async () => {
+    const { launchMogplexApiSandbox } =
+      await import("../../app/api/v1/mogplex/sandboxes/route");
+    const handler = await createAuthenticatedHandler(launchMogplexApiSandbox);
+    delete process.env.INTERNAL_API_SECRET;
+    const originalError = console.error;
+    const diagnostics: unknown[][] = [];
+    console.error = (...args: unknown[]) => diagnostics.push(args);
+    try {
+      const response = await handler(sandboxRequest({ repoId: REPO_ID }));
+      assert.equal(response.status, 503);
+      const payload = await response.json();
+      assert.equal(payload.error.code, "SERVICE_UNAVAILABLE");
+      assert.doesNotMatch(
+        payload.error.message,
+        /INTERNAL_API_SECRET|delegated|configured/i
+      );
+      assert.match(JSON.stringify(diagnostics), /INTERNAL_API_SECRET/);
+    } finally {
+      console.error = originalError;
+    }
+  });
+});
+
+test("a team developer can restart an owned repository's saved sandbox", async () => {
+  await withInternalSecret(async (state) => {
+    state.teamId = TEAM_ID;
+    const fixture = await buildRestartingLauncher();
+    const handler = await createAuthenticatedHandler(fixture.launchSandbox);
+    const response = await handler(sandboxRequest({ repoId: REPO_ID }));
+    assert.equal(response.status, 202, await response.clone().text());
+    const payload = await response.json();
+    assert.equal(payload.data.sandbox.id, fixture.saved.id);
+    assert.equal(payload.data.sandbox.status, "running");
+    assert.deepEqual(fixture.providerCalls, [false, true]);
+  });
+});
+
+for (const role of ["viewer", null] as const) {
+  test(`v1 launch rejects a team ${role ?? "non-member"} before starting a VM`, async () => {
+    await withInternalSecret(async (state) => {
+      state.teamId = TEAM_ID;
+      state.role = role;
+      const { launchMogplexApiSandbox } =
+        await import("../../app/api/v1/mogplex/sandboxes/route");
+      const handler = await createAuthenticatedHandler(launchMogplexApiSandbox);
+      const response = await handler(sandboxRequest({ repoId: REPO_ID }));
+      assert.equal(response.status, 403, await response.clone().text());
+      const payload = await response.json();
+      assert.equal(payload.error.code, "FORBIDDEN");
+      assert.match(payload.error.message, /tools\.bash/);
+    });
+  });
+}
+
+test("restart rechecks the real team capability after creation admission", async () => {
+  await withInternalSecret(async (state) => {
+    state.teamId = TEAM_ID;
+    const fixture = await buildRestartingLauncher("user-123", () => {
+      state.role = "viewer";
+    });
+    const handler = await createAuthenticatedHandler(fixture.launchSandbox);
+    const response = await handler(sandboxRequest({ repoId: REPO_ID }));
+    assert.equal(response.status, 403, await response.clone().text());
+    const payload = await response.json();
+    assert.equal(payload.error.code, "FORBIDDEN");
+    assert.match(payload.error.message, /tools\.bash/);
+    assert.deepEqual(fixture.providerCalls, []);
+  });
+});
+
+test("v1 launch refuses a repository the caller does not own", async () => {
+  await withInternalSecret(async (state) => {
+    state.repoFound = false;
+    const fixture = await buildRestartingLauncher();
+    const handler = await createAuthenticatedHandler(fixture.launchSandbox);
+    const response = await handler(sandboxRequest({ repoId: REPO_ID }));
+    assert.equal(response.status, 404);
+    assert.deepEqual(fixture.providerCalls, []);
+  });
+});
+
+test("v1 launch fails closed when repository scope cannot be loaded", async () => {
+  await withInternalSecret(async (state) => {
+    state.repoLookupFails = true;
+    const fixture = await buildRestartingLauncher();
+    const handler = await createAuthenticatedHandler(fixture.launchSandbox);
+    const response = await handler(sandboxRequest({ repoId: REPO_ID }));
+    assert.equal(response.status, 500);
+    assert.deepEqual(fixture.providerCalls, []);
+  });
 });

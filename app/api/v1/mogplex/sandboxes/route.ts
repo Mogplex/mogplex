@@ -1,5 +1,9 @@
 import { resolveApiKey } from "@/lib/auth/api-key";
-import { buildInternalApiHeaders } from "@/lib/internal-api-auth";
+import {
+  buildInternalApiHeaders,
+  getInternalApiSecret,
+} from "@/lib/internal-api-auth";
+import { getOwnedRepo } from "@/lib/repos";
 import type { resolveMogplexOAuthToken } from "@/lib/auth/mogplex-oauth";
 import {
   normalizeOptionalSearchParam,
@@ -10,7 +14,10 @@ import {
   mogplexApiSuccess,
   resolveMogplexApiUser,
 } from "@/lib/mogplex-api/response";
-import { consumeSandboxLaunchResponse } from "@/lib/mogplex-api/sandbox-launch";
+import {
+  consumeSandboxLaunchResponse,
+  type MogplexApiSandboxLaunchResult,
+} from "@/lib/mogplex-api/sandbox-launch";
 import { requireFullAccessKey } from "@/lib/mogplex-api/credential-boundary";
 import {
   requireKeyAllowedOn,
@@ -36,34 +43,47 @@ const defaultMogplexApiSandboxesGetDeps: MogplexApiSandboxesGetDeps = {
   launchSandbox: launchMogplexApiSandbox,
 };
 
-async function postMogplexApiSandbox(request: Request, userId: string) {
-  const [
-    { createSandboxPostHandler },
-    { loadSandboxServiceCredentialsForUser },
-  ] = await Promise.all([
-    import("@/app/api/sandbox/route"),
-    import("@/lib/sandbox/get-user-credentials"),
-  ]);
-  const credentials = await loadSandboxServiceCredentialsForUser(userId);
-  const launch = createSandboxPostHandler({
-    getSandboxServiceCredentials: async () => credentials,
-  });
-  return launch(request);
+async function postMogplexApiSandbox(request: Request) {
+  const [{ createSandboxPostHandler }, { createMogplexApiSandboxPostDeps }] =
+    await Promise.all([
+      import("@/app/api/sandbox/route"),
+      import("./_lib/launch-deps"),
+    ]);
+  return createSandboxPostHandler(createMogplexApiSandboxPostDeps())(request);
 }
 
 export async function launchMogplexApiSandbox(
   userId: string,
   body: Record<string, unknown>,
   post = postMogplexApiSandbox
-) {
+): Promise<MogplexApiSandboxLaunchResult> {
+  if (!getInternalApiSecret()) {
+    console.error(
+      "[mogplex-api/sandboxes] INTERNAL_API_SECRET is not configured"
+    );
+    return {
+      ok: false,
+      status: 503,
+      error: "The sandbox service is not available. Try again later.",
+    };
+  }
+  const repoId = typeof body.repoId === "string" ? body.repoId.trim() : "";
+  if (!repoId) return { ok: false, status: 400, error: "repoId is required" };
+  const repo = await getOwnedRepo<{ product_team_id: string | null }>(
+    repoId,
+    userId,
+    "product_team_id"
+  );
+  if (!repo) return { ok: false, status: 404, error: "Repository not found" };
   const response = await post(
     new Request("https://mogplex.internal/api/sandbox", {
       method: "POST",
       // Reusing a stopped VM delegates to RESTART, which authenticates again.
-      headers: buildInternalApiHeaders(userId),
+      headers: buildInternalApiHeaders(userId, {
+        teamId: repo.product_team_id,
+      }),
       body: JSON.stringify(body),
-    }),
-    userId
+    })
   );
   return consumeSandboxLaunchResponse(response);
 }
@@ -146,7 +166,11 @@ export function createMogplexApiSandboxesPostHandler(
       const result = await deps.launchSandbox(user.userId, body);
       if (!result.ok) {
         return mogplexApiError(
-          result.status >= 500 ? "SERVICE_UNAVAILABLE" : "BAD_REQUEST",
+          result.status >= 500
+            ? "SERVICE_UNAVAILABLE"
+            : result.status === 403
+              ? "FORBIDDEN"
+              : "BAD_REQUEST",
           result.error,
           result.status
         );
