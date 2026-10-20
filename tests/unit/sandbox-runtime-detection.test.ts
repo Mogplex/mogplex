@@ -21,6 +21,32 @@ for (const fixture of [
     runtime: "node24",
   },
   {
+    name: "nested app without a root manifest",
+    files: {
+      "web/package.json":
+        '{"scripts":{"dev":"next dev"},"engines":{"node":">=24"}}',
+    },
+    runtime: "node24",
+  },
+  {
+    name: "nested app ahead of Python root tooling",
+    files: {
+      "pyproject.toml": "[project]",
+      "web/package.json":
+        '{"scripts":{"dev":"next dev"},"engines":{"node":">=26"}}',
+    },
+    runtime: "node26",
+  },
+  {
+    name: "explicit Python root over a nested web app",
+    root: "etl",
+    files: {
+      "etl/pyproject.toml": "[project]",
+      "web/package.json": '{"scripts":{"dev":"next dev"}}',
+    },
+    runtime: "python3.13",
+  },
+  {
     name: "engine requirement",
     files: { "package.json": '{"engines":{"node":">=24.0.0"}}' },
     runtime: "node24",
@@ -62,6 +88,18 @@ for (const fixture of [
       init?: RequestInit
     ) => {
       const url = new URL(String(input));
+      if (url.pathname.includes("/git/trees/")) {
+        assert.equal(
+          decodeURIComponent(url.pathname.split("/git/trees/")[1]),
+          "feature/runtime"
+        );
+        return Response.json({
+          tree: Object.keys(fixture.files).map((path) => ({
+            type: "blob",
+            path,
+          })),
+        });
+      }
       assert.equal(url.searchParams.get("ref"), "feature/runtime");
       const file = decodeURIComponent(url.pathname.split("/contents/")[1]);
       const content = (fixture.files as Partial<Record<string, string>>)[file];

@@ -35,6 +35,19 @@ function repository(
 }
 
 describe("pinned package dev ports", () => {
+  it("follows a workspace declared in an inline pnpm list", async () => {
+    const files = repository("pnpm --filter @acme/portal dev", "next dev", {
+      "package.json": JSON.stringify({
+        scripts: { dev: "pnpm --filter @acme/portal dev" },
+      }),
+      "pnpm-workspace.yaml": 'packages: ["products/portal"]',
+      "products/portal/package.json": JSON.stringify({
+        name: "@acme/portal",
+        scripts: { dev: "next dev --port 4777" },
+      }),
+    });
+    expect(await resolvePackageDevPort(files, {})).toBe(4777);
+  });
   it.each([
     ["next dev --port 3015", 3015],
     ["next dev -p 4001", 4001],

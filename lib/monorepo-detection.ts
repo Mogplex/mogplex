@@ -1,3 +1,5 @@
+import { parse } from "yaml";
+
 const MONOREPO_MARKERS = [
   "pnpm-workspace.yaml",
   "turbo.json",
@@ -146,43 +148,22 @@ async function detectFramework(
 }
 
 export function parsePnpmWorkspaceGlobs(text: string): string[] {
-  const globs: string[] = [];
-  const lines = text.split(/\r?\n/);
-  let inPackages = false;
-  let sectionIndent = 0;
-
-  for (const line of lines) {
-    if (!inPackages) {
-      const match = /^(\s*)packages:\s*$/.exec(line);
-      if (match) {
-        inPackages = true;
-        sectionIndent = match[1]?.length ?? 0;
-      }
-      continue;
-    }
-
-    if (!line.trim() || line.trim().startsWith("#")) continue;
-
-    const indent = /^\s*/.exec(line)![0].length;
-    if (indent <= sectionIndent && !/^\s*-/.test(line)) {
-      break;
-    }
-
-    const itemMatch = /^\s*-\s*(.+?)\s*$/.exec(line);
-    if (!itemMatch) continue;
-
-    let value = itemMatch[1].trim();
+  try {
+    const value: unknown = parse(text);
     if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
-    }
-
-    if (value) globs.push(value);
+      !value ||
+      typeof value !== "object" ||
+      !("packages" in value) ||
+      !Array.isArray(value.packages)
+    )
+      return [];
+    return value.packages.filter(
+      (path): path is string =>
+        typeof path === "string" && path.trim().length > 0
+    );
+  } catch {
+    return [];
   }
-
-  return globs;
 }
 
 function normalizeWorkspaceScanDir(glob: string): string | null {

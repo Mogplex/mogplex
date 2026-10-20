@@ -104,7 +104,11 @@ test("baseline streaming ensures Bun before launching the dev command", async ()
       if (opts.cmd === "node") {
         return {
           stdout: async () =>
-            opts.args?.[1] === "process.versions.node" ? "22.22.0" : "1",
+            opts.args?.[1]?.includes("const packages = []")
+              ? '[""]'
+              : opts.args?.[1] === "process.versions.node"
+                ? "22.22.0"
+                : "1",
           stderr: async () => "",
           exitCode: 0,
         };

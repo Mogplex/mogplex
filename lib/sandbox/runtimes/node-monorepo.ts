@@ -1,5 +1,10 @@
 import { resolveSandboxPath } from "@/lib/repo-settings";
-import { parsePnpmWorkspaceGlobs } from "@/lib/monorepo-detection";
+import {
+  discoverWorkspacePaths,
+  isDiscoveryDirectory,
+  readWorkspacePatterns,
+  workspacePathFilter,
+} from "./workspace-paths";
 import type { Sandbox } from "@vercel/sandbox";
 import {
   sandboxRepositoryFiles,
@@ -77,8 +82,10 @@ async function readPackageJsonInfo(
   rootDir?: string | null
 ): Promise<WebPackageInfo | null> {
   const pkgPath = resolveSandboxPath(rootDir, "package.json");
+  // RepositoryFiles (and Sandbox.readFileToBuffer) return null for missing
+  // files. Preserve access/I/O failures instead of choosing a different app.
+  const raw = await readTextFile(sandbox, pkgPath);
   try {
-    const raw = await readTextFile(sandbox, pkgPath);
     if (!raw) return null;
     const pkg = JSON.parse(raw) as {
       name?: unknown;
@@ -87,7 +94,9 @@ async function readPackageJsonInfo(
       devDependencies?: Record<string, unknown>;
     };
     const devScript =
-      typeof pkg.scripts?.dev === "string" ? pkg.scripts.dev : null;
+      typeof pkg.scripts?.dev === "string"
+        ? pkg.scripts.dev.trim() || null
+        : null;
     const deps = {
       ...pkg.dependencies,
       ...pkg.devDependencies,
@@ -146,225 +155,80 @@ function isViablePreviewTarget(info: WebPackageInfo | null): boolean {
   return isWebPackage(info);
 }
 
-/**
- * Parse the monorepo workspace config (pnpm-workspace.yaml, package.json
- * workspaces, or lerna.json) and return categorised paths:
- * - directPaths: specific workspace paths to probe (e.g. "web", "dashboard")
- * - scanDirs: directories whose subdirectories should be listed (e.g. "packages")
- */
-async function resolveWorkspaceScanTargets(
-  sandbox: RepositoryFiles
-): Promise<{ directPaths: string[]; scanDirs: string[] }> {
-  const directPaths: string[] = [];
-  const scanDirs: string[] = [];
-  const seen = new Set<string>();
-
-  let globs: string[] = [];
-
-  // Try pnpm-workspace.yaml first (most explicit config).
-  try {
-    const pnpmWsText = await readTextFile(sandbox, "pnpm-workspace.yaml");
-    if (pnpmWsText) {
-      globs = parsePnpmWorkspaceGlobs(pnpmWsText);
-    }
-  } catch {
-    /* ignore */
-  }
-
-  // Fall back to package.json workspaces field.
-  if (globs.length === 0) {
-    try {
-      const rootPkgText = await readTextFile(sandbox, "package.json");
-      if (rootPkgText) {
-        const parsed = JSON.parse(rootPkgText) as {
-          workspaces?: string[] | { packages?: string[] };
-        };
-        if (Array.isArray(parsed.workspaces)) {
-          globs = parsed.workspaces;
-        } else if (Array.isArray(parsed.workspaces?.packages)) {
-          globs = parsed.workspaces.packages;
-        }
-      }
-    } catch {
-      /* ignore */
-    }
-  }
-
-  // Fall back to lerna.json packages field.
-  if (globs.length === 0) {
-    try {
-      const lernaText = await readTextFile(sandbox, "lerna.json");
-      if (lernaText) {
-        const parsed = JSON.parse(lernaText) as { packages?: string[] };
-        if (Array.isArray(parsed.packages)) {
-          globs = parsed.packages;
-        }
-      }
-    } catch {
-      /* ignore */
-    }
-  }
-
-  for (const glob of globs) {
-    const normalized = glob
-      .trim()
-      .replace(/^\.\/+/, "")
-      .replace(/\/+$/, "");
-    if (!normalized || normalized === ".") continue;
-
-    if (normalized.includes("*")) {
-      // Glob pattern -> extract the parent directory to scan.
-      const dir = normalized.replace(/\/\*\*?$/, "").replace(/\/+$/, "");
-      if (dir && !seen.has(dir)) {
-        scanDirs.push(dir);
-        seen.add(dir);
-      }
-    } else if (!seen.has(normalized)) {
-      directPaths.push(normalized);
-      seen.add(normalized);
-    }
-  }
-
-  return { directPaths, scanDirs };
-}
-
-/** Checks whether the repo root is the top of a monorepo (so we should
- * consider redirecting to a workspace member). */
-async function isMonorepoRoot(sandbox: RepositoryFiles): Promise<boolean> {
-  const [pnpmWs, turboJson, lernaJson, nxJson, rushJson] = await Promise.all([
-    sandbox.readText("pnpm-workspace.yaml").then((text) => text !== null),
-    sandbox.readText("turbo.json").then((text) => text !== null),
-    sandbox.readText("lerna.json").then((text) => text !== null),
-    sandbox.readText("nx.json").then((text) => text !== null),
-    sandbox.readText("rush.json").then((text) => text !== null),
-  ]);
-  if (pnpmWs || turboJson || lernaJson || nxJson || rushJson) return true;
-  try {
-    const raw = await readTextFile(sandbox, "package.json");
-    if (!raw) return false;
-    const parsed = JSON.parse(raw) as { workspaces?: unknown };
-    return Boolean(parsed.workspaces);
-  } catch {
-    return false;
-  }
-}
-
-/** List immediate workspace directories through the repository boundary. */
-async function listSandboxSubdirs(
-  files: RepositoryFiles,
-  dir: string
-): Promise<string[]> {
-  return (await files.listDirectories(dir)).map((name) => `${dir}/${name}`);
-}
-
 export function resolveMonorepoWebTarget(sandbox: Sandbox) {
   return resolveMonorepoWebTargetFromFiles(sandboxRepositoryFiles(sandbox));
 }
 
 /**
- * Auto-select a web-app workspace inside a monorepo when the caller didn't
- * pin a rootDirectory. Returns null if the root itself is a web app, no
- * monorepo markers exist, or no candidate workspace looks like a web app.
- *
- * Preference order when multiple candidates match:
- *   1. Common paths (web, apps/web, packages/web, ...) - first match wins
- *   2. Direct workspace paths from config (pnpm-workspace.yaml, package.json
- *      workspaces, lerna.json) - sorted by framework priority
- *   3. Scanned subdirectories of workspace dirs (from config, falling back to
- *      apps/, packages/, services/) - sorted by framework priority
- *      (Next > Nuxt > SvelteKit > Astro > Remix > Vite > React/Vue > ...)
- *
- * Only workspaces with a recognised framework AND a `dev` script are eligible
- * so the sandbox can actually launch a preview server.
+ * Select a runnable nested web app without requiring workspace metadata.
+ * Explicit launch roots bypass this function. A runnable root app wins;
+ * otherwise common app paths (in the listed order), configured workspaces,
+ * then source directories are considered. Fallback candidates use framework
+ * priority, then path order, so directory listing order cannot change selection.
  */
 export async function resolveMonorepoWebTargetFromFiles(
   sandbox: RepositoryFiles
 ): Promise<{ path: string; framework: string | null } | null> {
-  // If the repo root itself is a web app, don't redirect - the user's dev
-  // server already lives at the root.
   const rootInfo = await readPackageJsonInfo(sandbox, null);
-  if (isWebPackage(rootInfo)) return null;
+  if (isViablePreviewTarget(rootInfo)) return null;
 
-  // Only activates for monorepos.
-  if (!(await isMonorepoRoot(sandbox))) return null;
-
-  // Phase 1: Probe well-known paths in parallel (fast path, deterministic order).
+  const packageDirectories = await sandbox.listPackageDirectories?.();
+  if (packageDirectories?.length === 0) return null;
+  const patterns = await readWorkspacePatterns(sandbox);
+  // Apply exclusions to common paths too; an excluded legacy web/ must never
+  // shadow the app declared in workspace configuration.
+  const allowed = workspacePathFilter(patterns.excludes);
   const commonResults = await Promise.all(
-    COMMON_WEB_WORKSPACE_PATHS.map(async (candidate) => ({
-      path: candidate,
-      info: await readPackageJsonInfo(sandbox, candidate),
+    COMMON_WEB_WORKSPACE_PATHS.filter(
+      (path) =>
+        allowed(path) &&
+        (!packageDirectories || packageDirectories.includes(path))
+    ).map(async (path) => ({
+      path,
+      info: await readPackageJsonInfo(sandbox, path),
     }))
   );
   for (const { path, info } of commonResults) {
-    if (isViablePreviewTarget(info)) {
+    if (isViablePreviewTarget(info))
       return { path, framework: info!.framework };
-    }
   }
 
-  // Phase 2: Parse workspace config for paths beyond the common set.
-  const commonSet = new Set<string>(
-    COMMON_WEB_WORKSPACE_PATHS as readonly string[]
+  const configured = await discoverWorkspacePaths(
+    sandbox,
+    patterns,
+    packageDirectories
   );
-  const { directPaths, scanDirs } = await resolveWorkspaceScanTargets(sandbox);
-
-  // Probe direct workspace paths not already covered by common paths.
-  const extraDirect = directPaths.filter((p) => !commonSet.has(p));
-  if (extraDirect.length > 0) {
-    const directResults = await Promise.all(
-      extraDirect.map(async (path) => ({
+  const choose = async (candidates: string[]) => {
+    const results = await Promise.all(
+      [...new Set(candidates)].filter(allowed).map(async (path) => ({
         path,
         info: await readPackageJsonInfo(sandbox, path),
       }))
     );
-    const viable = directResults
-      .filter(({ info }) => isViablePreviewTarget(info))
-      .map(({ path, info }) => ({
-        path,
-        framework: info!.framework!,
-        priority:
-          FRAMEWORK_PRIORITY[info!.framework!] ??
-          Object.keys(FRAMEWORK_PRIORITY).length,
-      }));
-    if (viable.length > 0) {
-      viable.sort((a, b) => a.priority - b.priority);
-      return { path: viable[0].path, framework: viable[0].framework };
-    }
-  }
-
-  // Phase 3: Scan workspace directories for web-app subdirectories.
-  // Merge config-discovered dirs with defaults, deduplicated.
-  const allScanDirs = new Set([
-    ...scanDirs,
-    ...(MONOREPO_SCAN_DIRS as readonly string[]),
-  ]);
-  const candidates: Array<{
-    path: string;
-    framework: string;
-    priority: number;
-  }> = [];
-
-  for (const scanDir of allScanDirs) {
-    const subdirs = await listSandboxSubdirs(sandbox, scanDir);
-    const subdirResults = await Promise.all(
-      subdirs.map(async (subdir) => ({
-        subdir,
-        info: await readPackageJsonInfo(sandbox, subdir),
-      }))
+    const viable = results.filter(({ info }) => isViablePreviewTarget(info));
+    viable.sort(
+      (a, b) =>
+        (FRAMEWORK_PRIORITY[a.info!.framework!] ?? 100) -
+          (FRAMEWORK_PRIORITY[b.info!.framework!] ?? 100) ||
+        a.path.localeCompare(b.path, "en")
     );
-    for (const { subdir, info } of subdirResults) {
-      if (isViablePreviewTarget(info) && info!.framework) {
-        candidates.push({
-          path: subdir,
-          framework: info!.framework,
-          priority:
-            FRAMEWORK_PRIORITY[info!.framework] ??
-            Object.keys(FRAMEWORK_PRIORITY).length,
-        });
-      }
-    }
-  }
+    return viable[0]
+      ? { path: viable[0].path, framework: viable[0].info!.framework }
+      : null;
+  };
+  const selected = await choose(configured.paths);
+  if (selected) return selected;
+  if (packageDirectories) return choose(packageDirectories);
 
-  if (candidates.length === 0) return null;
-  candidates.sort((a, b) => a.priority - b.priority);
-  return { path: candidates[0].path, framework: candidates[0].framework };
+  const rootDirs = (await sandbox.listDirectories("")).filter(
+    isDiscoveryDirectory
+  );
+  const nested = await Promise.all(
+    MONOREPO_SCAN_DIRS.map(async (directory) =>
+      (await sandbox.listDirectories(directory))
+        .filter(isDiscoveryDirectory)
+        .map((name) => `${directory}/${name}`)
+    )
+  );
+  return choose([...rootDirs, ...nested.flat()]);
 }

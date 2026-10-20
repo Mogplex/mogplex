@@ -46,6 +46,11 @@ function mockRepository(extra: Record<string, string> = {}) {
       expect(new Headers(init?.headers).get("Authorization")).toBe(
         "Bearer fixture"
       );
+      if (url.pathname.includes("/git/trees/")) {
+        return Response.json({
+          tree: Object.keys(files).map((path) => ({ type: "blob", path })),
+        });
+      }
       const path = decodeURIComponent(
         url.pathname.split("/contents/")[1] ?? ""
       );
@@ -78,8 +83,14 @@ afterEach(() => {
 it("inspects the requested ref and follows its workspace pin", async () => {
   const fetch = mockRepository();
   expect(await detectGithubDevPort(repoInput)).toBe(3015);
-  for (const [url] of fetch.mock.calls)
-    expect(new URL(String(url)).searchParams.get("ref")).toBe(repoInput.ref);
+  for (const [url] of fetch.mock.calls) {
+    const parsed = new URL(String(url));
+    expect(
+      parsed.pathname.includes("/git/trees/")
+        ? decodeURIComponent(parsed.pathname.split("/git/trees/")[1])
+        : parsed.searchParams.get("ref")
+    ).toBe(repoInput.ref);
+  }
 });
 
 it("honors a manual port without any repository requests", async () => {

@@ -2,6 +2,54 @@ import type { Sandbox } from "@vercel/sandbox";
 import { expect, it } from "vitest";
 import { resolveBootstrapContext } from "./client-bootstrap-context";
 
+it.each([undefined, "admin"])(
+  "boots a mixed repository in its detected app or explicit root (%s)",
+  async (rootDirectory) => {
+    const files: Record<string, string> = {
+      "etl/main.py": "",
+      "web/package.json": JSON.stringify({
+        dependencies: { next: "16" },
+        scripts: { dev: "next dev --port 3015" },
+      }),
+      "web/pnpm-lock.yaml": "lockfileVersion: '9.0'",
+      "admin/package.json": JSON.stringify({
+        dependencies: { vite: "7" },
+        scripts: { dev: "vite --port 4555" },
+      }),
+      "admin/yarn.lock": "",
+    };
+    const sandbox = {
+      readFile: async ({ path }: { path: string }) =>
+        path in files ? {} : null,
+      readFileToBuffer: async ({ path }: { path: string }) =>
+        path in files ? Buffer.from(files[path]) : null,
+      writeFiles: async () => {},
+      runCommand: async ({ args }: { args: string[] }) => ({
+        stdout: async () =>
+          args[1]?.includes("const packages = []") ? '["web","admin"]' : "0",
+        exitCode: 0,
+      }),
+      domain: (port: number) => `https://preview-${port}.example.test`,
+    } as unknown as Sandbox;
+    const context = await resolveBootstrapContext(sandbox, { rootDirectory });
+    const root = rootDirectory ?? "web";
+    expect(context.normalizedRoot).toBe(root);
+    expect(context.devLogPath).toBe(`${root}/.mogplex/dev.log`);
+    expect(context.packageManager).toBe(rootDirectory ? "yarn" : "pnpm");
+    expect(context.devCommand).toBe(
+      rootDirectory ? "yarn run dev --host" : "pnpm run dev"
+    );
+    expect(context.installCommand).toBe(
+      rootDirectory
+        ? "yarn install --ignore-scripts"
+        : "pnpm install --ignore-scripts"
+    );
+    expect(context.previewUrl).toBe(
+      `https://preview-${rootDirectory ? 4555 : 3015}.example.test`
+    );
+  }
+);
+
 it.each([
   {
     label: "delegated workspace",
