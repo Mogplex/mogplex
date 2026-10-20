@@ -215,6 +215,40 @@ it("uses a complete package index to find deeply nested apps without directory f
   });
 });
 
+it.each([
+  {
+    files: { "web/package.json": web() },
+    expected: { path: "web", framework: "next" },
+  },
+  { files: { "web/package.json": "{}" }, expected: null },
+  {
+    files: {
+      "pnpm-workspace.yaml": "packages: ['*', '!web']",
+      "web/package.json": web(),
+      "frontend/package.json": web("vite"),
+    },
+    expected: { path: "frontend", framework: "vite" },
+  },
+])(
+  "selects indexed common paths and respects exclusions and non-apps",
+  async ({ files, expected }) => {
+    const contents = Object.fromEntries(
+      Object.entries(files).filter(
+        (entry): entry is [string, string] => typeof entry[1] === "string"
+      )
+    );
+    const source = repository(contents);
+    source.listPackageDirectories = async () =>
+      Object.keys(contents)
+        .filter((path) => path.endsWith("/package.json"))
+        .map((path) => path.slice(0, -13));
+    source.listDirectories = async () => {
+      throw new Error("must use complete package index");
+    };
+    expect(await resolveMonorepoWebTargetFromFiles(source)).toEqual(expected);
+  }
+);
+
 it("skips web/config probes for repositories with no package manifests", async () => {
   const reads: string[] = [];
   const files: RepositoryFiles = {

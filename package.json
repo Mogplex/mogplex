@@ -200,6 +200,7 @@
     "undici": "7.29.1",
     "use-stick-to-bottom": "^1.1.6",
     "vaul": "^1.1.2",
+    "yaml": "2.8.3",
     "zod": "^3.24.1",
     "zustand": "^5.0.0"
   },
@@ -266,7 +267,6 @@
     "tw-animate-css": "1.3.3",
     "typescript": "5.7.3",
     "ultracite": "^7.4.3",
-    "vitest": "^4.1.11",
-    "yaml": "2.8.3"
+    "vitest": "^4.1.11"
   }
 }

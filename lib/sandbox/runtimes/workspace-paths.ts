@@ -1,7 +1,7 @@
 import { posix } from "node:path";
 import picomatch from "picomatch";
 import JSON5 from "json5";
-import { parse } from "yaml";
+import { parsePnpmWorkspaceGlobs } from "@/lib/monorepo-detection";
 import {
   DISCOVERY_IGNORED_DIRECTORIES,
   type RepositoryFiles,
@@ -32,11 +32,9 @@ async function readConfig(files: RepositoryFiles, path: string) {
   try {
     return record(
       text
-        ? path.endsWith(".yaml")
-          ? parse(text)
-          : path === "package.json"
-            ? JSON.parse(text)
-            : parseJSON5(text)
+        ? path === "package.json"
+          ? JSON.parse(text)
+          : parseJSON5(text)
         : null
     );
   } catch {
@@ -72,13 +70,13 @@ export function isDiscoveryDirectory(name: string) {
 
 export async function readWorkspacePatterns(files: RepositoryFiles) {
   const [pnpm, pkg, lerna, nx, rush] = await Promise.all([
-    readConfig(files, "pnpm-workspace.yaml"),
+    files.readText("pnpm-workspace.yaml"),
     readConfig(files, "package.json"),
     readConfig(files, "lerna.json"),
     readConfig(files, "nx.json"),
     readConfig(files, "rush.json"),
   ]);
-  let patterns = strings(pnpm.packages);
+  let patterns = parsePnpmWorkspaceGlobs(pnpm ?? "");
   if (patterns.length === 0) patterns = strings(pkg.workspaces);
   if (patterns.length === 0)
     patterns = strings(record(pkg.workspaces).packages);
