@@ -334,9 +334,10 @@ test("bootstrapFromSnapshotStreaming installs Bun and puts it on PATH when the r
       detached?: boolean;
     }) => {
       if (opts.cmd === "node") {
-        // The repo-wide bun usage probe.
+        // Package indexing and the repo-wide Bun usage probe are separate commands.
         return {
-          stdout: async () => "1",
+          stdout: async () =>
+            opts.args?.[1]?.includes("const packages = []") ? '[""]' : "1",
           stderr: async () => "",
           exitCode: 0,
         };
