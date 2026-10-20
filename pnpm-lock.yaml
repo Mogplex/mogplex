@@ -269,6 +269,9 @@ importers:
       jose:
         specifier: ^6.2.3
         version: 6.2.3
+      json5:
+        specifier: 2.2.3
+        version: 2.2.3
       just-bash:
         specifier: ^2.13.1
         version: 2.13.1
@@ -299,6 +302,9 @@ importers:
       pg:
         specifier: ^8.22.0
         version: 8.22.0
+      picomatch:
+        specifier: 4.0.4
+        version: 4.0.4
       radix-ui:
         specifier: ^1.6.7
         version: 1.6.7(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -423,6 +429,9 @@ importers:
       '@types/pg':
         specifier: ^8.20.3
         version: 8.20.3
+      '@types/picomatch':
+        specifier: ^4.0.3
+        version: 4.0.3
       '@types/react':
         specifier: 19.2.14
         version: 19.2.14
@@ -4614,6 +4623,9 @@ packages:
 
   '@types/phoenix@1.6.7':
     resolution: {integrity: sha512-oN9ive//QSBkf19rfDv45M7eZPi0eEXylht2OLEXicu5b4KoQ1OzXIw+xDSGWxSxe1JmepRR/ZH283vsu518/Q==}
+
+  '@types/picomatch@4.0.3':
+    resolution: {integrity: sha512-iG0T6+nYJ9FAPmx9SsUlnwcq1ZVRuCXcVEvWnntoPlrOpwtSTKNDC9uVAxTsC3PUvJ+99n4RpAcNgBbHX3JSnQ==}
 
   '@types/prop-types@15.7.15':
     resolution: {integrity: sha512-F6bEyamV9jKGAFBEmlQnesRPGOQqS2+Uwi0Em15xenOxHaf2hv6L8YCVn3rPdPJOiJfPiCnLIRyvwVaqMY3MIw==}
@@ -14019,6 +14031,8 @@ snapshots:
       pg-types: 2.2.0
 
   '@types/phoenix@1.6.7': {}
+
+  '@types/picomatch@4.0.3': {}
 
   '@types/prop-types@15.7.15':
     optional: true

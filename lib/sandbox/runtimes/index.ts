@@ -71,11 +71,12 @@ export async function detectRuntimeFromGithub(
     files.readText(`${prefix}pyproject.toml`),
   ]);
 
-  // If both exist, prefer Node (user can override in settings)
-  if (pkg !== null) {
-    const autoTarget = rootDirectory
-      ? null
-      : await resolveMonorepoWebTargetFromFiles(files);
+  // Use the same target as bootstrap and port discovery, including mixed
+  // repositories with no root package.json or workspace manifest.
+  const autoTarget = rootDirectory
+    ? null
+    : await resolveMonorepoWebTargetFromFiles(files);
+  if (pkg !== null || autoTarget) {
     return detectNodeRuntimeFromFiles(files, autoTarget?.path ?? rootDirectory);
   }
   if (requirements !== null || pyproject !== null) return "python3.13";

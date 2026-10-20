@@ -21,6 +21,32 @@ for (const fixture of [
     runtime: "node24",
   },
   {
+    name: "nested app without a root manifest",
+    files: {
+      "web/package.json":
+        '{"scripts":{"dev":"next dev"},"engines":{"node":">=24"}}',
+    },
+    runtime: "node24",
+  },
+  {
+    name: "nested app ahead of Python root tooling",
+    files: {
+      "pyproject.toml": "[project]",
+      "web/package.json":
+        '{"scripts":{"dev":"next dev"},"engines":{"node":">=26"}}',
+    },
+    runtime: "node26",
+  },
+  {
+    name: "explicit Python root over a nested web app",
+    root: "etl",
+    files: {
+      "etl/pyproject.toml": "[project]",
+      "web/package.json": '{"scripts":{"dev":"next dev"}}',
+    },
+    runtime: "python3.13",
+  },
+  {
     name: "engine requirement",
     files: { "package.json": '{"engines":{"node":">=24.0.0"}}' },
     runtime: "node24",
