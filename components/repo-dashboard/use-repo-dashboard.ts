@@ -31,8 +31,6 @@ import {
 } from "./use-repo-actions";
 import { useRepoDashboardDerived, useFilteredRepos } from "./use-repo-derived";
 
-const useNeonBackend = process.env.NEXT_PUBLIC_MOGPLEX_DATA_BACKEND === "neon";
-
 export function useRepoDashboard({
   onOpenChat,
   onReposLoaded,
@@ -259,50 +257,11 @@ export function useRepoDashboard({
 
   useTableEvents({
     tables: ["repos"],
-    enabled: useNeonBackend && Boolean(user?.id),
+    enabled: Boolean(user?.id),
     onEvent: () => {
       void fetchData();
     },
   });
-
-  useEffect(() => {
-    if (process.env.NEXT_PUBLIC_MOGPLEX_DATA_BACKEND === "neon" || !user?.id)
-      return;
-
-    let active = true;
-    let disconnect = () => {};
-    const subscribe = async () => {
-      const { createClient } = await import("@/lib/supabase/client");
-      if (!active) return;
-      const supabase = createClient();
-      const channel = supabase
-        .channel(`repos:${user.id}`)
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table: "repos",
-            filter: `user_id=eq.${user.id}`,
-          },
-          () => {
-            void fetchData();
-          }
-        )
-        .subscribe();
-
-      disconnect = () => {
-        void supabase.removeChannel(channel);
-      };
-    };
-    void subscribe().catch((error) => {
-      if (active) console.error("[repo-dashboard] realtime load failed", error);
-    });
-    return () => {
-      active = false;
-      disconnect();
-    };
-  }, [user?.id, fetchData]);
 
   const filteredRepos = useFilteredRepos({
     ownerFilter,

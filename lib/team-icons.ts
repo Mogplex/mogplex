@@ -6,15 +6,9 @@ export const TEAM_ICONS_BUCKET = "team-icons";
 // open-redirect/XSS class of bug that would exist if icon_url were a free-form
 // column written by callers.
 //
-// Built from backend configuration — no admin client — so this module is safe
-// to import from anywhere without risking the service-role key landing in a
-// client bundle.
-//
-// Prefers NEXT_PUBLIC_SUPABASE_URL because the result is rendered as an
-// <img src> in the browser; SUPABASE_URL is only used as a fallback for
-// server-side deployments that don't set the public var (unlike
-// lib/supabase/admin.ts, which prefers SUPABASE_URL for its server-to-server
-// admin client where an internal hostname is preferable).
+// Icons live in the storage_objects table and the app serves them itself under
+// /storage/v1/object/public/*, so the URL is same-origin and relative. No
+// admin client is involved, so this module is safe to import from anywhere.
 // Filename segment must start with an alphanumeric character to reject
 // dot-only names like ".." or "." that would otherwise pass the character
 // class — HTTP clients or storage layers that normalize path segments could
@@ -24,10 +18,5 @@ const TEAM_ICON_PATH_PATTERN = /^[A-Za-z0-9_-]+\/[A-Za-z0-9][A-Za-z0-9._-]*$/;
 export function teamIconUrlFromPath(iconPath: string | null): string | null {
   if (!iconPath) return null;
   if (!TEAM_ICON_PATH_PATTERN.test(iconPath)) return null;
-  if (process.env.NEXT_PUBLIC_MOGPLEX_DATA_BACKEND === "neon") {
-    return `/storage/v1/object/public/${TEAM_ICONS_BUCKET}/${iconPath}`;
-  }
-  const base = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL;
-  if (!base) return null;
-  return `${base.replace(/\/$/, "")}/storage/v1/object/public/${TEAM_ICONS_BUCKET}/${iconPath}`;
+  return `/storage/v1/object/public/${TEAM_ICONS_BUCKET}/${iconPath}`;
 }

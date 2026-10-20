@@ -44,6 +44,14 @@ const NOT_OPERATOR_CONFIG: Record<string, string> = {
     "retired name; instrumentation.ts reads it only to reject it",
   NEXT_PUBLIC_SANDBOX_DISABLE_USER_BILLING:
     "read only by the retired-name check in instrumentation.ts",
+  SUPABASE_URL:
+    "unit-test REST transport only (MOGPLEX_DATA_BACKEND=supabase); no deployment sets it",
+  NEXT_PUBLIC_SUPABASE_URL:
+    "unit-test REST transport only (MOGPLEX_DATA_BACKEND=supabase); no deployment sets it",
+  SUPABASE_SERVICE_ROLE_KEY:
+    "unit-test REST transport only (MOGPLEX_DATA_BACKEND=supabase); no deployment sets it",
+  SUPABASE_SECRET_KEY:
+    "unit-test REST transport only (MOGPLEX_DATA_BACKEND=supabase); no deployment sets it",
 };
 
 test("findEnvReads recognizes every supported read form", () => {

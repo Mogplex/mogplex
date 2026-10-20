@@ -20,10 +20,9 @@ describe("checkAppConfig", () => {
   const base = {
     NEXT_PUBLIC_APP_URL: "https://mogplex.example.com/",
     MOGPLEX_DATA_BACKEND: "neon",
-    NEXT_PUBLIC_MOGPLEX_DATA_BACKEND: "neon",
   };
 
-  it("should pass for a valid URL and agreeing neon flags", () => {
+  it("should pass for a valid URL and the neon backend", () => {
     expect(checkAppConfig(base)).toMatchObject({
       status: "pass",
       summary: "App URL https://mogplex.example.com",
@@ -56,12 +55,18 @@ describe("checkAppConfig", () => {
     );
   });
 
-  it("should fail when the backend flags disagree", () => {
+  it("should pass when the backend flag is unset", () => {
     expect(
-      checkAppConfig({ ...base, NEXT_PUBLIC_MOGPLEX_DATA_BACKEND: "supabase" })
+      checkAppConfig({ ...base, MOGPLEX_DATA_BACKEND: undefined }).status
+    ).toBe("pass");
+  });
+
+  it("should fail when the backend flag names the retired supabase backend", () => {
+    expect(
+      checkAppConfig({ ...base, MOGPLEX_DATA_BACKEND: "supabase" })
     ).toMatchObject({
       status: "fail",
-      summary: expect.stringMatching(/disagree/),
+      summary: expect.stringMatching(/not supported/),
     });
   });
 });

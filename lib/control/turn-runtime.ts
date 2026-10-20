@@ -9,7 +9,6 @@ import {
 import { resolveInfrastructureDiagnosticScope } from "@/lib/agents/user-facing-output";
 import { createControlNativeExecution } from "./native-execution";
 import { createTableEventListener } from "@/lib/db/table-event-listener";
-import { createControlSupabaseListener } from "./continuation-supabase-listener";
 import {
   assertControlTurnCurrent,
   claimControlTurn,
@@ -35,15 +34,7 @@ export async function executeControlTurn(
     combinedSignal.throwIfAborted();
     await assertControlTurnCurrent(turn, runtimeRunId);
   };
-  const listener =
-    process.env.MOGPLEX_DATA_BACKEND === "neon"
-      ? await createTableEventListener()
-      : await createControlSupabaseListener({
-          userId: payload.userId,
-          sessionId: turn.session_id,
-          continuationId: payload.aiCallId,
-          callId: payload.aiCallId,
-        });
+  const listener = await createTableEventListener();
   listener.onError((error) => controller.abort(error));
   listener.onNotification((event) => {
     if (

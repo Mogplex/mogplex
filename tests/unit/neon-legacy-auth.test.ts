@@ -51,12 +51,7 @@ test("retired OAuth decisions fail closed in Neon mode and preserve origin check
 
 test("retired waitlist validation cannot consume codes or mint cookies in Neon mode", async () => {
   const { POST } = await import("../../app/api/auth/waitlist/validate/route");
-  const response = await POST(
-    new Request("http://localhost:3000/api/auth/waitlist/validate", {
-      method: "POST",
-      body: JSON.stringify({ code: "unused-code" }),
-    })
-  );
+  const response = await POST();
   assert.equal(response.status, 410);
   assert.equal(response.headers.get("set-cookie"), null);
   assert.equal((await response.json()).error, "legacy_login_retired");

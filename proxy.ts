@@ -1,6 +1,4 @@
 import { NextResponse } from "next/server";
-import type { CookieOptions } from "@supabase/ssr";
-import { createServerClient } from "@supabase/ssr";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { lookupApiKeyAccess } from "@/lib/auth/api-key";
 import {
@@ -23,11 +21,8 @@ import { getCanonicalAppUrl } from "@/lib/app-url";
 import { resolveScope, type ScopeLookup } from "@/lib/middleware-scope";
 import type { NextRequest } from "next/server";
 
-type PendingCookie = { name: string; value: string; options: CookieOptions };
-
-// supabaseAdmin is the backend-aware data client: the Supabase service-role
-// REST client today, the pg-backed Neon shim when MOGPLEX_DATA_BACKEND=neon.
-// proxy.ts runs in the Node.js runtime, so the pg path is available here.
+// supabaseAdmin is the pg-backed PostgREST shim over Neon. proxy.ts runs in
+// the Node.js runtime, so the pg path is available here.
 function makeScopeDb(): ScopeLookup {
   return {
     findProfileBySlug: async (slug) => {
@@ -188,50 +183,19 @@ async function handleProxy(request: NextRequest, deps: ProxyDeps) {
     return NextResponse.next();
   }
 
-  // Create a response we can mutate (Supabase needs to set refreshed cookies)
-  let supabaseResponse = NextResponse.next({ request });
-  const pendingCookies: PendingCookie[] = [];
+  const passThrough = NextResponse.next({ request });
 
-  let user: { id: string } | null;
-  if (process.env.MOGPLEX_DATA_BACKEND === "neon") {
-    // better-auth session. With cookieCache enabled this usually verifies the
-    // signed cookie snapshot without a database round-trip; a stale cache
-    // falls through to the real session lookup. Dynamic import keeps the
-    // better-auth/pg stack out of the Supabase-backend request path.
-    const { auth } = await import("@/lib/better-auth/server");
-    const session = await auth.api.getSession({ headers: request.headers });
-    user = session?.user ? { id: session.user.id } : null;
-  } else {
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return request.cookies.getAll();
-          },
-          setAll(cookiesToSet) {
-            for (const { name, value, options } of cookiesToSet) {
-              request.cookies.set(name, value);
-              pendingCookies.push({ name, value, options });
-            }
-            supabaseResponse = NextResponse.next({ request });
-            for (const { name, value, options } of cookiesToSet)
-              supabaseResponse.cookies.set(name, value, options);
-          },
-        },
-      }
-    );
-    const {
-      data: { user: supabaseUser },
-    } = await supabase.auth.getUser();
-    user = supabaseUser ? { id: supabaseUser.id } : null;
-  }
+  // better-auth session. With cookieCache enabled this usually verifies the
+  // signed cookie snapshot without a database round-trip; a stale cache
+  // falls through to the real session lookup.
+  const { auth } = await import("@/lib/better-auth/server");
+  const session = await auth.api.getSession({ headers: request.headers });
+  const user = session?.user ? { id: session.user.id } : null;
 
   if (!user) {
     // Anonymous root renders the public landing page — never a login bounce.
     if (pathname === "/") {
-      return supabaseResponse;
+      return passThrough;
     }
 
     const referer = request.headers.get("referer");
@@ -251,7 +215,7 @@ async function handleProxy(request: NextRequest, deps: ProxyDeps) {
 
   // API routes are authed but unscoped — no slug resolution.
   if (pathname.startsWith("/api/")) {
-    return supabaseResponse;
+    return passThrough;
   }
 
   const { data: profile } = await supabaseAdmin
@@ -267,11 +231,7 @@ async function handleProxy(request: NextRequest, deps: ProxyDeps) {
     if (profile?.slug) {
       const url = new URL(`/${profile.slug as string}`, request.url);
       url.search = request.nextUrl.search;
-      const redirect = NextResponse.redirect(url);
-      for (const { name, value, options } of pendingCookies) {
-        redirect.cookies.set(name, value, options);
-      }
-      return redirect;
+      return NextResponse.redirect(url);
     }
     if (profile && !profile.slug) {
       console.warn(
@@ -279,12 +239,12 @@ async function handleProxy(request: NextRequest, deps: ProxyDeps) {
         { profileId: profile.id }
       );
     }
-    return supabaseResponse;
+    return passThrough;
   }
 
   const firstSegment = pathname.split("/")[1];
-  if (!firstSegment) return supabaseResponse;
-  if (isUnscopedAuthedRoutePath(pathname)) return supabaseResponse;
+  if (!firstSegment) return passThrough;
+  if (isUnscopedAuthedRoutePath(pathname)) return passThrough;
 
   const result = await resolveScope(
     firstSegment,
@@ -315,11 +275,7 @@ async function handleProxy(request: NextRequest, deps: ProxyDeps) {
     ) {
       const url = new URL(`/${profileSlug}${pathname}`, request.url);
       url.search = request.nextUrl.search;
-      const redirect = NextResponse.redirect(url);
-      for (const { name, value, options } of pendingCookies) {
-        redirect.cookies.set(name, value, options);
-      }
-      return redirect;
+      return NextResponse.redirect(url);
     }
     return notFoundResponse(request);
   }
@@ -338,11 +294,7 @@ async function handleProxy(request: NextRequest, deps: ProxyDeps) {
   requestHeaders.set("x-mogplex-scope-slug", result.slug);
   requestHeaders.set("x-mogplex-scope-id", scopeId);
 
-  const response = NextResponse.next({ request: { headers: requestHeaders } });
-  for (const { name, value, options } of pendingCookies) {
-    response.cookies.set(name, value, options);
-  }
-  return response;
+  return NextResponse.next({ request: { headers: requestHeaders } });
 }
 
 // Font assets live in `/public/fonts/**` and are served at the root. Without

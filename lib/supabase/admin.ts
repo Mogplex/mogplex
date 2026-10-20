@@ -11,31 +11,38 @@ type AdminConnectionRunnerDeps = {
 
 let cached: SupabaseClient | null = null;
 
+/** True only when a unit test explicitly opts into the supabase-js REST fixture transport. */
+function usesSupabaseRestTransport(
+  backend: string | undefined = process.env.MOGPLEX_DATA_BACKEND
+) {
+  return backend === "supabase";
+}
+
 function resolveAdminClient(): SupabaseClient {
   if (cached) return cached;
-  // MOGPLEX_DATA_BACKEND=neon routes every supabaseAdmin call through the
-  // pg-backed PostgREST shim against Neon instead of Supabase. Default stays
-  // "supabase" until the data copy lands, so the shim ships dark and the flip
-  // is a single env change (plus the one-time prod data copy).
+  // Production data lives in Neon: every supabaseAdmin call goes through the
+  // pg-backed PostgREST shim. The Supabase project is retired.
+  //
+  // The supabase-js REST client is kept only as a unit-test transport: tests
+  // opt in with MOGPLEX_DATA_BACKEND=supabase plus a fake SUPABASE_URL and a
+  // fetch mock. Nothing deployed sets that value, and an unset flag means Neon.
   //
   // The shim implements the subset of the supabase-js surface this codebase
   // uses (enforced by the tests/db battery); the cast erases the difference
-  // for the 150+ existing call sites and goes away with the Supabase branch
-  // once Supabase is fully retired.
-  cached =
-    process.env.MOGPLEX_DATA_BACKEND === "neon"
-      ? (createPostgrestShim(getNeonPool()) as unknown as SupabaseClient)
-      : createClient(
-          process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.SUPABASE_SERVICE_ROLE_KEY ||
-            process.env.SUPABASE_SECRET_KEY!
-        );
+  // for the 150+ existing call sites.
+  cached = usesSupabaseRestTransport()
+    ? createClient(
+        process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY ||
+          process.env.SUPABASE_SECRET_KEY!
+      )
+    : (createPostgrestShim(getNeonPool()) as unknown as SupabaseClient);
   return cached;
 }
 
 // Lazy so importing this module is side-effect-free: proxy.ts and unit tests
-// import it without backend env configured, and the client (Supabase REST or
-// pg shim) is only constructed on first actual use. Properties defined
+// import it without backend env configured, and the client (pg shim, or the
+// unit-test REST transport) is only constructed on first actual use. Properties defined
 // directly on the export (unit tests stub `from` via Object.defineProperty)
 // win over the resolved client.
 export const supabaseAdmin: SupabaseClient = new Proxy({} as SupabaseClient, {
@@ -65,7 +72,7 @@ export function createSupabaseAdminConnectionRunner(
   return async function withSupabaseAdminConnection<T>(
     operation: (client: SupabaseClient) => Promise<T>
   ): Promise<T> {
-    if (deps.getDataBackend() !== "neon") {
+    if (usesSupabaseRestTransport(deps.getDataBackend())) {
       return operation(deps.defaultClient);
     }
 
