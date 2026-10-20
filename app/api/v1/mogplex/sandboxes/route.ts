@@ -1,4 +1,5 @@
 import { resolveApiKey } from "@/lib/auth/api-key";
+import { buildInternalApiHeaders } from "@/lib/internal-api-auth";
 import type { resolveMogplexOAuthToken } from "@/lib/auth/mogplex-oauth";
 import {
   normalizeOptionalSearchParam,
@@ -35,10 +36,7 @@ const defaultMogplexApiSandboxesGetDeps: MogplexApiSandboxesGetDeps = {
   launchSandbox: launchMogplexApiSandbox,
 };
 
-async function launchMogplexApiSandbox(
-  userId: string,
-  body: Record<string, unknown>
-) {
+async function postMogplexApiSandbox(request: Request, userId: string) {
   const [
     { createSandboxPostHandler },
     { loadSandboxServiceCredentialsForUser },
@@ -50,12 +48,22 @@ async function launchMogplexApiSandbox(
   const launch = createSandboxPostHandler({
     getSandboxServiceCredentials: async () => credentials,
   });
-  const response = await launch(
+  return launch(request);
+}
+
+export async function launchMogplexApiSandbox(
+  userId: string,
+  body: Record<string, unknown>,
+  post = postMogplexApiSandbox
+) {
+  const response = await post(
     new Request("https://mogplex.internal/api/sandbox", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      // Reusing a stopped VM delegates to RESTART, which authenticates again.
+      headers: buildInternalApiHeaders(userId),
       body: JSON.stringify(body),
-    })
+    }),
+    userId
   );
   return consumeSandboxLaunchResponse(response);
 }
