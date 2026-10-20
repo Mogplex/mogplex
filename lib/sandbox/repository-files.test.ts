@@ -4,8 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { Sandbox } from "@vercel/sandbox";
-import { expect, it } from "vitest";
-import { sandboxRepositoryFiles } from "./repository-files";
+import { afterEach, expect, it, vi } from "vitest";
+import {
+  githubRepositoryFiles,
+  sandboxRepositoryFiles,
+} from "./repository-files";
 import { detectRepositoryDevPort } from "./dev-port";
 
 it("discovers a nonstandard workspace through the actual directory probe", async () => {
@@ -44,10 +47,75 @@ it("discovers a nonstandard workspace through the actual directory probe", async
     const files = sandboxRepositoryFiles(sandbox);
     expect(await files.listDirectories("services")).toEqual(["customer app"]);
     expect(await files.listDirectories("absent")).toEqual([]);
+    expect(await files.listPackageDirectories!()).toEqual([
+      "",
+      "services/customer app",
+    ]);
     expect(await detectRepositoryDevPort(files, {})).toBe(4777);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+afterEach(() => vi.restoreAllMocks());
+
+it("indexes GitHub package paths in one request at the requested ref", async () => {
+  const request = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    Response.json({
+      truncated: false,
+      tree: [
+        { type: "blob", path: "package.json" },
+        { type: "blob", path: "custom/deep/web/package.json" },
+        { type: "blob", path: "README.md" },
+        { type: "tree", path: "directory/package.json" },
+        null,
+      ],
+    })
+  );
+  const files = githubRepositoryFiles({
+    repoFullName: "acme/repo",
+    githubToken: "fixture",
+    ref: "feature/nested app",
+  });
+  expect(await files.listPackageDirectories!()).toEqual([
+    "",
+    "custom/deep/web",
+  ]);
+  expect(request).toHaveBeenCalledTimes(1);
+  expect(String(request.mock.calls[0][0])).toContain(
+    "/git/trees/feature%2Fnested%20app?recursive=1"
+  );
+});
+
+it.each([404, 200])(
+  "falls back when the tree is unavailable or truncated (%s)",
+  async (status) => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      Response.json({ truncated: true, tree: [] }, { status })
+    );
+    const files = githubRepositoryFiles({
+      repoFullName: "acme/repo",
+      githubToken: "fixture",
+      ref: "main",
+    });
+    expect(await files.listPackageDirectories!()).toBeNull();
+  }
+);
+
+it("reports GitHub index access and invalid-response failures", async () => {
+  const request = vi
+    .spyOn(globalThis, "fetch")
+    .mockResolvedValue(new Response("", { status: 403 }));
+  const files = githubRepositoryFiles({
+    repoFullName: "acme/repo",
+    githubToken: "fixture",
+    ref: "main",
+  });
+  await expect(files.listPackageDirectories!()).rejects.toThrow("GitHub 403");
+  request.mockResolvedValue(Response.json({}));
+  await expect(files.listPackageDirectories!()).rejects.toThrow(
+    "Invalid repository package index"
+  );
 });
 
 it("reports directory-probe failures rather than returning an unrelated default", async () => {

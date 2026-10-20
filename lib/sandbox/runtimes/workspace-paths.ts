@@ -1,18 +1,17 @@
 import { posix } from "node:path";
 import picomatch from "picomatch";
-import { parse as parseJSON5 } from "json5";
+import JSON5 from "json5";
 import { parse } from "yaml";
-import type { RepositoryFiles } from "../repository-files";
+import {
+  DISCOVERY_IGNORED_DIRECTORIES,
+  type RepositoryFiles,
+} from "../repository-files";
 
-const GENERATED_DIRECTORIES = new Set([
-  "node_modules",
-  "dist",
-  "build",
-  "coverage",
-  "vendor",
-  "venv",
-  "__pycache__",
-]);
+// JSON5's ESM entry has only a default export (unlike its CommonJS entry).
+// eslint-disable-next-line import-x/no-named-as-default-member -- The named import fails in Turbopack's ESM build.
+const { parse: parseJSON5 } = JSON5;
+
+const GENERATED_DIRECTORIES = new Set(DISCOVERY_IGNORED_DIRECTORIES);
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -32,7 +31,13 @@ async function readConfig(files: RepositoryFiles, path: string) {
   const text = await files.readText(path);
   try {
     return record(
-      text ? (path.endsWith(".yaml") ? parse(text) : parseJSON5(text)) : null
+      text
+        ? path.endsWith(".yaml")
+          ? parse(text)
+          : path === "package.json"
+            ? JSON.parse(text)
+            : parseJSON5(text)
+        : null
     );
   } catch {
     return {};
@@ -103,16 +108,33 @@ export function workspacePathFilter(excludes: string[]) {
   const excluded =
     excludes.length > 0 ? picomatch(excludes, { dot: true }) : () => false;
   return (path: string) =>
-    !excluded(path) && path.split("/").every(isDiscoveryDirectory);
+    path
+      .split("/")
+      .every(
+        (name, index, parts) =>
+          isDiscoveryDirectory(name) &&
+          !excluded(parts.slice(0, index + 1).join("/"))
+      );
 }
 
 /** Expand configured paths only. Globstars recurse through source directories;
  * ordinary patterns stop at their declared depth. No repository code runs. */
 export async function discoverWorkspacePaths(
   files: RepositoryFiles,
-  patterns: Awaited<ReturnType<typeof readWorkspacePatterns>>
+  patterns: Awaited<ReturnType<typeof readWorkspacePatterns>>,
+  packageDirectories?: string[] | null
 ) {
   const allowed = workspacePathFilter(patterns.excludes);
+  if (packageDirectories) {
+    const matches =
+      patterns.includes.length > 0 ? picomatch(patterns.includes) : () => false;
+    return {
+      paths: packageDirectories
+        .filter((path) => allowed(path) && matches(path))
+        .sort(),
+      allowed,
+    };
+  }
   const listings = new Map<string, Promise<string[]>>();
   const list = (path: string) => {
     let pending = listings.get(path);

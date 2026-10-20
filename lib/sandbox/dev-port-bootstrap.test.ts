@@ -24,7 +24,11 @@ it.each([undefined, "admin"])(
       readFileToBuffer: async ({ path }: { path: string }) =>
         path in files ? Buffer.from(files[path]) : null,
       writeFiles: async () => {},
-      runCommand: async () => ({ stdout: async () => "0", exitCode: 0 }),
+      runCommand: async ({ args }: { args: string[] }) => ({
+        stdout: async () =>
+          args[1]?.includes("const packages = []") ? '["web","admin"]' : "0",
+        exitCode: 0,
+      }),
       domain: (port: number) => `https://preview-${port}.example.test`,
     } as unknown as Sandbox;
     const context = await resolveBootstrapContext(sandbox, { rootDirectory });

@@ -88,6 +88,18 @@ for (const fixture of [
       init?: RequestInit
     ) => {
       const url = new URL(String(input));
+      if (url.pathname.includes("/git/trees/")) {
+        assert.equal(
+          decodeURIComponent(url.pathname.split("/git/trees/")[1]),
+          "feature/runtime"
+        );
+        return Response.json({
+          tree: Object.keys(fixture.files).map((path) => ({
+            type: "blob",
+            path,
+          })),
+        });
+      }
       assert.equal(url.searchParams.get("ref"), "feature/runtime");
       const file = decodeURIComponent(url.pathname.split("/contents/")[1]);
       const content = (fixture.files as Partial<Record<string, string>>)[file];

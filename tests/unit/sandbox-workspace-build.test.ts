@@ -133,6 +133,22 @@ function makeMonorepoSandbox(
       return Buffer.from(JSON.stringify(value));
     },
     runCommand: async ({ args }: { cmd: string; args: string[] }) => {
+      if (args[1]?.includes("const packages = []")) {
+        return {
+          exitCode: 0,
+          stdout: async () =>
+            JSON.stringify(
+              Object.keys(files)
+                .filter(
+                  (path) =>
+                    path === "package.json" || path.endsWith("/package.json")
+                )
+                .map((path) =>
+                  path === "package.json" ? "" : path.slice(0, -13)
+                )
+            ),
+        };
+      }
       const dir = args[args.length - 1] || "";
       runCommandCalls.push(dir);
       const listing = listedDirs[dir] || [];

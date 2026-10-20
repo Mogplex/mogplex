@@ -82,6 +82,8 @@ async function readPackageJsonInfo(
   rootDir?: string | null
 ): Promise<WebPackageInfo | null> {
   const pkgPath = resolveSandboxPath(rootDir, "package.json");
+  // RepositoryFiles (and Sandbox.readFileToBuffer) return null for missing
+  // files. Preserve access/I/O failures instead of choosing a different app.
   const raw = await readTextFile(sandbox, pkgPath);
   try {
     if (!raw) return null;
@@ -160,8 +162,9 @@ export function resolveMonorepoWebTarget(sandbox: Sandbox) {
 /**
  * Select a runnable nested web app without requiring workspace metadata.
  * Explicit launch roots bypass this function. A runnable root app wins;
- * otherwise common app paths, configured workspaces, then source directories
- * are considered. Framework priority and path order make fallback deterministic.
+ * otherwise common app paths (in the listed order), configured workspaces,
+ * then source directories are considered. Fallback candidates use framework
+ * priority, then path order, so directory listing order cannot change selection.
  */
 export async function resolveMonorepoWebTargetFromFiles(
   sandbox: RepositoryFiles
@@ -169,12 +172,18 @@ export async function resolveMonorepoWebTargetFromFiles(
   const rootInfo = await readPackageJsonInfo(sandbox, null);
   if (isViablePreviewTarget(rootInfo)) return null;
 
+  const packageDirectories = await sandbox.listPackageDirectories?.();
+  if (packageDirectories?.length === 0) return null;
   const patterns = await readWorkspacePatterns(sandbox);
   // Apply exclusions to common paths too; an excluded legacy web/ must never
   // shadow the app declared in workspace configuration.
   const allowed = workspacePathFilter(patterns.excludes);
   const commonResults = await Promise.all(
-    COMMON_WEB_WORKSPACE_PATHS.filter(allowed).map(async (path) => ({
+    COMMON_WEB_WORKSPACE_PATHS.filter(
+      (path) =>
+        allowed(path) &&
+        (!packageDirectories || packageDirectories.includes(path))
+    ).map(async (path) => ({
       path,
       info: await readPackageJsonInfo(sandbox, path),
     }))
@@ -184,7 +193,11 @@ export async function resolveMonorepoWebTargetFromFiles(
       return { path, framework: info!.framework };
   }
 
-  const configured = await discoverWorkspacePaths(sandbox, patterns);
+  const configured = await discoverWorkspacePaths(
+    sandbox,
+    patterns,
+    packageDirectories
+  );
   const choose = async (candidates: string[]) => {
     const results = await Promise.all(
       [...new Set(candidates)].filter(allowed).map(async (path) => ({
@@ -205,6 +218,7 @@ export async function resolveMonorepoWebTargetFromFiles(
   };
   const selected = await choose(configured.paths);
   if (selected) return selected;
+  if (packageDirectories) return choose(packageDirectories);
 
   const rootDirs = (await sandbox.listDirectories("")).filter(
     isDiscoveryDirectory

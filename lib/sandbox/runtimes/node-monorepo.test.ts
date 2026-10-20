@@ -90,6 +90,19 @@ it("honors exclusions even for common web/ paths", async () => {
   ).toEqual({ path: "frontend", framework: "vite" });
 });
 
+it("excludes descendants of a legacy workspace directory", async () => {
+  expect(
+    await resolveMonorepoWebTargetFromFiles(
+      repository({
+        "pnpm-workspace.yaml": "packages: ['packages/**', '!packages/legacy']",
+        "packages/legacy/web/package.json": web(),
+        "packages/legacy/app/package.json": web(),
+        "packages/current/ui/package.json": web("vite"),
+      })
+    )
+  ).toEqual({ path: "packages/current/ui", framework: "vite" });
+});
+
 it("supports globstars and braces without traversing dependencies", async () => {
   expect(
     await resolveMonorepoWebTargetFromFiles(
@@ -185,6 +198,46 @@ it("propagates repository access errors", async () => {
   await expect(resolveMonorepoWebTargetFromFiles(files)).rejects.toThrow(
     "GitHub 403"
   );
+});
+
+it("uses a complete package index to find deeply nested apps without directory fan-out", async () => {
+  const files = repository({
+    "pnpm-workspace.yaml": "packages: ['products/**']",
+    "products/department/project/ui/package.json": web(),
+  });
+  files.listPackageDirectories = async () => ["products/department/project/ui"];
+  files.listDirectories = async () => {
+    throw new Error("must use package index");
+  };
+  expect(await resolveMonorepoWebTargetFromFiles(files)).toEqual({
+    path: "products/department/project/ui",
+    framework: "next",
+  });
+});
+
+it("skips web/config probes for repositories with no package manifests", async () => {
+  const reads: string[] = [];
+  const files: RepositoryFiles = {
+    readText: async (path) => {
+      reads.push(path);
+      return null;
+    },
+    listDirectories: async () => {
+      throw new Error("must use package index");
+    },
+    listPackageDirectories: async () => [],
+  };
+  expect(await resolveMonorepoWebTargetFromFiles(files)).toBeNull();
+  expect(reads).toEqual(["package.json"]);
+});
+
+it("falls back to directory discovery when a package index is truncated", async () => {
+  const files = repository({ "web/package.json": web() });
+  files.listPackageDirectories = async () => null;
+  expect(await resolveMonorepoWebTargetFromFiles(files)).toEqual({
+    path: "web",
+    framework: "next",
+  });
 });
 
 it("reads commented Rush config with trailing commas", async () => {
