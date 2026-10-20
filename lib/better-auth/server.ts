@@ -145,10 +145,6 @@ export const auth = betterAuth({
     user: {
       create: {
         after: async (user) => {
-          // Only provision profiles when profiles live in the same database
-          // better-auth writes to — i.e. after the Neon data cutover. Before
-          // that, Supabase's OAuth callback owns profile creation.
-          if (process.env.MOGPLEX_DATA_BACKEND !== "neon") return;
           await createProfileForBetterAuthUser(user);
         },
       },

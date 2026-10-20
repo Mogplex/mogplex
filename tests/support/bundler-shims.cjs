@@ -2,6 +2,12 @@
 // node:test can import page/component modules directly.
 const Module = require("node:module");
 
+// node:test suites drive supabaseAdmin through the supabase-js REST client
+// against a fake SUPABASE_URL and a fetch mock. Deployed code always uses the
+// Neon shim; this opt-in exists only for the test transport. Suites that need
+// the shim set MOGPLEX_DATA_BACKEND=neon themselves.
+process.env.MOGPLEX_DATA_BACKEND ??= "supabase";
+
 // Stylesheet imports are a bundler concern.
 require.extensions[".css"] = () => {
   // Intentionally empty: a global stylesheet has no module exports.

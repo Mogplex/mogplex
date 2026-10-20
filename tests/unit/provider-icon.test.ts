@@ -8,21 +8,12 @@ import {
   normalizeProviderIconProviders,
 } from "../../lib/models/provider-icon";
 
-test("getProviderIconUrl resolves provider slugs against persistent Supabase storage", () => {
-  const previousPublicUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  process.env.NEXT_PUBLIC_SUPABASE_URL = "https://example.supabase.co/";
-  try {
-    assert.equal(
-      getProviderIconUrl(" OpenAI "),
-      "https://example.supabase.co/storage/v1/object/public/provider-icons/openai.png"
-    );
-  } finally {
-    if (previousPublicUrl === undefined) {
-      delete process.env.NEXT_PUBLIC_SUPABASE_URL;
-    } else {
-      process.env.NEXT_PUBLIC_SUPABASE_URL = previousPublicUrl;
-    }
-  }
+test("getProviderIconUrl resolves provider slugs to same-origin storage", () => {
+  assert.equal(
+    getProviderIconUrl(" OpenAI "),
+    "/storage/v1/object/public/provider-icons/openai.png"
+  );
+  assert.equal(getProviderIconUrl("../openai"), null);
 });
 
 test("provider icon paths reject values that are unsafe as storage object names", () => {
@@ -50,28 +41,6 @@ test("provider icon candidates are normalized, filtered, and deduplicated", () =
     ]),
     ["openai", "arcee-ai"]
   );
-});
-
-test("getProviderIconUrl ignores server-only Supabase configuration", () => {
-  const previousPublicUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const previousServerUrl = process.env.SUPABASE_URL;
-  delete process.env.NEXT_PUBLIC_SUPABASE_URL;
-  process.env.SUPABASE_URL = "https://server-only.supabase.co";
-
-  try {
-    assert.equal(getProviderIconUrl("openai"), null);
-  } finally {
-    if (previousPublicUrl === undefined) {
-      delete process.env.NEXT_PUBLIC_SUPABASE_URL;
-    } else {
-      process.env.NEXT_PUBLIC_SUPABASE_URL = previousPublicUrl;
-    }
-    if (previousServerUrl === undefined) {
-      delete process.env.SUPABASE_URL;
-    } else {
-      process.env.SUPABASE_URL = previousServerUrl;
-    }
-  }
 });
 
 test("getProviderInitial matches the AI Gateway catalog fallback for providers without logos", () => {

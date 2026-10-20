@@ -8,6 +8,10 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    // Unit tests drive supabaseAdmin through the supabase-js REST client
+    // against a fake SUPABASE_URL and a fetch mock. Deployed code always uses
+    // the Neon shim; this opt-in exists only for the test transport.
+    env: { MOGPLEX_DATA_BACKEND: "supabase" },
     // tests/unit/** uses node:test syntax and is run by `pnpm test:unit`.
     // tests/db/** is an isolated pglite-backed suite run via `pnpm test:db`
     // (see vitest-db.config.ts) — keeping it out of the default include keeps

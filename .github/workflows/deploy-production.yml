@@ -25,27 +25,24 @@ jobs:
     name: migrate-production
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 20
-    # Migrations are optional while the database moves from Supabase to Neon:
-    # without SUPABASE_DB_URL the job succeeds with a warning so the Vercel
-    # deploy still ships. (secrets are not readable in job-level `if`, hence
-    # the env indirection on each step.)
+    # Without DATABASE_URL the job succeeds with a warning so the Vercel deploy
+    # still ships. (secrets are not readable in job-level `if`, hence the env
+    # indirection on each step.)
     env:
-      SUPABASE_DB_URL_PRESENT: ${{ secrets.SUPABASE_DB_URL != '' }}
       DATABASE_URL_PRESENT: ${{ secrets.DATABASE_URL != '' }}
     steps:
       - name: Note migrations skipped
-        if: ${{ env.SUPABASE_DB_URL_PRESENT != 'true' && env.DATABASE_URL_PRESENT != 'true' }}
+        if: ${{ env.DATABASE_URL_PRESENT != 'true' }}
         run: |
-          echo "::warning::Skipping database migrations because neither SUPABASE_DB_URL nor DATABASE_URL is configured."
+          echo "::warning::Skipping database migrations because DATABASE_URL is not configured."
 
       - name: Check out repository
-        if: ${{ env.SUPABASE_DB_URL_PRESENT == 'true' || env.DATABASE_URL_PRESENT == 'true' }}
+        if: ${{ env.DATABASE_URL_PRESENT == 'true' }}
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       # Neon migrations (neon/migrations/*.sql, tracked in
-      # neon_migrations.schema_migrations). Runs before the Supabase push so
-      # the Neon side is never behind when both are configured during the
-      # transition; each migration runs in its own transaction.
+      # neon_migrations.schema_migrations); each migration runs in its own
+      # transaction.
       - name: Set up Node.js for Neon migrations
         if: ${{ env.DATABASE_URL_PRESENT == 'true' }}
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
@@ -83,25 +80,6 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: pnpm exec tsx scripts/apply-neon-migrations.ts
-
-      - name: Set up Supabase CLI
-        if: ${{ env.SUPABASE_DB_URL_PRESENT == 'true' }}
-        uses: supabase/setup-cli@ab058987d8d6c725971f6cf9d0b5c98467e30bd1 # v1
-
-      # Note: `supabase db push` sends each migration file through a
-      # Postgres extended-query pipeline, so statements that cannot run in
-      # a pipeline (e.g. `CREATE INDEX CONCURRENTLY`) must be applied out
-      # of band, not added here. Keep migrations pipeline-compatible.
-      #
-      # The default `supabase/setup-cli@v1` build predates the `--yes`
-      # flag and `supabase db push` is interactive, so feed `yes` on
-      # stdin to auto-confirm. Works across CLI versions whether or not
-      # `--yes` exists.
-      - name: Apply production migrations
-        if: ${{ env.SUPABASE_DB_URL_PRESENT == 'true' }}
-        env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-        run: yes | supabase db push --db-url "$SUPABASE_DB_URL" --include-all
 
   deploy-production:
     name: deploy-production

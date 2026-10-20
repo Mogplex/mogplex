@@ -37,7 +37,7 @@ test("GET /api/auth/user derives connected state from vault-backed OAuth storage
     getResolvedAuth: async () => ({
       profileId: "user-123",
       authUserId: "auth-123",
-      source: "supabase",
+      source: "better-auth",
     }),
     getCookies: async () => ({
       get: (name: string) => {
@@ -148,7 +148,7 @@ test("GET /api/auth/user treats covered repos as app-connected even when install
     getResolvedAuth: async () => ({
       profileId: "user-123",
       authUserId: "auth-123",
-      source: "supabase",
+      source: "better-auth",
     }),
     getCookies: async () => ({
       get: () => undefined,
@@ -250,7 +250,7 @@ test("GET /api/auth/user keeps explicit access when billing access resolution fa
       getResolvedAuth: async () => ({
         profileId: "user-123",
         authUserId: "auth-123",
-        source: "supabase",
+        source: "better-auth",
       }),
       getCookies: async () => ({
         get: () => undefined,

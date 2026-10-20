@@ -53,21 +53,13 @@ export function checkAppConfig(env: DoctorEnv): DoctorCheckResult {
       summary: `${appUrlName} is not a valid URL`,
     };
   }
-  const server = env.MOGPLEX_DATA_BACKEND?.trim() ?? "";
-  const client = env.NEXT_PUBLIC_MOGPLEX_DATA_BACKEND?.trim() ?? "";
-  if (server !== client) {
+  // Neon is the only data backend; an unset flag means neon.
+  const backend = env.MOGPLEX_DATA_BACKEND?.trim() || "neon";
+  if (backend !== "neon") {
     return {
       ...result,
       status: "fail",
-      summary:
-        "MOGPLEX_DATA_BACKEND and NEXT_PUBLIC_MOGPLEX_DATA_BACKEND disagree",
-    };
-  }
-  if (server !== "neon") {
-    return {
-      ...result,
-      status: "warn",
-      summary: "Data backend is not neon; self-hosting docs assume neon",
+      summary: `MOGPLEX_DATA_BACKEND=${backend} is not supported; use neon or leave it unset`,
     };
   }
   return {

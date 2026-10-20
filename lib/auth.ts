@@ -3,12 +3,11 @@ import { headers } from "next/headers";
 import { getPlaywrightUserIdFromHeaders } from "@/lib/internal-api-auth";
 import { resolveCliBearerAuth } from "@/lib/auth/cli-bearer";
 import type { ApiKeyAccess } from "@/lib/mogplex-api/key-access";
-import { createClient as createSupabaseServerClient } from "@/lib/supabase/server";
 
 type ResolvedAuth = {
   profileId: string;
   authUserId: string | null;
-  source: "supabase" | "better-auth" | "playwright" | "api-key" | "oauth";
+  source: "better-auth" | "playwright" | "api-key" | "oauth";
   /** What a Mogplex API key's owner allows it to do; set only for `api-key`. */
   apiKeyAccess?: ApiKeyAccess;
 };
@@ -33,19 +32,6 @@ async function findProfileIdByAuthUserId(
     .eq("auth_user_id", authUserId)
     .single();
   return (profile?.id as string | undefined) ?? undefined;
-}
-
-async function getSupabaseLinkedUserId(): Promise<ResolvedAuth | undefined> {
-  const supabase = await createSupabaseServerClient();
-  const { data, error } = await supabase.auth.getUser();
-  const authUserId = data.user?.id;
-
-  if (error || !authUserId) return undefined;
-
-  const profileId = await findProfileIdByAuthUserId(authUserId);
-  if (!profileId) return undefined;
-
-  return { profileId, authUserId, source: "supabase" };
 }
 
 async function getBetterAuthLinkedUserId(): Promise<ResolvedAuth | undefined> {
@@ -107,12 +93,9 @@ export async function getResolvedAuth(
     };
   }
 
-  // 3. Session cookie auth — better-auth once the data backend is Neon
-  // (profiles and better-auth users share that database), Supabase before.
-  if (process.env.MOGPLEX_DATA_BACKEND === "neon") {
-    return getBetterAuthLinkedUserId();
-  }
-  return getSupabaseLinkedUserId();
+  // 3. Session cookie auth — better-auth (profiles and better-auth users share
+  // the Neon database).
+  return getBetterAuthLinkedUserId();
 }
 
 export function ensureUserId(userId: string | undefined) {
