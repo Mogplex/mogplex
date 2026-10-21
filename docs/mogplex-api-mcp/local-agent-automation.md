@@ -106,6 +106,9 @@ Legacy restarts need a snapshot with no expiry. Mogplex saves the snapshot
 reference before it retires the old record. If snapshot capture or storage fails,
 Mogplex keeps the old record and blocks a new checkout.
 
+A workspace that has not started returns `409 CONFLICT`. Wait for startup, then
+try again. A conflict with another restart also asks the caller to try again.
+
 ## Manual trigger input
 
 `mogplex_trigger_automation.input` is merged into the run metadata before Mogplex adds authoritative repo, installation, flow, version, and source fields. For a GitHub-oriented flow, pass the same fields its conditions and agent prompt expect, for example:

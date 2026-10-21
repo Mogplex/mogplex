@@ -150,6 +150,11 @@ for (const scenario of [
       );
       assert.equal(providerStops, 0);
       assert.equal(launches, scenario === "successful snapshot" ? 1 : 0);
+      if (scenario === "running failure" || scenario === "rotated failure") {
+        const body = await response.text();
+        assert.match(body, /Try again/);
+        assert.doesNotMatch(body, /support|recovery/);
+      }
       assert.equal(
         providerReads,
         2,

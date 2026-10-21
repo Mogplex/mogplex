@@ -9,6 +9,45 @@ import {
 
 const TEAM_ID = "00000000-0000-4000-8000-000000000456";
 
+test("a still-booting legacy record returns a retryable conflict without provider or record changes", async () => {
+  const { createSandboxRestartHandler } = await loadSandboxRestartRouteModule();
+  let effects = 0;
+  const handler = createSandboxRestartHandler({
+    loadOwnedSandboxRouteRecord: (async () =>
+      buildLoadedSandboxRestartRecord({
+        sandbox_id: "pending",
+        status: "creating",
+      })) as never,
+    resolveLoadedSandboxRouteContext: async (loaded) =>
+      buildResolvedSandboxRouteContext(loaded) as never,
+    getSandbox: async () => {
+      effects++;
+      throw new Error("Must not touch a VM");
+    },
+    stopSandboxRecord: async () => {
+      effects++;
+      return { id: "sandbox-1" } as never;
+    },
+    updateSandboxRecord: async () => {
+      effects++;
+      return { id: "sandbox-1" } as never;
+    },
+    fetchImpl: async () => {
+      effects++;
+      return Response.json({});
+    },
+  });
+  const response = await handler(
+    new Request("https://browser.example/api/sandbox", { method: "POST" }),
+    buildSandboxRouteParams()
+  );
+  assert.equal(response.status, 409);
+  const message = (await response.json()).error;
+  assert.match(message, /still booting/);
+  assert.doesNotMatch(message, /support|recovery|unavailable/);
+  assert.equal(effects, 0);
+});
+
 for (const [host, root, savedTeam, requestedTeam] of [
   ["mogplex.internal", "apps/web", TEAM_ID, TEAM_ID],
   ["internal.mogplex", null, TEAM_ID, null],

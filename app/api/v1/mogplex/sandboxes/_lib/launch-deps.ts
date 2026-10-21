@@ -45,6 +45,8 @@ export function createMogplexApiSandboxPostDeps(
         productTeamId
       );
       if (scoped || !productTeamId) return scoped;
+      // The active lookup includes creating/installing team records. Only
+      // saved paused/stopped records need the separate canonical-name lookup.
       // Collection launches pass the resolved repo default (string or null).
       // Undefined means no root filter, so never guess across saved roots here.
       if (!workingBranch || rootDirectory === undefined) return null;

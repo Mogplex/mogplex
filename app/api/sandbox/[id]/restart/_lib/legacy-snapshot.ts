@@ -15,6 +15,13 @@ type CloseAttempt = NonNullable<
   Awaited<ReturnType<SandboxRestartDeps["prepareSandboxBillingClose"]>>
 >;
 
+export class LegacySnapshotConflictError extends Error {
+  constructor() {
+    super("The workspace could not restart. Try again.");
+    this.name = "LegacySnapshotConflictError";
+  }
+}
+
 async function settleClose(
   input: CaptureInput,
   attempt: CloseAttempt,
@@ -102,6 +109,6 @@ export async function captureLegacyWorkspaceSnapshot(
     attempt &&
     !(await settleClose(input, attempt, previousSessionId, snapshotCompletedAt))
   )
-    return null;
+    throw new LegacySnapshotConflictError();
   return snapshotId;
 }

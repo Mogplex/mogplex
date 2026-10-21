@@ -359,6 +359,32 @@ test("an active personal workspace does not displace a stopped team workspace", 
   });
 });
 
+for (const status of ["creating", "installing"]) {
+  test(`an active personal workspace never displaces a ${status} team workspace`, async () => {
+    await withSavedWorkspaces(
+      async ({ legacy, records, deps, providerNames }) => {
+        legacy.status = "running";
+        records.unshift({
+          ...legacy,
+          id: "booting-team-workspace",
+          product_team_id: TEAM_ID,
+          sandbox_id: collisionInput().name,
+          status,
+        });
+        const active = await deps.getActiveSandboxForRepo(
+          REPO_ID,
+          identity.userId,
+          "main",
+          null,
+          TEAM_ID
+        );
+        assert.equal(active?.id, "booting-team-workspace");
+        assert.deepEqual(providerNames, []);
+      }
+    );
+  });
+}
+
 test("legacy lookup does not cross root directories", async () => {
   await withSavedWorkspaces(async ({ legacy, deps, providerNames }) => {
     const input = collisionInput("apps/other");

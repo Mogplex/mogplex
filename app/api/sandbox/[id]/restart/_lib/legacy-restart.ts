@@ -7,7 +7,10 @@ import {
 import { buildSandboxRouteErrorResponse } from "@/lib/sandbox/route-context";
 import { buildLifecycleConflictResponse } from "@/lib/sandbox/lifecycle-conflict";
 import type { RestartSandboxRecord, SandboxRestartDeps } from "./types";
-import { captureLegacyWorkspaceSnapshot } from "./legacy-snapshot";
+import {
+  captureLegacyWorkspaceSnapshot,
+  LegacySnapshotConflictError,
+} from "./legacy-snapshot";
 
 /**
  * Legacy non-persistent restart: snapshot the VM, retire the record,
@@ -31,7 +34,8 @@ export async function handleLegacyRestart(
   if (!loaded.ok) return buildSandboxRouteErrorResponse(loaded);
   const teamId = loaded.record.product_team_id ?? null;
   if (teamId && teamId !== readActiveTeamIdHeader(request)) {
-    // Recheck the saved team's role before touching its provider session.
+    // Credentials for the request's scope cannot authorize a different saved
+    // team. Resolve that team's role again before touching its provider session.
     const headers = new Headers(request.headers);
     headers.set(ACTIVE_TEAM_HEADER, teamId);
     loaded = await loadRecord(
@@ -52,6 +56,12 @@ export async function handleLegacyRestart(
   }
   if (!record.repo_id)
     return NextResponse.json({ error: "Sandbox not found" }, { status: 404 });
+  if (record.sandbox_id === "pending") {
+    return NextResponse.json(
+      { error: "Sandbox is still booting" },
+      { status: 409 }
+    );
+  }
 
   const requestUrl = new URL(request.url);
   const internalRequest =
@@ -70,33 +80,34 @@ export async function handleLegacyRestart(
     );
   }
 
-  let restoreSnapshotId: string | null = null;
+  let restoreSnapshotId: string | null;
   const resolved = await deps.resolveLoadedSandboxRouteContext(loaded, {
     hydrateSandboxClient: false,
   });
   if (!resolved.ok) return buildSandboxRouteErrorResponse(resolved);
-  if (record.sandbox_id !== "pending") {
-    try {
-      restoreSnapshotId = await captureLegacyWorkspaceSnapshot({
-        deps,
-        recordId: record.id,
-        sandboxId: record.sandbox_id,
-        credentials: {
-          vercelToken: resolved.context.credentials.vercelToken,
-          vercelTeamId: resolved.context.credentials.vercelTeamId,
-          vercelProjectId: resolved.context.credentials.vercelProjectId,
-        },
-      });
-    } catch (error) {
-      console.error("[sandbox/restart] Snapshot billing recovery failed", {
-        sandboxRecordId: record.id,
-        errorName: error instanceof Error ? error.name : typeof error,
-      });
-      return NextResponse.json(
-        { error: "The sandbox service is not available. Try again later." },
-        { status: 503 }
-      );
+  try {
+    restoreSnapshotId = await captureLegacyWorkspaceSnapshot({
+      deps,
+      recordId: record.id,
+      sandboxId: record.sandbox_id,
+      credentials: {
+        vercelToken: resolved.context.credentials.vercelToken,
+        vercelTeamId: resolved.context.credentials.vercelTeamId,
+        vercelProjectId: resolved.context.credentials.vercelProjectId,
+      },
+    });
+  } catch (error) {
+    if (error instanceof LegacySnapshotConflictError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
     }
+    console.error("[sandbox/restart] Snapshot billing recovery failed", {
+      sandboxRecordId: record.id,
+      errorName: error instanceof Error ? error.name : typeof error,
+    });
+    return NextResponse.json(
+      { error: "The sandbox service is not available. Try again later." },
+      { status: 503 }
+    );
   }
   if (!restoreSnapshotId) {
     return NextResponse.json(
