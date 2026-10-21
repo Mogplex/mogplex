@@ -7,6 +7,7 @@ import { fetchJsonObject } from "@/lib/client-fetch"
 import type { TeamMembersResponse } from "@/app/api/teams/[teamId]/members/route"
 import type { TeamRole } from "@/lib/team-capabilities"
 import { formatTeamRole } from "@/lib/team-role-label"
+import { TeamJoinSettings } from "./team-join-settings"
 
 // Every fetch in this component must pass an explicit `teamId` to
 // getActiveTeamRequestHeaders. The module-level activeTeamId singleton is set
@@ -352,6 +353,8 @@ export function TeamMembersSection({ teamId }: { teamId: string }) {
           </div>
         </div>
       </section>
+
+      <TeamJoinSettings teamId={teamId} />
 
       {membersData?.viewer.role === "owner" && (
         <section>
