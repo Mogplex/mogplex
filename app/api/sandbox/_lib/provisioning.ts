@@ -230,6 +230,16 @@ export async function restoreSandboxFromSnapshotIfAvailable(input: {
       shouldQueueDeferredSnapshot: input.launch.repo.snapshot_id == null,
     };
   } catch (snapshotErr) {
+    if (input.launch.launchRequest.restoreSnapshotId) {
+      console.error(
+        "[sandbox/create] Saved workspace snapshot restore failed:",
+        snapshotErr
+      );
+      throw new Error(
+        "Saved workspace could not be restored. Contact support for recovery.",
+        { cause: snapshotErr }
+      );
+    }
     console.warn(
       "[sandbox/create] Snapshot restore failed, falling back to git:",
       snapshotErr
