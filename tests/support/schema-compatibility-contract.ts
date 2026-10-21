@@ -86,6 +86,16 @@ export async function checkSchemaCompatibility(
       .single();
     assert.equal(membership.error, null, JSON.stringify(membership.error));
     assert.deepEqual(membership.data, { role: "owner" });
+    // Old team reads/writes retain their meaning: opt-in domain enrollment
+    // defaults off and does not change existing membership or role records.
+    const retainedTeam = await client
+      .from("teams")
+      .update({ name: "Existing team" })
+      .eq("id", BEFORE_USER)
+      .select("name,slug,owner_user_id")
+      .single();
+    assert.equal(retainedTeam.error, null, JSON.stringify(retainedTeam.error));
+    assert.deepEqual(retainedTeam.data, team.data);
     const profile = await client
       .from("profiles")
       .select("email,default_model,surface_models")

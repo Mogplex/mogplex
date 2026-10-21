@@ -77,6 +77,13 @@ export async function mockTeamSettings(page: Page, role: TeamRole = "owner") {
       viewer: { canManage },
     })
   );
+  await page.route(`**/api/teams/${TEAM.id}/signup-domain`, (route) =>
+    fulfillJson(route, {
+      domain: null,
+      eligibleDomain: "example.com",
+      viewer: { canManage },
+    })
+  );
 }
 
 export { expect } from "@playwright/test";
