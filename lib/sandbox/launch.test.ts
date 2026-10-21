@@ -123,6 +123,48 @@ describe("resolveNameCollision", () => {
     expect(result).toEqual({ kind: "restart", record });
   });
 
+  it.each([
+    { dbStatus: "running", providerStatus: "running", kind: "resume" },
+    { dbStatus: "stopped", providerStatus: "running", kind: "restart" },
+    { dbStatus: "running", providerStatus: "stopped", kind: "restart" },
+  ])(
+    "preserves a persistent workspace with DB $dbStatus and provider $providerStatus via $kind",
+    async ({ dbStatus, providerStatus, kind }) => {
+      const record = sandboxRecord({ status: dbStatus, persistent: true });
+      const result = await resolveNameCollision(input, {
+        loadMatchingRecord: async () => record,
+        getSandbox: async () =>
+          ({
+            name: input.name,
+            status: providerStatus,
+            sandbox: { persistent: true },
+          }) as never,
+        deleteSandbox: async () => {
+          throw new Error("Saved workspace must not be deleted");
+        },
+      });
+      expect(result).toEqual({ kind, record });
+    }
+  );
+
+  it("delegates a stale persistent record to snapshot-preserving restart without retiring it", async () => {
+    const record = sandboxRecord({ status: "stopped", persistent: true });
+    await expect(
+      resolveNameCollision(input, {
+        loadMatchingRecord: async () => record,
+        getSandbox: async () =>
+          ({
+            name: input.name,
+            status: "stopped",
+            sandbox: { persistent: false },
+          }) as never,
+        stopMatchingRecord: async () => {
+          throw new Error("Saved workspace kept for recovery");
+        },
+      })
+    ).resolves.toEqual({ kind: "restart", record });
+  });
+
   it("creates fresh when a stopped persistent record has no provider sandbox", async () => {
     const record = sandboxRecord({ status: "stopped", persistent: true });
     const getSandbox = vi.fn(async () => {
