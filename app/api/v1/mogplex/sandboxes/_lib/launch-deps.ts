@@ -14,6 +14,12 @@ type LaunchDeps = {
   resolveNameCollision: typeof resolveNameCollision;
 };
 
+async function refuseWorkspaceReplacement(): Promise<never> {
+  throw new Error(
+    "Saved workspace is unavailable; refusing to replace its checkout"
+  );
+}
+
 /** Preserve work created before v1 launches carried their repository's team. */
 export function createMogplexApiSandboxPostDeps(
   overrides: Partial<LaunchDeps> = {}
@@ -56,6 +62,7 @@ export function createMogplexApiSandboxPostDeps(
         }),
       });
       if (savedTeamWorkspace) return null;
+      // Keep older records personal-scoped; changing ownership could expose WIP.
       return deps.getActiveSandboxForRepo(
         repoId,
         userId,
@@ -74,9 +81,22 @@ export function createMogplexApiSandboxPostDeps(
           productTeamId: null,
           name: buildSandboxName({ ...input, productTeamId: null }),
         });
-        // The canonical lifecycle restores this record's own provider identity
-        // and filesystem. Keep the authenticated team header for its role check.
-        if (legacy) return { kind: "restart", record: legacy };
+        if (legacy) {
+          // Let the canonical resolver probe persistence and provider state.
+          // A legacy workspace may resume/restart, but must never be discarded.
+          const resolved = await deps.resolveNameCollision(
+            { ...input, name: legacy.sandbox_id, productTeamId: null },
+            {
+              stopMatchingRecord: refuseWorkspaceReplacement,
+              deleteSandbox: refuseWorkspaceReplacement,
+              deleteSandboxByName: refuseWorkspaceReplacement,
+            }
+          );
+          if (resolved.kind === "create" || resolved.kind === "replace") {
+            return refuseWorkspaceReplacement();
+          }
+          return resolved;
+        }
       }
       return deps.resolveNameCollision(input);
     },

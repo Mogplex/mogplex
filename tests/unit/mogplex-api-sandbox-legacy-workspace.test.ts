@@ -20,6 +20,7 @@ async function withSavedWorkspaces(
       (typeof import("../../app/api/v1/mogplex/sandboxes/_lib/launch-deps"))["createMogplexApiSandboxPostDeps"]
     >;
     providerNames: string[];
+    provider: { status: string; persistent: boolean; missing: boolean };
   }) => Promise<void>
 ) {
   process.env.MOGPLEX_DATA_BACKEND = "supabase";
@@ -69,28 +70,35 @@ async function withSavedWorkspaces(
       await import("../../app/api/v1/mogplex/sandboxes/_lib/launch-deps");
     const { resolveNameCollision } = await import("../../lib/sandbox/launch");
     const providerNames: string[] = [];
+    const provider = { status: "stopped", persistent: true, missing: false };
     const deps = createMogplexApiSandboxPostDeps({
-      resolveNameCollision: (input) =>
+      resolveNameCollision: (input, policy) =>
         resolveNameCollision(input, {
           getSandbox: async (name) => {
             providerNames.push(name);
             if (!records.some((record) => record.sandbox_id === name)) {
               throw new Error("Scoped provider probe failed");
             }
-            return { status: "stopped", persistent: true } as never;
+            if (provider.missing)
+              throw Object.assign(new Error("Provider unavailable"), {
+                status: 404,
+              });
+            return {
+              status: provider.status,
+              persistent: provider.persistent,
+            } as never;
           },
-          findNamedSandbox: async () => {
-            throw new Error("Must not discard saved work");
-          },
+          findNamedSandbox: async () => null,
           deleteSandbox: async () => {
             throw new Error("Must not delete saved work");
           },
           deleteSandboxByName: async () => {
             throw new Error("Must not delete saved work");
           },
+          ...policy,
         }),
     });
-    await runTest({ legacy, records, deps, providerNames });
+    await runTest({ legacy, records, deps, providerNames, provider });
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -133,10 +141,53 @@ test("team launch restarts the stopped legacy record instead of making a fresh c
       assert.equal(result.record.id, legacy.id);
       assert.equal(result.record.sandbox_id, legacy.sandbox_id);
     }
-    assert.deepEqual(
-      providerNames,
-      [],
-      "the restart lifecycle owns the provider resume"
+    assert.deepEqual(providerNames, [legacy.sandbox_id]);
+  });
+});
+
+test("a usable non-persistent legacy workspace resumes without entering restart", async () => {
+  await withSavedWorkspaces(
+    async ({ legacy, deps, provider, providerNames }) => {
+      legacy.persistent = false;
+      legacy.status = "paused";
+      provider.persistent = false;
+      provider.status = "running";
+      const result = await deps.resolveNameCollision(collisionInput());
+      assert.equal(result.kind, "resume");
+      if (result.kind === "resume") assert.equal(result.record.id, legacy.id);
+      assert.deepEqual(providerNames, [legacy.sandbox_id]);
+    }
+  );
+});
+
+test("an unavailable legacy provider never falls through to a fresh checkout", async () => {
+  await withSavedWorkspaces(async ({ deps, provider }) => {
+    provider.missing = true;
+    await assert.rejects(
+      deps.resolveNameCollision(collisionInput()),
+      /Saved workspace is unavailable/
+    );
+  });
+});
+
+test("a stopped non-persistent legacy workspace is kept for explicit recovery", async () => {
+  await withSavedWorkspaces(async ({ legacy, deps, provider }) => {
+    legacy.persistent = false;
+    provider.persistent = false;
+    await assert.rejects(
+      deps.resolveNameCollision(collisionInput()),
+      /Saved workspace is unavailable/
+    );
+  });
+});
+
+test("provider persistence overrides a stale persistent flag before cleanup", async () => {
+  await withSavedWorkspaces(async ({ legacy, deps, provider }) => {
+    assert.equal(legacy.persistent, true);
+    provider.persistent = false;
+    await assert.rejects(
+      deps.resolveNameCollision(collisionInput()),
+      /Saved workspace is unavailable/
     );
   });
 });

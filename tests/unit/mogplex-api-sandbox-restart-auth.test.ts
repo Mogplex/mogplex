@@ -371,7 +371,28 @@ test("v1 launch refuses a repository the caller does not own", async () => {
     const handler = await createAuthenticatedHandler(fixture.launchSandbox);
     const response = await handler(sandboxRequest({ repoId: REPO_ID }));
     assert.equal(response.status, 404);
+    assert.equal((await response.json()).error.code, "NOT_FOUND");
     assert.deepEqual(fixture.providerCalls, []);
+  });
+});
+
+test("a resume-required event returns the public CONFLICT code", async () => {
+  await withInternalSecret(async () => {
+    const { launchMogplexApiSandbox } =
+      await import("../../app/api/v1/mogplex/sandboxes/route");
+    const handler = await createAuthenticatedHandler((userId, body) =>
+      launchMogplexApiSandbox(
+        userId,
+        body,
+        async () =>
+          new Response('data: {"type":"resume_required"}\n\n', {
+            headers: { "Content-Type": "text/event-stream" },
+          })
+      )
+    );
+    const response = await handler(sandboxRequest({ repoId: REPO_ID }));
+    assert.equal(response.status, 409);
+    assert.equal((await response.json()).error.code, "CONFLICT");
   });
 });
 

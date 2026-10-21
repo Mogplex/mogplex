@@ -13,6 +13,7 @@ import {
   mogplexApiError,
   mogplexApiSuccess,
   resolveMogplexApiUser,
+  type MogplexApiErrorCode,
 } from "@/lib/mogplex-api/response";
 import {
   consumeSandboxLaunchResponse,
@@ -69,6 +70,8 @@ export async function launchMogplexApiSandbox(
   }
   const repoId = typeof body.repoId === "string" ? body.repoId.trim() : "";
   if (!repoId) return { ok: false, status: 400, error: "repoId is required" };
+  // OAuth skips key-policy lookup, so resolve scope for every caller here.
+  // Keep v1's user_id boundary; repos_owner_shape_check forbids mixed scopes.
   const repo = await getOwnedRepo<{ product_team_id: string | null }>(
     repoId,
     userId,
@@ -129,6 +132,21 @@ export function createMogplexApiSandboxesGetHandler(
 
 export const GET = createMogplexApiSandboxesGetHandler();
 
+function sandboxLaunchErrorCode(status: number): MogplexApiErrorCode {
+  switch (status) {
+    case 401:
+      return "UNAUTHORIZED";
+    case 403:
+      return "FORBIDDEN";
+    case 404:
+      return "NOT_FOUND";
+    case 409:
+      return "CONFLICT";
+    default:
+      return status >= 500 ? "SERVICE_UNAVAILABLE" : "BAD_REQUEST";
+  }
+}
+
 export function createMogplexApiSandboxesPostHandler(
   overrides: Partial<MogplexApiSandboxesGetDeps> = {}
 ) {
@@ -166,11 +184,7 @@ export function createMogplexApiSandboxesPostHandler(
       const result = await deps.launchSandbox(user.userId, body);
       if (!result.ok) {
         return mogplexApiError(
-          result.status >= 500
-            ? "SERVICE_UNAVAILABLE"
-            : result.status === 403
-              ? "FORBIDDEN"
-              : "BAD_REQUEST",
+          sandboxLaunchErrorCode(result.status),
           result.error,
           result.status
         );

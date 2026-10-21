@@ -373,6 +373,7 @@ export async function resolveNameCollision(
   // dev server on the same record.
   if (
     matchingRecordIsPersistent &&
+    !isSandboxExplicitlyNonPersistent(sandbox) &&
     (matchingRecordNeedsRestart || vercelStatus === "stopped")
   ) {
     return { kind: "restart", record: matchingRecordForRoot };

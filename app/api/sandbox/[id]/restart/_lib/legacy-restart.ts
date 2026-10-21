@@ -1,4 +1,9 @@
 import { NextResponse } from "next/server";
+import { getCanonicalAppUrl } from "@/lib/app-url";
+import {
+  ACTIVE_TEAM_HEADER,
+  readActiveTeamIdHeader,
+} from "@/lib/team-capabilities";
 import { buildSandboxRouteErrorResponse } from "@/lib/sandbox/route-context";
 import { buildLifecycleConflictResponse } from "@/lib/sandbox/lifecycle-conflict";
 import type { RestartSandboxRecord, SandboxRestartDeps } from "./types";
@@ -19,7 +24,7 @@ export async function handleLegacyRestart(
     id,
     {
       select:
-        "id, repo_id, sandbox_id, base_branch, working_branch, status, persistent, billing_source, billing_team_id, billing_project_id, vercel_team_id, vercel_project_id",
+        "id, repo_id, sandbox_id, base_branch, working_branch, root_directory, status, persistent, billing_source, billing_team_id, billing_project_id, vercel_team_id, vercel_project_id",
       notFoundMessage: "Sandbox not found",
       requireCapability: "tools.bash",
     }
@@ -33,6 +38,14 @@ export async function handleLegacyRestart(
   }
   if (!record.repo_id)
     return NextResponse.json({ error: "Sandbox not found" }, { status: 404 });
+
+  const requestUrl = new URL(request.url);
+  const origin =
+    requestUrl.hostname === "mogplex.internal" ||
+    requestUrl.hostname === "internal.mogplex"
+      ? getCanonicalAppUrl().origin
+      : requestUrl.origin;
+  const teamId = readActiveTeamIdHeader(request);
 
   let restoreSnapshotId: string | null = null;
   const resolved = await deps.resolveLoadedSandboxRouteContext(loaded, {
@@ -92,12 +105,12 @@ export async function handleLegacyRestart(
     }
   }
 
-  const { origin } = new URL(request.url);
   const launchResponse = await deps.fetchImpl(`${origin}/api/sandbox`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       cookie: request.headers.get("cookie") || "",
+      ...(teamId ? { [ACTIVE_TEAM_HEADER]: teamId } : {}),
       ...(request.headers.get("authorization")
         ? { Authorization: request.headers.get("authorization")! }
         : {}),
@@ -112,6 +125,9 @@ export async function handleLegacyRestart(
       baseBranch: record.base_branch,
       workingBranch: record.working_branch,
       createBranch: false,
+      ...(loaded.rootDirectory === undefined
+        ? {}
+        : { rootDirectory: loaded.rootDirectory }),
       ...(restoreSnapshotId
         ? {
             restoreSnapshotId,

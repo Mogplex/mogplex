@@ -94,6 +94,10 @@ Older saved workspaces can retain a personal scope. If no team workspace exists,
 Mogplex can resume a personal workspace that belongs to the caller. The repository,
 branch, and root must match. The caller's role in the team still applies.
 
+If Mogplex cannot resume an older workspace, the launch fails. Mogplex keeps the saved
+workspace record for recovery. Legacy restarts use the server's configured app
+URL. They retain the team scope and saved root.
+
 ## Manual trigger input
 
 `mogplex_trigger_automation.input` is merged into the run metadata before Mogplex adds authoritative repo, installation, flow, version, and source fields. For a GitHub-oriented flow, pass the same fields its conditions and agent prompt expect, for example:
