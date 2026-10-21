@@ -335,14 +335,13 @@ test("a stopped non-persistent legacy workspace is kept for explicit recovery", 
   });
 });
 
-test("provider persistence overrides a stale persistent flag before cleanup", async () => {
+test("a stale persistent flag delegates to recovery without deleting the saved workspace", async () => {
   await withSavedWorkspaces(async ({ legacy, deps, provider }) => {
     assert.equal(legacy.persistent, true);
     provider.persistent = false;
-    await assert.rejects(
-      deps.resolveNameCollision(collisionInput()),
-      /Saved workspace is unavailable/
-    );
+    const result = await deps.resolveNameCollision(collisionInput());
+    assert.equal(result.kind, "restart");
+    if (result.kind === "restart") assert.equal(result.record.id, legacy.id);
   });
 });
 

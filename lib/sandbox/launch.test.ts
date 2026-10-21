@@ -147,7 +147,7 @@ describe("resolveNameCollision", () => {
     }
   );
 
-  it("honors the provider's non-persistent flag before restarting a stale persistent record", async () => {
+  it("delegates a stale persistent record to snapshot-preserving restart without retiring it", async () => {
     const record = sandboxRecord({ status: "stopped", persistent: true });
     await expect(
       resolveNameCollision(input, {
@@ -162,7 +162,7 @@ describe("resolveNameCollision", () => {
           throw new Error("Saved workspace kept for recovery");
         },
       })
-    ).rejects.toThrow("Saved workspace kept for recovery");
+    ).resolves.toEqual({ kind: "restart", record });
   });
 
   it("creates fresh when a stopped persistent record has no provider sandbox", async () => {

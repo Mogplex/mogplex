@@ -385,9 +385,10 @@ export async function resolveNameCollision(
   // identity and filesystem history. Hand it to the normal restart lifecycle,
   // which performs admission, resumes the provider session, and bootstraps the
   // dev server on the same record.
+  // Restart also captures legacy recovery when provider persistence disagrees;
+  // that mismatch must not turn a saved workspace into a deletion here.
   if (
     matchingRecordIsPersistent &&
-    !isSandboxExplicitlyNonPersistent(sandbox) &&
     (matchingRecordNeedsRestart || vercelStatus === "stopped")
   ) {
     return { kind: "restart", record: matchingRecordForRoot };

@@ -83,8 +83,9 @@ They must not receive the internal secret.
 Without this secret, the API returns `503 SERVICE_UNAVAILABLE`. The response
 does not expose server configuration. Server logs name the setting to correct.
 
-The caller must own the repository. Its saved `product_team_id` selects the team
-scope. Headers from the client cannot change this scope.
+The caller must match the repository's recorded creator. Other members of a team
+receive `404 NOT_FOUND` for that team's repository. Its saved `product_team_id`
+selects the team scope. Headers from the client cannot change this scope.
 
 Team launches need a role that permits `tools.bash`.
 Creation and restart both check this capability. Personal repositories keep their

@@ -80,15 +80,14 @@ export async function handleLegacyRestart(
     );
   }
 
-  const snapshotProjectId =
-    record.vercel_project_id ?? record.billing_project_id ?? null;
-  const snapshotTeamId =
-    record.vercel_team_id ?? record.billing_team_id ?? null;
   let restoreSnapshotId: string | null;
   const resolved = await deps.resolveLoadedSandboxRouteContext(loaded, {
     hydrateSandboxClient: false,
   });
   if (!resolved.ok) return buildSandboxRouteErrorResponse(resolved);
+  // Snapshot ownership follows the provider that captures it, including rotations.
+  const snapshotProjectId = resolved.context.credentials.vercelProjectId;
+  const snapshotTeamId = resolved.context.credentials.vercelTeamId;
   try {
     restoreSnapshotId = await captureLegacyWorkspaceSnapshot({
       deps,
