@@ -319,3 +319,54 @@ test("snapshot metadata never overwrites a concurrently replaced provider record
     else process.env.MOGPLEX_DATA_BACKEND = previousBackend;
   }
 });
+
+for (const status of [503, undefined]) {
+  test(`legacy provider lookup ${status ?? "network"} failure remains a retryable service error`, async () => {
+    const { createSandboxRestartHandler } =
+      await loadSandboxRestartRouteModule();
+    let changes = 0;
+    const errors: unknown[] = [];
+    const originalError = console.error;
+    console.error = (...args) => errors.push(args);
+    try {
+      const handler = createSandboxRestartHandler({
+        loadOwnedSandboxRouteRecord: (async () =>
+          buildLoadedSandboxRestartRecord()) as never,
+        resolveLoadedSandboxRouteContext: async (loaded) =>
+          buildResolvedSandboxRouteContext(loaded) as never,
+        getSandbox: async () => {
+          throw Object.assign(new Error("Private provider connection detail"), {
+            status,
+          });
+        },
+        updateSandboxRecord: async () => {
+          changes++;
+          return { id: "sandbox-1" } as never;
+        },
+        stopSandboxRecord: async () => {
+          changes++;
+          return { id: "sandbox-1" } as never;
+        },
+        fetchImpl: async () => {
+          changes++;
+          return Response.json({});
+        },
+      });
+      const response = await handler(
+        new Request("https://browser.example/api/sandbox", { method: "POST" }),
+        buildSandboxRouteParams()
+      );
+      assert.equal(response.status, 503);
+      const body = await response.text();
+      assert.match(body, /Try again later/);
+      assert.doesNotMatch(body, /Private provider|support|recovery/);
+      assert.equal(changes, 0);
+      assert.match(
+        JSON.stringify(errors),
+        /Private provider connection detail/
+      );
+    } finally {
+      console.error = originalError;
+    }
+  });
+}

@@ -9,7 +9,7 @@ import { buildLifecycleConflictResponse } from "@/lib/sandbox/lifecycle-conflict
 import type { RestartSandboxRecord, SandboxRestartDeps } from "./types";
 import {
   captureLegacyWorkspaceSnapshot,
-  LegacySnapshotConflictError,
+  LegacySnapshotError,
 } from "./legacy-snapshot";
 
 /**
@@ -80,6 +80,10 @@ export async function handleLegacyRestart(
     );
   }
 
+  const snapshotProjectId =
+    record.vercel_project_id ?? record.billing_project_id ?? null;
+  const snapshotTeamId =
+    record.vercel_team_id ?? record.billing_team_id ?? null;
   let restoreSnapshotId: string | null;
   const resolved = await deps.resolveLoadedSandboxRouteContext(loaded, {
     hydrateSandboxClient: false,
@@ -90,6 +94,8 @@ export async function handleLegacyRestart(
       deps,
       recordId: record.id,
       sandboxId: record.sandbox_id,
+      snapshotProjectId,
+      snapshotTeamId,
       credentials: {
         vercelToken: resolved.context.credentials.vercelToken,
         vercelTeamId: resolved.context.credentials.vercelTeamId,
@@ -97,12 +103,16 @@ export async function handleLegacyRestart(
       },
     });
   } catch (error) {
-    if (error instanceof LegacySnapshotConflictError) {
-      return NextResponse.json({ error: error.message }, { status: 409 });
+    if (error instanceof LegacySnapshotError) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: error.status }
+      );
     }
     console.error("[sandbox/restart] Snapshot billing recovery failed", {
       sandboxRecordId: record.id,
       errorName: error instanceof Error ? error.name : typeof error,
+      errorMessage: error instanceof Error ? error.message : String(error),
     });
     return NextResponse.json(
       { error: "The sandbox service is not available. Try again later." },
@@ -115,38 +125,6 @@ export async function handleLegacyRestart(
         error: "Saved workspace is unavailable. Contact support for recovery.",
       },
       { status: 409 }
-    );
-  }
-
-  const snapshotProjectId =
-    record.vercel_project_id ?? record.billing_project_id ?? null;
-  const snapshotTeamId =
-    record.vercel_team_id ?? record.billing_team_id ?? null;
-
-  try {
-    const saved = await deps.updateSandboxRecord(
-      record.id,
-      {
-        snapshot_id: restoreSnapshotId,
-        snapshot_billing_project_id: snapshotProjectId,
-        snapshot_billing_team_id: snapshotTeamId,
-      },
-      { expectedSandboxId: record.sandbox_id }
-    );
-    if (!saved) {
-      throw new Error("Saved workspace changed before its snapshot was stored");
-    }
-  } catch (error) {
-    console.error(
-      "[sandbox/restart] Failed to persist snapshot metadata:",
-      error
-    );
-    return NextResponse.json(
-      {
-        error:
-          "Mogplex could not save the workspace snapshot. Contact support for recovery.",
-      },
-      { status: 503 }
     );
   }
 

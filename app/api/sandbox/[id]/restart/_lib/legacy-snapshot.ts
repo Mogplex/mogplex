@@ -9,16 +9,26 @@ type CaptureInput = {
   deps: SandboxRestartDeps;
   recordId: string;
   sandboxId: string;
+  snapshotProjectId: string | null;
+  snapshotTeamId: string | null;
   credentials: Parameters<SandboxRestartDeps["getSandbox"]>[1];
 };
 type CloseAttempt = NonNullable<
   Awaited<ReturnType<SandboxRestartDeps["prepareSandboxBillingClose"]>>
 >;
 
-export class LegacySnapshotConflictError extends Error {
-  constructor() {
-    super("The workspace could not restart. Try again.");
-    this.name = "LegacySnapshotConflictError";
+export class LegacySnapshotError extends Error {
+  constructor(
+    readonly status: 409 | 503,
+    cause?: unknown
+  ) {
+    super(
+      status === 409
+        ? "The workspace could not restart. Try again."
+        : "Mogplex could not save the workspace snapshot. Contact support for recovery.",
+      { cause }
+    );
+    this.name = "LegacySnapshotError";
   }
 }
 
@@ -84,7 +94,9 @@ export async function captureLegacyWorkspaceSnapshot(
       sandboxRecordId: input.recordId,
       providerNotFound: isNotFoundError(error),
       errorName: error instanceof Error ? error.name : typeof error,
+      errorMessage: error instanceof Error ? error.message : String(error),
     });
+    if (!isNotFoundError(error)) throw error;
     return null;
   }
   const attempt = await input.deps.prepareSandboxBillingClose(input.recordId);
@@ -103,12 +115,40 @@ export async function captureLegacyWorkspaceSnapshot(
       sandboxRecordId: input.recordId,
       providerNotFound: isNotFoundError(error),
       errorName: error instanceof Error ? error.name : typeof error,
+      errorMessage: error instanceof Error ? error.message : String(error),
     });
   }
-  if (
-    attempt &&
-    !(await settleClose(input, attempt, previousSessionId, snapshotCompletedAt))
-  )
-    throw new LegacySnapshotConflictError();
+  let storageError: LegacySnapshotError | null = null;
+  if (snapshotId) {
+    try {
+      // Save the recovery reference before any billing outcome can block restart.
+      const saved = await input.deps.updateSandboxRecord(
+        input.recordId,
+        {
+          snapshot_id: snapshotId,
+          snapshot_billing_project_id: input.snapshotProjectId,
+          snapshot_billing_team_id: input.snapshotTeamId,
+        },
+        { expectedSandboxId: input.sandboxId }
+      );
+      if (!saved)
+        throw new Error(
+          "Saved workspace changed before its snapshot was stored"
+        );
+    } catch (error) {
+      console.error("[sandbox/restart] Failed to persist snapshot metadata:", {
+        sandboxRecordId: input.recordId,
+        snapshotId,
+        error,
+      });
+      storageError = new LegacySnapshotError(503, error);
+    }
+  }
+  // Even a failed metadata write must settle the prepared billing generation.
+  const settled = attempt
+    ? await settleClose(input, attempt, previousSessionId, snapshotCompletedAt)
+    : true;
+  if (storageError) throw storageError;
+  if (!settled) throw new LegacySnapshotError(409);
   return snapshotId;
 }

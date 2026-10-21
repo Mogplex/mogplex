@@ -11,6 +11,9 @@ for (const scenario of [
   "running failure",
   "stopped failure",
   "successful snapshot",
+  "successful snapshot unknown outcome",
+  "successful snapshot rotated outcome",
+  "successful snapshot still running",
   "metadata failure",
   "rotated failure",
   "missing after failure",
@@ -34,6 +37,7 @@ for (const scenario of [
     let providerReads = 0;
     let providerStops = 0;
     let launches = 0;
+    let storedSnapshotId: string | null = null;
     let providerStatus = "running";
     let providerSessionId = "provider-session-1";
     const finalizedAt: Date[] = [];
@@ -71,7 +75,11 @@ for (const scenario of [
               scenario === "missing end watermark")
           )
             throw Object.assign(new Error("Provider gone"), { status: 404 });
-          if (providerReads > 1 && scenario === "unknown after failure")
+          if (
+            providerReads > 1 &&
+            (scenario === "unknown after failure" ||
+              scenario === "successful snapshot unknown outcome")
+          )
             throw Object.assign(new Error("Provider unavailable"), {
               status: 503,
             });
@@ -97,10 +105,15 @@ for (const scenario of [
                 ].includes(scenario)
               )
                 providerStatus = "stopped";
-              if (scenario === "rotated failure")
+              if (scenario === "successful snapshot unknown outcome")
+                providerStatus = "stopped";
+              if (
+                scenario === "rotated failure" ||
+                scenario === "successful snapshot rotated outcome"
+              )
                 providerSessionId = "provider-session-2";
               if (
-                scenario !== "successful snapshot" &&
+                !scenario.startsWith("successful snapshot") &&
                 scenario !== "metadata failure"
               )
                 throw new Error("Snapshot failed");
@@ -111,10 +124,15 @@ for (const scenario of [
             },
           } as never;
         },
-        updateSandboxRecord: async () =>
-          (scenario === "metadata failure"
-            ? null
-            : { id: "sandbox-1" }) as never,
+        updateSandboxRecord: async (_id, updates) => {
+          order.push("persist");
+          if (scenario === "metadata failure") return null as never;
+          storedSnapshotId =
+            typeof updates.snapshot_id === "string"
+              ? updates.snapshot_id
+              : null;
+          return { id: "sandbox-1" } as never;
+        },
         stopSandboxRecord: async () => {
           order.push("retire");
           return { id: "sandbox-1" } as never;
@@ -135,15 +153,18 @@ for (const scenario of [
           ? 200
           : scenario === "metadata failure" ||
               scenario === "unknown after failure" ||
+              scenario === "successful snapshot unknown outcome" ||
               scenario === "missing end watermark"
             ? 503
             : 409
       );
       assert.equal(
         ledger,
-        scenario === "running failure"
+        scenario === "running failure" ||
+          scenario === "successful snapshot still running"
           ? "open"
           : scenario === "unknown after failure" ||
+              scenario === "successful snapshot unknown outcome" ||
               scenario === "missing end watermark"
             ? "closing"
             : "closed"
@@ -161,6 +182,19 @@ for (const scenario of [
         "read provider state once after the ambiguous operation"
       );
       assert.ok(order.indexOf("prepare") < order.indexOf("snapshot"));
+      if (scenario.startsWith("successful snapshot")) {
+        assert.equal(
+          storedSnapshotId,
+          "saved-snapshot",
+          "retain the captured snapshot even when billing settlement prevents restart"
+        );
+        assert.ok(
+          order.indexOf("persist") < order.indexOf("finalize") ||
+            !order.includes("finalize")
+        );
+      }
+      if (scenario !== "successful snapshot")
+        assert.ok(!order.includes("retire"));
       if (scenario === "successful snapshot")
         assert.ok(order.indexOf("finalize") < order.indexOf("launch"));
       if (scenario === "stopped failure" || scenario === "rotated failure")
