@@ -3,15 +3,16 @@ import {
   type SandboxPostDeps,
 } from "@/app/api/sandbox/_lib/deps";
 import {
-  loadMatchingSandboxRecord,
+  loadMatchingSandboxRecordRow,
   resolveNameCollision,
 } from "@/lib/sandbox/launch";
 import { buildSandboxName } from "@/lib/sandbox/sandbox-name";
+import { resolveSandboxRecordCredentials } from "@/lib/sandbox/get-user-credentials";
 import { SavedWorkspaceUnavailableError } from "./workspace-conflict";
 
 type LaunchDeps = {
   getActiveSandboxForRepo: typeof getActiveSandboxForRepo;
-  loadMatchingSandboxRecord: typeof loadMatchingSandboxRecord;
+  loadMatchingSandboxRecord: typeof loadMatchingSandboxRecordRow;
   resolveNameCollision: typeof resolveNameCollision;
 };
 
@@ -25,7 +26,7 @@ export function createMogplexApiSandboxPostDeps(
 ): Pick<SandboxPostDeps, "getActiveSandboxForRepo" | "resolveNameCollision"> {
   const deps: LaunchDeps = {
     getActiveSandboxForRepo,
-    loadMatchingSandboxRecord,
+    loadMatchingSandboxRecord: loadMatchingSandboxRecordRow,
     resolveNameCollision,
     ...overrides,
   };
@@ -85,10 +86,27 @@ export function createMogplexApiSandboxPostDeps(
           name: buildSandboxName({ ...input, productTeamId: null }),
         });
         if (legacy) {
+          // Creation can target a different project from the saved workspace.
+          // Use authenticated service credentials and the record's billing target.
+          if (!input.serviceCredentials) return refuseWorkspaceReplacement();
+          const credentials = resolveSandboxRecordCredentials(
+            input.serviceCredentials,
+            legacy
+          );
+          if (!credentials.ok) return refuseWorkspaceReplacement();
           // Let the canonical resolver probe persistence and provider state.
           // A legacy workspace may resume/restart, but must never be discarded.
           const resolved = await deps.resolveNameCollision(
-            { ...input, name: legacy.sandbox_id, productTeamId: null },
+            {
+              ...input,
+              name: legacy.sandbox_id,
+              productTeamId: null,
+              credentials: {
+                vercelToken: credentials.vercelToken,
+                vercelTeamId: credentials.vercelTeamId,
+                vercelProjectId: credentials.vercelProjectId,
+              },
+            },
             {
               stopMatchingRecord: refuseWorkspaceReplacement,
               deleteSandbox: refuseWorkspaceReplacement,

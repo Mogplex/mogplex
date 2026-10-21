@@ -1,17 +1,32 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildPersistedPersistentRestartRecord } from "./helpers/sandbox-restart-route-fixtures";
+import type { SandboxServiceCredentials } from "../../lib/sandbox/get-user-credentials";
 import { buildSandboxName } from "../../lib/sandbox/sandbox-name";
 
 const TEAM_ID = "00000000-0000-4000-8000-000000000456";
 const REPO_ID = "00000000-0000-4000-8000-000000000123";
+const serviceCredentials: SandboxServiceCredentials = {
+  userId: "user-1",
+  productTeamId: TEAM_ID,
+  vercelToken: "platform-token",
+  vercelTeamId: null,
+  vercelProjectId: "platform-project",
+  allowPlatformSandbox: true,
+  userVercelToken: "user-token",
+  userVercelTeamId: "user-team",
+  accountDefaultVercelProjectId: null,
+  accountDefaultVercelTeamId: null,
+};
 const identity = { userId: "user-1", repoId: REPO_ID, workingBranch: "main" };
 type StoredSandbox = ReturnType<
   typeof buildPersistedPersistentRestartRecord
 > & {
   product_team_id: string | null;
+  billing_source?: "platform" | "user_vercel_project" | null;
+  billing_project_id?: string | null;
+  billing_team_id?: string | null;
 };
-
 async function withSavedWorkspaces(
   runTest: (fixture: {
     legacy: StoredSandbox;
@@ -26,6 +41,11 @@ async function withSavedWorkspaces(
       persistent: boolean;
       missing: boolean;
       recordDisappears: boolean;
+      expectedCredentials?: {
+        vercelToken: string;
+        vercelProjectId: string;
+        vercelTeamId?: string | null;
+      };
     };
   }) => Promise<void>
 ) {
@@ -50,6 +70,13 @@ async function withSavedWorkspaces(
     persistent: true,
     missing: false,
     recordDisappears: false,
+    expectedCredentials: undefined as
+      | {
+          vercelToken: string;
+          vercelProjectId: string;
+          vercelTeamId?: string | null;
+        }
+      | undefined,
   };
   let legacyLookups = 0;
   const originalFetch = globalThis.fetch;
@@ -109,7 +136,9 @@ async function withSavedWorkspaces(
     const deps = createMogplexApiSandboxPostDeps({
       resolveNameCollision: (input, policy) =>
         resolveNameCollision(input, {
-          getSandbox: async (name) => {
+          getSandbox: async (name, credentials) => {
+            if (provider.expectedCredentials)
+              assert.deepEqual(credentials, provider.expectedCredentials);
             providerNames.push(name);
             if (!records.some((record) => record.sandbox_id === name)) {
               throw new Error("Scoped provider probe failed");
@@ -150,6 +179,7 @@ function collisionInput(rootDirectory: string | null = null) {
       rootDirectory,
     }),
     credentials: { vercelToken: "vercel-token", vercelProjectId: "project-1" },
+    serviceCredentials,
   };
 }
 
@@ -396,3 +426,75 @@ test("legacy lookup does not cross root directories", async () => {
     assert.notEqual(input.name, legacy.sandbox_id);
   });
 });
+
+for (const billingSource of [
+  "platform",
+  "user_vercel_project",
+  null,
+] as const) {
+  test(`team target changes preserve the saved ${billingSource ?? "inferred"} provider credentials`, async () => {
+    await withSavedWorkspaces(
+      async ({ legacy, deps, provider, claims, providerNames }) => {
+        const { maybeReturnNameCollisionResponse } =
+          await import("../../app/api/sandbox/_lib/launch");
+        legacy.status = "paused";
+        legacy.billing_source = billingSource;
+        legacy.billing_project_id = "saved-project";
+        legacy.billing_team_id = "saved-team";
+        provider.status = "running";
+        provider.expectedCredentials =
+          billingSource === "platform"
+            ? {
+                vercelToken: "platform-token",
+                vercelProjectId: "platform-project",
+                vercelTeamId: null,
+              }
+            : {
+                vercelToken: "user-token",
+                vercelProjectId: "saved-project",
+                vercelTeamId: "saved-team",
+              };
+        const input = collisionInput();
+        const response = await maybeReturnNameCollisionResponse(
+          deps as never,
+          {
+            repoId: REPO_ID,
+            creds: serviceCredentials,
+            actorUserId: identity.userId,
+            productTeamId: TEAM_ID,
+            effectiveRootDirectory: null,
+            runtime: "node22",
+            launchRequest: { workingBranch: "main", baseBranch: "main" },
+            createContext: {
+              credentials: input.credentials,
+              ownership: { billingSource: "user_vercel_project" },
+            },
+          } as never,
+          "boot-claim",
+          new Request("https://mogplex.internal/api/sandbox")
+        );
+        assert.ok(response);
+        assert.equal(response.status, 200);
+        assert.equal((await response.json()).sandbox.id, legacy.id);
+        assert.equal(claims.size, 0);
+        providerNames.length = 0;
+        await assert.rejects(
+          deps.resolveNameCollision({
+            ...input,
+            serviceCredentials: {
+              ...serviceCredentials,
+              allowPlatformSandbox: false,
+              userVercelToken: null,
+            },
+          }),
+          /Saved workspace is unavailable/
+        );
+        assert.deepEqual(
+          providerNames,
+          [],
+          "unavailable record credentials must not probe the new launch target"
+        );
+      }
+    );
+  });
+}

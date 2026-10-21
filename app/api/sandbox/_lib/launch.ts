@@ -278,6 +278,7 @@ export async function maybeReturnNameCollisionResponse(
       rootDirectory: launch.effectiveRootDirectory,
       runtime: launch.runtime,
       credentials: launch.createContext.credentials,
+      serviceCredentials: launch.creds,
       billingSource: launch.createContext.ownership.billingSource,
       billingTeamId: launch.createContext.credentials.vercelTeamId,
       billingProjectId: launch.createContext.credentials.vercelProjectId,

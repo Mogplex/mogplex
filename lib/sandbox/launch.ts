@@ -15,7 +15,12 @@ import { toSandboxClientRecord } from "@/lib/sandbox/summary";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import type { SandboxBillingMode } from "@/lib/sandbox/billing";
 import type { SandboxRuntime } from "@/lib/sandbox/runtimes";
-import type { SandboxLifecycleStatus, SandboxRecord } from "@/lib/types";
+import type { SandboxServiceCredentials } from "@/lib/sandbox/get-user-credentials";
+import type {
+  SandboxLifecycleStatus,
+  SandboxRecord,
+  SandboxRecordRow,
+} from "@/lib/types";
 
 export type VercelCredentials = {
   vercelToken: string;
@@ -40,6 +45,8 @@ type ResolveNameCollisionInput = {
   workingBranch: string;
   rootDirectory: string | null;
   credentials: VercelCredentials;
+  /** Authenticated credential bundle for resolving a saved record's target. */
+  serviceCredentials?: SandboxServiceCredentials;
   baseBranch?: string | null;
   runtime?: SandboxRuntime | null;
   billingSource?: SandboxBillingMode | null;
@@ -110,14 +117,14 @@ function isRestartablePersistentRecord(record: SandboxRecord | null) {
   );
 }
 
-export async function loadMatchingSandboxRecord(input: {
+export async function loadMatchingSandboxRecordRow(input: {
   name: string;
   repoId: string;
   userId: string;
   productTeamId?: string | null;
   workingBranch: string;
   rootDirectory: string | null;
-}) {
+}): Promise<SandboxRecordRow | null> {
   let query = supabaseAdmin
     .from("sandboxes")
     .select(SANDBOX_COLLISION_SELECT)
@@ -141,7 +148,14 @@ export async function loadMatchingSandboxRecord(input: {
     throw new Error(`Failed to load matching sandbox record: ${error.message}`);
   }
 
-  return data ? toSandboxClientRecord(data as never) : null;
+  return data as SandboxRecordRow | null;
+}
+
+export async function loadMatchingSandboxRecord(
+  input: Parameters<typeof loadMatchingSandboxRecordRow>[0]
+) {
+  const record = await loadMatchingSandboxRecordRow(input);
+  return record ? toSandboxClientRecord(record) : null;
 }
 
 async function insertAdoptedSandboxRecord(input: ResolveNameCollisionInput) {
