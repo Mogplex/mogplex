@@ -265,22 +265,28 @@ export async function maybeReturnNameCollisionResponse(
     productTeamId: launch.productTeamId,
     rootDirectory: launch.effectiveRootDirectory,
   });
-  const collision = await deps.resolveNameCollision({
-    name: sandboxName,
-    repoId: launch.repoId,
-    userId: launch.creds.userId,
-    productTeamId: launch.productTeamId,
-    actorUserId: launch.actorUserId,
-    workingBranch: launch.launchRequest.workingBranch,
-    baseBranch: launch.launchRequest.baseBranch,
-    rootDirectory: launch.effectiveRootDirectory,
-    runtime: launch.runtime,
-    credentials: launch.createContext.credentials,
-    billingSource: launch.createContext.ownership.billingSource,
-    billingTeamId: launch.createContext.credentials.vercelTeamId,
-    billingProjectId: launch.createContext.credentials.vercelProjectId,
-    limitClaimId,
-  });
+  let collision: Awaited<ReturnType<SandboxPostDeps["resolveNameCollision"]>>;
+  try {
+    collision = await deps.resolveNameCollision({
+      name: sandboxName,
+      repoId: launch.repoId,
+      userId: launch.creds.userId,
+      productTeamId: launch.productTeamId,
+      actorUserId: launch.actorUserId,
+      workingBranch: launch.launchRequest.workingBranch,
+      baseBranch: launch.launchRequest.baseBranch,
+      rootDirectory: launch.effectiveRootDirectory,
+      runtime: launch.runtime,
+      credentials: launch.createContext.credentials,
+      billingSource: launch.createContext.ownership.billingSource,
+      billingTeamId: launch.createContext.credentials.vercelTeamId,
+      billingProjectId: launch.createContext.credentials.vercelProjectId,
+      limitClaimId,
+    });
+  } catch (error) {
+    await releaseSandboxBootLimitClaim(launch.creds.userId, limitClaimId);
+    throw error;
+  }
 
   if (collision.kind === "create") return null;
 

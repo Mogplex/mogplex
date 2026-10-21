@@ -7,6 +7,7 @@ import {
 import { buildSandboxRouteErrorResponse } from "@/lib/sandbox/route-context";
 import { buildLifecycleConflictResponse } from "@/lib/sandbox/lifecycle-conflict";
 import type { RestartSandboxRecord, SandboxRestartDeps } from "./types";
+import { captureLegacyWorkspaceSnapshot } from "./legacy-snapshot";
 
 /**
  * Legacy non-persistent restart: snapshot the VM, retire the record,
@@ -33,7 +34,9 @@ export async function handleLegacyRestart(
     // Recheck the saved team's role before touching its provider session.
     const headers = new Headers(request.headers);
     headers.set(ACTIVE_TEAM_HEADER, teamId);
-    loaded = await loadRecord(new Request(request, { headers }));
+    loaded = await loadRecord(
+      new Request(request.url, { method: request.method, headers })
+    );
     if (!loaded.ok) return buildSandboxRouteErrorResponse(loaded);
     if (loaded.record.product_team_id !== teamId) {
       return buildLifecycleConflictResponse(
@@ -74,25 +77,25 @@ export async function handleLegacyRestart(
   if (!resolved.ok) return buildSandboxRouteErrorResponse(resolved);
   if (record.sandbox_id !== "pending") {
     try {
-      const sandbox = await deps.getSandbox(
-        record.sandbox_id,
-        {
+      restoreSnapshotId = await captureLegacyWorkspaceSnapshot({
+        deps,
+        recordId: record.id,
+        sandboxId: record.sandbox_id,
+        credentials: {
           vercelToken: resolved.context.credentials.vercelToken,
           vercelTeamId: resolved.context.credentials.vercelTeamId,
           vercelProjectId: resolved.context.credentials.vercelProjectId,
         },
-        {
-          resume: false,
-          onResume: async (resumedSandbox) => {
-            await deps.requireSandboxBillingSession(record.id, resumedSandbox);
-          },
-        }
+      });
+    } catch (error) {
+      console.error("[sandbox/restart] Snapshot billing recovery failed", {
+        sandboxRecordId: record.id,
+        errorName: error instanceof Error ? error.name : typeof error,
+      });
+      return NextResponse.json(
+        { error: "The sandbox service is not available. Try again later." },
+        { status: 503 }
       );
-      await deps.prepareSandboxBillingClose(record.id);
-      const snapshot = await sandbox.snapshot({ expiration: 0 });
-      restoreSnapshotId = snapshot.snapshotId;
-    } catch {
-      // An unknown provider/snapshot outcome must never discard the checkout.
     }
   }
   if (!restoreSnapshotId) {

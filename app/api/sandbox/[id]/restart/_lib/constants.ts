@@ -16,6 +16,7 @@ import {
 import {
   finalizeSandboxBillingClose,
   prepareSandboxBillingClose,
+  reopenSandboxBillingClose,
   requireSandboxBillingSession,
 } from "@/lib/billing/sandbox-usage";
 import type { SandboxRestartDeps } from "./types";
@@ -46,5 +47,6 @@ export const defaultSandboxRestartDeps: SandboxRestartDeps = {
   fetchImpl: fetch,
   requireSandboxBillingSession,
   prepareSandboxBillingClose,
+  reopenSandboxBillingClose,
   finalizeSandboxBillingClose,
 };

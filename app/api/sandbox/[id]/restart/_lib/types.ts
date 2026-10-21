@@ -19,6 +19,7 @@ import type {
 import type {
   finalizeSandboxBillingClose,
   prepareSandboxBillingClose,
+  reopenSandboxBillingClose,
   requireSandboxBillingSession,
 } from "@/lib/billing/sandbox-usage";
 
@@ -89,5 +90,6 @@ export type SandboxRestartDeps = {
   fetchImpl: typeof fetch;
   requireSandboxBillingSession: typeof requireSandboxBillingSession;
   prepareSandboxBillingClose: typeof prepareSandboxBillingClose;
+  reopenSandboxBillingClose: typeof reopenSandboxBillingClose;
   finalizeSandboxBillingClose: typeof finalizeSandboxBillingClose;
 };

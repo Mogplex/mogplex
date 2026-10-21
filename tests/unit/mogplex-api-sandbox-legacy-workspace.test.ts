@@ -20,6 +20,7 @@ async function withSavedWorkspaces(
       (typeof import("../../app/api/v1/mogplex/sandboxes/_lib/launch-deps"))["createMogplexApiSandboxPostDeps"]
     >;
     providerNames: string[];
+    claims: Set<string>;
     provider: {
       status: string;
       persistent: boolean;
@@ -43,6 +44,7 @@ async function withSavedWorkspaces(
     product_team_id: null,
   };
   const records: StoredSandbox[] = [legacy];
+  const claims = new Set(["boot-claim"]);
   const provider = {
     status: "stopped",
     persistent: true,
@@ -53,6 +55,18 @@ async function withSavedWorkspaces(
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (input, init) => {
     const url = new URL(String(input));
+    if (url.pathname === "/rest/v1/limit_events" && init?.method === "DELETE") {
+      if (
+        url.searchParams.get("user_id") === `eq.${identity.userId}` &&
+        url.searchParams.get("route_key") === "eq.sandbox_boot" &&
+        url.searchParams.get("decision") === "eq.allowed"
+      ) {
+        claims.delete(
+          (url.searchParams.get("claim_id") ?? "").replace(/^eq\./, "")
+        );
+      }
+      return Response.json(null);
+    }
     assert.equal(
       init?.method ?? "GET",
       "GET",
@@ -119,7 +133,7 @@ async function withSavedWorkspaces(
           ...policy,
         }),
     });
-    await runTest({ legacy, records, deps, providerNames, provider });
+    await runTest({ legacy, records, deps, providerNames, provider, claims });
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -137,6 +151,83 @@ function collisionInput(rootDirectory: string | null = null) {
     }),
     credentials: { vercelToken: "vercel-token", vercelProjectId: "project-1" },
   };
+}
+
+test("a refused legacy collision releases its provisional boot claim", async () => {
+  await withSavedWorkspaces(async ({ deps, provider, claims }) => {
+    const { maybeReturnNameCollisionResponse } =
+      await import("../../app/api/sandbox/_lib/launch");
+    const input = collisionInput();
+    provider.missing = true;
+    await assert.rejects(
+      maybeReturnNameCollisionResponse(
+        deps as never,
+        {
+          repoId: REPO_ID,
+          creds: { userId: identity.userId },
+          actorUserId: identity.userId,
+          productTeamId: TEAM_ID,
+          effectiveRootDirectory: null,
+          runtime: "node22",
+          launchRequest: { workingBranch: "main", baseBranch: "main" },
+          createContext: {
+            credentials: input.credentials,
+            ownership: { billingSource: "platform" },
+          },
+        } as never,
+        "boot-claim",
+        new Request("https://mogplex.internal/api/sandbox")
+      ),
+      /Saved workspace is unavailable/
+    );
+    assert.equal(claims.size, 0);
+  });
+});
+
+for (const repoRoot of [null, "apps/web"]) {
+  test(`omitting the launch root resolves repository default ${repoRoot ?? "root"} before legacy lookup`, async () => {
+    await withSavedWorkspaces(async ({ legacy, deps }) => {
+      const { resolveLaunchRootDirectory } =
+        await import("../../app/api/sandbox/_lib/utils");
+      const request = {
+        repoId: REPO_ID,
+        baseBranch: "main",
+        workingBranch: "main",
+        createBranch: false,
+        rootDirectory: undefined,
+        restoreSnapshotId: null,
+        restoreSnapshotProjectId: null,
+        restoreSnapshotTeamId: null,
+      };
+      const root = resolveLaunchRootDirectory({
+        request,
+        repo: { root_directory: repoRoot },
+      });
+      legacy.status = "running";
+      legacy.root_directory = repoRoot;
+      legacy.sandbox_id = buildSandboxName({
+        ...identity,
+        rootDirectory: repoRoot,
+      });
+      const result = await deps.getActiveSandboxForRepo(
+        REPO_ID,
+        identity.userId,
+        "main",
+        root,
+        TEAM_ID
+      );
+      assert.equal(root, repoRoot);
+      assert.equal(result?.id, legacy.id);
+      if (repoRoot)
+        assert.equal(
+          resolveLaunchRootDirectory({
+            request: { ...request, rootDirectory: null },
+            repo: { root_directory: repoRoot },
+          }),
+          null
+        );
+    });
+  });
 }
 
 test("team launch keeps an active legacy personal workspace", async () => {
