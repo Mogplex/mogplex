@@ -120,6 +120,7 @@ async function withInternalSecret(
   const environment = {
     INTERNAL_API_SECRET: "sandbox-restart-test-secret",
     MOGPLEX_DATA_BACKEND: "supabase",
+    APP_URL: "https://configured-app.example",
     PLATFORM_VERCEL_TOKEN: "vercel-token",
     VERCEL_PROJECT_ID: "project-123",
     PLATFORM_VERCEL_TEAM_ID: "",
@@ -404,5 +405,68 @@ test("v1 launch fails closed when repository scope cannot be loaded", async () =
     const response = await handler(sandboxRequest({ repoId: REPO_ID }));
     assert.equal(response.status, 500);
     assert.deepEqual(fixture.providerCalls, []);
+  });
+});
+
+test("a saved workspace recovery conflict returns the public reason and CONFLICT code", async () => {
+  await withInternalSecret(async () => {
+    const { launchMogplexApiSandbox } =
+      await import("../../app/api/v1/mogplex/sandboxes/route");
+    const { SavedWorkspaceUnavailableError } =
+      await import("../../app/api/v1/mogplex/sandboxes/_lib/workspace-conflict");
+    const handler = await createAuthenticatedHandler((userId, body) =>
+      launchMogplexApiSandbox(userId, body, async () => {
+        throw new SavedWorkspaceUnavailableError();
+      })
+    );
+    const response = await handler(sandboxRequest({ repoId: REPO_ID }));
+    const payload = await response.json();
+    assert.equal(response.status, 409);
+    assert.equal(payload.error.code, "CONFLICT");
+    assert.match(payload.error.message, /Saved workspace is unavailable/);
+  });
+});
+
+test("legacy restart checks the saved team's real capability even without a team header", async () => {
+  await withInternalSecret(async (state) => {
+    state.teamId = TEAM_ID;
+    state.role = "viewer";
+    const { createSandboxRestartHandler } =
+      await loadSandboxRestartRouteModule();
+    const { loadOwnedSandboxRouteRecord } =
+      await import("../../lib/sandbox/route-context");
+    const { buildInternalApiHeaders } =
+      await import("../../lib/internal-api-auth");
+    let providerCalls = 0;
+    const handler = createSandboxRestartHandler({
+      loadOwnedSandboxRouteRecord: (request, id, options) =>
+        loadOwnedSandboxRouteRecord(request, id, options, {
+          loadOwnedSandboxRecord: async (_id, _userId, select) => ({
+            ...buildPersistedPersistentRestartRecord({
+              user_id: "user-123",
+              persistent: false,
+            }),
+            ...(select.includes("product_team_id")
+              ? { product_team_id: TEAM_ID }
+              : {}),
+          }),
+        }),
+      getSandbox: async () => {
+        providerCalls++;
+        throw new Error("Must not start a VM");
+      },
+      stopSandboxRecord: async () => ({ id: "saved" }) as never,
+      fetchImpl: async () => Response.json({}),
+    });
+    const response = await handler(
+      new Request("https://mogplex.internal/api/sandbox/saved/restart", {
+        method: "POST",
+        headers: buildInternalApiHeaders("user-123"),
+      }),
+      { params: Promise.resolve({ id: "saved" }) }
+    );
+    assert.equal(response.status, 403);
+    assert.match((await response.json()).error, /tools\.bash/);
+    assert.equal(providerCalls, 0);
   });
 });

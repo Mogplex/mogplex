@@ -27,6 +27,7 @@ import type {
 export type RestartSandboxRecord = {
   id: string;
   repo_id?: string | null;
+  product_team_id?: string | null;
   sandbox_id: string;
   base_branch?: string | null;
   working_branch?: string | null;

@@ -20,7 +20,12 @@ async function withSavedWorkspaces(
       (typeof import("../../app/api/v1/mogplex/sandboxes/_lib/launch-deps"))["createMogplexApiSandboxPostDeps"]
     >;
     providerNames: string[];
-    provider: { status: string; persistent: boolean; missing: boolean };
+    provider: {
+      status: string;
+      persistent: boolean;
+      missing: boolean;
+      recordDisappears: boolean;
+    };
   }) => Promise<void>
 ) {
   process.env.MOGPLEX_DATA_BACKEND = "supabase";
@@ -38,10 +43,27 @@ async function withSavedWorkspaces(
     product_team_id: null,
   };
   const records: StoredSandbox[] = [legacy];
+  const provider = {
+    status: "stopped",
+    persistent: true,
+    missing: false,
+    recordDisappears: false,
+  };
+  let legacyLookups = 0;
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async (input) => {
+  globalThis.fetch = async (input, init) => {
     const url = new URL(String(input));
+    assert.equal(
+      init?.method ?? "GET",
+      "GET",
+      "Must not create a new workspace record"
+    );
     assert.equal(url.pathname, "/rest/v1/sandboxes");
+    if (url.searchParams.get("sandbox_id") === `eq.${legacy.sandbox_id}`) {
+      legacyLookups++;
+      if (provider.recordDisappears && legacyLookups > 1)
+        return Response.json(null);
+    }
     const found = records.filter(
       (record) =>
         [
@@ -70,7 +92,6 @@ async function withSavedWorkspaces(
       await import("../../app/api/v1/mogplex/sandboxes/_lib/launch-deps");
     const { resolveNameCollision } = await import("../../lib/sandbox/launch");
     const providerNames: string[] = [];
-    const provider = { status: "stopped", persistent: true, missing: false };
     const deps = createMogplexApiSandboxPostDeps({
       resolveNameCollision: (input, policy) =>
         resolveNameCollision(input, {
@@ -167,6 +188,18 @@ test("an unavailable legacy provider never falls through to a fresh checkout", a
       deps.resolveNameCollision(collisionInput()),
       /Saved workspace is unavailable/
     );
+  });
+});
+
+test("a legacy record disappearing during the provider probe is never adopted into a new record", async () => {
+  await withSavedWorkspaces(async ({ deps, provider, records }) => {
+    provider.status = "running";
+    provider.recordDisappears = true;
+    await assert.rejects(
+      deps.resolveNameCollision(collisionInput()),
+      /Saved workspace is unavailable/
+    );
+    assert.equal(records.length, 1);
   });
 });
 

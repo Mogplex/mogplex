@@ -5,6 +5,7 @@ import {
 } from "@/lib/internal-api-auth";
 import { getOwnedRepo } from "@/lib/repos";
 import type { resolveMogplexOAuthToken } from "@/lib/auth/mogplex-oauth";
+import { SavedWorkspaceUnavailableError } from "./_lib/workspace-conflict";
 import {
   normalizeOptionalSearchParam,
   parseMogplexApiListLimit,
@@ -78,17 +79,24 @@ export async function launchMogplexApiSandbox(
     "product_team_id"
   );
   if (!repo) return { ok: false, status: 404, error: "Repository not found" };
-  const response = await post(
-    new Request("https://mogplex.internal/api/sandbox", {
-      method: "POST",
-      // Reusing a stopped VM delegates to RESTART, which authenticates again.
-      headers: buildInternalApiHeaders(userId, {
-        teamId: repo.product_team_id,
-      }),
-      body: JSON.stringify(body),
-    })
-  );
-  return consumeSandboxLaunchResponse(response);
+  try {
+    const response = await post(
+      new Request("https://mogplex.internal/api/sandbox", {
+        method: "POST",
+        // Reusing a stopped VM delegates to RESTART, which authenticates again.
+        headers: buildInternalApiHeaders(userId, {
+          teamId: repo.product_team_id,
+        }),
+        body: JSON.stringify(body),
+      })
+    );
+    return consumeSandboxLaunchResponse(response);
+  } catch (error) {
+    if (error instanceof SavedWorkspaceUnavailableError) {
+      return { ok: false, status: 409, error: error.message };
+    }
+    throw error;
+  }
 }
 
 export function createMogplexApiSandboxesGetHandler(

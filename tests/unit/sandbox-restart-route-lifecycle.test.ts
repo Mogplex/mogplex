@@ -14,7 +14,7 @@ import {
   type PersistentRestartRecord,
 } from "./helpers/sandbox-restart-route-fixtures";
 
-test("POST /api/sandbox/[id]/restart falls back to legacy restart when the stored persistent row is ephemeral in Vercel", async () => {
+test("POST /api/sandbox/[id]/restart preserves a stopped ephemeral workspace without a usable snapshot", async () => {
   const { createSandboxRestartHandler } = await loadSandboxRestartRouteModule();
   const getSandboxOptions: Array<{ resume?: boolean }> = [];
   const releasedClaims: string[] = [];
@@ -95,18 +95,11 @@ test("POST /api/sandbox/[id]/restart falls back to legacy restart when the store
     buildSandboxRouteParams()
   );
 
-  assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { ok: true });
+  assert.equal(response.status, 409);
+  assert.match((await response.json()).error, /Saved workspace is unavailable/);
   assert.deepEqual(releasedClaims, ["claim-restart-1"]);
   assert.deepEqual(updates, [{ persistent: false }]);
-  assert.deepEqual(fetchBodies, [
-    {
-      repoId: "repo-1",
-      baseBranch: "main",
-      workingBranch: "feature-a",
-      createBranch: false,
-    },
-  ]);
+  assert.deepEqual(fetchBodies, []);
   assert.deepEqual(
     getSandboxOptions.map((option) => option.resume),
     [false, false]
@@ -179,8 +172,11 @@ test("POST /api/sandbox/[id]/restart logs when non-persistent demotion loses the
       buildSandboxRouteParams()
     );
 
-    assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), { ok: true });
+    assert.equal(response.status, 409);
+    assert.match(
+      (await response.json()).error,
+      /Saved workspace is unavailable/
+    );
     assert.match(
       String(warnings[0]?.[0]),
       /skipped marking sandbox-1 as non-persistent/
@@ -190,7 +186,7 @@ test("POST /api/sandbox/[id]/restart logs when non-persistent demotion loses the
   }
 });
 
-test("POST /api/sandbox/[id]/restart logs and continues when snapshot metadata persistence fails", async () => {
+test("POST /api/sandbox/[id]/restart preserves the record when snapshot metadata persistence fails", async () => {
   const { createSandboxRestartHandler } = await loadSandboxRestartRouteModule();
   const errors: Array<Parameters<typeof console.error>> = [];
   const fetchCalls: Array<{ url: string; init?: RequestInit }> = [];
@@ -235,19 +231,10 @@ test("POST /api/sandbox/[id]/restart logs and continues when snapshot metadata p
       buildSandboxRouteParams()
     );
 
-    assert.equal(response.status, 200);
-    assert.deepEqual(stopCalls, [{ id: "sandbox-1", sandboxId: "vm_123" }]);
-    assert.equal(fetchCalls.length, 1);
-    assert.deepEqual(JSON.parse(String(fetchCalls[0]?.init?.body)), {
-      repoId: "repo-1",
-      baseBranch: "main",
-      workingBranch: "feature-a",
-      createBranch: false,
-      restoreSnapshotId: "snapshot-123",
-      restoreSnapshotProjectId: "project-1",
-      restoreSnapshotTeamId: null,
-    });
-    assert.deepEqual(await response.json(), { ok: true });
+    assert.equal(response.status, 503);
+    assert.deepEqual(stopCalls, []);
+    assert.deepEqual(fetchCalls, []);
+    assert.match((await response.json()).error, /could not save/);
     assert.equal(errors.length, 1);
     assert.match(String(errors[0]?.[0]), /Failed to persist snapshot metadata/);
   } finally {
@@ -344,7 +331,7 @@ test("POST /api/sandbox/[id]/restart finalizes the old session before waking the
   ]);
 });
 
-test("POST /api/sandbox/[id]/restart relaunches through legacy restart when Vercel has no resumable sandbox behind the name", async () => {
+test("POST /api/sandbox/[id]/restart retains the workspace when Vercel has no resumable sandbox behind the name", async () => {
   const { createSandboxRestartHandler } = await loadSandboxRestartRouteModule();
   const releasedClaims: string[] = [];
   const stopReasons: unknown[] = [];
@@ -414,16 +401,9 @@ test("POST /api/sandbox/[id]/restart relaunches through legacy restart when Verc
     buildSandboxRouteParams()
   );
 
-  assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { ok: true });
+  assert.equal(response.status, 409);
+  assert.match((await response.json()).error, /Saved workspace is unavailable/);
   assert.deepEqual(releasedClaims, ["claim-restart-gone"]);
-  assert.deepEqual(stopReasons, ["manual"]);
-  assert.deepEqual(fetchBodies, [
-    {
-      repoId: "repo-1",
-      baseBranch: "main",
-      workingBranch: "feature-a",
-      createBranch: false,
-    },
-  ]);
+  assert.deepEqual(stopReasons, []);
+  assert.deepEqual(fetchBodies, []);
 });

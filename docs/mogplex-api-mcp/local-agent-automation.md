@@ -94,9 +94,17 @@ Older saved workspaces can retain a personal scope. If no team workspace exists,
 Mogplex can resume a personal workspace that belongs to the caller. The repository,
 branch, and root must match. The caller's role in the team still applies.
 
-If Mogplex cannot resume an older workspace, the launch fails. Mogplex keeps the saved
-workspace record for recovery. Legacy restarts use the server's configured app
-URL. They retain the team scope and saved root.
+If Mogplex cannot resume an older workspace, the API returns `409 CONFLICT`.
+Mogplex keeps the saved workspace record for recovery.
+
+Legacy restarts keep the saved ownership and root. Use `APP_URL`,
+`NEXT_PUBLIC_APP_URL`, or `VERCEL_URL` to set the app URL on the server.
+If server settings have no app URL, the API returns `503 SERVICE_UNAVAILABLE`.
+This check occurs before the workspace changes.
+
+Legacy restarts need a snapshot with no expiry. Mogplex saves the snapshot
+reference before it retires the old record. If snapshot capture or storage fails,
+Mogplex keeps the old record and blocks a new checkout.
 
 ## Manual trigger input
 

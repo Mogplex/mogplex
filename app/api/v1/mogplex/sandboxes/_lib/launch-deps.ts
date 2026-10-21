@@ -7,6 +7,7 @@ import {
   resolveNameCollision,
 } from "@/lib/sandbox/launch";
 import { buildSandboxName } from "@/lib/sandbox/sandbox-name";
+import { SavedWorkspaceUnavailableError } from "./workspace-conflict";
 
 type LaunchDeps = {
   getActiveSandboxForRepo: typeof getActiveSandboxForRepo;
@@ -15,9 +16,7 @@ type LaunchDeps = {
 };
 
 async function refuseWorkspaceReplacement(): Promise<never> {
-  throw new Error(
-    "Saved workspace is unavailable; refusing to replace its checkout"
-  );
+  throw new SavedWorkspaceUnavailableError();
 }
 
 /** Preserve work created before v1 launches carried their repository's team. */
@@ -90,9 +89,14 @@ export function createMogplexApiSandboxPostDeps(
               stopMatchingRecord: refuseWorkspaceReplacement,
               deleteSandbox: refuseWorkspaceReplacement,
               deleteSandboxByName: refuseWorkspaceReplacement,
+              insertAdoptedRecord: refuseWorkspaceReplacement,
             }
           );
-          if (resolved.kind === "create" || resolved.kind === "replace") {
+          if (
+            resolved.kind === "create" ||
+            resolved.kind === "replace" ||
+            resolved.kind === "adopt"
+          ) {
             return refuseWorkspaceReplacement();
           }
           return resolved;

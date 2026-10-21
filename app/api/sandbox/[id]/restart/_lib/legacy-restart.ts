@@ -19,17 +19,28 @@ export async function handleLegacyRestart(
   id: string,
   deps: SandboxRestartDeps
 ): Promise<Response> {
-  const loaded = await deps.loadOwnedSandboxRouteRecord<RestartSandboxRecord>(
-    request,
-    id,
-    {
+  const loadRecord = (scopedRequest: Request) =>
+    deps.loadOwnedSandboxRouteRecord<RestartSandboxRecord>(scopedRequest, id, {
       select:
-        "id, repo_id, sandbox_id, base_branch, working_branch, root_directory, status, persistent, billing_source, billing_team_id, billing_project_id, vercel_team_id, vercel_project_id",
+        "id, repo_id, product_team_id, sandbox_id, base_branch, working_branch, root_directory, status, persistent, billing_source, billing_team_id, billing_project_id, vercel_team_id, vercel_project_id",
       notFoundMessage: "Sandbox not found",
       requireCapability: "tools.bash",
-    }
-  );
+    });
+  let loaded = await loadRecord(request);
   if (!loaded.ok) return buildSandboxRouteErrorResponse(loaded);
+  const teamId = loaded.record.product_team_id ?? null;
+  if (teamId && teamId !== readActiveTeamIdHeader(request)) {
+    // Recheck the saved team's role before touching its provider session.
+    const headers = new Headers(request.headers);
+    headers.set(ACTIVE_TEAM_HEADER, teamId);
+    loaded = await loadRecord(new Request(request, { headers }));
+    if (!loaded.ok) return buildSandboxRouteErrorResponse(loaded);
+    if (loaded.record.product_team_id !== teamId) {
+      return buildLifecycleConflictResponse(
+        "Workspace access changed. Try again."
+      );
+    }
+  }
   const { record } = loaded;
   if (record.status === "pausing") {
     return buildLifecycleConflictResponse(
@@ -40,18 +51,28 @@ export async function handleLegacyRestart(
     return NextResponse.json({ error: "Sandbox not found" }, { status: 404 });
 
   const requestUrl = new URL(request.url);
-  const origin =
+  const internalRequest =
     requestUrl.hostname === "mogplex.internal" ||
-    requestUrl.hostname === "internal.mogplex"
-      ? getCanonicalAppUrl().origin
-      : requestUrl.origin;
-  const teamId = readActiveTeamIdHeader(request);
+    requestUrl.hostname === "internal.mogplex";
+  let origin: string;
+  try {
+    origin = getCanonicalAppUrl(internalRequest ? undefined : request).origin;
+  } catch {
+    console.error(
+      "[sandbox/restart] Configure APP_URL, NEXT_PUBLIC_APP_URL, or VERCEL_URL"
+    );
+    return NextResponse.json(
+      { error: "The sandbox service is not available. Try again later." },
+      { status: 503 }
+    );
+  }
 
   let restoreSnapshotId: string | null = null;
   const resolved = await deps.resolveLoadedSandboxRouteContext(loaded, {
     hydrateSandboxClient: false,
   });
-  if (resolved.ok && record.sandbox_id !== "pending") {
+  if (!resolved.ok) return buildSandboxRouteErrorResponse(resolved);
+  if (record.sandbox_id !== "pending") {
     try {
       const sandbox = await deps.getSandbox(
         record.sandbox_id,
@@ -68,41 +89,60 @@ export async function handleLegacyRestart(
         }
       );
       await deps.prepareSandboxBillingClose(record.id);
-      try {
-        const snapshot = await sandbox.snapshot();
-        restoreSnapshotId = snapshot.snapshotId;
-      } catch {
-        await sandbox.stop();
-      }
+      const snapshot = await sandbox.snapshot({ expiration: 0 });
+      restoreSnapshotId = snapshot.snapshotId;
     } catch {
-      // Already stopped or destroyed.
+      // An unknown provider/snapshot outcome must never discard the checkout.
     }
   }
-
-  await deps.stopSandboxRecord(record.id, {
-    expectedSandboxId: record.sandbox_id,
-    healthStatus: "stopped",
-    stopReason: "manual",
-  });
+  if (!restoreSnapshotId) {
+    return NextResponse.json(
+      {
+        error: "Saved workspace is unavailable. Contact support for recovery.",
+      },
+      { status: 409 }
+    );
+  }
 
   const snapshotProjectId =
     record.vercel_project_id ?? record.billing_project_id ?? null;
   const snapshotTeamId =
     record.vercel_team_id ?? record.billing_team_id ?? null;
 
-  if (restoreSnapshotId) {
-    try {
-      await deps.updateSandboxRecord(record.id, {
+  try {
+    const saved = await deps.updateSandboxRecord(
+      record.id,
+      {
         snapshot_id: restoreSnapshotId,
         snapshot_billing_project_id: snapshotProjectId,
         snapshot_billing_team_id: snapshotTeamId,
-      });
-    } catch (error) {
-      console.error(
-        "[sandbox/restart] Failed to persist snapshot metadata:",
-        error
-      );
+      },
+      { expectedSandboxId: record.sandbox_id }
+    );
+    if (!saved) {
+      throw new Error("Saved workspace changed before its snapshot was stored");
     }
+  } catch (error) {
+    console.error(
+      "[sandbox/restart] Failed to persist snapshot metadata:",
+      error
+    );
+    return NextResponse.json(
+      {
+        error:
+          "Mogplex could not save the workspace snapshot. Contact support for recovery.",
+      },
+      { status: 503 }
+    );
+  }
+
+  const stopped = await deps.stopSandboxRecord(record.id, {
+    expectedSandboxId: record.sandbox_id,
+    healthStatus: "stopped",
+    stopReason: "manual",
+  });
+  if (!stopped) {
+    return buildLifecycleConflictResponse("Workspace changed. Try again.");
   }
 
   const launchResponse = await deps.fetchImpl(`${origin}/api/sandbox`, {
