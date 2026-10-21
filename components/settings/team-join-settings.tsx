@@ -7,6 +7,7 @@ import { fetchTeamSettingsJson } from "./team-settings-helpers";
 import { Switch } from "@/components/ui/switch";
 
 type JoinSetting = {
+  enabled: boolean;
   domain: string | null;
   eligibleDomain: string | null;
   viewer: { canManage: boolean };
@@ -46,7 +47,8 @@ export function TeamJoinSettings({ teamId }: { teamId: string }) {
     }
   }
 
-  const domain = data?.domain || data?.eligibleDomain;
+  const domain = data?.domain || (data?.viewer.canManage ? data.eligibleDomain : null);
+  const canEnable = Boolean(data?.eligibleDomain && (!data.domain || data.domain === data.eligibleDomain));
   return (
     <section className="space-y-4 border border-border/60 bg-card p-4">
       <div>
@@ -68,9 +70,12 @@ export function TeamJoinSettings({ teamId }: { teamId: string }) {
           {data?.viewer.canManage && !data.eligibleDomain && !data.domain && (
             <p className="mt-1 text-xs text-muted-foreground">Verify a work email to enable this setting. Shared email services are not supported.</p>
           )}
+          {data?.viewer.canManage && data.domain && !data.enabled && !canEnable && (
+            <p className="mt-1 text-xs text-muted-foreground">Use a verified @{data.domain} email to turn this on.</p>
+          )}
         </div>
-        <Switch id={`domain-join-${teamId}`} checked={Boolean(data?.domain)}
-          disabled={!data || Boolean(error) || busy || !data.viewer.canManage || (!data.domain && !data.eligibleDomain)}
+        <Switch id={`domain-join-${teamId}`} checked={data?.enabled === true}
+          disabled={!data || Boolean(error) || busy || !data.viewer.canManage || (!data.enabled && !canEnable)}
           onCheckedChange={(enabled) => void save(endpoint, "PATCH", { enabled })} />
       </div>
       {data?.viewer.canManage && (

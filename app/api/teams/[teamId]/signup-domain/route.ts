@@ -2,17 +2,15 @@ import { z } from "zod";
 import { requireProfileId } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { loadTeamMembershipAuth } from "@/lib/team-management";
-import { recordTeamAuditEvent } from "@/lib/team-audit";
 import { verifiedWorkEmailDomain } from "@/lib/team-signup-domain";
 
 const defaults = {
   requireProfileId,
   loadTeamMembershipAuth,
-  recordTeamAuditEvent,
   async read(teamId: string, profileId: string) {
     const { data: team, error } = await supabaseAdmin
       .from("teams")
-      .select("signup_email_domain")
+      .select("signup_email_domain, signup_email_domain_enabled")
       .eq("id", teamId)
       .single();
     if (error) throw new Error("Unable to load this setting.");
@@ -30,17 +28,25 @@ const defaults = {
     if (userError) throw new Error("Unable to load this setting.");
     return {
       domain: team.signup_email_domain as string | null,
+      enabled: team.signup_email_domain_enabled === true,
       eligibleDomain: verifiedWorkEmailDomain(
         user?.email ?? null,
         user?.emailVerified === true
       ),
     };
   },
-  async write(teamId: string, domain: string | null) {
-    const { error } = await supabaseAdmin
-      .from("teams")
-      .update({ signup_email_domain: domain })
-      .eq("id", teamId);
+  async write(
+    teamId: string,
+    profileId: string,
+    domain: string | null,
+    enabled: boolean
+  ) {
+    const { error } = await supabaseAdmin.rpc("set_team_signup_domain", {
+      p_team_id: teamId,
+      p_actor_id: profileId,
+      p_domain: domain,
+      p_enabled: enabled,
+    });
     if (error) throw new Error("Unable to save this setting.");
   },
 };
@@ -66,7 +72,7 @@ export function createTeamSignupDomainHandlers(
       return Response.json({ error: "Forbidden" }, { status: 403 });
     try {
       const setting = await deps.read(teamId, profileId);
-      let domain = setting.domain;
+      let { domain, enabled } = setting;
       if (save) {
         const body = z
           .object({ enabled: z.boolean() })
@@ -85,23 +91,31 @@ export function createTeamSignupDomainHandlers(
             { status: 400 }
           );
         }
-        domain = body.data.enabled ? setting.eligibleDomain : null;
-        await deps.write(teamId, domain);
-        await deps.recordTeamAuditEvent({
-          productTeamId: teamId,
-          actorUserId: profileId,
-          action: "team.signup_domain.changed",
-          targetType: "team",
-          targetId: teamId,
-          payload: { from_domain: setting.domain, to_domain: domain },
-        });
+        if (
+          body.data.enabled &&
+          setting.domain &&
+          setting.domain !== setting.eligibleDomain
+        ) {
+          return Response.json(
+            {
+              error:
+                "Use a verified email from the configured domain to turn this on.",
+            },
+            { status: 403 }
+          );
+        }
+        enabled = body.data.enabled;
+        domain = setting.domain ?? (enabled ? setting.eligibleDomain : null);
+        await deps.write(teamId, profileId, domain, enabled);
       }
       return Response.json({
         domain,
+        enabled,
         eligibleDomain: setting.eligibleDomain,
         viewer: { canManage: auth.canManage },
       });
-    } catch {
+    } catch (error) {
+      console.error("[team-signup-domain] request failed", error);
       return Response.json(
         {
           error: save

@@ -80,6 +80,7 @@ export async function mockTeamSettings(page: Page, role: TeamRole = "owner") {
   await page.route(`**/api/teams/${TEAM.id}/signup-domain`, (route) =>
     fulfillJson(route, {
       domain: null,
+      enabled: false,
       eligibleDomain: "example.com",
       viewer: { canManage },
     })

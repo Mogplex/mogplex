@@ -18,8 +18,8 @@ function fixture(
   eligibleDomain: string | null = "example.com"
 ) {
   let domain: string | null = null;
-  const writes: Array<string | null> = [];
-  let audits = 0;
+  let enabled = false;
+  const writes: Array<{ domain: string | null; enabled: boolean }> = [];
   const deps = {
     requireProfileId: async () => "owner-id",
     loadTeamMembershipAuth: async () =>
@@ -30,20 +30,21 @@ function fixture(
             role,
             canManage: role === "owner" || role === "admin",
           },
-    read: async () => ({ domain, eligibleDomain }),
-    write: async (_id: string, value: string | null) => {
+    read: async () => ({ domain, enabled, eligibleDomain }),
+    write: async (
+      _id: string,
+      _actor: string,
+      value: string | null,
+      nextEnabled: boolean
+    ) => {
       domain = value;
-      writes.push(value);
-    },
-    recordTeamAuditEvent: async () => {
-      audits++;
-      return { ok: true as const };
+      enabled = nextEnabled;
+      writes.push({ domain: value, enabled });
     },
   };
   return {
     deps,
     writes,
-    audits: () => audits,
     handlers: createTeamSignupDomainHandlers(deps),
   };
 }
@@ -67,8 +68,10 @@ for (const role of ["owner", "admin"] as const) {
       (await f.handlers.PATCH(request({ enabled: false }), context)).status,
       200
     );
-    assert.deepEqual(f.writes, ["example.com", null]);
-    assert.equal(f.audits(), 2);
+    assert.deepEqual(f.writes, [
+      { domain: "example.com", enabled: true },
+      { domain: "example.com", enabled: false },
+    ]);
   });
 }
 for (const role of ["developer", "viewer", null] as const) {
@@ -125,5 +128,27 @@ test("requires sign-in, validates IDs, and returns storage failure without succe
     (await failed.PATCH(request({ enabled: true }), context)).status,
     500
   );
-  assert.equal(f.audits(), 0);
+  assert.deepEqual(f.writes, []);
+});
+
+test("a different-domain admin can disable but cannot silently replace the configured domain", async () => {
+  const f = fixture("admin", "other.test");
+  const handlers = createTeamSignupDomainHandlers({
+    ...f.deps,
+    read: async () => ({
+      domain: "example.com",
+      enabled: false,
+      eligibleDomain: "other.test",
+    }),
+  });
+  assert.equal(
+    (await handlers.PATCH(request({ enabled: true }), context)).status,
+    403
+  );
+  assert.deepEqual(f.writes, []);
+  assert.equal(
+    (await handlers.PATCH(request({ enabled: false }), context)).status,
+    200
+  );
+  assert.deepEqual(f.writes, [{ domain: "example.com", enabled: false }]);
 });

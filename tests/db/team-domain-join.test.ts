@@ -22,13 +22,14 @@ describe("verified domain team enrollment", () => {
       create table public.teams (id uuid primary key, name text);
       create table public.team_members (team_id uuid references public.teams(id) on delete cascade,
         user_id uuid references public.profiles(id) on delete cascade, role text,
+        id uuid not null default gen_random_uuid(),
         primary key (team_id, user_id));
-      create table public.team_audit_events (team_id uuid, actor_user_id uuid, action text, target_type text, target_id text, payload jsonb);
+      create table public.team_audit_events (team_id uuid, actor_user_id uuid, actor_member_id uuid, action text, target_type text, target_id text, payload jsonb);
       create table public.session (id text primary key, "userId" uuid references public."user"(id));
       insert into public."user" values ('${owner}', 'owner@example.com', true);
       insert into public.profiles values ('${owner}', '${owner}', 'owner@example.com');
       insert into public.teams values ('${team}', 'Example'), ('${otherTeam}', 'Other');
-      insert into public.team_members values ('${team}', '${owner}', 'owner');
+      insert into public.team_members(team_id,user_id,role) values ('${team}', '${owner}', 'owner');
       grant usage on schema public to service_role;
       grant select, insert, update, delete on all tables in schema public to service_role;
     `);
@@ -51,7 +52,7 @@ describe("verified domain team enrollment", () => {
   }
   async function enable() {
     await db.query(
-      "update public.teams set signup_email_domain=$1 where id=$2",
+      "update public.teams set signup_email_domain=$1, signup_email_domain_enabled=true where id=$2",
       ["example.com", team]
     );
   }
@@ -152,7 +153,7 @@ describe("verified domain team enrollment", () => {
     await signup();
     await enable();
     await db.query(
-      "update public.teams set signup_email_domain=null where id=$1",
+      "update public.teams set signup_email_domain_enabled=false where id=$1",
       [team]
     );
     await signIn();
@@ -160,7 +161,7 @@ describe("verified domain team enrollment", () => {
     await enable();
     await signIn();
     await db.query(
-      "update public.teams set signup_email_domain=null where id=$1",
+      "update public.teams set signup_email_domain_enabled=false where id=$1",
       [team]
     );
     await signIn();
@@ -174,11 +175,10 @@ describe("verified domain team enrollment", () => {
     ]);
     await signIn();
     expect(await memberships()).toEqual([]);
-    await db.query("insert into public.team_members values ($1,$2,$3)", [
-      team,
-      teammate,
-      "developer",
-    ]);
+    await db.query(
+      "insert into public.team_members(team_id,user_id,role) values ($1,$2,$3)",
+      [team, teammate, "developer"]
+    );
     expect(await memberships()).toHaveLength(1);
   });
   it("supports parent deletion cascades and server-role enrollment", async () => {

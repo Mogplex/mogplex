@@ -14,9 +14,11 @@ The control starts off. It matches the exact domain. Subdomains do not match.
 People who already have accounts join at their next sign-in.
 People who sign up with email join after they verify their address.
 Current roles stay the same.
+The team keeps its domain when this control is off.
 
 Turn the control off to stop future joins. Current members keep their access.
 Remove a member to stop that person from an automatic join.
 An owner or admin can still add that account explicitly.
+The app also protects past removals recorded in the team's audit log.
 
 GitHub membership does not give access to a team in Mogplex.
