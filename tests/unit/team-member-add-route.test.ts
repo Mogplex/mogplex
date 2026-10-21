@@ -22,35 +22,39 @@ function fixture(
   } = {}
 ) {
   const writes: unknown[] = [];
-  let audits = 0;
   const db = createClient("https://db.example.test", "test-key", {
     auth: { persistSession: false, autoRefreshToken: false },
     global: {
       fetch: async (input, init) => {
         const url = new URL(String(input));
-        const table = url.pathname.split("/").at(-1);
+        assert.equal(
+          url.pathname.split("/").at(-1),
+          "add_verified_team_member"
+        );
+        assert.equal(init?.method, "POST");
         if (options.fail)
           return Response.json(
             { message: "failed", code: "XX000" },
             { status: 500 }
           );
-        if (table === "user") {
-          assert.equal(url.searchParams.get("emailVerified"), "eq.true");
-          return Response.json(options.missing ? [] : [{ id: "auth-person" }]);
-        }
-        if (table === "profiles") {
-          assert.equal(url.searchParams.get("auth_user_id"), "eq.auth-person");
-          return Response.json([{ id: "person" }]);
-        }
-        assert.equal(table, "team_members");
-        assert.equal(init?.method, "POST");
+        if (options.missing)
+          return Response.json(
+            {
+              message: "member_add_account_unverified_or_missing",
+              code: "P0001",
+            },
+            { status: 400 }
+          );
         if (options.duplicate)
           return Response.json(
             { message: "duplicate", code: "23505" },
             { status: 409 }
           );
         writes.push(JSON.parse(String(init?.body)));
-        return new Response(null, { status: 201 });
+        return Response.json({
+          member_user_id: "person",
+          member_role: "developer",
+        });
       },
     },
   });
@@ -63,16 +67,11 @@ function fixture(
       role,
       canManage: role === "owner" || role === "admin",
     }),
-    recordTeamAuditEvent: async () => {
-      audits++;
-      return { ok: true as const };
-    },
   };
   return {
     handler: createAddTeamMemberHandler(deps),
     deps,
     writes,
-    audits: () => audits,
   };
 }
 
@@ -92,13 +91,12 @@ test("adds a verified existing account to the URL team with the selected role an
   });
   assert.deepEqual(f.writes, [
     {
-      team_id: teamId,
-      user_id: "person",
-      role: "developer",
-      invited_by_user_id: "owner",
+      p_team_id: teamId,
+      p_email: "person@example.com",
+      p_role: "developer",
+      p_actor_id: "owner",
     },
   ]);
-  assert.equal(f.audits(), 1);
 });
 for (const role of ["developer", "viewer"] as const) {
   test(`${role} cannot add a teammate`, async () => {
@@ -163,6 +161,5 @@ for (const [options, status] of [
       status
     );
     assert.deepEqual(f.writes, []);
-    assert.equal(f.audits(), 0);
   });
 }

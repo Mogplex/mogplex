@@ -69,6 +69,46 @@ $$;
 revoke all on function public.set_team_signup_domain(uuid, uuid, boolean, text) from public;
 grant execute on function public.set_team_signup_domain(uuid, uuid, boolean, text) to service_role;
 
+create function public.add_verified_team_member(
+  p_team_id uuid, p_actor_id uuid, p_email text, p_role text
+) returns table(member_user_id uuid, member_role text)
+language plpgsql set search_path = '' as $$
+declare
+  actor_member uuid;
+  actor_role text;
+  candidates uuid[];
+  target_user uuid;
+begin
+  select m.id, m.role into actor_member, actor_role from public.team_members m
+    where m.team_id = p_team_id and m.user_id = p_actor_id for share;
+  if actor_role is null or actor_role not in ('owner', 'admin')
+    or p_role is null or p_role not in ('admin', 'developer', 'viewer')
+    or (actor_role = 'admin' and p_role = 'admin') then
+    raise exception 'member_add_forbidden';
+  end if;
+  select array_agg(p.id) into candidates from public.profiles p
+    join public."user" u on u.id = p.auth_user_id
+    where lower(u.email) = lower(trim(p_email)) and u."emailVerified" = true;
+  if coalesce(cardinality(candidates), 0) = 0 then
+    raise exception 'member_add_account_unverified_or_missing';
+  elsif cardinality(candidates) > 1 then
+    raise exception 'member_add_account_ambiguous';
+  end if;
+  target_user := candidates[1];
+  insert into public.team_members(team_id, user_id, role, invited_by_user_id)
+    values (p_team_id, target_user, p_role, p_actor_id);
+  delete from public.team_domain_join_blocks
+    where team_id = p_team_id and user_id = target_user;
+  insert into public.team_audit_events
+    (team_id, actor_user_id, actor_member_id, action, target_type, target_id, payload)
+  values (p_team_id, p_actor_id, actor_member, 'member.added', 'member', target_user::text,
+    jsonb_build_object('email', lower(trim(p_email)), 'role', p_role));
+  return query select target_user, p_role;
+end;
+$$;
+revoke all on function public.add_verified_team_member(uuid, uuid, text, text) from public;
+grant execute on function public.add_verified_team_member(uuid, uuid, text, text) to service_role;
+
 create function public.enroll_verified_email_teams(p_auth_user_id uuid)
 returns void language plpgsql set search_path = '' as $$
 begin
@@ -145,6 +185,7 @@ begin
       execute format('revoke all on public.team_domain_join_blocks from %I', client_role);
       execute format('revoke all on function public.enroll_verified_email_teams(uuid), public.tg_enroll_verified_email_teams(), public.tg_block_removed_domain_member() from %I', client_role);
       execute format('revoke all on function public.set_team_signup_domain(uuid, uuid, boolean, text) from %I', client_role);
+      execute format('revoke all on function public.add_verified_team_member(uuid, uuid, text, text) from %I', client_role);
     end if;
   end loop;
 end;

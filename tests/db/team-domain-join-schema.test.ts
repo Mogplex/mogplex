@@ -73,6 +73,12 @@ it("upgrades the real prior schema, preserves historical removals and domain ide
     await db.exec(
       await readFile(path.join(migrationsDir, migrationName), "utf8")
     );
+    // pg_dump's baseline omits role attributes/ACLs. Provision the serving
+    // contract from 20260817190000_runtime_security_hardening.sql explicitly:
+    // BYPASSRLS plus server DML, with no owner or DDL privileges.
+    await db.exec(
+      "alter role service_role bypassrls; grant usage on schema public to service_role; grant select, insert, update, delete on all tables in schema public to service_role; set role service_role"
+    );
     expect(
       (
         await db.query(
@@ -115,6 +121,19 @@ it("upgrades the real prior schema, preserves historical removals and domain ide
         )
       ).rows
     ).toEqual([{ actor_member_id: member.id }]);
+    await db.query(
+      "delete from public.team_members where team_id=$1 and user_id=$2",
+      [team, person]
+    );
+    await db.query("select public.enroll_verified_email_teams($1)", [person]);
+    expect(
+      (
+        await db.query(
+          "select user_id from public.team_domain_join_blocks where team_id=$1 and user_id=$2",
+          [team, person]
+        )
+      ).rows
+    ).toEqual([{ user_id: person }]);
     await setting(owner, false, "example.com");
     expect(
       (
@@ -139,9 +158,52 @@ it("upgrades the real prior schema, preserves historical removals and domain ide
       /signup_domain_mismatch/
     );
 
-    await db.exec(
-      "create function public.reject_signup_setting_audit() returns trigger language plpgsql as $$ begin if new.action = 'team.signup_domain.changed' then raise exception 'audit unavailable'; end if; return new; end; $$; create trigger reject_signup_setting_audit before insert on public.team_audit_events for each row execute function public.reject_signup_setting_audit();"
+    const add = (email: string) =>
+      db.query("select * from public.add_verified_team_member($1,$2,$3,$4)", [
+        team,
+        owner,
+        email,
+        "developer",
+      ]);
+    const unverified = crypto.randomUUID();
+    await account(unverified, "unverified@other.test", false);
+    await expect(add("unverified@other.test")).rejects.toThrow(
+      /member_add_account_unverified_or_missing/
     );
+    expect(
+      (
+        await db.query(
+          "select user_id from public.team_members where user_id=$1",
+          [unverified]
+        )
+      ).rows
+    ).toEqual([]);
+    await db.query(
+      'update public."user" set "emailVerified"=true where id=$1',
+      [unverified]
+    );
+    expect((await add("UNVERIFIED@other.test")).rows).toEqual([
+      { member_user_id: unverified, member_role: "developer" },
+    ]);
+    expect((await add("removed@example.com")).rows).toEqual([
+      { member_user_id: removed, member_role: "developer" },
+    ]);
+    expect(
+      (
+        await db.query(
+          "select user_id from public.team_domain_join_blocks where team_id=$1 and user_id=$2",
+          [team, removed]
+        )
+      ).rows
+    ).toEqual([]);
+    const rollbackTarget = crypto.randomUUID();
+    await account(rollbackTarget, "rollback@other.test");
+
+    await db.exec("reset role");
+    await db.exec(
+      "create function public.reject_signup_setting_audit() returns trigger language plpgsql as $$ begin if new.action in ('team.signup_domain.changed', 'member.added') then raise exception 'audit unavailable'; end if; return new; end; $$; create trigger reject_signup_setting_audit before insert on public.team_audit_events for each row execute function public.reject_signup_setting_audit();"
+    );
+    await db.exec("set role service_role");
     await expect(setting(owner, true, "example.com")).rejects.toThrow(
       /audit unavailable/
     );
@@ -153,6 +215,17 @@ it("upgrades the real prior schema, preserves historical removals and domain ide
         )
       ).rows
     ).toEqual([{ signup_email_domain_enabled: false }]);
+    await expect(add("rollback@other.test")).rejects.toThrow(
+      /audit unavailable/
+    );
+    expect(
+      (
+        await db.query(
+          "select user_id from public.team_members where user_id=$1",
+          [rollbackTarget]
+        )
+      ).rows
+    ).toEqual([]);
   } finally {
     await db.close();
     await rm(scratch, { recursive: true, force: true });

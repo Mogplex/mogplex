@@ -2,14 +2,12 @@ import { z } from "zod";
 import { requireProfileId } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { canInviteRole, loadTeamMembershipAuth } from "@/lib/team-management";
-import { recordTeamAuditEvent } from "@/lib/team-audit";
 import { inviteSchema } from "../../invites/schema";
 
 const defaults = {
   requireProfileId,
   db: supabaseAdmin,
   loadTeamMembershipAuth,
-  recordTeamAuditEvent,
 };
 
 /** Explicit owner/admin action; never infers a role from GitHub membership. */
@@ -43,30 +41,18 @@ export function createAddTeamMemberHandler(
     const { email, role } = parsed.data;
     if (!canInviteRole(auth.role, role))
       return Response.json({ error: "Forbidden" }, { status: 403 });
-    const { data: user, error: userError } = await deps.db
-      .from("user")
-      .select("id")
-      .ilike("email", email.replace(/[\\%_]/g, "\\$&"))
-      .eq("emailVerified", true)
-      .maybeSingle();
-    if (userError)
-      return Response.json(
-        { error: "Unable to find this account." },
-        { status: 500 }
-      );
-    const { data: profile, error: profileError } = user
-      ? await deps.db
-          .from("profiles")
-          .select("id")
-          .eq("auth_user_id", user.id)
-          .maybeSingle()
-      : { data: null, error: null };
-    if (profileError)
-      return Response.json(
-        { error: "Unable to find this account." },
-        { status: 500 }
-      );
-    if (!profile)
+    const { data, error } = await deps.db
+      .rpc("add_verified_team_member", {
+        p_team_id: teamId,
+        p_actor_id: actor,
+        p_email: email,
+        p_role: role,
+      })
+      .maybeSingle<{
+        member_user_id: string;
+        member_role: "admin" | "developer" | "viewer";
+      }>();
+    if (error?.message.includes("member_add_account_unverified_or_missing"))
       return Response.json(
         {
           error:
@@ -74,12 +60,16 @@ export function createAddTeamMemberHandler(
         },
         { status: 404 }
       );
-    const { error } = await deps.db.from("team_members").insert({
-      team_id: teamId,
-      user_id: profile.id,
-      role,
-      invited_by_user_id: actor,
-    });
+    if (error?.message.includes("member_add_account_ambiguous"))
+      return Response.json(
+        {
+          error:
+            "More than one account uses this email. Contact support to choose the account.",
+        },
+        { status: 409 }
+      );
+    if (error?.message.includes("member_add_forbidden"))
+      return Response.json({ error: "Forbidden" }, { status: 403 });
     if (error)
       return Response.json(
         {
@@ -90,16 +80,13 @@ export function createAddTeamMemberHandler(
         },
         { status: error.code === "23505" ? 409 : 500 }
       );
-    await deps.recordTeamAuditEvent({
-      productTeamId: teamId,
-      actorUserId: actor,
-      action: "member.added",
-      targetType: "member",
-      targetId: profile.id,
-      payload: { email, role },
-    });
+    if (!data)
+      return Response.json(
+        { error: "Unable to add this member." },
+        { status: 500 }
+      );
     return Response.json(
-      { member: { userId: profile.id, role } },
+      { member: { userId: data.member_user_id, role: data.member_role } },
       { status: 201 }
     );
   };
