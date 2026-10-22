@@ -62,6 +62,10 @@ function pullResponse(pull: MergeStubState) {
     mergeable_state: pull.mergeableState ?? "clean",
     node_id: "PR_84",
     head: { sha: REVIEWED_HEAD_SHA },
+    user: {
+      type: pull.author?.__typename ?? "Bot",
+      login: pull.author?.login ?? "mogplex-test",
+    },
   });
 }
 
@@ -141,7 +145,6 @@ export async function auditedTeamMerge(
   input: {
     owner?: string;
     contextRepo?: string;
-    userGithubLogin?: string | null;
     onResult?: (result: unknown) => void;
   } = {}
 ) {
@@ -165,7 +168,6 @@ export async function auditedTeamMerge(
             contextRepoOnly: false,
           }),
         },
-        loadUserGithubLogin: async () => input.userGithubLogin ?? null,
         recordAuditEvent: async (event) => {
           events.push(event);
           return { ok: true };
@@ -185,9 +187,9 @@ export async function auditedTeamMerge(
 
 export function mergeAuditEvent(
   decisionCode: string,
-  extra: { error?: string; repoId?: string | null; basis?: string } = {}
+  extra: { error?: string; repoId?: string | null } = {}
 ) {
-  const { error, repoId = "repo-1", basis } = extra;
+  const { error, repoId = "repo-1" } = extra;
   return {
     productTeamId: "team-1",
     actorUserId: "user-1",
@@ -204,7 +206,6 @@ export function mergeAuditEvent(
       target_owner: "acme",
       target_repo: "widgets",
       head_sha: REVIEWED_HEAD_SHA,
-      ...(basis ? { author_basis: basis } : {}),
       ...(error ? { error } : {}),
     },
   };

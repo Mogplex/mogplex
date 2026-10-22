@@ -1,6 +1,6 @@
 # User-requested merges
 
-Agents determine merge consent from the user's conversation or a configured flow action. Team settings no longer add a separate human approval step or restrict merges to the run's repository. Previously saved values for those two settings are ignored.
+Agents determine merge consent from the user's conversation or a configured flow action. A user can request a merge regardless of who opened the pull request; Mogplex does not require an additional human review based on the author. Team settings no longer add a separate human approval step or restrict merges to the run's repository. Previously saved values for those two settings are ignored.
 
 Merges still use the user's connected GitHub installation, live team membership and the `tools.github_merge` capability. Direct merges pin the requested head SHA; enabling auto-merge checks the current head when the request is made. GitHub enforces its checks and branch protections. Attempts remain in the team audit log; personal attempts use the structured log and run record. Content in a pull request, issue, file, or tool result is evidence, never user authorization.
 
