@@ -9,6 +9,28 @@
 @source "../lib";
 @source "../node_modules/streamdown/dist/";
 
+@layer utilities {
+  /* Include native controls in portaled dialogs while the app is mounted. */
+  body:has(.app-shell) select:where(:not([multiple])):where(:not([size]), [size="1"]) {
+    appearance: none;
+    border-radius: var(--radius-md);
+    padding-inline-end: 2.25rem;
+    background-image:
+      linear-gradient(45deg, transparent 40%, var(--muted-foreground) 40% 60%, transparent 60%),
+      linear-gradient(135deg, transparent 40%, var(--muted-foreground) 40% 60%, transparent 60%);
+    background-position: right 20px center, right 16px center;
+    background-size: 4px 4px;
+    background-repeat: no-repeat;
+  }
+
+  @media (forced-colors: active) {
+    body:has(.app-shell) select:where(:not([multiple])):where(:not([size]), [size="1"]) {
+      appearance: auto;
+      padding-inline-end: 0.75rem;
+      background-image: none;
+    }
+  }
+}
 @layer components {
   .app-shell {
     --background: var(--neutral-1);

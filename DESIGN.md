@@ -171,6 +171,11 @@ behavior. Defaults can be overridden by the owning screen; inspect it first.
   padding of 12px, a transparent light background, and `input/30` in dark mode.
   Preserve the focus ring, `aria-invalid` treatment, responsive text size, and
   associated label. A placeholder is not a label.
+- **Native dropdowns:** 4px corners and an inset, vertically centered chevron,
+  matching the shared control scale. The app stylesheet reserves room for the
+  indicator on pages and in portaled dialogs. Native keyboard and picker
+  behavior remain available; multiple-select listboxes keep their native
+  treatment. Forced-color mode uses the system indicator.
 - **[Switch](./components/ui/switch.tsx):** 48px by 28px capsule with a visible
   outline and a 20px thumb. Off uses the secondary surface for its track; On
   uses the primary accent with a fixed near-black thumb (`neutral-11`, an
