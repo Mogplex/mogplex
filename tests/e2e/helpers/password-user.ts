@@ -4,6 +4,8 @@ import type { Pool } from "pg";
 
 // Existing password users remain supported after public email signup closes.
 // Seed their stored state directly so login/recovery tests cannot reopen signup.
+// This covers existing accounts, not signup provisioning. Each attempt uses a
+// unique email/slug; optional profile metadata keeps its database defaults.
 export async function seedPasswordUser(
   pool: Pool,
   {

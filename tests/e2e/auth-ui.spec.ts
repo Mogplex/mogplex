@@ -93,6 +93,9 @@ test.describe("auth pages render", () => {
     test(`social signup preserves a safe destination ${query}`, async ({
       page,
     }) => {
+      await page.addInitScript(() => {
+        window.__mogplexTrackedEvents = [];
+      });
       await page.route("**/api/auth/sign-in/social", (route) =>
         route.fulfill({
           status: 400,
@@ -107,6 +110,12 @@ test.describe("auth pages render", () => {
         provider: "github",
         callbackURL: next,
       });
+      expect(
+        await page.evaluate(() => window.__mogplexTrackedEvents)
+      ).toContainEqual({
+        name: "signup_submitted",
+        properties: { source: "signup_page", provider: "github" },
+      });
     });
   }
 
@@ -115,6 +124,28 @@ test.describe("auth pages render", () => {
 
     await expect(page.getByTestId("forgot-password-form")).toBeVisible();
     await expect(page.getByTestId("forgot-password-email")).toBeVisible();
+  });
+
+  test("social login does not count as a signup submission", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      window.__mogplexTrackedEvents = [];
+    });
+    await page.route("**/api/auth/sign-in/social", (route) => route.abort());
+    await page.goto("/login");
+    await page.getByTestId("auth-social-github").click();
+    await expect(page.getByTestId("auth-social-error")).toBeVisible();
+    const events = await page.evaluate(
+      () => window.__mogplexTrackedEvents ?? []
+    );
+    expect(events).toContainEqual({
+      name: "login_started",
+      properties: { source: "login_page", provider: "github" },
+    });
+    expect(events.some((event) => event.name === "signup_submitted")).toBe(
+      false
+    );
   });
 
   test("/reset-password without a token shows the invalid-link state", async ({

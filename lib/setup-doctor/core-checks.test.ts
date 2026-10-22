@@ -108,13 +108,22 @@ describe("checkAuth", () => {
     expect(checkAuth({ RESEND_API_KEY: "r" }).status).toBe("fail");
   });
 
-  it("should fail when no sign-in method is configured", () => {
+  it("should fail when no social signup provider is configured", () => {
     expect(checkAuth({ BETTER_AUTH_SECRET: "s" }).summary).toMatch(
-      /No sign-in method/
+      /No social provider/
     );
   });
 
-  it("should list complete providers and email", () => {
+  it("should require a social provider even when email delivery is configured", () => {
+    expect(
+      checkAuth({ BETTER_AUTH_SECRET: "s", RESEND_API_KEY: "r" })
+    ).toMatchObject({
+      status: "fail",
+      summary: expect.stringMatching(/social provider/),
+    });
+  });
+
+  it("should list complete social providers", () => {
     expect(
       checkAuth({
         BETTER_AUTH_SECRET: "s",
@@ -122,7 +131,7 @@ describe("checkAuth", () => {
         AUTH_GITHUB_CLIENT_SECRET: "secret",
         RESEND_API_KEY: "r",
       })
-    ).toMatchObject({ status: "pass", summary: "Sign-in: GitHub, email" });
+    ).toMatchObject({ status: "pass", summary: "Sign-in: GitHub" });
   });
 
   it("should warn about a provider with only one of its values", () => {
@@ -130,6 +139,8 @@ describe("checkAuth", () => {
       checkAuth({
         BETTER_AUTH_SECRET: "s",
         RESEND_API_KEY: "r",
+        AUTH_GITHUB_CLIENT_ID: "id",
+        AUTH_GITHUB_CLIENT_SECRET: "secret",
         AUTH_GOOGLE_CLIENT_ID: "id",
       })
     ).toMatchObject({

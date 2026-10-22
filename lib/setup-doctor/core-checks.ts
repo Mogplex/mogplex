@@ -114,13 +114,12 @@ export function checkAuth(env: DoctorEnv): DoctorCheckResult {
     if (hasId && hasSecret) enabled.push(label);
     else if (hasId || hasSecret) halfConfigured.push(label);
   }
-  if (configured(env, "RESEND_API_KEY")) enabled.push("email");
   if (enabled.length === 0) {
     return {
       ...result,
       status: "fail",
       summary:
-        "No sign-in method: set an AUTH_*_CLIENT_ID/SECRET pair or RESEND_API_KEY",
+        "No social provider: set an AUTH_*_CLIENT_ID/SECRET pair for signup",
     };
   }
   if (halfConfigured.length > 0) {

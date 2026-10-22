@@ -19,7 +19,7 @@ Each row is independent. Mogplex boots with only the first row configured; every
 
 | Service | What it does | Your options |
 | --- | --- | --- |
-| **Postgres + auth** (required) | All application state and user accounts | [Neon](https://neon.tech) or any Postgres 17 with the `vector` and `pg_trgm` extensions available, with Better Auth. Set both backend flags to `neon`, configure `DATABASE_URL` / `DATABASE_URL_UNPOOLED` and `BETTER_AUTH_SECRET`, add at least one sign-in provider (`AUTH_GITHUB_*`, `AUTH_GOOGLE_*`, or email), and run the migration script below. It bootstraps an empty database from `neon/baseline.sql` and then applies `neon/migrations/`. |
+| **Postgres + auth** (required) | All application state and user accounts | [Neon](https://neon.tech) or any Postgres 17 with the `vector` and `pg_trgm` extensions available, with Better Auth. Set both backend flags to `neon`, configure `DATABASE_URL` / `DATABASE_URL_UNPOOLED` and `BETTER_AUTH_SECRET`, add at least one social provider (`AUTH_GITHUB_*`, `AUTH_GOOGLE_*`, or `AUTH_MICROSOFT_*`), and run the migration script below. It bootstraps an empty database from `neon/baseline.sql` and then applies `neon/migrations/`. |
 | **Trigger.dev** | Background jobs: automations, syncs, long-running agent runs | A [Trigger.dev cloud](https://trigger.dev) account with your own project (`TRIGGER_PROJECT_REF`, `TRIGGER_SECRET_KEY`), or [self-host the full Trigger.dev stack](https://trigger.dev/docs/self-hosting/overview) — webapp, Postgres, Redis, ClickHouse, object storage, container registry, and supervisor/worker nodes. Without it, everything Trigger-powered does not run. |
 | **Vercel (sandboxes)** | Agent sandboxes run on [Vercel Sandbox](https://vercel.com/docs/vercel-sandbox) | A Vercel account and token (`PLATFORM_VERCEL_TOKEN`, `PLATFORM_VERCEL_TEAM_ID`, `VERCEL_PROJECT_ID`). There is no local substitute; without it, sandbox features are dead. |
 | **AI providers** | Model inference, memory embeddings | [Vercel AI Gateway](https://vercel.com/docs/ai-gateway) key and/or OpenRouter + OpenAI keys. |
@@ -32,6 +32,21 @@ Every one of these has its own signup, billing, and credential rotation. Budget 
 
 ## Give users access
 
+Before the first signup, set both client credentials for at least one provider:
+`AUTH_GITHUB_CLIENT_ID` / `AUTH_GITHUB_CLIENT_SECRET`,
+`AUTH_GOOGLE_CLIENT_ID` / `AUTH_GOOGLE_CLIENT_SECRET`, or
+`AUTH_MICROSOFT_CLIENT_ID` / `AUTH_MICROSOFT_CLIENT_SECRET`.
+Register the matching callback URL:
+
+- GitHub: `https://<your-domain>/api/auth/callback/github`
+- Google: `https://<your-domain>/api/auth/callback/google`
+- Microsoft: `https://<your-domain>/api/auth/callback/microsoft`
+
+Microsoft uses `AUTH_MICROSOFT_TENANT_ID=common` unless an Entra tenant is specified.
+New accounts use social signup. Existing email/password accounts keep login,
+email verification, and password recovery. A Resend key alone cannot enable signup.
+Run `pnpm setup:doctor` to check the configuration before signing in.
+
 Platform AI and sandboxes are gated per user. On mogplex.com that gate is a funded billing account. A self-hosted deployment without Stripe has no balances, so set `MOGPLEX_SELF_HOSTED=1`. It grants platform AI and sandbox access to every signed-in user and hides the billing screens. To limit the grant, set `MOGPLEX_SELF_HOSTED_ALLOWED_EMAIL_DOMAINS=example.com`. Self-host mode never activates while `STRIPE_SECRET_KEY` is set. For finer control, use the `PLATFORM_ACCESS_*` allowlists or the `profiles.allow_platform_*` flags. Full guide: [docs.mogplex.com/self-hosting](https://docs.mogplex.com/self-hosting).
 
 ## Run with Docker Compose
@@ -39,7 +54,7 @@ Platform AI and sandboxes are gated per user. On mogplex.com that gate is a fund
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/Mogplex/mogplex/main/docker-compose.yml
 curl -fsSL https://raw.githubusercontent.com/Mogplex/mogplex/main/.env.example -o .env
-# edit .env: set APP_URL, BETTER_AUTH_SECRET, CRON_SECRET, and the services you provisioned
+# edit .env: set APP_URL, BETTER_AUTH_SECRET, CRON_SECRET, a social provider's AUTH_* pair, and your services
 
 docker compose up -d   # postgres, migrate (one-shot), app on :3000, cron
 ```
