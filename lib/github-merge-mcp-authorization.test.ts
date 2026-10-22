@@ -1,16 +1,19 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { createMogplexMcpPost } from "@/lib/harness/mogplex-mcp";
 import { buildHarnessResearchEnv } from "@/lib/harness/research-auth";
 import { createGithubPullRequestMergeTool } from "@/lib/agents/tools/github-pr-merge";
 import { ALL_CAPABILITIES } from "@/lib/team-capabilities";
-import { withEnv, withPatchedFetch } from "./helpers/agents-tools-fixtures";
+import {
+  withEnv,
+  withPatchedFetch,
+} from "@/tests/unit/helpers/agents-tools-fixtures";
 import {
   mergeFetch,
   REVIEWED_HEAD_SHA,
   withAcmeInstallation,
   type MergeFetchCall,
-} from "./helpers/github-pr-merge-fixtures";
+} from "@/tests/unit/helpers/github-pr-merge-fixtures";
 
 test("MCP cached tool ignores retired settings and rechecks live team permission", async () => {
   await withEnv(
@@ -38,10 +41,6 @@ test("MCP cached tool ignores retired settings and rechecks live team permission
                 if (!permitted) throw new Error("Merge permission revoked");
                 return { requireApproval, contextRepoOnly: false };
               },
-              claimApproval: async () => {
-                throw new Error("Retired approval must never be claimed");
-              },
-              requestApproval: async () => "pending",
             },
           });
           const post = createMogplexMcpPost({

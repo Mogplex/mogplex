@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { NextResponse } from "next/server";
 import { createMergeSettingsHandlers } from "@/lib/github-merge-policy-handlers";
 

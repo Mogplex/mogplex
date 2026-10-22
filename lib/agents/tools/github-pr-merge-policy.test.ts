@@ -1,17 +1,17 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import type { RecordTeamAuditEventInput } from "@/lib/team-audit";
 import {
   loadToolsModule,
   withPatchedFetch,
-} from "./helpers/agents-tools-fixtures";
+} from "@/tests/unit/helpers/agents-tools-fixtures";
 import {
   mergeFetch,
   REVIEWED_HEAD_SHA,
   withAcmeInstallation,
   type MergeExecute,
   type MergeFetchCall,
-} from "./helpers/github-pr-merge-fixtures";
+} from "@/tests/unit/helpers/github-pr-merge-fixtures";
 
 const target = {
   owner: "acme",
@@ -22,22 +22,17 @@ const target = {
 type Policy = { requireApproval: boolean; contextRepoOnly: boolean };
 type GateDeps = {
   read: (userId: string, teamId: string) => Promise<Policy>;
-  claimApproval: (input: unknown) => Promise<string | null>;
-  requestApproval: (input: unknown) => Promise<string>;
 };
 
 async function run(input: {
   policy?: Policy;
   contextRepo?: string | null;
-  approvalId?: string | null;
   failRead?: boolean;
-  failClaim?: boolean;
   calls?: MergeFetchCall[];
 }) {
   const calls = input.calls ?? [];
   const events: RecordTeamAuditEventInput[] = [];
   let result: unknown;
-  let requested = 0;
   await withAcmeInstallation(async () =>
     withPatchedFetch(mergeFetch(calls), async () => {
       const { createGithubPullRequestMergeTool } = await loadToolsModule();
@@ -62,14 +57,6 @@ async function run(input: {
               input.policy ?? { requireApproval: false, contextRepoOnly: false }
             );
           },
-          claimApproval: async () => {
-            if (input.failClaim) throw new Error("private approval diagnostic");
-            return input.approvalId ?? null;
-          },
-          requestApproval: async () => {
-            requested += 1;
-            return "approval-1";
-          },
         },
       };
       const tool = createGithubPullRequestMergeTool(options) as unknown as {
@@ -86,7 +73,6 @@ async function run(input: {
       approvalId?: string;
       merged?: boolean;
     },
-    requested,
   };
 }
 
@@ -97,16 +83,13 @@ test("retired approval settings no longer block a user-requested merge", async (
   assert.equal(result.result.merged, true);
   assert.equal(result.result.approvalId, undefined);
   assert.equal(result.events[0].decisionCode, "merged");
-  assert.equal(result.requested, 0);
 });
 
 test("exact-head protected merges do not claim an old human approval", async () => {
   const result = await run({
     policy: { requireApproval: true, contextRepoOnly: true },
-    approvalId: "approval-approved",
   });
   assert.equal(result.result.merged, true);
-  assert.equal(result.requested, 0);
   assert.equal(result.calls.at(-1)?.path, "/repos/acme/widgets/pulls/84/merge");
   assert.equal(result.events[0].payload?.approval_id, undefined);
 });
@@ -116,11 +99,9 @@ test("retired repository settings do not block missing or different run context"
     const result = await run({
       policy: { requireApproval: true, contextRepoOnly: true },
       contextRepo,
-      approvalId: "approved",
     });
     assert.equal(result.result.merged, true);
     assert.equal(result.events[0].decisionCode, "merged");
-    assert.equal(result.requested, 0);
   }
 });
 
@@ -138,5 +119,4 @@ test("unavailable team permission never falls back to a merge", async () => {
     assert.deepEqual(result.calls, []);
     assert.ok(!result.result.error?.includes("private"));
   }
-  assert.equal((await run({ failClaim: true })).result.merged, true);
 });

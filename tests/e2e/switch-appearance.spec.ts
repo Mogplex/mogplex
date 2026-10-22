@@ -44,6 +44,10 @@ async function switchAppearance(control: Locator) {
       ),
       textContrast: contrast(style.color, style.backgroundColor),
       thumbX: thumb.getBoundingClientRect().x,
+      thumbRight: thumb.getBoundingClientRect().right,
+      padding:
+        Number.parseFloat(style.paddingRight) +
+        Number.parseFloat(style.borderRightWidth),
       right: element.getBoundingClientRect().right,
     };
   });
@@ -95,6 +99,13 @@ for (const theme of ["light", "dark"] as const) {
     expect(on.thumbX).toBeGreaterThan(off.thumbX + 10);
     expect(on.outlineContrast).toBeGreaterThanOrEqual(3);
     expect(on.textContrast).toBeGreaterThanOrEqual(4.5);
+    await control.evaluate((element) => {
+      element.style.width = "80px";
+      element.style.height = "32px";
+      element.style.padding = "4px";
+    });
+    const resized = await switchAppearance(control);
+    expect(resized.right - resized.thumbRight).toBeCloseTo(resized.padding);
     await page.setViewportSize({ width: 390, height: 844 });
     expect((await switchAppearance(control)).right).toBeLessThanOrEqual(390);
     await page.screenshot({

@@ -17,8 +17,6 @@ export type MergeApprovalTarget = {
 
 export type MergePolicyDeps = {
   read: (userId: string, teamId: string) => Promise<TeamMergePolicy>;
-  claimApproval: (input: MergeApprovalTarget) => Promise<string | null>;
-  requestApproval: (input: MergeApprovalTarget) => Promise<string>;
 };
 
 export type MergePolicyDecision =

@@ -165,8 +165,10 @@ behavior. Defaults can be overridden by the owning screen; inspect it first.
   associated label. A placeholder is not a label.
 - **[Switch](./components/ui/switch.tsx):** 64px by 28px capsule with a visible
   border, a 20px thumb, and On/Off text. Off uses a neutral track; On uses the
-  primary accent with dark ink. Thumb position and text convey state alongside
-  color. Keep the Radix switch semantics, associated label, keyboard focus ring,
+  primary accent with fixed near-black ink (`neutral-11`, an intentional exception
+  so the ink stays legible in both themes). State text is 12px; keep a minimum
+  width of 64px to fit it. Thumb position and text convey state alongside color.
+  Keep the Radix switch semantics, associated label, keyboard focus ring,
   disabled treatment, and reduced-motion behavior.
 - **[Card](./components/ui/card.tsx):** 6px corners, border, and `shadow-sm`.
   The container has 24px vertical padding and gap; header, content, and footer

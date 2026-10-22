@@ -21,6 +21,7 @@ import {
 import { createMergeSettingsHandlers } from "@/lib/github-merge-policy-handlers";
 import {
   defaultMergePolicyDeps,
+  legacyMergeApprovalStore,
   listMergeApprovals,
   readTeamMergePolicy,
   resolveMergeApproval,
@@ -129,7 +130,7 @@ async function approve(id: string) {
 
 describe("retired merge settings and retained storage compatibility", () => {
   it("retires the approval endpoint without changing a pending legacy request", async () => {
-    const id = await defaultMergePolicyDeps.requestApproval(target);
+    const id = await legacyMergeApprovalStore.requestApproval(target);
     const pending = await listMergeApprovals(developer, team);
     expect(pending.map((row) => row.id)).toEqual([id]);
     const response = await handlers().resolve(
@@ -142,7 +143,7 @@ describe("retired merge settings and retained storage compatibility", () => {
       error: expect.stringMatching(/settings have been removed/),
     });
     expect(await listMergeApprovals(developer, team)).toEqual(pending);
-    expect(await defaultMergePolicyDeps.claimApproval(target)).toBeNull();
+    expect(await legacyMergeApprovalStore.claimApproval(target)).toBeNull();
   });
   it("server service_role can use approvals while public callers cannot execute the RPC", async () => {
     const result = await db.transaction(async (tx) => {
@@ -181,11 +182,6 @@ describe("retired merge settings and retained storage compatibility", () => {
       requireApproval: false,
       contextRepoOnly: false,
     });
-    const result = await db.query<{ name: string; role: string }>(
-      "select t.name,m.role from teams t join team_members m on m.team_id=t.id where t.id=$1 and m.user_id=$2",
-      [team, owner]
-    );
-    expect(result.rows).toEqual([{ name: "Merges", role: "owner" }]);
     expect(await defaultMergePolicyDeps.read(developer, team)).toEqual({
       requireApproval: false,
       contextRepoOnly: false,
@@ -232,9 +228,9 @@ describe("retired merge settings and retained storage compatibility", () => {
     );
     expect(decision).toEqual({ allowed: true });
     expect(await listMergeApprovals(developer, team)).toEqual([]);
-    const id = await defaultMergePolicyDeps.requestApproval(target);
-    expect(await defaultMergePolicyDeps.requestApproval(target)).toBe(id);
-    expect(await defaultMergePolicyDeps.claimApproval(target)).toBeNull();
+    const id = await legacyMergeApprovalStore.requestApproval(target);
+    expect(await legacyMergeApprovalStore.requestApproval(target)).toBe(id);
+    expect(await legacyMergeApprovalStore.claimApproval(target)).toBeNull();
     expect(await listMergeApprovals(other, team)).toEqual([]);
     expect(await listMergeApprovals(developer, otherTeam)).toEqual([]);
     expect(
@@ -257,8 +253,8 @@ describe("retired merge settings and retained storage compatibility", () => {
         approved: false,
       })
     ).toBe(false);
-    expect(await defaultMergePolicyDeps.claimApproval(target)).toBe(id);
-    expect(await defaultMergePolicyDeps.claimApproval(target)).toBeNull();
+    expect(await legacyMergeApprovalStore.claimApproval(target)).toBe(id);
+    expect(await legacyMergeApprovalStore.claimApproval(target)).toBeNull();
     expect(
       (
         await db.query<{ status: string }>(
@@ -269,7 +265,7 @@ describe("retired merge settings and retained storage compatibility", () => {
     ).toEqual([{ status: "consumed" }]);
   });
   it("binds approval to the exact user, team, owner, repo, number, head, and commit title", async () => {
-    const id = await defaultMergePolicyDeps.requestApproval(target);
+    const id = await legacyMergeApprovalStore.requestApproval(target);
     await approve(id);
     for (const change of [
       { userId: other },
@@ -281,11 +277,11 @@ describe("retired merge settings and retained storage compatibility", () => {
       { commitTitle: "Different title" },
     ]) {
       expect(
-        await defaultMergePolicyDeps.claimApproval({ ...target, ...change })
+        await legacyMergeApprovalStore.claimApproval({ ...target, ...change })
       ).toBeNull();
     }
     expect(
-      await defaultMergePolicyDeps.claimApproval({
+      await legacyMergeApprovalStore.claimApproval({
         ...target,
         owner: "ACME",
         repo: "Widgets",
@@ -294,17 +290,17 @@ describe("retired merge settings and retained storage compatibility", () => {
   });
   it("omitted merge titles stay empty in the approval list and bind a single claim", async () => {
     const untitled = { ...target, commitTitle: undefined };
-    const id = await defaultMergePolicyDeps.requestApproval(untitled);
+    const id = await legacyMergeApprovalStore.requestApproval(untitled);
     expect(await listMergeApprovals(developer, team)).toEqual([
       expect.objectContaining({ id, commit_title: "" }),
     ]);
     await approve(id);
-    expect(await defaultMergePolicyDeps.claimApproval(target)).toBeNull();
-    expect(await defaultMergePolicyDeps.claimApproval(untitled)).toBe(id);
-    expect(await defaultMergePolicyDeps.claimApproval(untitled)).toBeNull();
+    expect(await legacyMergeApprovalStore.claimApproval(target)).toBeNull();
+    expect(await legacyMergeApprovalStore.claimApproval(untitled)).toBe(id);
+    expect(await legacyMergeApprovalStore.claimApproval(untitled)).toBeNull();
   });
   it("denied requests cannot authorize a merge", async () => {
-    const id = await defaultMergePolicyDeps.requestApproval(target);
+    const id = await legacyMergeApprovalStore.requestApproval(target);
     expect(
       await resolveMergeApproval({
         userId: developer,
@@ -313,10 +309,10 @@ describe("retired merge settings and retained storage compatibility", () => {
         approved: false,
       })
     ).toBe(true);
-    expect(await defaultMergePolicyDeps.claimApproval(target)).toBeNull();
+    expect(await legacyMergeApprovalStore.claimApproval(target)).toBeNull();
   });
   it("ignores saved context restrictions and rechecks the current member capability", async () => {
-    const id = await defaultMergePolicyDeps.requestApproval(target);
+    const id = await legacyMergeApprovalStore.requestApproval(target);
     await approve(id);
     await writeTeamMergePolicy(team, {
       requireApproval: true,
@@ -347,14 +343,14 @@ describe("retired merge settings and retained storage compatibility", () => {
         defaultMergePolicyDeps
       )
     ).toEqual({ allowed: true });
-    expect(await defaultMergePolicyDeps.claimApproval(target)).toBe(id);
+    expect(await legacyMergeApprovalStore.claimApproval(target)).toBe(id);
   });
   it("at most one simultaneous claim consumes the approved target", async () => {
-    const id = await defaultMergePolicyDeps.requestApproval(target);
+    const id = await legacyMergeApprovalStore.requestApproval(target);
     await approve(id);
     const claimed = await Promise.all([
-      defaultMergePolicyDeps.claimApproval(target),
-      defaultMergePolicyDeps.claimApproval(target),
+      legacyMergeApprovalStore.claimApproval(target),
+      legacyMergeApprovalStore.claimApproval(target),
     ]);
     expect(claimed.filter((value) => value === id)).toHaveLength(1);
     expect(claimed.filter((value) => value === null)).toHaveLength(1);
@@ -363,7 +359,7 @@ describe("retired merge settings and retained storage compatibility", () => {
     const disposableUser = "00000000-0000-4000-8000-000000000066";
     const disposableTeam = "00000000-0000-4000-8000-000000000077";
     await db.query("insert into profiles(id) values ($1)", [disposableUser]);
-    const userRequest = await defaultMergePolicyDeps.requestApproval({
+    const userRequest = await legacyMergeApprovalStore.requestApproval({
       ...target,
       userId: disposableUser,
     });
@@ -372,7 +368,7 @@ describe("retired merge settings and retained storage compatibility", () => {
       "insert into teams(id,name,slug,owner_user_id) values ($1,'Disposable','disposable-merge-team',$2)",
       [disposableTeam, owner]
     );
-    const teamRequest = await defaultMergePolicyDeps.requestApproval({
+    const teamRequest = await legacyMergeApprovalStore.requestApproval({
       ...target,
       teamId: disposableTeam,
     });

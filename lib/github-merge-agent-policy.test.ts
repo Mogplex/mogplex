@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import type { ToolSet } from "ai";
 import {
   mergePullRequestIfSafe,
@@ -14,27 +14,16 @@ const head = "a".repeat(40);
 const DEFAULT_INPUT = {};
 function fixture(
   input: {
-    approved?: boolean;
     waiting?: boolean;
     failRead?: boolean;
   } = DEFAULT_INPUT
 ) {
   const writes: string[] = [];
   const events: RecordTeamAuditEventInput[] = [];
-  let claims = 0;
-  let requests = 0;
   const deps: MergePolicyDeps = {
     read: async () => {
       if (input.failRead) throw new Error("private diagnostic");
       return { requireApproval: true, contextRepoOnly: true };
-    },
-    claimApproval: async () => {
-      claims += 1;
-      return input.approved ? "approved" : null;
-    },
-    requestApproval: async () => {
-      requests += 1;
-      return "pending";
     },
   };
   const scope = {
@@ -80,21 +69,19 @@ function fixture(
     fetchImpl,
     mergePolicyScope: scope,
   };
-  return { merge, scope, writes, events, counts: () => ({ claims, requests }) };
+  return { merge, scope, writes, events };
 }
 
 test("native requested merges ignore retired approval settings", async () => {
   const f = fixture();
   const result = await mergePullRequestIfSafe(f.merge);
   assert.equal(result.merged, true);
-  assert.deepEqual(f.counts(), { claims: 0, requests: 0 });
   assert.equal(f.events[0]?.decisionCode, "merged");
 });
 
 test("native merge records the exact-head attempt without consuming old approvals", async () => {
-  const f = fixture({ approved: true });
+  const f = fixture();
   assert.equal((await mergePullRequestIfSafe(f.merge)).merged, true);
-  assert.deepEqual(f.counts(), { claims: 0, requests: 0 });
   assert.equal(f.events[0]?.payload?.approval_id, undefined);
 });
 
@@ -105,12 +92,11 @@ test("personal native flows retain merging without a team policy or team audit r
     mergePolicyScope: { ...f.scope, teamId: null },
   });
   assert.equal(result.merged, true);
-  assert.deepEqual(f.counts(), { claims: 0, requests: 0 });
   assert.deepEqual(f.events, []);
 });
 
 test("pending GitHub checks can queue the requested merge despite old approval settings", async () => {
-  const f = fixture({ approved: true, waiting: true });
+  const f = fixture({ waiting: true });
   const result = await mergePullRequestIfSafe(f.merge);
   assert.equal(result.merged, false);
   assert.equal(result.queued, true);
@@ -118,10 +104,9 @@ test("pending GitHub checks can queue the requested merge despite old approval s
 });
 
 test("queue-only calls ignore old approval settings without consuming approval", async () => {
-  const f = fixture({ approved: true });
+  const f = fixture();
   const result = await queuePullRequestForMerge(f.merge);
   assert.equal(result.queued, true);
-  assert.deepEqual(f.counts(), { claims: 0, requests: 0 });
   assert.deepEqual(f.writes, ["https://api.github.com/graphql"]);
 });
 
@@ -134,13 +119,12 @@ test("default-off team controls retain native GitHub auto-merge without an appro
   const result = await queuePullRequestForMerge(f.merge);
   assert.equal(result.merged, false);
   assert.equal(result.queued, true);
-  assert.deepEqual(f.counts(), { claims: 0, requests: 0 });
   assert.deepEqual(f.writes, ["https://api.github.com/graphql"]);
   assert.equal(f.events[0]?.decisionCode, "auto_merge_queued");
 });
 
-test("flow review defers an approved attempt until its required review check completes", async () => {
-  const f = fixture({ approved: true });
+test("flow review defers a requested attempt until its required review check completes", async () => {
+  const f = fixture();
   const deferred: unknown[] = [];
   const scope = {
     ...f.scope,
@@ -153,7 +137,6 @@ test("flow review defers an approved attempt until its required review check com
     mergePolicyScope: scope,
   });
   assert.equal(result.merged, false);
-  assert.deepEqual(f.counts(), { claims: 0, requests: 0 });
   assert.deepEqual(f.writes, []);
   assert.deepEqual(deferred, [
     { prNumber: 42, expectedHeadSha: head, commitTitle: undefined },
@@ -168,7 +151,6 @@ test("native cross-repository merges work but live team permission remains requi
     f.scope.contextRepo.repo = "different";
     assert.equal((await mergePullRequestIfSafe(f.merge)).merged, !failRead);
     assert.equal(f.writes.length, failRead ? 0 : 1);
-    assert.equal(f.counts().claims, 0);
   }
 });
 

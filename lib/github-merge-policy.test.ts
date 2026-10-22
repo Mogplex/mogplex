@@ -22,12 +22,6 @@ describe("team merge authorization", () => {
         calls.push("permission");
         return { requireApproval: true, contextRepoOnly: true };
       },
-      claimApproval: async () => {
-        throw new Error("Retired approval claim");
-      },
-      requestApproval: async () => {
-        throw new Error("Retired approval request");
-      },
     };
     for (const context of [undefined, { owner: "other", repo: "different" }]) {
       for (const mode of ["merge", "queue"] as const) {
@@ -42,12 +36,6 @@ describe("team merge authorization", () => {
   it("finishes publishing a flow review before continuing its requested merge", async () => {
     const deps: MergePolicyDeps = {
       read: async () => ({ requireApproval: false, contextRepoOnly: false }),
-      claimApproval: async () => {
-        throw new Error("Retired approval claim");
-      },
-      requestApproval: async () => {
-        throw new Error("Retired approval request");
-      },
     };
     expect(
       await enforceMergePolicy(target, undefined, deps, "review")
@@ -63,8 +51,6 @@ describe("team merge authorization", () => {
       read: async () => {
         throw new Error("private database diagnostic");
       },
-      claimApproval: async () => null,
-      requestApproval: async () => "unused",
     };
     const result = await enforceMergePolicy(target, undefined, deps);
     expect(result).toMatchObject({

@@ -19,6 +19,7 @@ export type MergeApprovalRequest = {
   created_at: string;
 };
 
+/** Legacy storage adapters only; current merge paths never read/write approvals. */
 export async function readTeamMergePolicy(
   teamId: string
 ): Promise<TeamMergePolicy | null> {
@@ -74,7 +75,11 @@ export const defaultMergePolicyDeps: MergePolicyDeps = {
       throw new Error("Merge permission unavailable");
     return { requireApproval: false, contextRepoOnly: false };
   },
-  async claimApproval(input) {
+};
+
+/** Retained RPC contracts for schema compatibility, separate from authorization. */
+export const legacyMergeApprovalStore = {
+  async claimApproval(input: MergeApprovalTarget) {
     const { data, error } = await supabaseAdmin.rpc(
       "claim_github_merge_approval",
       {
@@ -86,7 +91,7 @@ export const defaultMergePolicyDeps: MergePolicyDeps = {
     if (error) throw new Error(error.message);
     return typeof data === "string" ? data : null;
   },
-  async requestApproval(input) {
+  async requestApproval(input: MergeApprovalTarget) {
     const { data, error } = await supabaseAdmin.rpc(
       "request_github_merge_approval",
       {
