@@ -2,7 +2,6 @@
 
 import { DecisionChecksSection } from "@/components/settings/decision-checks-section";
 import { TeamApiKeyAccessSection } from "@/components/settings/team-api-key-access-section";
-import { AgentMergesSection } from "@/components/settings/agent-merges-section";
 import { useTeamSettingsActions } from "./use-team-settings-actions";
 import { MembersTabContent } from "./members-tab-content";
 import { TeamJoinSettings } from "./team-join-settings";
@@ -172,7 +171,6 @@ export function TeamSettingsClient({
       )}
 
       {section === "members" && <TeamJoinSettings teamId={teamId} />}
-      {section === "members" && <AgentMergesSection teamId={teamId} />}
 
       {section === "keys" && (
         <div>

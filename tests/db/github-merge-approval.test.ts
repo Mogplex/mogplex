@@ -36,7 +36,6 @@ const developer = "00000000-0000-4000-8000-000000000061";
 const other = "00000000-0000-4000-8000-000000000062";
 const team = "00000000-0000-4000-8000-000000000071";
 const otherTeam = "00000000-0000-4000-8000-000000000072";
-const missingTeam = "00000000-0000-4000-8000-000000000073";
 const target: MergeApprovalTarget = {
   userId: developer,
   teamId: team,
@@ -108,7 +107,6 @@ beforeEach(async () => {
 function handlers(userId = developer) {
   return createMergeSettingsHandlers({
     requireProfileId: async () => userId,
-    audit: async () => ({ ok: true }),
   });
 }
 function request(body: unknown, method = "POST") {
@@ -120,12 +118,17 @@ function request(body: unknown, method = "POST") {
 }
 async function approve(id: string) {
   expect(
-    (await handlers().resolve(request({ approved: true }), team, id)).status
-  ).toBe(200);
+    await resolveMergeApproval({
+      userId: developer,
+      teamId: team,
+      approvalId: id,
+      approved: true,
+    })
+  ).toBe(true);
 }
 
-describe("team merge approvals against the real schema and routes", () => {
-  it("rejects a malformed approval ID without changing a pending request", async () => {
+describe("retired merge settings and retained storage compatibility", () => {
+  it("retires the approval endpoint without changing a pending legacy request", async () => {
     const id = await defaultMergePolicyDeps.requestApproval(target);
     const pending = await listMergeApprovals(developer, team);
     expect(pending.map((row) => row.id)).toEqual([id]);
@@ -134,8 +137,10 @@ describe("team merge approvals against the real schema and routes", () => {
       team,
       "not-a-uuid"
     );
-    expect(response.status).toBe(422);
-    expect(await response.json()).toEqual({ error: "Invalid approval ID" });
+    expect(response.status).toBe(410);
+    expect(await response.json()).toMatchObject({
+      error: expect.stringMatching(/settings have been removed/),
+    });
     expect(await listMergeApprovals(developer, team)).toEqual(pending);
     expect(await defaultMergePolicyDeps.claimApproval(target)).toBeNull();
   });
@@ -186,16 +191,21 @@ describe("team merge approvals against the real schema and routes", () => {
       contextRepoOnly: false,
     });
   });
-  it("only an owner/admin can change the team settings", async () => {
+  it("no team role can save retired settings, while legacy schema contracts remain", async () => {
     const policy = { requireApproval: true, contextRepoOnly: true };
     expect(
       (await handlers().patch(request(policy, "PATCH"), team)).status
-    ).toBe(403);
+    ).toBe(410);
     const saves = await Promise.all([
       handlers(owner).patch(request({ requireApproval: true }, "PATCH"), team),
       handlers(owner).patch(request({ contextRepoOnly: true }, "PATCH"), team),
     ]);
-    expect(saves.map((response) => response.status)).toEqual([200, 200]);
+    expect(saves.map((response) => response.status)).toEqual([410, 410]);
+    expect(await readTeamMergePolicy(team)).toEqual({
+      requireApproval: false,
+      contextRepoOnly: false,
+    });
+    await writeTeamMergePolicy(team, policy);
     expect(await readTeamMergePolicy(team)).toEqual(policy);
     expect(await writeTeamMergePolicy(team, { requireApproval: false })).toBe(
       true
@@ -208,12 +218,9 @@ describe("team merge approvals against the real schema and routes", () => {
       requireApproval: false,
       contextRepoOnly: false,
     });
-    expect(
-      await writeTeamMergePolicy(missingTeam, { requireApproval: true })
-    ).toBe(false);
     expect((await handlers(other).get(otherTeam)).status).toBe(403);
   });
-  it("deduplicates pending targets, lists only this user's team requests, and requires explicit human resolution", async () => {
+  it("merges ignore saved approval settings while legacy requests retain their contracts", async () => {
     await writeTeamMergePolicy(team, {
       requireApproval: true,
       contextRepoOnly: false,
@@ -223,12 +230,10 @@ describe("team merge approvals against the real schema and routes", () => {
       undefined,
       defaultMergePolicyDeps
     );
-    expect(decision).toMatchObject({
-      allowed: false,
-      decision: "approval_required",
-    });
+    expect(decision).toEqual({ allowed: true });
+    expect(await listMergeApprovals(developer, team)).toEqual([]);
     const id = await defaultMergePolicyDeps.requestApproval(target);
-    expect(decision).toMatchObject({ approvalId: id });
+    expect(await defaultMergePolicyDeps.requestApproval(target)).toBe(id);
     expect(await defaultMergePolicyDeps.claimApproval(target)).toBeNull();
     expect(await listMergeApprovals(other, team)).toEqual([]);
     expect(await listMergeApprovals(developer, otherTeam)).toEqual([]);
@@ -236,13 +241,22 @@ describe("team merge approvals against the real schema and routes", () => {
       (await listMergeApprovals(developer, team)).map((row) => row.id)
     ).toEqual([id]);
     expect(
-      (await handlers(other).resolve(request({ approved: true }), team, id))
-        .status
-    ).toBe(409);
+      await resolveMergeApproval({
+        userId: other,
+        teamId: team,
+        approvalId: id,
+        approved: true,
+      })
+    ).toBe(false);
     await approve(id);
     expect(
-      (await handlers().resolve(request({ approved: false }), team, id)).status
-    ).toBe(409);
+      await resolveMergeApproval({
+        userId: developer,
+        teamId: team,
+        approvalId: id,
+        approved: false,
+      })
+    ).toBe(false);
     expect(await defaultMergePolicyDeps.claimApproval(target)).toBe(id);
     expect(await defaultMergePolicyDeps.claimApproval(target)).toBeNull();
     expect(
@@ -301,7 +315,7 @@ describe("team merge approvals against the real schema and routes", () => {
     ).toBe(true);
     expect(await defaultMergePolicyDeps.claimApproval(target)).toBeNull();
   });
-  it("rechecks current role and context policy after an approval", async () => {
+  it("ignores saved context restrictions and rechecks the current member capability", async () => {
     const id = await defaultMergePolicyDeps.requestApproval(target);
     await approve(id);
     await writeTeamMergePolicy(team, {
@@ -310,7 +324,7 @@ describe("team merge approvals against the real schema and routes", () => {
     });
     expect(
       await enforceMergePolicy(target, undefined, defaultMergePolicyDeps)
-    ).toMatchObject({ allowed: false, decision: "outside_context_repo" });
+    ).toEqual({ allowed: true });
     await db.query(
       "update team_members set role='viewer' where team_id=$1 and user_id=$2",
       [team, developer]
@@ -332,7 +346,8 @@ describe("team merge approvals against the real schema and routes", () => {
         { owner: "acme", repo: "widgets" },
         defaultMergePolicyDeps
       )
-    ).toEqual({ allowed: true, approvalId: id, immediateOnly: true });
+    ).toEqual({ allowed: true });
+    expect(await defaultMergePolicyDeps.claimApproval(target)).toBe(id);
   });
   it("at most one simultaneous claim consumes the approved target", async () => {
     const id = await defaultMergePolicyDeps.requestApproval(target);
@@ -371,7 +386,7 @@ describe("team merge approvals against the real schema and routes", () => {
       ).rows
     ).toEqual([]);
   });
-  it("production flow reviewer creates a request, requires human resolution, and merges once at the approved head", async () => {
+  it("production flow reviewer publishes its review then merges the requested head without human approval", async () => {
     await writeTeamMergePolicy(team, {
       requireApproval: true,
       contextRepoOnly: true,
@@ -464,13 +479,7 @@ describe("team merge approvals against the real schema and routes", () => {
         mergePolicyScope: flowMergePolicyScope(context, "run-1"),
         ...state.request!,
       };
-      const pending = await attemptFlowAutoMerge(postRunInput);
-      expect(pending.merged).toBe(false);
-      expect(await listMergeApprovals(developer, team)).toMatchObject([
-        { id: pending.approvalId, head_sha: target.expectedHeadSha },
-      ]);
-      await approve(pending.approvalId!);
-      // A new review still has a pending check: it must preserve approval.
+      // A new review still publishes its check before the merge finalizer.
       expect(
         (
           (await tools.mergePullRequest.execute!(
@@ -479,18 +488,10 @@ describe("team merge approvals against the real schema and routes", () => {
           )) as { merged: boolean }
         ).merged
       ).toBe(false);
-      expect(
-        (
-          await db.query<{ status: string }>(
-            "select status from github_merge_approvals where id=$1",
-            [pending.approvalId]
-          )
-        ).rows[0].status
-      ).toBe("approved");
       const merged = await attemptFlowAutoMerge(postRunInput);
       expect(merged.merged).toBe(true);
       expect(pinned).toEqual([target.expectedHeadSha]);
-      expect((await attemptFlowAutoMerge(postRunInput)).merged).toBe(false);
+      expect(await listMergeApprovals(developer, team)).toEqual([]);
       expect(writes).toHaveLength(1);
     } finally {
       globalThis.fetch = originalFetch;

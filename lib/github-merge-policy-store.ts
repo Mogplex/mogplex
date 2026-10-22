@@ -69,13 +69,10 @@ function targetParams(input: MergeApprovalTarget) {
 
 export const defaultMergePolicyDeps: MergePolicyDeps = {
   async read(userId, teamId) {
-    const [policy, caps] = await Promise.all([
-      readTeamMergePolicy(teamId),
-      resolveMemberCapabilities(userId, teamId),
-    ]);
-    if (!policy || !hasCapability(caps, "tools.github_merge"))
+    const caps = await resolveMemberCapabilities(userId, teamId);
+    if (!hasCapability(caps, "tools.github_merge"))
       throw new Error("Merge permission unavailable");
-    return policy;
+    return { requireApproval: false, contextRepoOnly: false };
   },
   async claimApproval(input) {
     const { data, error } = await supabaseAdmin.rpc(
