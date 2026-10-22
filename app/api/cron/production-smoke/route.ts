@@ -40,7 +40,10 @@ export function createProductionSmokeGetHandler(
 
     try {
       return await deps.withSupabaseAdminConnection(async (adminClient) => {
-        const summary = await deps.runProductionSmokeChecks(adminClient);
+        const summary = {
+          ...(await deps.runProductionSmokeChecks(adminClient)),
+          nodeVersion: process.version,
+        };
         if (!summary.ok) {
           return NextResponse.json(summary, { status: 500 });
         }

@@ -46,6 +46,7 @@ test("GET /api/cron/production-smoke returns 200 when all checks pass", async ()
   assert.equal(connectionRuns, 1);
   assert.deepEqual(await response.json(), {
     ok: true,
+    nodeVersion: process.version,
     checkedAt: "2026-04-02T17:45:00.000Z",
     checks: [{ name: "repos_select", ok: true, detail: "repos ok" }],
   });
@@ -72,6 +73,7 @@ test("GET /api/cron/production-smoke returns 500 when any check fails", async ()
   assert.equal(response.status, 500);
   assert.deepEqual(await response.json(), {
     ok: false,
+    nodeVersion: process.version,
     checkedAt: "2026-04-02T17:45:00.000Z",
     checks: [{ name: "repos_select", ok: false, detail: "missing column" }],
   });

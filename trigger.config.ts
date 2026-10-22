@@ -17,8 +17,8 @@ const { ref: triggerProjectRef } = resolveTriggerProjectRef();
 export default defineConfig({
   project: triggerProjectRef,
   dirs: ["trigger"],
-  // "node" still means Node 21 on Trigger.dev; the app pins Node 22 in
-  // package.json engines and .nvmrc, so workers must match.
+  // Keep workers on the app's Node major. CLI 4.7.7 supplies the patched
+  // Node 22.23.4 image; existing deployments require a redeploy to pick it up.
   runtime: "node-22",
   logLevel: "log",
   maxDuration: 1800,
