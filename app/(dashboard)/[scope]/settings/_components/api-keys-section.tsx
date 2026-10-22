@@ -144,7 +144,7 @@ export function ApiKeysSection({ platformAiEnabled }: { platformAiEnabled: boole
                     <div className="flex min-h-9 flex-wrap items-center gap-2">
                       {keyEntry && (
                         <span className="text-[11px] text-muted-foreground">
-                          · added {new Date(keyEntry.created_at).toLocaleDateString()}
+                          Added {new Date(keyEntry.created_at).toLocaleDateString()}
                         </span>
                       )}
                       <div className="ml-auto flex gap-1.5">
