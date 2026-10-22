@@ -152,6 +152,8 @@ export const auth = betterAuth({
   },
   emailAndPassword: {
     enabled: true,
+    // Existing password users retain sign-in and recovery; new users use OAuth.
+    disableSignUp: true,
     requireEmailVerification: true,
     password: {
       hash: hashAccountPassword,

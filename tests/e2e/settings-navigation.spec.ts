@@ -3,6 +3,7 @@ import {
   expect,
   fulfillJson,
   mockTeamSettings,
+  TEAM,
   TEAM_SETTINGS_PATH,
 } from "./helpers/run-checks-fixtures";
 import { enableScopedE2EAuth, scopedPath } from "./helpers/auth";
@@ -116,7 +117,13 @@ test("mobile Settings navigation opens, selects a page and closes", async ({
     fulfillJson(route, { ...capacitySummary(), recentCosts: [] })
   );
   await page.goto(scopedPath("settings/account"));
-  await page.getByRole("button", { name: "Open navigation" }).click();
+  const menuButton = page.getByRole("button", { name: "Open navigation" });
+  await expect(menuButton.locator("svg")).toBeVisible();
+  await expect(menuButton).not.toHaveText("|||");
+  const menuBounds = await menuButton.boundingBox();
+  expect(menuBounds?.width).toBeGreaterThanOrEqual(36);
+  expect(menuBounds?.height).toBeGreaterThanOrEqual(36);
+  await menuButton.click();
   const dialog = page.getByRole("dialog", { name: "Navigation" });
   await dialog.getByRole("button", { name: "Back to main navigation" }).click();
   await expect(
@@ -140,6 +147,54 @@ test("mobile Settings navigation opens, selects a page and closes", async ({
       .getByRole("link", { name: "Billing", exact: true })
   ).toBeVisible();
 });
+
+for (const width of [320, 390, 768, 1280]) {
+  test(`team icon content stays readable at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await mockTeamSettings(page, "owner");
+    await page.route(`**/api/teams/${TEAM.id}/members`, (route) =>
+      fulfillJson(route, {
+        team: { ...TEAM, iconUrl: "/icon.png" },
+        viewer: { role: "owner", canManage: true },
+        members: [],
+        invites: [],
+      })
+    );
+    await page.goto(`${TEAM_SETTINGS_PATH}/members`);
+    const section = page.locator("section").filter({
+      has: page.getByText("Team icon", { exact: true }),
+    });
+    const caption = section.getByText("PNG, JPG, WEBP, or GIF", {
+      exact: false,
+    });
+    await expect(caption).toBeVisible();
+    const captionBounds = await caption.boundingBox();
+    expect(captionBounds?.width).toBeGreaterThanOrEqual(140);
+    const replace = section.getByRole("button", {
+      name: "Replace",
+      exact: true,
+    });
+    const remove = section.getByRole("button", { name: "Remove", exact: true });
+    await expect(replace).toBeVisible();
+    await expect(remove).toBeVisible();
+    const replaceBounds = await replace.boundingBox();
+    const removeBounds = await remove.boundingBox();
+    expect(replaceBounds?.y).toBe(removeBounds?.y);
+    const sectionBounds = await section.boundingBox();
+    expect(sectionBounds?.height).toBeLessThan(230);
+    if (width < 640) {
+      expect(replaceBounds!.y).toBeGreaterThanOrEqual(
+        captionBounds!.y + captionBounds!.height
+      );
+    }
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth
+      )
+    ).toBe(true);
+    await page.screenshot({ path: test.info().outputPath("team-icon.png") });
+  });
+}
 
 test("team Settings has team pages and limits Audit access", async ({
   page,

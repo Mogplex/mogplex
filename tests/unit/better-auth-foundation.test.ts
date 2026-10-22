@@ -14,6 +14,24 @@ test("should construct the better-auth instance when no auth env is set", async 
   assert.equal(typeof auth.api.getMcpSession, "function");
 });
 
+test("should reject email signup through the real auth handler", async () => {
+  const { POST } = await import("../../app/api/auth/[...all]/route");
+  const response = await POST(
+    new Request("http://localhost:3000/api/auth/sign-up/email", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "Signup disabled",
+        email: "signup-disabled@example.com",
+        password: "signup-disabled-password",
+      }),
+    })
+  );
+
+  assert.equal(response.status, 400);
+  assert.equal((await response.json()).code, "EMAIL_PASSWORD_SIGN_UP_DISABLED");
+});
+
 test("should serve Better Auth MCP authorization-server metadata", async () => {
   const { GET } = await import("../../app/api/auth/[...all]/route");
   const response = await GET(

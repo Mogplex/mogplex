@@ -6,9 +6,9 @@
 // resolvable so DB-less environments still run the rest of the suite.
 import crypto from "node:crypto";
 import { expect, test } from "@playwright/test";
-import { verifyPassword } from "better-auth/crypto";
 import { Pool } from "pg";
 import { resolveNeonDatabaseUrl } from "./helpers/neon";
+import { seedPasswordUser } from "./helpers/password-user";
 
 const databaseUrl = resolveNeonDatabaseUrl();
 
@@ -40,42 +40,26 @@ test.describe("better-auth against real Neon", () => {
     await pool.end();
   });
 
-  test("email/password journey writes real rows and enforces verification", async ({
+  test("email signup is blocked while existing password users can sign in through CLI OAuth", async ({
     page,
     request,
   }) => {
-    // Sign-up succeeds (the e2e server logs the verification email instead of
-    // sending) and persists a real, unverified user row.
     const signUp = await request.post("/api/auth/sign-up/email", {
       data: { name: "E2E Neon", email, password },
     });
-    expect(signUp.status(), await signUp.text()).toBe(200);
+    expect(signUp.status(), await signUp.text()).toBe(400);
+    expect((await signUp.json()).code).toBe("EMAIL_PASSWORD_SIGN_UP_DISABLED");
 
     const created = await pool.query(
       'select id, "emailVerified" from "user" where email = $1',
       [email]
     );
-    expect(created.rowCount).toBe(1);
-    expect(created.rows[0].emailVerified).toBe(false);
-
-    const credential = await pool.query(
-      'select "providerId", "password" from "account" where "userId" = $1',
-      [created.rows[0].id]
-    );
-    expect(credential.rows.map((row) => row.providerId)).toContain(
-      "credential"
-    );
-    const storedPassword = credential.rows.find(
-      (row) => row.providerId === "credential"
-    )?.password;
-    if (typeof storedPassword !== "string") {
-      throw new TypeError("Credential account did not persist a password hash");
-    }
-    expect(storedPassword).toMatch(/^[0-9a-f]{32}:[0-9a-f]{128}$/);
-    expect(storedPassword).not.toBe(password);
-    await expect(
-      verifyPassword({ hash: storedPassword, password })
-    ).resolves.toBe(true);
+    expect(created.rowCount).toBe(0);
+    const userId = await seedPasswordUser(pool, {
+      email,
+      password,
+      verified: false,
+    });
 
     // requireEmailVerification gates sign-in until the address is verified.
     const unverifiedSignIn = await request.post("/api/auth/sign-in/email", {
@@ -169,7 +153,7 @@ test.describe("better-auth against real Neon", () => {
 
       const sessionRows = await pool.query(
         'select id from "session" where "userId" = $1',
-        [created.rows[0].id]
+        [userId]
       );
       expect(sessionRows.rowCount).toBeGreaterThan(0);
 
@@ -260,7 +244,7 @@ test.describe("better-auth against real Neon", () => {
       const ttlRows = await pool.query(
         `select "refreshTokenExpiresAt" from "oauthAccessToken"
           where "clientId" = 'mogplex-cli' and "userId" = $1`,
-        [created.rows[0].id]
+        [userId]
       );
       expect(ttlRows.rowCount).toBeGreaterThan(0);
       const maxTtlMs = 31 * 24 * 60 * 60 * 1000;

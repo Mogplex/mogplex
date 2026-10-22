@@ -47,7 +47,7 @@ flowchart LR
 | --- | --- |
 | Next.js (App Router) | UI, API routes, MCP server, webhooks |
 | Neon Postgres | All application state; migrations in [`neon/migrations/`](./neon/migrations) |
-| Better Auth | Sign-in (GitHub, Google, email) and sessions |
+| Better Auth | Signup with GitHub, Google, or Microsoft; existing email/password sign-in and recovery; sessions |
 | GitHub App | Repo access, webhooks, checks |
 | Vercel Sandbox | Isolated compute for every agent session |
 | Vercel AI Gateway | Model routing, with OpenRouter and direct keys as alternatives |
