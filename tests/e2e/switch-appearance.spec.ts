@@ -36,13 +36,23 @@ async function switchAppearance(control: Locator) {
     };
     const style = getComputedStyle(element);
     const thumb = element.querySelector('[data-slot="switch-thumb"]')!;
+    const secondarySurface = document.createElement("span");
+    secondarySurface.style.backgroundColor = "var(--secondary)";
+    element.append(secondarySurface);
+    const secondaryColor = getComputedStyle(secondarySurface).backgroundColor;
+    secondarySurface.remove();
     return {
       border: style.borderColor,
+      background: style.backgroundColor,
+      secondaryColor,
       outlineContrast: contrast(
         style.borderColor,
         getComputedStyle(document.body).backgroundColor
       ),
-      textContrast: contrast(style.color, style.backgroundColor),
+      thumbContrast: contrast(
+        getComputedStyle(thumb).backgroundColor,
+        style.backgroundColor
+      ),
       thumbX: thumb.getBoundingClientRect().x,
       thumbRight: thumb.getBoundingClientRect().right,
       padding:
@@ -54,7 +64,7 @@ async function switchAppearance(control: Locator) {
 }
 
 for (const theme of ["light", "dark"] as const) {
-  test(`${theme} switches have a visible track, state text, and keyboard feedback`, async ({
+  test(`${theme} switches use an outlined secondary track without state text and support the keyboard`, async ({
     page,
   }) => {
     await mockTeamSettings(page);
@@ -87,18 +97,18 @@ for (const theme of ["light", "dark"] as const) {
     const off = await switchAppearance(control);
     expect(off.border).not.toBe("rgba(0, 0, 0, 0)");
     expect(off.outlineContrast).toBeGreaterThanOrEqual(3);
-    expect(off.textContrast).toBeGreaterThanOrEqual(4.5);
-    await expect(control.getByText("Off", { exact: true })).toBeVisible();
+    expect(off.background).toBe(off.secondaryColor);
+    expect(off.thumbContrast).toBeGreaterThanOrEqual(3);
+    await expect(control).toHaveText("");
     await control.focus();
     await expect(control).toBeFocused();
     await page.keyboard.press("Space");
     await expect(control).toBeChecked();
-    await expect(control.getByText("On", { exact: true })).toBeVisible();
-    await expect(control.getByText("Off", { exact: true })).toBeHidden();
+    await expect(control).toHaveText("");
     const on = await switchAppearance(control);
     expect(on.thumbX).toBeGreaterThan(off.thumbX + 10);
     expect(on.outlineContrast).toBeGreaterThanOrEqual(3);
-    expect(on.textContrast).toBeGreaterThanOrEqual(4.5);
+    expect(on.thumbContrast).toBeGreaterThanOrEqual(3);
     await control.evaluate((element) => {
       element.style.width = "80px";
       element.style.height = "32px";
