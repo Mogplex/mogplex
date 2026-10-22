@@ -197,7 +197,8 @@ behavior. Defaults can be overridden by the owning screen; inspect it first.
   scale while allowing for the outlined track. Off uses the secondary surface for its track; On
   uses the primary accent with a fixed near-black thumb (`neutral-11`, an
   intentional exception for contrast in both themes). Keep text outside the
-  control. Thumb position conveys state alongside color.
+  control. Thumb position conveys state alongside color. An invisible surrounding
+  hit area keeps the pointer target at least 24px tall.
   Keep the Radix switch semantics, associated label, keyboard focus ring,
   disabled treatment, and reduced-motion behavior.
 - **[Card](./components/ui/card.tsx):** 6px corners, border, and `shadow-sm`.
