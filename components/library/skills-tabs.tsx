@@ -239,7 +239,7 @@ export function InstalledTab({
             <div className="text-muted-foreground text-[11px]">No skills yet</div>
           )}
           {skills.map(s => (
-            <div key={s.id} onClick={() => setEditing(s)} className="border border-border p-2 cursor-pointer hover:bg-secondary group">
+            <div key={s.id} onClick={() => setEditing(s)} className="rounded-lg border border-border p-2 cursor-pointer hover:bg-secondary group">
               <div className="flex items-center justify-between">
                 <span className="text-foreground text-[11px]">{s.name}</span>
                 <button onClick={e => { e.stopPropagation(); deleteSkill(s.id); }} className="opacity-0 group-hover:opacity-100 text-destructive text-[11px]">Delete</button>

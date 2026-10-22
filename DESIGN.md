@@ -139,6 +139,8 @@ hand-authored sections in Settings, Connections, and the agent library. This
 matches Geist's [base material](https://vercel.com/geist/materials). Reuse that
 token when adding a surface; keep dividers and adjoining rows inside the same
 card square. Clip edge-to-edge row fills to the card's corners when needed.
+Inline callouts and alert boxes use `rounded-md` (4px), matching their existing
+settings counterparts.
 
 The app shadow vocabulary in `app/globals.css` is:
 
