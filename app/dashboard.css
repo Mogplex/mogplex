@@ -10,6 +10,7 @@
 @source "../node_modules/streamdown/dist/";
 
 @layer utilities {
+  /* Override legacy per-field corners and backgrounds, including dark utilities. */
   body:has(.app-shell)
     :is(
       input:where(
@@ -19,7 +20,7 @@
         [type="month"], [type="week"]
       ),
       textarea
-    ):where(.border) {
+    ).border {
     border-radius: var(--radius-md);
     background-color: var(--secondary);
 
@@ -39,7 +40,7 @@
     appearance: none;
     border-radius: var(--radius-md);
     background-color: var(--secondary);
-    padding-inline-end: 2.25rem;
+    padding-right: 2.25rem;
     background-image:
       linear-gradient(45deg, transparent 40%, var(--muted-foreground) 40% 60%, transparent 60%),
       linear-gradient(135deg, transparent 40%, var(--muted-foreground) 40% 60%, transparent 60%);
@@ -52,7 +53,7 @@
   @media (forced-colors: active) {
     body:has(.app-shell) select:where(:not([multiple])):where(:not([size]), [size="1"]) {
       appearance: auto;
-      padding-inline-end: 0.75rem;
+      padding-right: 0.75rem;
       background-image: none;
     }
   }
