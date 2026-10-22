@@ -119,7 +119,9 @@ export async function readSearchInputTheme(page: Page) {
       if (!context) return value;
       context.fillStyle = "#000000";
       context.fillStyle = value;
-      return context.fillStyle;
+      context.fillRect(0, 0, 1, 1);
+      const [red, green, blue] = context.getImageData(0, 0, 1, 1).data;
+      return `rgb(${red}, ${green}, ${blue})`;
     };
 
     const parseChannels = (value: string) => {

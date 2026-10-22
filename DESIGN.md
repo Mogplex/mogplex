@@ -168,10 +168,13 @@ behavior. Defaults can be overridden by the owning screen; inspect it first.
   97% with a 150ms base transition. Keep loading labels stable in width where
   practical and explain unavailable actions nearby.
 - **[Input](./components/ui/input.tsx):** 36px height, 4px corners, horizontal
-  padding of 12px, a transparent light background, and `input/30` in dark mode.
+  padding of 12px. In the authenticated app, bordered inputs and textareas use
+  the secondary surface background. Hand-authored fields use the same corners,
+  focus ring, invalid state, and disabled treatment as the shared primitive.
   Preserve the focus ring, `aria-invalid` treatment, responsive text size, and
   associated label. A placeholder is not a label.
-- **Native dropdowns:** 4px corners and an inset, vertically centered chevron,
+- **Native dropdowns:** secondary surface background, 4px corners, and an inset,
+  vertically centered chevron,
   matching the shared control scale. The app stylesheet reserves room for the
   indicator on pages and in portaled dialogs. Native keyboard and picker
   behavior remain available; multiple-select listboxes keep their native

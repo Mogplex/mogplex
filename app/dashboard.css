@@ -10,10 +10,35 @@
 @source "../node_modules/streamdown/dist/";
 
 @layer utilities {
+  body:has(.app-shell)
+    :is(
+      input:where(
+        :not([type]), [type="text"], [type="email"], [type="password"],
+        [type="search"], [type="url"], [type="tel"], [type="number"],
+        [type="date"], [type="time"], [type="datetime-local"],
+        [type="month"], [type="week"]
+      ),
+      textarea
+    ):where(.border) {
+    border-radius: var(--radius-md);
+    background-color: var(--secondary);
+
+    &:not([data-slot]) {
+      @apply transition-[color,box-shadow] disabled:cursor-not-allowed disabled:opacity-50;
+      @apply focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] focus-visible:outline-hidden;
+      @apply aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive;
+    }
+  }
+
+  body:has(.app-shell) [data-slot="select-trigger"] {
+    background-color: var(--secondary);
+  }
+
   /* Include native controls in portaled dialogs while the app is mounted. */
   body:has(.app-shell) select:where(:not([multiple])):where(:not([size]), [size="1"]) {
     appearance: none;
     border-radius: var(--radius-md);
+    background-color: var(--secondary);
     padding-inline-end: 2.25rem;
     background-image:
       linear-gradient(45deg, transparent 40%, var(--muted-foreground) 40% 60%, transparent 60%),
@@ -21,6 +46,7 @@
     background-position: right 20px center, right 16px center;
     background-size: 4px 4px;
     background-repeat: no-repeat;
+    @apply focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] focus-visible:outline-hidden;
   }
 
   @media (forced-colors: active) {
