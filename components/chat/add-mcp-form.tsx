@@ -2,6 +2,7 @@
 import { useState } from "react"
 import type { CreateMcpInput } from "@/hooks/use-connections"
 import { MAX_MCP_CONNECTIONS } from "@/lib/connections/constants"
+import { PasswordInput } from "@/components/ui/password-input"
 
 export function AddMcpForm({
   allowScopeSelection,
@@ -145,12 +146,12 @@ export function AddMcpForm({
         </select>
       </div>
       {authType !== "none" && (
-        <input
+        <PasswordInput
           value={credentials}
           onChange={e => setCredentials(e.target.value)}
           type="password"
           placeholder={authType === "api_key" ? "API key" : "Bearer token"}
-          className="w-full px-2 py-1 bg-input border border-border text-[11px] text-foreground rounded"
+          className="h-auto w-full px-2 py-1 bg-input border border-border text-[11px] text-foreground rounded"
         />
       )}
       <div className="flex justify-end gap-2 pt-1">

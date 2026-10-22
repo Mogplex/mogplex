@@ -207,6 +207,20 @@ test("Connections MCP tab supports add, edit, secret overwrite, and delete witho
   await page.getByRole("button", { name: "Add secret environment" }).click();
   await page.getByPlaceholder("Environment name").fill("SUPABASE_ACCESS_TOKEN");
   await page.getByPlaceholder("Secret value").fill("sbp_initial_123");
+  await page.getByRole("button", { name: "Show secret", exact: true }).click();
+  await expect(page.getByPlaceholder("Secret value")).toHaveAttribute(
+    "type",
+    "text"
+  );
+  await expect(page.getByPlaceholder("Secret value")).toHaveValue(
+    "sbp_initial_123"
+  );
+  expect(postBodies).toHaveLength(0);
+  await page.getByRole("button", { name: "Hide secret", exact: true }).click();
+  await expect(page.getByPlaceholder("Secret value")).toHaveAttribute(
+    "type",
+    "password"
+  );
   await page.getByRole("button", { name: "Create server" }).click();
 
   await expect(page.getByText("supabase")).toBeVisible();
@@ -217,10 +231,22 @@ test("Connections MCP tab supports add, edit, secret overwrite, and delete witho
   await expect(
     page.getByRole("dialog").getByText("Saved", { exact: true })
   ).toBeVisible();
+  await expect(page.getByPlaceholder("Overwrite saved secret")).toHaveValue("");
+  await expect(
+    page.getByRole("button", { name: "Saved secret cannot be shown" })
+  ).toBeDisabled();
   await page.getByRole("button", { name: "Save changes" }).click();
 
   await page.getByRole("button", { name: "Edit" }).click();
   await page.getByPlaceholder("Overwrite saved secret").fill("sbp_updated_456");
+  await page.getByRole("button", { name: "Show secret", exact: true }).click();
+  await expect(page.getByPlaceholder("Secret value")).toHaveValue(
+    "sbp_updated_456"
+  );
+  await expect(page.getByPlaceholder("Secret value")).toHaveAttribute(
+    "type",
+    "text"
+  );
   await page.getByRole("button", { name: "Save changes" }).click();
 
   expect(patchBodies).toHaveLength(2);

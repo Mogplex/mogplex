@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useCallback } from "react"
+import { PasswordInput } from "@/components/ui/password-input"
 import {
   CONNECTION_AUTH_OPTIONS,
   INITIAL_CONNECTION_FORM,
@@ -100,7 +101,7 @@ export function AddConnectionForm({
               ))}
             </select>
             {newConn.auth_type !== "none" && (
-              <input value={newConn.credentials} onChange={e => setNewConn(p => ({ ...p, credentials: e.target.value }))} placeholder="credential" type="password" className="min-w-0 flex-1 border border-border bg-input px-3 py-2 text-sm text-foreground" />
+              <PasswordInput containerClassName="flex-1" value={newConn.credentials} onChange={e => setNewConn(p => ({ ...p, credentials: e.target.value }))} placeholder="credential" type="password" className="h-auto border border-border bg-input px-3 py-2 text-sm text-foreground" />
             )}
           </div>
           {(newConn.auth_type === "bearer" || newConn.auth_type === "api_key") && (
@@ -134,7 +135,7 @@ export function AddConnectionForm({
               ))}
             </select>
             {newConn.auth_type !== "none" && (
-              <input value={newConn.credentials} onChange={e => setNewConn(p => ({ ...p, credentials: e.target.value }))} placeholder={newConn.auth_type === "api_key" ? "API key" : newConn.auth_type === "basic" ? "base64 user:pass" : "token"} type="password" className="min-w-0 flex-1 border border-border bg-input px-3 py-2 text-sm text-foreground" />
+              <PasswordInput containerClassName="flex-1" value={newConn.credentials} onChange={e => setNewConn(p => ({ ...p, credentials: e.target.value }))} placeholder={newConn.auth_type === "api_key" ? "API key" : newConn.auth_type === "basic" ? "base64 user:pass" : "token"} type="password" className="h-auto border border-border bg-input px-3 py-2 text-sm text-foreground" />
             )}
           </div>
           {(newConn.auth_type === "bearer" || newConn.auth_type === "api_key") && (

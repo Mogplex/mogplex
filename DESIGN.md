@@ -167,13 +167,21 @@ behavior. Defaults can be overridden by the owning screen; inspect it first.
   separate brand-hover token. Focus uses a 3px ring; active feedback scales to
   97% with a 150ms base transition. Keep loading labels stable in width where
   practical and explain unavailable actions nearby.
+  Native bordered app action buttons use the same 4px radius. Preserve pill
+  buttons, circular icon buttons, and the seams of grouped controls.
 - **[Input](./components/ui/input.tsx):** 36px height, 4px corners, horizontal
   padding of 12px. In the authenticated app, bordered inputs and textareas use
   the secondary surface background. Hand-authored fields use the same corners,
   focus ring, invalid state, and disabled treatment as the shared primitive.
   Preserve the focus ring, `aria-invalid` treatment, responsive text size, and
   associated label. A placeholder is not a label.
-- **Native dropdowns:** secondary surface background, 4px corners, and an inset,
+- **[Password input](./components/ui/password-input.tsx):** password and secret
+  fields always show an eye button. Newly entered values can be shown or hidden
+  without changing the value or submitting the form, and hide when focus leaves
+  the field and its eye button. Saved secrets that the
+  server does not return use a disabled, muted eye; unavailable saved API-key
+  fields are muted and disabled. An editable replacement field stays usable.
+- **Native bordered dropdowns:** secondary surface background, 4px corners, and an inset,
   vertically centered chevron,
   matching the shared control scale. The app stylesheet reserves room for the
   indicator on pages and in portaled dialogs. Native keyboard and picker

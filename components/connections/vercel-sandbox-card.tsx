@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useState } from "react";
 import { VercelFill } from "@/components/settings/icons";
+import { PasswordInput } from "@/components/ui/password-input";
 
 type Phase = "idle" | "saving" | "deleting";
 
@@ -202,7 +203,7 @@ export function VercelSandboxCard({
           <label htmlFor={inputId} className="sr-only">
             Vercel Personal Access Token
           </label>
-          <input
+          <PasswordInput
             id={inputId}
             type="password"
             autoComplete="off"
@@ -214,7 +215,7 @@ export function VercelSandboxCard({
             }}
             placeholder="vercel_…"
             disabled={saving}
-            className="w-full border border-border bg-input px-2 py-1 text-[11px] font-mono text-foreground disabled:opacity-50"
+            className="h-auto w-full border border-border bg-input px-2 py-1 text-[11px] font-mono text-foreground disabled:opacity-50"
           />
           <div className="text-[11px] text-muted-foreground leading-tight">
             Generate one at{" "}
@@ -244,7 +245,7 @@ export function VercelSandboxCard({
               type="button"
               onClick={() => void handleSave()}
               disabled={!token.trim() || saving}
-              className="px-3 py-1.5 text-[11px] bg-primary text-primary-foreground disabled:opacity-50"
+              className="rounded-md px-3 py-1.5 text-[11px] bg-primary text-primary-foreground disabled:opacity-50"
             >
               {saving ? "..." : "Save token"}
             </button>

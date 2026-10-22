@@ -8,6 +8,45 @@ import { Pool } from "pg";
 import { resolveNeonDatabaseUrl } from "./helpers/neon";
 
 test.describe("auth pages render", () => {
+  for (const surface of [
+    { path: "/login", fields: [{ id: "signin-password", label: "password" }] },
+    { path: "/signup", fields: [{ id: "signup-password", label: "password" }] },
+    {
+      path: "/reset-password?token=visibility-preview",
+      fields: [
+        { id: "reset-password-new", label: "new password" },
+        { id: "reset-password-confirm", label: "confirm password" },
+      ],
+    },
+  ]) {
+    test(`${surface.path} lets users show and hide passwords without changing the value`, async ({
+      page,
+    }) => {
+      await page.goto(surface.path);
+      for (const field of surface.fields) {
+        const input = page.getByTestId(field.id);
+        await expect(input).toHaveAttribute("type", "password");
+        const show = page.getByRole("button", {
+          name: `Show ${field.label}`,
+          exact: true,
+        });
+        await expect(show).toBeVisible();
+        await input.fill("visibility-preview-123");
+        await show.click();
+        await expect(input).toHaveAttribute("type", "text");
+        await expect(input).toHaveValue("visibility-preview-123");
+        const hide = page.getByRole("button", {
+          name: `Hide ${field.label}`,
+          exact: true,
+        });
+        await expect(hide).toHaveAttribute("aria-pressed", "true");
+        await hide.press("Enter");
+        await expect(input).toHaveAttribute("type", "password");
+        await expect(input).toHaveValue("visibility-preview-123");
+      }
+    });
+  }
+
   test("/login shows the sign-in surface with social and SSO options", async ({
     page,
   }) => {

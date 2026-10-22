@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { MAX_MCP_CONNECTIONS } from "@/lib/connections/constants"
 import { toast } from "@/hooks/use-toast"
+import { PasswordInput } from "@/components/ui/password-input"
 
 const AUTH_OPTIONS = [
   { value: "none", label: "None" },
@@ -169,18 +170,18 @@ export function InlineAddForm({ repoId, onCreated, onCancel, mcpCount }: {
       {authType === "oauth" ? (
         <>
           <input value={oauthClientId} onChange={(e) => setOauthClientId(e.target.value)} placeholder="Client ID" className="w-full px-2 py-1 bg-input border border-border text-[11px] text-foreground rounded" />
-          <input value={credentials} onChange={(e) => setCredentials(e.target.value)} placeholder="Client Secret" type="password" className="w-full px-2 py-1 bg-input border border-border text-[11px] text-foreground rounded" />
+          <PasswordInput value={credentials} onChange={(e) => setCredentials(e.target.value)} placeholder="Client Secret" type="password" className="h-auto w-full px-2 py-1 bg-input border border-border text-[11px] text-foreground rounded" />
           <input value={oauthAuthorizeUrl} onChange={(e) => setOauthAuthorizeUrl(e.target.value)} placeholder="Authorize URL" className="w-full px-2 py-1 bg-input border border-border text-[11px] text-foreground rounded" />
           <input value={oauthTokenUrl} onChange={(e) => setOauthTokenUrl(e.target.value)} placeholder="Token URL" className="w-full px-2 py-1 bg-input border border-border text-[11px] text-foreground rounded" />
           <input value={oauthScopes} onChange={(e) => setOauthScopes(e.target.value)} placeholder="Scopes (space-separated, optional)" className="w-full px-2 py-1 bg-input border border-border text-[11px] text-foreground rounded" />
         </>
       ) : authType !== "none" ? (
-        <input
+        <PasswordInput
           value={credentials}
           onChange={(e) => setCredentials(e.target.value)}
           placeholder={authType === "api_key" ? "API Key" : authType === "basic" ? "base64 user:pass" : "Token"}
           type="password"
-          className="w-full px-2 py-1 bg-input border border-border text-[11px] text-foreground rounded"
+          className="h-auto w-full px-2 py-1 bg-input border border-border text-[11px] text-foreground rounded"
         />
       ) : null}
 
