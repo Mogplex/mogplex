@@ -72,7 +72,7 @@ export function TeamApiKeyAccessSection({ teamId }: { teamId: string }) {
   }
 
   return (
-    <section className="border border-border/60 bg-card">
+    <section className="rounded-lg border border-border/60 bg-card">
       <div className="px-5 pt-5 pb-2">
         <div className="ui-section-title">Mogplex API keys</div>
         <div className="ui-section-caption">

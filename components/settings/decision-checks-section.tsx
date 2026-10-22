@@ -62,7 +62,7 @@ export function DecisionChecksSection({
   }
 
   return (
-    <section className="border border-border/60 bg-card">
+    <section className="rounded-lg border border-border/60 bg-card">
       <div className="flex items-start justify-between gap-4 px-5 pt-5 pb-2">
         <div>
           <div className="ui-section-title">Run checks</div>

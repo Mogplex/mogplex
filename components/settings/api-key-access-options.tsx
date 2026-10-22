@@ -68,7 +68,7 @@ export function ApiKeyAccessOptions({
           <label
             key={option.value}
             htmlFor={id}
-            className="flex cursor-pointer items-start gap-3 border border-border bg-background/60 px-3 py-2.5 has-[button:disabled]:cursor-not-allowed"
+            className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-background/60 px-3 py-2.5 has-[button:disabled]:cursor-not-allowed"
           >
             <RadioGroupItem id={id} value={option.value} className="mt-0.5" />
             <span>

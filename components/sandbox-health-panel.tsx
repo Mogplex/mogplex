@@ -75,7 +75,7 @@ export function SandboxHealthPanel({
   }
 
   return (
-    <section className="border border-border bg-card">
+    <section className="rounded-lg border border-border bg-card">
       <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
         <div>
           <div className="text-sm text-foreground">Sandbox Health</div>
@@ -175,7 +175,7 @@ export function SandboxHealthPanel({
       </div>
 
       {actionError ? (
-        <div className="mx-4 mt-4 border border-destructive px-3 py-2 text-[11px] text-destructive">
+        <div className="mx-4 mt-4 rounded-md border border-destructive px-3 py-2 text-[11px] text-destructive">
           <div className="font-medium">{actionError.title}</div>
           <div className="mt-1 whitespace-pre-wrap break-words text-destructive/80">{actionError.message}</div>
           {actionError.cta ? (
@@ -190,7 +190,7 @@ export function SandboxHealthPanel({
       ) : null}
 
       {currentError ? (
-        <div className="mx-4 mt-4 border border-destructive/40 bg-destructive/10 px-3 py-2 text-[11px] text-destructive">
+        <div className="mx-4 mt-4 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-[11px] text-destructive">
           <div className="font-medium">{currentError.title}</div>
           <div className="mt-1 whitespace-pre-wrap break-words text-destructive/80">{currentError.message}</div>
           {currentError.cta ? (
@@ -205,7 +205,7 @@ export function SandboxHealthPanel({
       ) : null}
 
       {vercelPresentation ? (
-        <div className="mx-4 mt-4 border border-border bg-secondary/20 px-3 py-3 text-[11px]">
+        <div className="mx-4 mt-4 rounded-lg border border-border bg-secondary/20 px-3 py-3 text-[11px]">
           <div className="flex flex-wrap items-center gap-2">
             <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Vercel Diagnostics</div>
             <span className="border border-border px-2 py-1 text-muted-foreground">
@@ -293,13 +293,13 @@ export function SandboxHealthPanel({
       <div className="grid gap-4 p-4 lg:grid-cols-2">
         <div className="space-y-2">
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Install Log</div>
-          <pre className="max-h-80 overflow-auto border border-border bg-background p-3 text-[11px] text-foreground whitespace-pre-wrap">
+          <pre className="max-h-80 overflow-auto rounded-lg border border-border bg-background p-3 text-[11px] text-foreground whitespace-pre-wrap">
             {installLog || "No install log yet."}
           </pre>
         </div>
         <div className="space-y-2">
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Dev Server Log</div>
-          <pre className="max-h-80 overflow-auto border border-border bg-background p-3 text-[11px] text-foreground whitespace-pre-wrap">
+          <pre className="max-h-80 overflow-auto rounded-lg border border-border bg-background p-3 text-[11px] text-foreground whitespace-pre-wrap">
             {devLog || "No dev log yet."}
           </pre>
         </div>

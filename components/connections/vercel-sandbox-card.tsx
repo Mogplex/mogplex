@@ -147,7 +147,7 @@ export function VercelSandboxCard({
   return (
     <div
       data-testid="settings-sandbox-vercel"
-      className={`border bg-background p-2.5 space-y-1 ${stateTone}`}
+      className={`rounded-lg border bg-background p-2.5 space-y-1 ${stateTone}`}
     >
       <div className="flex items-center justify-between gap-1">
         <div className="flex items-center gap-1.5 min-w-0">

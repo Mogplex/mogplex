@@ -43,7 +43,7 @@ export function AccountSection({
   ownerTargetsNeedingInstall,
 }: AccountSectionProps) {
   return (
-    <section className="border border-border/60 bg-card">
+    <section className="rounded-lg border border-border/60 bg-card">
       <div className="px-5 pt-5 pb-2">
         <div className="ui-section-title">Account</div>
         <div className="ui-section-caption">GitHub is your account identity. Manage Vercel from Connections.</div>

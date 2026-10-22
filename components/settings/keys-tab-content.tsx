@@ -25,7 +25,7 @@ export function KeysTabContent({
   deleteProviderKey,
 }: KeysTabContentProps) {
   return (
-    <section className="border border-border/60 bg-card">
+    <section className="rounded-lg border border-border/60 bg-card">
       <div className="px-5 pt-5 pb-2">
         <div className="ui-section-title">Team Keys</div>
         <div className="ui-section-caption">Shared provider keys are preferred over personal keys inside this team.</div>
@@ -35,7 +35,7 @@ export function KeysTabContent({
         {PROVIDERS.map((provider) => {
           const configured = configuredProviders.has(provider.id);
           return (
-            <div key={provider.id} className="border border-border bg-background/60 p-4">
+            <div key={provider.id} className="rounded-lg border border-border bg-background/60 p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-sm font-medium text-foreground">{provider.label}</div>

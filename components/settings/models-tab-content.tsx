@@ -29,7 +29,7 @@ export function ModelsTabContent({
   saveModelAllowlist,
 }: ModelsTabContentProps) {
   return (
-    <section className="border border-border/60 bg-card">
+    <section className="rounded-lg border border-border/60 bg-card">
       <div className="px-5 pt-5 pb-2">
         <div className="ui-section-title">Model Allowlist</div>
         <div className="ui-section-caption">Limit which catalog models members can run in this team.</div>
@@ -45,7 +45,7 @@ export function ModelsTabContent({
           />
           Restrict this team to selected models
         </label>
-        <div className="grid max-h-[460px] gap-2 overflow-auto border border-border p-3 md:grid-cols-2">
+        <div className="grid max-h-[460px] gap-2 overflow-auto rounded-lg border border-border p-3 md:grid-cols-2">
           {catalog.map((model) => (
             <label key={model.id} className="flex items-start gap-2 rounded-md px-2 py-1 text-sm hover:bg-secondary/60">
               <input

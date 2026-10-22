@@ -128,7 +128,7 @@ export function McpServersPageClient() {
 
   return (
     <div className="space-y-4">
-      <section className="border border-border bg-card">
+      <section className="rounded-lg border border-border bg-card">
         <div className="flex flex-col gap-3 border-b border-border px-4 py-3 md:flex-row md:items-start md:justify-between">
           <div>
             <div className="ui-section-title">Server Definitions</div>

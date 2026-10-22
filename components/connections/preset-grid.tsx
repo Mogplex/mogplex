@@ -161,7 +161,7 @@ export function PresetGrid({
             <div
               key={preset.id}
               data-testid={`settings-preset-${preset.id}`}
-              className={`border p-2.5 space-y-1.5 transition-colors ${
+              className={`rounded-lg border p-2.5 space-y-1.5 transition-colors ${
                 isConfigured
                   ? isConnected
                     ? "border-accent-green/30 bg-accent-green/[0.04]"

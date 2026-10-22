@@ -36,7 +36,7 @@ export function TeamsListSection() {
 
   return (
     <div className="space-y-4">
-      <section className="border border-border/60 bg-card">
+      <section className="rounded-lg border border-border/60 bg-card">
         <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-2">
           <div>
             <div className="ui-section-title">Teams</div>
@@ -63,7 +63,7 @@ export function TeamsListSection() {
           )}
 
           {!error && !isLoading && teams.length === 0 && (
-            <div className="rounded-md border border-dashed border-border bg-background/60 p-6 text-center">
+            <div className="rounded-lg border border-dashed border-border bg-background/60 p-6 text-center">
               <div className="text-sm text-foreground">No teams yet</div>
               <div className="mt-1 text-[12px] text-muted-foreground">
                 Create a team to invite collaborators and share resources.
@@ -79,7 +79,7 @@ export function TeamsListSection() {
           )}
 
           {teams.length > 0 && (
-            <div className="divide-y divide-border/40 border border-border/60">
+            <div className="divide-y divide-border/40 overflow-hidden rounded-lg border border-border/60">
               {teams.map((team) => {
                 const expanded = !collapsedTeamIds.has(team.id)
                 const panelId = `team-${team.id}-panel`

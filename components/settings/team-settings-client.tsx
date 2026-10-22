@@ -76,7 +76,7 @@ export function TeamSettingsClient({
       )}
 
       {section === "members" && (
-        <section className="flex flex-wrap items-center gap-4 border border-border/60 bg-card px-5 py-4">
+        <section className="flex flex-wrap items-center gap-4 rounded-lg border border-border/60 bg-card px-5 py-4">
           <div
             className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-md bg-accent text-sm font-medium text-foreground/80"
             aria-hidden="true"

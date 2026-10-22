@@ -90,7 +90,7 @@ export function SkillEditor({
         <div className="ui-section-title">{skill ? "Edit skill" : "New skill"}</div>
         <button onClick={onCancel} className="text-muted-foreground text-sm hover:text-foreground cursor-pointer">Cancel</button>
       </div>
-      <div className="border border-border bg-card p-4 space-y-3">
+      <div className="rounded-lg border border-border bg-card p-4 space-y-3">
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="ui-label uppercase">Name</label>
