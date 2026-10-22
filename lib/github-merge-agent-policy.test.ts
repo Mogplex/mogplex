@@ -191,8 +191,11 @@ test("native reviewer lifecycle tool merges after its clean report without extra
     lifecycleTools: true,
   }).instructions;
   assert.doesNotMatch(instructions, /team's merge approval policy/i);
+  const queueDescription = tools.queuePullRequestForMerge.description;
+  assert.ok(typeof queueDescription === "string");
+  assert.match(queueDescription, /GitHub.*branch protection/i);
   assert.doesNotMatch(
-    tools.queuePullRequestForMerge.description ?? "",
+    queueDescription,
     /Team merge controls apply|Teams that require exact-head approval/i
   );
   const report = tools.reportReview.execute!;
