@@ -56,10 +56,11 @@ test("code blocks show current plain text while real syntax highlighting loads",
 
 test("Markdown highlighting activates for code fences and supports real languages", async () => {
   const restore = installControlHookDom();
-  const [{ renderHook, act }, { useCodeHighlighting }] = await Promise.all([
-    import("@testing-library/react"),
-    import("../../components/ai-elements/use-code-highlighting"),
-  ]);
+  const [{ renderHook, act }, { useCodeHighlighting, loadCodeHighlighter }] =
+    await Promise.all([
+      import("@testing-library/react"),
+      import("../../components/ai-elements/use-code-highlighting"),
+    ]);
   const view = renderHook(
     ({ content }: { content: string }) => useCodeHighlighting(content),
     {
@@ -69,14 +70,14 @@ test("Markdown highlighting activates for code fences and supports real language
   const getPlugin = () => view.result.current;
   try {
     await act(async () => {
-      await import("@streamdown/code");
+      await loadCodeHighlighter();
     });
     assert.equal(getPlugin(), undefined);
     await act(async () => {
       view.rerender({ content: '> ~~~json\n> {"ready":true}\n> ~~~' });
     });
     await act(async () => {
-      await import("@streamdown/code");
+      await loadCodeHighlighter();
     });
     assert.equal(getPlugin()?.supportsLanguage("json"), true);
     const loadedPlugin = getPlugin();
@@ -90,16 +91,17 @@ test("Markdown highlighting activates for code fences and supports real language
 
 test("Markdown highlighting also activates for indented code blocks", async () => {
   const restore = installControlHookDom();
-  const [{ renderHook, act }, { useCodeHighlighting }] = await Promise.all([
-    import("@testing-library/react"),
-    import("../../components/ai-elements/use-code-highlighting"),
-  ]);
+  const [{ renderHook, act }, { useCodeHighlighting, loadCodeHighlighter }] =
+    await Promise.all([
+      import("@testing-library/react"),
+      import("../../components/ai-elements/use-code-highlighting"),
+    ]);
   const view = renderHook(() =>
     useCodeHighlighting("Example:\n\n    const indented = true;")
   );
   try {
     await act(async () => {
-      await import("@streamdown/code");
+      await loadCodeHighlighter();
     });
     assert.equal(view.result.current?.supportsLanguage("javascript"), true);
   } finally {

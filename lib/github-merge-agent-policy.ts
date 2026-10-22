@@ -37,15 +37,13 @@ async function recordAttempt(
   scope: AgentMergePolicyScope,
   target: Target,
   outcome: AutoMergeOutcome,
-  decision: string,
-  approvalId?: string
+  decision: string
 ) {
   const targetId = `${target.owner}/${target.repo}#${target.prNumber}`;
   const payload = {
     target_owner: target.owner,
     target_repo: target.repo,
     head_sha: target.expectedHeadSha ?? null,
-    ...(approvalId ? { approval_id: approvalId } : {}),
   };
   if (!scope.teamId) {
     console.info("[github-merge] attempt", {
@@ -127,23 +125,12 @@ export async function withAgentMergePolicy(
     const outcome = {
       merged: false,
       reason: policy.error,
-      approvalId: policy.approvalId,
     };
-    await recordAttempt(
-      scope,
-      target,
-      outcome,
-      policy.decision,
-      policy.approvalId
-    );
+    await recordAttempt(scope, target, outcome, policy.decision);
     return outcome;
   }
-  const approvalId = "approvalId" in policy ? policy.approvalId : undefined;
   try {
-    const outcome = await execute(
-      target.requireImmediateMerge === true ||
-        ("immediateOnly" in policy && policy.immediateOnly === true)
-    );
+    const outcome = await execute(target.requireImmediateMerge === true);
     await recordAttempt(
       scope,
       target,
@@ -152,17 +139,15 @@ export async function withAgentMergePolicy(
         ? "merged"
         : outcome.queued
           ? "auto_merge_queued"
-          : "not_merged",
-      approvalId
+          : "not_merged"
     );
-    return { ...outcome, ...(approvalId ? { approvalId } : {}) };
+    return outcome;
   } catch (error) {
     await recordAttempt(
       scope,
       target,
       { merged: false, reason: "GitHub merge failed" },
-      "not_merged",
-      approvalId
+      "not_merged"
     );
     throw error;
   }

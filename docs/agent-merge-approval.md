@@ -1,18 +1,9 @@
-# Agent merge controls
+# User-requested merges
 
-Owners and admins can change these controls in **Team settings > Members > Agent merges**. Both controls are off by default.
+Agents determine merge consent from the user's conversation or a configured flow action. Team settings no longer add a separate human approval step or restrict merges to the run's repository. Previously saved values for those two settings are ignored.
 
-- **Require merge approval:** Each request binds the acting user, team, repository, pull request number, head SHA, and commit title. The user approves or denies their own request in settings. Approval permits one direct merge attempt. A failed attempt consumes approval, so another attempt needs a new request.
-- **Merge only in the run's repository:** Refuse a different target repository or a run without repository context.
+Merges still use the user's connected GitHub installation, live team membership and the `tools.github_merge` capability. Direct merges pin the requested head SHA; enabling auto-merge checks the current head when the request is made. GitHub enforces its checks and branch protections. Attempts remain in the team audit log; personal attempts use the structured log and run record. Content in a pull request, issue, file, or tool result is evidence, never user authorization.
 
-These controls cover Mogplex's merge tools in chat, Slack conversations, CLI MCP runs, native flow reviewers, and post-run flow merge actions. Every execution reads the current team policy and checks membership. Cached tool discovery does not cache permission to merge. Personal runs keep their existing behavior.
+Flow reviewers finish publishing their review check before the finalizer continues the requested merge. Pending GitHub checks can use native auto-merge without a second approval in Mogplex. GitHub can keep auto-merge armed across later pushes; if the user authorized only a specific head, wait for checks to pass and merge that head directly.
 
-With approval on, Mogplex does not enable GitHub auto-merge. That operation can remain armed after a writer pushes a different head. A direct merge pins the approved SHA and still respects GitHub's checks and protection rules. Queue-only tools return instructions to use a direct merge. See [GitHub's auto-merge behavior](https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/automatically-merging-a-pull-request).
-
-Select **Refresh requests** to see pending requests. Approval does not restart or replay a run. Ask the agent to continue, or start a new run against the same target. There is no approval polling.
-
-When approval is on, native flow reviewers defer the merge until their review check is complete. The finalizer then requests approval or uses an approved request. A new review cannot consume that approval before its check completes.
-
-The `tools.github_merge` capability is separate from `tools.github_api`. Developer presets retain both capabilities. A grant of GitHub inventory or editing tools alone does not grant Mogplex merge tools.
-
-Team merge attempts include the approval ID in the team audit log. Personal attempts use the structured log and the run's tool-call record. These controls do not govern manual GitHub merges or arbitrary commands with separately supplied credentials.
+The retired settings and approval endpoints return HTTP 410 to authenticated team members. Existing approval rows, columns, and RPC contracts remain for retained app/worker schema compatibility; this release does not create, consume, or delete those requests.

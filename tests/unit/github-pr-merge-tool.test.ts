@@ -230,10 +230,6 @@ test("github_merge_pull_request reports a merge audit row that could not be writ
               requireApproval: false,
               contextRepoOnly: false,
             }),
-            claimApproval: async () => null,
-            requestApproval: async () => {
-              throw new Error("Approval is off in this fixture");
-            },
           },
           recordAuditEvent: async () => ({ ok: false, error: "insert failed" }),
           reportAuditFailure: (extra) => reported.push(extra),

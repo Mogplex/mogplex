@@ -1,18 +1,21 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { createMogplexMcpPost } from "@/lib/harness/mogplex-mcp";
 import { buildHarnessResearchEnv } from "@/lib/harness/research-auth";
 import { createGithubPullRequestMergeTool } from "@/lib/agents/tools/github-pr-merge";
 import { ALL_CAPABILITIES } from "@/lib/team-capabilities";
-import { withEnv, withPatchedFetch } from "./helpers/agents-tools-fixtures";
+import {
+  withEnv,
+  withPatchedFetch,
+} from "@/tests/unit/helpers/agents-tools-fixtures";
 import {
   mergeFetch,
   REVIEWED_HEAD_SHA,
   withAcmeInstallation,
   type MergeFetchCall,
-} from "./helpers/github-pr-merge-fixtures";
+} from "@/tests/unit/helpers/github-pr-merge-fixtures";
 
-test("MCP cached tool rechecks live team policy and consumes approval before GitHub writes", async () => {
+test("MCP cached tool ignores retired settings and rechecks live team permission", async () => {
   await withEnv(
     {
       EXA_API_KEY: "test-research-key",
@@ -24,7 +27,7 @@ test("MCP cached tool rechecks live team policy and consumes approval before Git
         const calls: MergeFetchCall[] = [];
         await withPatchedFetch(mergeFetch(calls), async () => {
           let requireApproval = false;
-          let approved = false;
+          let permitted = true;
           let builds = 0;
           let reads = 0;
           const tool = createGithubPullRequestMergeTool({
@@ -35,14 +38,9 @@ test("MCP cached tool rechecks live team policy and consumes approval before Git
             mergePolicyDeps: {
               read: async () => {
                 reads += 1;
+                if (!permitted) throw new Error("Merge permission revoked");
                 return { requireApproval, contextRepoOnly: false };
               },
-              claimApproval: async () => {
-                if (!approved) return null;
-                approved = false;
-                return "approved-once";
-              },
-              requestApproval: async () => "pending",
             },
           });
           const post = createMogplexMcpPost({
@@ -105,25 +103,26 @@ test("MCP cached tool rechecks live team policy and consumes approval before Git
               .merged,
             true
           );
-          const afterDefault = calls.length;
           requireApproval = true;
+          const withOldSetting = await call("tools/call");
+          assert.equal(withOldSetting.result.isError, false);
+          assert.equal(
+            JSON.parse(withOldSetting.result.content![0].text).merged,
+            true
+          );
+          const afterDefault = calls.length;
+          permitted = false;
           const denied = await call("tools/call");
           assert.equal(denied.result.isError, true);
-          assert.match(
-            denied.result.content![0].text,
-            /"approvalId":"pending"/
-          );
+          assert.match(denied.result.content![0].text, /merge permission/);
           assert.equal(calls.length, afterDefault);
-          approved = true;
+          permitted = true;
           const allowed = await call("tools/call");
           assert.equal(allowed.result.isError, false);
           assert.equal(
             JSON.parse(allowed.result.content![0].text).merged,
             true
           );
-          const afterApproved = calls.length;
-          assert.equal((await call("tools/call")).result.isError, true);
-          assert.equal(calls.length, afterApproved);
           assert.equal(builds, 1);
           assert.equal(reads, 4);
         });

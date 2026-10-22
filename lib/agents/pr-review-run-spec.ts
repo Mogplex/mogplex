@@ -15,7 +15,7 @@ export const PR_REVIEW_STATIC_INSTRUCTIONS = [
 
 const PR_REVIEW_LIFECYCLE_INSTRUCTIONS = [
   "This run also has PR lifecycle tools: mergePullRequest, queuePullRequestForMerge, rebasePullRequest, closePullRequest, and createIssue.",
-  "Only merge or queue when you reported hasIssues=false. Prefer queuePullRequestForMerge when required checks are still pending, unless the team's merge approval policy requires a direct merge. If a tool requests approval, relay its instructions and stop; never retry or poll for approval. Call rebasePullRequest first when the branch is behind the base branch. Never merge or queue a change that would break the repo's typecheck, lint, test, or build.",
+  "Only merge or queue when you reported hasIssues=false. Live team capability and GitHub checks and branch protection apply. Prefer queuePullRequestForMerge when required checks are still pending. GitHub auto-merge can remain armed across later pushes; if the user authorized only a specific head, wait for checks to pass and use a direct merge instead. Call rebasePullRequest first when the branch is behind the base branch. Never merge or queue a change that would break the repo's typecheck, lint, test, or build.",
   'When the change is unsafe and not safely fixable, call createIssue with a title like "Dependabot: <dependency> <from> -> <to> blocked" documenting what breaks, the evidence, and the suggested remediation; then call closePullRequest. Reference the issue in your review summary.',
 ].join("\n");
 

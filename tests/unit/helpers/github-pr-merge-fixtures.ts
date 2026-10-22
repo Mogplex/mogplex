@@ -164,10 +164,6 @@ export async function auditedTeamMerge(
             requireApproval: false,
             contextRepoOnly: false,
           }),
-          claimApproval: async () => null,
-          requestApproval: async () => {
-            throw new Error("Approval is off in this fixture");
-          },
         },
         loadUserGithubLogin: async () => input.userGithubLogin ?? null,
         recordAuditEvent: async (event) => {
