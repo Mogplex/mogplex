@@ -6,7 +6,7 @@ import {
   mergeFetch,
   REVIEWED_HEAD_SHA,
   type MergeFetchCall,
-} from "@/tests/unit/helpers/github-pr-merge-fixtures";
+} from "./helpers/github-pr-merge-fixtures";
 
 const mergePath = "/repos/acme/widgets/pulls/84/merge";
 
@@ -17,7 +17,9 @@ test("a user-requested merge accepts human and bot authors without a review requ
   ]) {
     const calls: MergeFetchCall[] = [];
     const events = await auditedTeamMerge(mergeFetch(calls, { author }));
-    assert.deepEqual(events, [mergeAuditEvent("merged")]);
+    assert.deepEqual(events, [
+      mergeAuditEvent("merged", { authorLogin: author.login }),
+    ]);
     assert.deepEqual(calls.at(-1), {
       method: "PUT",
       path: mergePath,
@@ -34,12 +36,10 @@ test("a user-requested merge accepts human and bot authors without a review requ
   }
 });
 
-test("unavailable author metadata does not block the user's requested merge", async () => {
+test("a missing PR author does not block the user's requested merge", async () => {
   const calls: MergeFetchCall[] = [];
-  const events = await auditedTeamMerge(
-    mergeFetch(calls, { ownershipStatus: 502 })
-  );
-  assert.deepEqual(events, [mergeAuditEvent("merged")]);
+  const events = await auditedTeamMerge(mergeFetch(calls, { author: null }));
+  assert.deepEqual(events, [mergeAuditEvent("merged", { authorLogin: null })]);
   assert.equal(
     calls.some((call) => call.path === "/graphql"),
     false
@@ -51,11 +51,12 @@ test("a requested third-party merge still waits on GitHub's required checks and 
   const events = await auditedTeamMerge(
     mergeFetch(calls, {
       author: { __typename: "User", login: "teammate" },
-      reviewDecision: "REVIEW_REQUIRED",
       mergeableState: "blocked",
     })
   );
-  assert.deepEqual(events, [mergeAuditEvent("auto_merge_queued")]);
+  assert.deepEqual(events, [
+    mergeAuditEvent("auto_merge_queued", { authorLogin: "teammate" }),
+  ]);
   assert.equal(
     calls.some((call) => call.path === mergePath),
     false

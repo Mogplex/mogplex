@@ -12,6 +12,7 @@ export type AutoMergeOutcome = {
   reason: string;
   sha?: string | null;
   approvalId?: string;
+  authorLogin?: string | null;
 };
 
 type PullRequestGate = {
@@ -22,6 +23,7 @@ type PullRequestGate = {
   node_id?: string;
   head?: { sha?: string };
   base?: { ref?: string };
+  user?: { login?: string } | null;
 };
 
 type MergeInput = {
@@ -457,16 +459,20 @@ async function mergePullRequestIfSafeUnchecked(
   input: MergeInput
 ): Promise<AutoMergeOutcome> {
   const pr = await loadPullRequestGate(input);
+  const withAuthor = (outcome: AutoMergeOutcome): AutoMergeOutcome => ({
+    ...outcome,
+    ...(pr.user === undefined ? {} : { authorLogin: pr.user?.login ?? null }),
+  });
   const blocked = pullRequestBlockReason(input, pr);
-  if (blocked) return blocked;
+  if (blocked) return withAuthor(blocked);
   if (await baseBranchUsesMergeQueue(input, pr)) {
-    return mergeThroughQueue(input, pr);
+    return withAuthor(await mergeThroughQueue(input, pr));
   }
   if (shouldEnablePullRequestAutoMerge(pr)) {
-    return enablePullRequestAutoMerge(input, pr);
+    return withAuthor(await enablePullRequestAutoMerge(input, pr));
   }
-  if (pr.mergeable_state !== "clean") return notCleanReason(pr);
-  return mergeCleanPullRequest(input, pr);
+  if (pr.mergeable_state !== "clean") return withAuthor(notCleanReason(pr));
+  return withAuthor(await mergeCleanPullRequest(input, pr));
 }
 
 export function queuePullRequestForMerge(

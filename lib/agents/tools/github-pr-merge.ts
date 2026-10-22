@@ -58,6 +58,7 @@ type MergeAttempt = {
   expectedHeadSha: string;
   decision: MergeDecision;
   error?: string;
+  authorLogin?: string | null;
 };
 
 function contextRepoIdFor(
@@ -80,6 +81,9 @@ function mergeAuditPayload(attempt: MergeAttempt) {
     target_owner: attempt.owner,
     target_repo: attempt.repo,
     head_sha: attempt.expectedHeadSha,
+    ...(attempt.authorLogin === undefined
+      ? {}
+      : { author_login: attempt.authorLogin }),
     ...(attempt.error ? { error: attempt.error } : {}),
   };
 }
@@ -179,7 +183,7 @@ function normalizePullRequestTarget(input: { owner: string; repo: string }) {
 }
 
 type MergeTarget = { owner: string; repo: string };
-type AuditOutcome = Pick<MergeAttempt, "decision" | "error">;
+type AuditOutcome = Pick<MergeAttempt, "decision" | "error" | "authorLogin">;
 
 async function resolveMergeToken(
   userId: string,
@@ -237,6 +241,7 @@ async function attemptMerge(
     return {
       audit: {
         decision: outcomeDecision(outcome),
+        authorLogin: outcome.authorLogin,
         ...(ok ? {} : { error: outcome.reason }),
       } satisfies AuditOutcome,
       response: {
@@ -247,6 +252,7 @@ async function attemptMerge(
         queued: outcome.queued === true,
         reason: outcome.reason,
         sha: outcome.sha ?? null,
+        authorLogin: outcome.authorLogin ?? null,
       },
     };
   } catch (error) {
