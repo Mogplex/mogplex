@@ -6,6 +6,7 @@ import {
   queuePullRequestForMerge,
 } from "@/lib/github-merge";
 import { buildPRReviewTools } from "@/lib/agents/pr-reviewer";
+import { buildPrReviewRunSpec } from "@/lib/agents/pr-review-run-spec";
 import { attemptFlowAutoMerge } from "@/lib/workflows/automation-job-auto-merge";
 import type { MergePolicyDeps } from "@/lib/github-merge-policy";
 import type { RecordTeamAuditEventInput } from "@/lib/team-audit";
@@ -185,6 +186,15 @@ test("native reviewer lifecycle tool merges after its clean report without extra
     mergePolicyScope: f.scope,
   };
   const tools: ToolSet = buildPRReviewTools(config);
+  const instructions = buildPrReviewRunSpec({
+    prNumber: 42,
+    lifecycleTools: true,
+  }).instructions;
+  assert.doesNotMatch(instructions, /team's merge approval policy/i);
+  assert.doesNotMatch(
+    tools.queuePullRequestForMerge.description ?? "",
+    /Team merge controls apply|Teams that require exact-head approval/i
+  );
   const report = tools.reportReview.execute!;
   await report(
     { hasIssues: false, summary: "No issues found" },

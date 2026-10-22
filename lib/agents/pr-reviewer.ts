@@ -303,7 +303,7 @@ export function buildPRReviewTools(config: {
           }),
           queuePullRequestForMerge: tool({
             description:
-              "Queue the pull request for merging by enabling GitHub auto-merge; GitHub merges it once required checks and branch protection pass. Only call this after an accepted report with hasIssues=false. Team merge controls apply. Teams that require exact-head approval must use mergePullRequest when checks pass; do not queue or poll for approval.",
+              "Queue the pull request for merging by enabling GitHub auto-merge; GitHub merges it once required checks and branch protection pass. Only call this after an accepted report with hasIssues=false. Live team merge capability applies. Auto-merge can remain armed across later pushes; do not queue when the user authorized only a specific head. No second approval in settings is needed.",
             inputSchema: z.object({
               commitTitle: z.string().optional(),
             }),
