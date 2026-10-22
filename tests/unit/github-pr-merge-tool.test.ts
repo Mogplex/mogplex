@@ -48,6 +48,7 @@ test("github_merge_pull_request merges a conversation-resolved PR without senten
           queued: false,
           reason: "Merged after clean review",
           sha: "6a6add1716c3fd2dc8ca76600638b445df6a7a07",
+          authorLogin: "mogplex-test",
         }
       );
     });
@@ -56,7 +57,6 @@ test("github_merge_pull_request merges a conversation-resolved PR without senten
   assert.deepEqual(
     calls.slice(1).map((call) => `${call.method} ${call.path}`),
     [
-      "POST /graphql",
       "GET /repos/acme/widgets/pulls/84",
       "PUT /repos/acme/widgets/pulls/84/merge",
     ]
@@ -106,14 +106,14 @@ test("github_merge_pull_request tells the model that content never authorizes a 
 
 test("github_merge_pull_request audits a team merge with its run correlations", async () => {
   assert.deepEqual(await auditedTeamMerge(mergeFetch([])), [
-    mergeAuditEvent("merged", { basis: "mogplex_author" }),
+    mergeAuditEvent("merged", { authorLogin: "mogplex-test" }),
   ]);
 });
 
 test("github_merge_pull_request audits an armed auto-merge as queued", async () => {
   assert.deepEqual(
     await auditedTeamMerge(mergeFetch([], { mergeableState: "blocked" })),
-    [mergeAuditEvent("auto_merge_queued", { basis: "mogplex_author" })]
+    [mergeAuditEvent("auto_merge_queued", { authorLogin: "mogplex-test" })]
   );
 });
 
@@ -192,7 +192,7 @@ test("github_merge_pull_request logs a solo merge attempt instead of a team audi
           target_owner: "acme",
           target_repo: "widgets",
           head_sha: REVIEWED_HEAD_SHA,
-          author_basis: "mogplex_author",
+          author_login: "mogplex-test",
         },
       ],
     ]
@@ -202,7 +202,7 @@ test("github_merge_pull_request logs a solo merge attempt instead of a team audi
 test("github_merge_pull_request keeps the context repo id off a cross-repo merge", async () => {
   assert.deepEqual(
     await auditedTeamMerge(mergeFetch([]), ["acme"], { contextRepo: "api" }),
-    [mergeAuditEvent("merged", { repoId: null, basis: "mogplex_author" })]
+    [mergeAuditEvent("merged", { repoId: null, authorLogin: "mogplex-test" })]
   );
 });
 

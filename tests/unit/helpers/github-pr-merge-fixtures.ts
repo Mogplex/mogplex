@@ -46,11 +46,7 @@ type MergeStubState = {
   status?: number;
   mergeableState?: string;
   /** The PR author; defaults to the Mogplex app bot ("mogplex-test"). */
-  author?: { __typename: "Bot" | "User"; login: string };
-  reviewDecision?: string | null;
-  ownershipStatus?: number;
-  /** Approvals an active ruleset on `main` requires; none by default. */
-  rulesetReviewCount?: number;
+  author?: { __typename: "Bot" | "User"; login: string } | null;
 };
 
 function pullResponse(pull: MergeStubState) {
@@ -62,30 +58,17 @@ function pullResponse(pull: MergeStubState) {
     mergeable_state: pull.mergeableState ?? "clean",
     node_id: "PR_84",
     head: { sha: REVIEWED_HEAD_SHA },
+    user:
+      pull.author === null
+        ? null
+        : {
+            type: pull.author?.__typename ?? "Bot",
+            login: pull.author?.login ?? "mogplex-test",
+          },
   });
 }
 
-function ownershipResponse(pull: MergeStubState) {
-  if (pull.ownershipStatus) {
-    return new Response("boom", { status: pull.ownershipStatus });
-  }
-  return Response.json({
-    data: {
-      repository: {
-        pullRequest: {
-          url: "https://github.com/acme/widgets/pull/84",
-          reviewDecision: pull.reviewDecision ?? null,
-          baseRefName: "main",
-          author: pull.author ?? { __typename: "Bot", login: "mogplex-test" },
-        },
-      },
-    },
-  });
-}
-
-function graphqlResponse(pull: MergeStubState, body: unknown) {
-  const query = (body as { query?: string } | undefined)?.query ?? "";
-  if (query.includes("PullRequestOwnership")) return ownershipResponse(pull);
+function graphqlResponse() {
   return Response.json({
     data: {
       enablePullRequestAutoMerge: {
@@ -105,21 +88,7 @@ export function mergeFetch(calls: MergeFetchCall[], pull: MergeStubState = {}) {
       return Response.json({ token: "ghs-installation" });
     }
     if (pathname === "/repos/acme/widgets/pulls/84") return pullResponse(pull);
-    if (pathname === "/graphql") return graphqlResponse(pull, body);
-    if (pathname === "/repos/acme/widgets/rules/branches/main") {
-      return Response.json(
-        pull.rulesetReviewCount
-          ? [
-              {
-                type: "pull_request",
-                parameters: {
-                  required_approving_review_count: pull.rulesetReviewCount,
-                },
-              },
-            ]
-          : []
-      );
-    }
+    if (pathname === "/graphql") return graphqlResponse();
     return Response.json({
       merged: true,
       sha: "6a6add1716c3fd2dc8ca76600638b445df6a7a07",
@@ -141,7 +110,6 @@ export async function auditedTeamMerge(
   input: {
     owner?: string;
     contextRepo?: string;
-    userGithubLogin?: string | null;
     onResult?: (result: unknown) => void;
   } = {}
 ) {
@@ -165,7 +133,6 @@ export async function auditedTeamMerge(
             contextRepoOnly: false,
           }),
         },
-        loadUserGithubLogin: async () => input.userGithubLogin ?? null,
         recordAuditEvent: async (event) => {
           events.push(event);
           return { ok: true };
@@ -185,9 +152,13 @@ export async function auditedTeamMerge(
 
 export function mergeAuditEvent(
   decisionCode: string,
-  extra: { error?: string; repoId?: string | null; basis?: string } = {}
+  extra: {
+    error?: string;
+    repoId?: string | null;
+    authorLogin?: string | null;
+  } = {}
 ) {
-  const { error, repoId = "repo-1", basis } = extra;
+  const { error, repoId = "repo-1", authorLogin } = extra;
   return {
     productTeamId: "team-1",
     actorUserId: "user-1",
@@ -204,7 +175,7 @@ export function mergeAuditEvent(
       target_owner: "acme",
       target_repo: "widgets",
       head_sha: REVIEWED_HEAD_SHA,
-      ...(basis ? { author_basis: basis } : {}),
+      ...(authorLogin === undefined ? {} : { author_login: authorLogin }),
       ...(error ? { error } : {}),
     },
   };
