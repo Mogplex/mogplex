@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
@@ -56,7 +57,7 @@ export function KeyValueEditor({
         </div>
       ) : (
         <div className="space-y-2">
-          {entries.map((entry) => {
+          {entries.map((entry, index) => {
             const showSavedBadge =
               entry.isSecret &&
               entry.saved &&
@@ -77,8 +78,10 @@ export function KeyValueEditor({
                     placeholder={`${label} name`}
                   />
                   <div className="space-y-2">
-                    <Input
+                    <PasswordInput
+                      label={entry.key.trim() || `${label.toLowerCase()} secret ${index + 1}`}
                       type={entry.isSecret ? "password" : "text"}
+                      previewable={!showSavedBadge}
                       value={entry.value}
                       onChange={(event) =>
                         updateEntry(entry.id, {

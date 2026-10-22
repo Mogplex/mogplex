@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react"
 import type { Repo } from "@/lib/types"
+import { PasswordInput } from "@/components/ui/password-input"
 
 type GitHubSecret = {
   name: string
@@ -132,12 +133,13 @@ export function RepoSecretsPanel({ repo }: Props) {
               placeholder="SECRET_NAME"
               className="w-full border border-border bg-input px-2 py-1 font-mono text-[11px] text-foreground"
             />
-            <input
+            <PasswordInput
+              label={newKey.trim() || "GitHub secret"}
               value={newValue}
               onChange={(event) => setNewValue(event.target.value)}
               type="password"
               placeholder="secret value"
-              className="w-full border border-border bg-input px-2 py-1 text-[11px] text-foreground"
+              className="h-auto w-full border border-border bg-input px-2 py-1 text-[11px] md:text-[11px] text-foreground"
             />
             <button
               onClick={handleAddGhSecret}

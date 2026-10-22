@@ -11,6 +11,7 @@ import {
 import type { ConnectionPreset } from "@/lib/connections/presets"
 import type { PresetConnectionState } from "@/lib/connections/presentation"
 import { getPresetIcon } from "@/components/settings/preset-icons"
+import { PasswordInput } from "@/components/ui/password-input"
 import { scrollToConnectionRow } from "./connection-form"
 
 type PresetStatus = {
@@ -227,12 +228,13 @@ export function PresetGrid({
                       <div className="text-[11px] text-muted-foreground leading-tight">
                         Paste the full MCP server URL from Zapier&apos;s Connect tab. This URL is secret and can be rotated from Zapier later.
                       </div>
-                      <input
+                      <PasswordInput
+                        label={`${preset.name} ${preset.mcp_url_field.label}`}
                         type={preset.mcp_url_field.secret ? "password" : "text"}
                         value={presetMcpUrl}
                         onChange={e => setPresetMcpUrl(e.target.value)}
                         placeholder={preset.mcp_url_field.placeholder}
-                        className="w-full border border-border bg-input px-2 py-1 text-[11px] text-foreground"
+                        className="h-auto w-full border border-border bg-input px-2 py-1 text-[11px] md:text-[11px] text-foreground"
                       />
                     </>
                   )}
@@ -242,8 +244,9 @@ export function PresetGrid({
                     </div>
                   ) : (
                     preset.auth_fields.map(field => (
-                      <input
+                      <PasswordInput
                         key={field.key}
+                        label={`${preset.name} ${field.label}`}
                         type={field.secret ? "password" : "text"}
                         value={presetCredentials[field.key] ?? ""}
                         onChange={e => {
@@ -251,7 +254,7 @@ export function PresetGrid({
                           setPresetCredentials(prev => ({ ...prev, [field.key]: next }))
                         }}
                         placeholder={field.placeholder}
-                        className="w-full border border-border bg-input px-2 py-1 text-[11px] text-foreground"
+                        className="h-auto w-full border border-border bg-input px-2 py-1 text-[11px] md:text-[11px] text-foreground"
                       />
                     ))
                   )}
@@ -273,7 +276,7 @@ export function PresetGrid({
                     <button
                       onClick={() => void addPresetConnection(preset)}
                       disabled={(!!preset.mcp_url_field && !presetMcpUrl.trim()) || (preset.auth_fields.some(f => !(presetCredentials[f.key] ?? "").trim())) || presetSaving}
-                      className="px-3 py-1.5 text-[11px] bg-primary text-primary-foreground disabled:opacity-50"
+                      className="rounded-md px-3 py-1.5 text-[11px] bg-primary text-primary-foreground disabled:opacity-50"
                     >
                       {presetSaving ? "..." : preset.auth_type === "oauth" ? "Connect" : "Add"}
                     </button>

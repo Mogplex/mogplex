@@ -167,10 +167,31 @@ behavior. Defaults can be overridden by the owning screen; inspect it first.
   separate brand-hover token. Focus uses a 3px ring; active feedback scales to
   97% with a 150ms base transition. Keep loading labels stable in width where
   practical and explain unavailable actions nearby.
+  Native bordered app action buttons use the same 4px radius. Preserve pill
+  buttons, circular icon buttons, and the seams of grouped controls.
+  Shared primitives marked with `data-slot` retain their own radius variants;
+  native pill buttons and tab, radio, and switch roles are excluded from the
+  action-button override.
 - **[Input](./components/ui/input.tsx):** 36px height, 4px corners, horizontal
-  padding of 12px, a transparent light background, and `input/30` in dark mode.
+  padding of 12px. In the authenticated app, bordered inputs and textareas use
+  the secondary surface background. Hand-authored fields use the same corners,
+  focus ring, invalid state, and disabled treatment as the shared primitive.
   Preserve the focus ring, `aria-invalid` treatment, responsive text size, and
   associated label. A placeholder is not a label.
+- **[Password input](./components/ui/password-input.tsx):** password and secret
+  fields always show an eye button. Newly entered values can be shown or hidden
+  without changing the value or submitting the form, and hide when focus leaves
+  the field and its eye button. Saved secrets that the
+  server does not return use a disabled, muted eye; unavailable saved API-key
+  fields are muted and disabled. An editable replacement field stays usable.
+  Give each eye the field or provider name so multiple secrets have distinct
+  accessible controls. Preserve compact text sizes at desktop breakpoints.
+- **Native bordered dropdowns:** secondary surface background, 4px corners, and an inset,
+  vertically centered chevron,
+  matching the shared control scale. The app stylesheet reserves room for the
+  indicator on pages and in portaled dialogs. Native keyboard and picker
+  behavior remain available; multiple-select listboxes keep their native
+  treatment. Forced-color mode uses the system indicator.
 - **[Switch](./components/ui/switch.tsx):** 48px by 28px capsule with a visible
   outline and a 20px thumb. Off uses the secondary surface for its track; On
   uses the primary accent with a fixed near-black thumb (`neutral-11`, an

@@ -4,6 +4,7 @@ import { useState, useMemo, useCallback } from "react"
 import useSWR from "swr"
 import { fetchJsonObject } from "@/lib/client-fetch"
 import { PROVIDER_META, type VerifyResult } from "./settings-types"
+import { PasswordInput } from "@/components/ui/password-input"
 
 type ApiKeyEntry = {
   provider: string
@@ -132,9 +133,16 @@ export function ApiKeysSection({ platformAiEnabled }: { platformAiEnabled: boole
                 {isConfigured ? (
                   <div className="mt-3 space-y-2">
                     <div className="flex items-center gap-2">
-                        <span className="text-[11px] text-muted-foreground font-mono">
-                        {meta.masked}
-                      </span>
+                      <PasswordInput
+                        label={`${meta.label} API key`}
+                        value=""
+                        placeholder={meta.masked}
+                        previewable={false}
+                        disabled
+                        aria-label={`${meta.label} saved API key`}
+                        containerClassName="flex-1"
+                        className="h-auto py-1 font-mono text-[11px] md:text-[11px] text-muted-foreground"
+                      />
                       {keyEntry && (
                         <span className="text-[11px] text-muted-foreground">
                           · added {new Date(keyEntry.created_at).toLocaleDateString()}
@@ -186,12 +194,14 @@ export function ApiKeysSection({ platformAiEnabled }: { platformAiEnabled: boole
                   </div>
                 ) : (
                   <div className="mt-3 flex gap-2">
-                    <input
+                    <PasswordInput
+                      label={`${meta.label} API key`}
+                      containerClassName="flex-1"
                       type="password"
                       value={inputs[provider] || ""}
                       onChange={(e) => setInputs((p) => ({ ...p, [provider]: e.target.value }))}
                       placeholder={meta.placeholder}
-                      className="flex-1 border border-border bg-input px-3 py-2 text-sm text-foreground"
+                      className="h-auto border border-border bg-input px-3 py-2 text-sm text-foreground"
                     />
                     <button
                       onClick={() => void handleSave(provider)}

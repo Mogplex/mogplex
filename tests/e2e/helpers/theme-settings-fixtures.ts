@@ -113,68 +113,39 @@ export async function mockSettingsPageData(
 
 export async function readSearchInputTheme(page: Page) {
   return page.getByPlaceholder("Search spaces...").evaluate((element) => {
-    const normalizeColor = (value: string) => {
+    const readColor = (value: string) => {
       const canvas = document.createElement("canvas");
       const context = canvas.getContext("2d");
-      if (!context) return value;
-      context.fillStyle = "#000000";
+      if (!context) throw new Error("Canvas is required to read theme colors");
+      context.fillStyle = "#010203";
       context.fillStyle = value;
-      return context.fillStyle;
-    };
-
-    const parseChannels = (value: string) => {
-      if (value.startsWith("oklab(") || value.startsWith("oklch(")) {
-        const lightness = Number(
-          value.match(/\d+(\.\d+)?%?/)?.[0].replace("%", "") ?? 0
-        );
-        const normalizedLightness = value.includes("%")
-          ? lightness / 100
-          : lightness;
-        const channel = normalizedLightness * 255;
-        return [channel, channel, channel];
+      const normalized = context.fillStyle;
+      context.fillStyle = "#040506";
+      context.fillStyle = value;
+      if (context.fillStyle !== normalized) {
+        throw new Error(`Canvas could not parse theme color: ${value}`);
       }
-
-      if (value.startsWith("#")) {
-        const hex = value.slice(1);
-        const expanded =
-          hex.length === 3
-            ? hex
-                .split("")
-                .map((channel) => `${channel}${channel}`)
-                .join("")
-            : hex;
-
-        return [
-          Number.parseInt(expanded.slice(0, 2), 16),
-          Number.parseInt(expanded.slice(2, 4), 16),
-          Number.parseInt(expanded.slice(4, 6), 16),
-        ];
-      }
-
-      const matches = value.match(/\d+(\.\d+)?/g) ?? [];
-      const channels = matches.slice(0, 3).map(Number);
-      const maxChannel = Math.max(...channels, 0);
-      return maxChannel <= 1
-        ? channels.map((channel) => channel * 255)
-        : channels;
+      context.fillRect(0, 0, 1, 1);
+      const [red, green, blue] = context.getImageData(0, 0, 1, 1).data;
+      return {
+        color: `rgb(${red}, ${green}, ${blue})`,
+        brightness: (red + green + blue) / 3,
+      };
     };
-
-    const brightness = (channels: number[]) =>
-      channels.length === 3 ? (channels[0] + channels[1] + channels[2]) / 3 : 0;
 
     const styles = getComputedStyle(element);
     const rawBackground = styles.backgroundColor;
     const rawForeground = styles.color;
-    const background = normalizeColor(rawBackground);
-    const foreground = normalizeColor(rawForeground);
+    const background = readColor(rawBackground);
+    const foreground = readColor(rawForeground);
 
     return {
       rawBackground,
       rawForeground,
-      background,
-      foreground,
-      backgroundBrightness: brightness(parseChannels(background)),
-      foregroundBrightness: brightness(parseChannels(foreground)),
+      background: background.color,
+      foreground: foreground.color,
+      backgroundBrightness: background.brightness,
+      foregroundBrightness: foreground.brightness,
     };
   });
 }

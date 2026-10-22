@@ -14,6 +14,7 @@ import type { ConnectionPreset } from "@/lib/connections/presets"
 import { getPresetConnectionState } from "@/lib/connections/presentation"
 import type { Connection, ConnectionOverride } from "@/lib/types"
 import { SlackSection } from "@/components/connections/slack-section"
+import { PasswordInput } from "@/components/ui/password-input"
 
 import { ConnectionRow } from "./connections-pane/connection-row"
 import { InlineAddForm } from "./connections-pane/inline-add-form"
@@ -244,12 +245,13 @@ export function ConnectionsPane() {
                   <div className="text-[11px] text-muted-foreground">
                     Paste the full MCP server URL from Zapier&apos;s Connect tab. This URL is secret and can be rotated from Zapier later.
                   </div>
-                  <input
+                  <PasswordInput
+                    label={`${activePreset.name} ${activePreset.mcp_url_field.label}`}
                     type={activePreset.mcp_url_field.secret ? "password" : "text"}
                     value={presetMcpUrl}
                     onChange={e => setPresetMcpUrl(e.target.value)}
                     placeholder={activePreset.mcp_url_field.placeholder}
-                    className="w-full px-2 py-1 bg-input border border-border text-[11px] text-foreground rounded"
+                    className="h-auto w-full px-2 py-1 bg-input border border-border text-[11px] md:text-[11px] text-foreground rounded"
                     autoFocus
                   />
                 </div>
@@ -258,12 +260,14 @@ export function ConnectionsPane() {
                   {getConnectionPresetAuthorizationDescription()}
                 </div>
               ) : (
-                <input
+                <PasswordInput
+                  label={`${activePreset.name} ${activePreset.auth_fields[0]?.label ?? "credential"}`}
+                  containerClassName="flex-1"
                   type="password"
                   value={presetCredential}
                   onChange={e => setPresetCredential(e.target.value)}
                   placeholder={activePreset.auth_fields[0]?.placeholder ?? "Credential"}
-                  className="flex-1 px-2 py-1 bg-input border border-border text-[11px] text-foreground rounded"
+                  className="h-auto px-2 py-1 bg-input border border-border text-[11px] md:text-[11px] text-foreground rounded"
                   autoFocus
                 />
               )}

@@ -1,33 +1,54 @@
 "use client";
 
-import type { InputHTMLAttributes, ReactNode } from "react";
+import { useState, type InputHTMLAttributes, type ReactNode } from "react";
+import { PasswordVisibilityToggle } from "@/components/ui/password-input";
 
 type AuthFieldProps = {
   id: string;
   label: string;
-  rightAdornment?: ReactNode;
 } & InputHTMLAttributes<HTMLInputElement>;
 
 export function AuthField({
   id,
   label,
-  rightAdornment,
+  type,
+  disabled,
   className,
   ...input
 }: AuthFieldProps) {
+  const [visible, setVisible] = useState(false);
+  const isPassword = type === "password";
+  const revealed = visible && !disabled;
   return (
     <div className="flex flex-col gap-2">
       <label htmlFor={id} className="mpx-auth-label">
         {label}
       </label>
-      <div className="mpx-auth-input-wrap">
+      <div
+        className="mpx-auth-input-wrap"
+        onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget)) setVisible(false);
+        }}
+      >
         <input
           id={id}
-          className={`mpx-auth-input ${rightAdornment ? "has-action" : ""} ${className ?? ""}`.trim()}
           {...input}
+          type={isPassword && revealed ? "text" : type}
+          disabled={disabled}
+          className={`mpx-auth-input ${isPassword ? "has-action" : ""} ${className ?? ""}`.trim()}
         />
-        {rightAdornment ? (
-          <div className="mpx-auth-input-action-slot">{rightAdornment}</div>
+        {isPassword ? (
+          <div className="mpx-auth-input-action-slot">
+            <PasswordVisibilityToggle
+              visible={revealed}
+              onToggle={() => setVisible((current) => !current)}
+              label={label.toLowerCase()}
+              disabled={disabled}
+              aria-controls={id}
+              data-testid={`${id}-toggle`}
+              className="mpx-auth-input-action"
+            />
+          </div>
         ) : null}
       </div>
     </div>
