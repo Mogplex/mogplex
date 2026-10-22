@@ -21,7 +21,7 @@ concurrency:
 
 env:
   HUSKY: 0
-  NODE_VERSION: 22.22.0
+  NODE_VERSION: 22.23.4
   PNPM_VERSION: 10.12.4
 
 jobs:

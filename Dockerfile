@@ -18,7 +18,7 @@
 # sign-in client ID, legacy Supabase keys) are still inlined into the client
 # bundle at BUILD time: pass them as --build-arg and rebuild when they change.
 
-ARG NODE_VERSION=22.22.0
+ARG NODE_VERSION=22.23.4
 
 FROM node:${NODE_VERSION}-bookworm-slim AS deps
 WORKDIR /app

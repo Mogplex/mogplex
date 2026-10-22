@@ -6,7 +6,7 @@
   "license": "Apache-2.0",
   "packageManager": "pnpm@10.12.4",
   "engines": {
-    "node": ">=22.22.0 <23"
+    "node": ">=22.23.4 <23"
   },
   "homepage": "https://github.com/Mogplex/mogplex#readme",
   "bugs": {
@@ -144,7 +144,7 @@
     "@streamdown/mermaid": "^1.0.2",
     "@supabase/supabase-js": "^2.99.1",
     "@tanstack/react-table": "^8.21.3",
-    "@trigger.dev/sdk": "^4.5.12",
+    "@trigger.dev/sdk": "4.7.7",
     "@vercel/analytics": "1.6.1",
     "@vercel/sandbox": "2.0.0-beta.19",
     "@vercel/speed-insights": "2.0.0",
@@ -217,7 +217,7 @@
     "@tailwindcss/postcss": "^4.2.0",
     "@tanstack/eslint-plugin-query": "^5.96.2",
     "@testing-library/react": "^16.3.2",
-    "@trigger.dev/build": "4.5.12",
+    "@trigger.dev/build": "4.7.7",
     "@types/jsdom": "^28.0.3",
     "@types/libsodium-wrappers": "^0.8.2",
     "@types/node": "^22",
