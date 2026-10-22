@@ -30,8 +30,8 @@ export async function seedPasswordUser(
     );
     await client.query(
       `insert into account (id, "accountId", "providerId", "userId", password, "createdAt", "updatedAt")
-       values ($1, $2, 'credential', $2, $3, now(), now())`,
-      [crypto.randomUUID(), userId, hash]
+       values ($1, $2, 'credential', $3, $4, now(), now())`,
+      [crypto.randomUUID(), userId, userId, hash]
     );
     await client.query(
       `insert into profiles (id, auth_user_id, email, name, slug)
