@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { betterAuth } from "better-auth";
+import { memoryAdapter } from "better-auth/adapters/memory";
+import { hashAccountPassword } from "../../lib/better-auth/password";
 import { sendAuthActionEmail } from "../../lib/email/send-auth-action-email";
 
 test("should construct the better-auth instance when no auth env is set", async () => {
@@ -30,6 +33,88 @@ test("should reject email signup through the real auth handler", async () => {
 
   assert.equal(response.status, 400);
   assert.equal((await response.json()).code, "EMAIL_PASSWORD_SIGN_UP_DISABLED");
+});
+
+test("unverified existing users receive a working verification link on password sign-in", async (t) => {
+  const { auth } = await import("../../lib/better-auth/server");
+  const email = "existing-unverified@example.com";
+  const password = "existing-password-1234";
+  const userId = crypto.randomUUID();
+  const now = new Date();
+  const database = {
+    user: [
+      {
+        id: userId,
+        name: "Existing user",
+        email,
+        emailVerified: false,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ],
+    account: [
+      {
+        id: crypto.randomUUID(),
+        accountId: userId,
+        providerId: "credential",
+        userId,
+        password: await hashAccountPassword(password),
+        createdAt: now,
+        updatedAt: now,
+      },
+    ],
+    session: [],
+    verification: [],
+  };
+  const instance = betterAuth({
+    ...auth.options,
+    secret: "unit-verification-secret-at-least-32-chars",
+    database: memoryAdapter(database),
+  });
+  const originalKey = process.env.RESEND_API_KEY;
+  delete process.env.RESEND_API_KEY;
+  const messages: string[] = [];
+  const originalWarn = console.warn;
+  console.warn = (message: string) => messages.push(message);
+  t.after(() => {
+    console.warn = originalWarn;
+    if (originalKey !== undefined) process.env.RESEND_API_KEY = originalKey;
+  });
+
+  const response = await instance.handler(
+    new Request("http://localhost:3000/api/auth/sign-in/email", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    })
+  );
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).code, "EMAIL_NOT_VERIFIED");
+  const sent = messages
+    .map((message) => JSON.parse(message))
+    .filter(
+      (message) => message.event === "auth_action_email_pending_delivery"
+    );
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].kind, "verify-email");
+  assert.equal(sent[0].email, email);
+
+  // Follow the delivered link and use its actual session cookie.
+  const verified = await instance.handler(new Request(sent[0].actionUrl));
+  assert.equal(verified.status, 302);
+  const cookie = verified.headers
+    .getSetCookie()
+    .map((value) => value.split(";")[0])
+    .join("; ");
+  const session = await instance.handler(
+    new Request("http://localhost:3000/api/auth/get-session", {
+      headers: { cookie },
+    })
+  );
+  assert.equal(session.status, 200);
+  const body = await session.json();
+  assert.equal(body.user.email, email);
+  assert.equal(body.user.emailVerified, true);
 });
 
 test("should serve Better Auth MCP authorization-server metadata", async () => {

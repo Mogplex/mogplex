@@ -164,7 +164,7 @@ export function TopBar() {
             aria-label="Open navigation"
             variant="outline"
             size="icon"
-            className="bg-card text-muted-foreground lg:hidden"
+            className="bg-card text-muted-foreground dark:bg-card lg:hidden"
           >
             <Menu className="size-5" aria-hidden="true" />
           </Button>

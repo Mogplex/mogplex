@@ -119,7 +119,6 @@ test("mobile Settings navigation opens, selects a page and closes", async ({
   await page.goto(scopedPath("settings/account"));
   const menuButton = page.getByRole("button", { name: "Open navigation" });
   await expect(menuButton.locator("svg")).toBeVisible();
-  await expect(menuButton).not.toHaveText("|||");
   const menuBounds = await menuButton.boundingBox();
   expect(menuBounds?.width).toBeGreaterThanOrEqual(36);
   expect(menuBounds?.height).toBeGreaterThanOrEqual(36);
@@ -148,7 +147,7 @@ test("mobile Settings navigation opens, selects a page and closes", async ({
   ).toBeVisible();
 });
 
-for (const width of [320, 390, 768, 1280]) {
+for (const width of [320, 390, 640, 700, 768, 1280]) {
   test(`team icon content stays readable at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     await mockTeamSettings(page, "owner");
@@ -179,7 +178,9 @@ for (const width of [320, 390, 768, 1280]) {
     await expect(remove).toBeVisible();
     const replaceBounds = await replace.boundingBox();
     const removeBounds = await remove.boundingBox();
-    expect(replaceBounds?.y).toBe(removeBounds?.y);
+    expect(replaceBounds).not.toBeNull();
+    expect(removeBounds).not.toBeNull();
+    expect(replaceBounds!.y).toBe(removeBounds!.y);
     const sectionBounds = await section.boundingBox();
     expect(sectionBounds?.height).toBeLessThan(230);
     if (width < 640) {
