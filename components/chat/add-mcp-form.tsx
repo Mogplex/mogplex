@@ -147,11 +147,12 @@ export function AddMcpForm({
       </div>
       {authType !== "none" && (
         <PasswordInput
+          label={`${name.trim() || "MCP server"} credential`}
           value={credentials}
           onChange={e => setCredentials(e.target.value)}
           type="password"
           placeholder={authType === "api_key" ? "API key" : "Bearer token"}
-          className="h-auto w-full px-2 py-1 bg-input border border-border text-[11px] text-foreground rounded"
+          className="h-auto w-full px-2 py-1 bg-input border border-border text-[11px] md:text-[11px] text-foreground rounded"
         />
       )}
       <div className="flex justify-end gap-2 pt-1">

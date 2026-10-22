@@ -8,21 +8,21 @@ import { Input } from "@/components/ui/input";
 type PasswordVisibilityToggleProps = {
   visible: boolean;
   onToggle: () => void;
-  label?: string;
+  label: string;
   unavailable?: boolean;
 } & Omit<ComponentProps<"button">, "onClick" | "type" | "children">;
 
 export function PasswordVisibilityToggle({
   visible,
   onToggle,
-  label = "secret",
+  label,
   unavailable = false,
   disabled,
   className,
   ...props
 }: PasswordVisibilityToggleProps) {
   const action = unavailable
-    ? "Saved secret cannot be shown"
+    ? `Saved ${label} cannot be shown`
     : `${visible ? "Hide" : "Show"} ${label}`;
 
   return (
@@ -49,12 +49,14 @@ type PasswordInputProps = Omit<ComponentProps<"input">, "type"> & {
   type?: "password" | "text";
   containerClassName?: string;
   previewable?: boolean;
+  label: string;
 };
 
 export function PasswordInput({
   type = "password",
   containerClassName,
   previewable = true,
+  label,
   className,
   disabled,
   ...props
@@ -62,11 +64,8 @@ export function PasswordInput({
   const generatedId = useId();
   const inputId = props.id ?? generatedId;
   const [visible, setVisible] = useState(false);
+  const isPassword = type === "password";
   const revealed = visible && previewable && !disabled;
-
-  if (type !== "password") {
-    return <Input {...props} type={type} disabled={disabled} className={className} />;
-  }
 
   return (
     <div
@@ -78,18 +77,22 @@ export function PasswordInput({
       <Input
         {...props}
         id={inputId}
-        type={revealed ? "text" : "password"}
+        aria-label={props["aria-label"] ?? label}
+        type={revealed ? "text" : type}
         disabled={disabled}
-        className={cn("border-border", className, "pr-10")}
+        className={cn("border-border", className, isPassword && "pr-10")}
       />
-      <PasswordVisibilityToggle
-        visible={revealed}
-        onToggle={() => setVisible((current) => !current)}
-        unavailable={!previewable}
-        disabled={disabled}
-        aria-controls={inputId}
-        className="absolute inset-y-0 right-1 my-auto"
-      />
+      {isPassword ? (
+        <PasswordVisibilityToggle
+          visible={revealed}
+          onToggle={() => setVisible((current) => !current)}
+          label={label}
+          unavailable={!previewable}
+          disabled={disabled}
+          aria-controls={inputId}
+          className="absolute inset-y-0 right-1 my-auto"
+        />
+      ) : null}
     </div>
   );
 }

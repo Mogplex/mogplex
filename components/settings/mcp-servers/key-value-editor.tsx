@@ -57,7 +57,7 @@ export function KeyValueEditor({
         </div>
       ) : (
         <div className="space-y-2">
-          {entries.map((entry) => {
+          {entries.map((entry, index) => {
             const showSavedBadge =
               entry.isSecret &&
               entry.saved &&
@@ -79,6 +79,7 @@ export function KeyValueEditor({
                   />
                   <div className="space-y-2">
                     <PasswordInput
+                      label={entry.key.trim() || `${label.toLowerCase()} secret ${index + 1}`}
                       type={entry.isSecret ? "password" : "text"}
                       previewable={!showSavedBadge}
                       value={entry.value}

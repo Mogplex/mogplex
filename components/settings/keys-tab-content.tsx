@@ -51,6 +51,7 @@ export function KeysTabContent({
               {canManageKeys && (
                 <div className="mt-3 flex gap-2">
                   <PasswordInput
+                    label={`${provider.label} API key`}
                     containerClassName="flex-1"
                     type="password"
                     previewable={!configured || !!keyInputs[provider.id]}

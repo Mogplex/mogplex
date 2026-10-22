@@ -169,6 +169,9 @@ behavior. Defaults can be overridden by the owning screen; inspect it first.
   practical and explain unavailable actions nearby.
   Native bordered app action buttons use the same 4px radius. Preserve pill
   buttons, circular icon buttons, and the seams of grouped controls.
+  Shared primitives marked with `data-slot` retain their own radius variants;
+  native pill buttons and tab, radio, and switch roles are excluded from the
+  action-button override.
 - **[Input](./components/ui/input.tsx):** 36px height, 4px corners, horizontal
   padding of 12px. In the authenticated app, bordered inputs and textareas use
   the secondary surface background. Hand-authored fields use the same corners,
@@ -181,6 +184,8 @@ behavior. Defaults can be overridden by the owning screen; inspect it first.
   the field and its eye button. Saved secrets that the
   server does not return use a disabled, muted eye; unavailable saved API-key
   fields are muted and disabled. An editable replacement field stays usable.
+  Give each eye the field or provider name so multiple secrets have distinct
+  accessible controls. Preserve compact text sizes at desktop breakpoints.
 - **Native bordered dropdowns:** secondary surface background, 4px corners, and an inset,
   vertically centered chevron,
   matching the shared control scale. The app stylesheet reserves room for the

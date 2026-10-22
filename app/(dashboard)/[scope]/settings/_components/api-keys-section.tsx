@@ -134,13 +134,14 @@ export function ApiKeysSection({ platformAiEnabled }: { platformAiEnabled: boole
                   <div className="mt-3 space-y-2">
                     <div className="flex items-center gap-2">
                       <PasswordInput
+                        label={`${meta.label} API key`}
                         value=""
                         placeholder={meta.masked}
                         previewable={false}
                         disabled
                         aria-label={`${meta.label} saved API key`}
                         containerClassName="flex-1"
-                        className="h-auto py-1 font-mono text-[11px] text-muted-foreground"
+                        className="h-auto py-1 font-mono text-[11px] md:text-[11px] text-muted-foreground"
                       />
                       {keyEntry && (
                         <span className="text-[11px] text-muted-foreground">
@@ -194,6 +195,7 @@ export function ApiKeysSection({ platformAiEnabled }: { platformAiEnabled: boole
                 ) : (
                   <div className="mt-3 flex gap-2">
                     <PasswordInput
+                      label={`${meta.label} API key`}
                       containerClassName="flex-1"
                       type="password"
                       value={inputs[provider] || ""}

@@ -204,6 +204,7 @@ export function VercelSandboxCard({
             Vercel Personal Access Token
           </label>
           <PasswordInput
+            label="Vercel Personal Access Token"
             id={inputId}
             type="password"
             autoComplete="off"
@@ -215,7 +216,7 @@ export function VercelSandboxCard({
             }}
             placeholder="vercel_…"
             disabled={saving}
-            className="h-auto w-full border border-border bg-input px-2 py-1 text-[11px] font-mono text-foreground disabled:opacity-50"
+            className="h-auto w-full border border-border bg-input px-2 py-1 text-[11px] md:text-[11px] font-mono text-foreground disabled:opacity-50"
           />
           <div className="text-[11px] text-muted-foreground leading-tight">
             Generate one at{" "}

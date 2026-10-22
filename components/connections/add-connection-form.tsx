@@ -101,7 +101,7 @@ export function AddConnectionForm({
               ))}
             </select>
             {newConn.auth_type !== "none" && (
-              <PasswordInput containerClassName="flex-1" value={newConn.credentials} onChange={e => setNewConn(p => ({ ...p, credentials: e.target.value }))} placeholder="credential" type="password" className="h-auto border border-border bg-input px-3 py-2 text-sm text-foreground" />
+              <PasswordInput label={`${newConn.name.trim() || "Connection"} credential`} containerClassName="flex-1" value={newConn.credentials} onChange={e => setNewConn(p => ({ ...p, credentials: e.target.value }))} placeholder="credential" type="password" className="h-auto border border-border bg-input px-3 py-2 text-sm text-foreground" />
             )}
           </div>
           {(newConn.auth_type === "bearer" || newConn.auth_type === "api_key") && (
@@ -135,7 +135,7 @@ export function AddConnectionForm({
               ))}
             </select>
             {newConn.auth_type !== "none" && (
-              <PasswordInput containerClassName="flex-1" value={newConn.credentials} onChange={e => setNewConn(p => ({ ...p, credentials: e.target.value }))} placeholder={newConn.auth_type === "api_key" ? "API key" : newConn.auth_type === "basic" ? "base64 user:pass" : "token"} type="password" className="h-auto border border-border bg-input px-3 py-2 text-sm text-foreground" />
+              <PasswordInput label={`${newConn.name.trim() || "Connection"} credential`} containerClassName="flex-1" value={newConn.credentials} onChange={e => setNewConn(p => ({ ...p, credentials: e.target.value }))} placeholder={newConn.auth_type === "api_key" ? "API key" : newConn.auth_type === "basic" ? "base64 user:pass" : "token"} type="password" className="h-auto border border-border bg-input px-3 py-2 text-sm text-foreground" />
             )}
           </div>
           {(newConn.auth_type === "bearer" || newConn.auth_type === "api_key") && (
