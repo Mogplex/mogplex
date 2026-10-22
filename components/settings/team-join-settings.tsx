@@ -50,7 +50,7 @@ export function TeamJoinSettings({ teamId }: { teamId: string }) {
   const domain = data?.domain || (data?.viewer.canManage ? data.eligibleDomain : null);
   const canEnable = Boolean(data?.eligibleDomain && (!data.domain || data.domain === data.eligibleDomain));
   return (
-    <section className="space-y-4 border border-border/60 bg-card p-4">
+    <section className="space-y-4 rounded-lg border border-border/60 bg-card p-4">
       <div>
         <div className="ui-section-title">Let teammates join</div>
         <p className="ui-section-caption">Add an existing account or let people with your work email domain join automatically.</p>

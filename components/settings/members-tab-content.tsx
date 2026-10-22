@@ -54,7 +54,7 @@ export function MembersTabContent({
 }: MembersTabContentProps) {
   return (
     <div className="space-y-4">
-      <section className="border border-border/60 bg-card">
+      <section className="rounded-lg border border-border/60 bg-card">
         <div className="px-5 pt-5 pb-2">
           <div className="ui-section-title">Members</div>
           <div className="ui-section-caption">Team roles control model, tool, and sandbox permissions.</div>
@@ -62,7 +62,7 @@ export function MembersTabContent({
         <div className="space-y-3 px-5 pb-5">
           {membersError && <div className="text-sm text-destructive">Unable to load members.</div>}
           {canManageMembers && (
-            <div className="grid gap-2 border border-border bg-background/60 p-3 md:grid-cols-[1fr_160px_auto]">
+            <div className="grid gap-2 rounded-lg border border-border bg-background/60 p-3 md:grid-cols-[1fr_160px_auto]">
               <input
                 value={inviteEmail}
                 onChange={(event) => setInviteEmail(event.target.value)}
@@ -90,7 +90,7 @@ export function MembersTabContent({
               </button>
             </div>
           )}
-          <div className="divide-y divide-border border border-border">
+          <div className="divide-y divide-border rounded-lg border border-border">
             {(membersData?.members ?? []).map((member) => {
               const options = membersData
                 ? roleOptions(membersData.viewer.role, member.role)
@@ -145,7 +145,7 @@ export function MembersTabContent({
       </section>
 
       {membersData?.viewer.role === "owner" && (
-        <section className="border border-border/60 bg-card">
+        <section className="rounded-lg border border-border/60 bg-card">
           <div className="px-5 pt-5 pb-2">
             <div className="ui-section-title">Ownership</div>
             <div className="ui-section-caption">
@@ -180,7 +180,7 @@ export function MembersTabContent({
         </section>
       )}
 
-      <section className="border border-border/60 bg-card">
+      <section className="rounded-lg border border-border/60 bg-card">
         <div className="px-5 pt-5 pb-2">
           <div className="ui-section-title">Pending Invites</div>
           <div className="ui-section-caption">Unused invitation links for this team.</div>

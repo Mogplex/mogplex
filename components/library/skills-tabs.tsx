@@ -67,7 +67,7 @@ export function BrowseTab({
   }
 
   return (
-    <div className="border border-border bg-card">
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
       <div className="flex gap-2 p-3 border-b border-border">
         <input value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e => e.key === "Enter" && fetchRegistry(search)} placeholder="Search skills.sh..." className="flex-1 border border-border bg-input px-3 py-2 text-sm text-foreground" />
         <button onClick={() => fetchRegistry(search)} className="border border-border px-3 py-2 text-sm text-foreground hover:bg-secondary cursor-pointer">Search</button>
@@ -167,7 +167,7 @@ export function VercelTab({
   }
 
   return (
-    <div className="border border-border bg-card">
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
       <div className="flex gap-2 p-3 border-b border-border">
         <input value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e => e.key === "Enter" && fetchVercelDocs(search)} placeholder="Search Vercel docs..." className="flex-1 border border-border bg-input px-3 py-2 text-sm text-foreground" />
         <button onClick={() => fetchVercelDocs(search)} className="border border-border px-3 py-2 text-sm text-foreground hover:bg-secondary cursor-pointer">Search</button>
@@ -267,7 +267,7 @@ export function InstalledTab({
         </button>
       </div>
 
-      <div className="border border-border bg-card">
+      <div className="overflow-hidden rounded-lg border border-border bg-card">
         {skills.length === 0 ? (
           <div className="p-8 text-center text-sm text-muted-foreground">No skills yet.</div>
         ) : (

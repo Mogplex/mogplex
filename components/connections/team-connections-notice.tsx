@@ -8,7 +8,7 @@ export function TeamConnectionsNotice() {
   const { memberships } = useMemberships();
   const personalSlug = memberships.personal.slug;
   return (
-    <section className="space-y-3 border border-border/60 bg-card p-5">
+    <section className="space-y-3 rounded-lg border border-border/60 bg-card p-5">
       <h2 className="ui-section-title">Personal connections</h2>
       <p className="max-w-[65ch] text-sm text-muted-foreground">
         Connections belong to your personal account. Shared team connections

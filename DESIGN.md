@@ -134,6 +134,12 @@ Use tonal surfaces and one-pixel borders for ordinary separation. The app's
 `--radius` is 6px; the frontmatter radius keys match the Tailwind aliases derived
 from it. The badge's explicit 3px radius is a component-specific exception.
 
+Resting cards and bordered section surfaces use `rounded-lg` (6px), including
+hand-authored sections in Settings, Connections, and the agent library. This
+matches Geist's [base material](https://vercel.com/geist/materials). Reuse that
+token when adding a surface; keep dividers and adjoining rows inside the same
+card square. Clip edge-to-edge row fills to the card's corners when needed.
+
 The app shadow vocabulary in `app/globals.css` is:
 
 | Token | Geometry | Role |

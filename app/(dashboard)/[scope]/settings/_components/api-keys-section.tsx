@@ -96,7 +96,7 @@ export function ApiKeysSection({ platformAiEnabled }: { platformAiEnabled: boole
   }, [])
 
   return (
-    <section className="border border-border/60 bg-card">
+    <section className="rounded-lg border border-border/60 bg-card">
       <div className="px-5 pt-5 pb-2">
         <div className="ui-section-title">Provider Keys</div>
         <div className="ui-section-caption">Encrypted provider and AI Gateway keys used for model execution and CLI harnesses.</div>

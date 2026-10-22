@@ -134,7 +134,7 @@ export function CliApiKeysSection() {
   };
 
   return (
-    <section className="border border-border/60 bg-card">
+    <section className="rounded-lg border border-border/60 bg-card">
       <div className="flex items-center justify-between px-5 pt-5 pb-2">
         <div>
           <div className="ui-section-title">Mogplex Keys</div>

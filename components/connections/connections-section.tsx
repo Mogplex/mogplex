@@ -95,7 +95,7 @@ export function ConnectionsSection() {
 
   return (
     <>
-      <section className="border border-border/60 bg-card">
+      <section className="rounded-lg border border-border/60 bg-card">
         <div className="px-5 pt-5 pb-2">
           <h2 className="ui-section-title">Services</h2>
           <div className="ui-section-caption">External APIs and MCP servers your agents can use.</div>
@@ -131,7 +131,7 @@ export function ConnectionsSection() {
         />
       </section>
 
-      <section className="border border-border/60 bg-card mt-6">
+      <section className="rounded-lg border border-border/60 bg-card mt-6">
         <div className="px-5 pt-5 pb-2">
           <div className="ui-section-title flex items-center gap-2">
             <SlackFill size={16} aria-hidden="true" className="shrink-0" />

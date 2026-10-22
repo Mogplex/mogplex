@@ -143,7 +143,7 @@ export function RulesSection({ compact }: Props) {
       </div>
 
       {showNew && (
-        <div className="border border-border bg-card p-4 space-y-2">
+        <div className="rounded-lg border border-border bg-card p-4 space-y-2">
           <div className="ui-kicker">New Rule</div>
           <div className="flex gap-2">
             <input
@@ -158,7 +158,7 @@ export function RulesSection({ compact }: Props) {
         </div>
       )}
 
-      <div className="border border-border bg-card">
+      <div className="overflow-hidden rounded-lg border border-border bg-card">
         {files.length === 0 ? (
           <div className="p-8 text-center text-sm text-muted-foreground">No rules yet. Create one to get started.</div>
         ) : (
@@ -186,7 +186,7 @@ export function RulesSection({ compact }: Props) {
       </div>
 
       {selected && (
-        <div className="border border-border bg-card">
+        <div className="overflow-hidden rounded-lg border border-border bg-card">
           <div className="flex items-center justify-between border-b border-border px-4 py-2">
             <span className="text-sm text-foreground">{selected.name}</span>
             <div className="flex gap-2">

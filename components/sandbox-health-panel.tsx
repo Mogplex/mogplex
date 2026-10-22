@@ -75,7 +75,7 @@ export function SandboxHealthPanel({
   }
 
   return (
-    <section className="border border-border bg-card">
+    <section className="rounded-lg border border-border bg-card">
       <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
         <div>
           <div className="text-sm text-foreground">Sandbox Health</div>
