@@ -28,6 +28,9 @@ export function SocialButtons({
   async function start(provider: SocialProviderId) {
     setPendingProvider(provider);
     setError(null);
+    if (source === "signup_page") {
+      trackActivation("signup_submitted", { source, provider });
+    }
     trackActivation("login_started", { source, provider });
 
     try {

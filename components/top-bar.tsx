@@ -1,6 +1,7 @@
 "use client";
 import React from "react";
 import { useMemo, useState } from "react";
+import { Menu } from "iconoir-react";
 import Link from "next/link";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import { scopedHref } from "@/lib/scoped-href";
@@ -9,6 +10,7 @@ import { useUser } from "@/hooks/use-user";
 import { ScopeMenuItems } from "@/components/scope-switcher";
 import { SlackFill } from "@/components/settings/icons";
 import { ThemeSwitcher } from "@/components/theme-switcher";
+import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import {
   DropdownMenu,
@@ -157,9 +159,15 @@ export function TopBar() {
     <div className="app-topbar flex items-center justify-end gap-2 bg-transparent">
       <Sheet open={navigationOpen} onOpenChange={setNavigationOpen}>
         <SheetTrigger asChild>
-          <button aria-label="Open navigation" className="border-border bg-card text-muted-foreground hover:bg-accent hover:text-foreground rounded-lg border px-2 py-1 font-mono text-[10px] tracking-[0.12em] uppercase lg:hidden">
-            |||
-          </button>
+          <Button
+            type="button"
+            aria-label="Open navigation"
+            variant="outline"
+            size="icon"
+            className="bg-card text-muted-foreground dark:bg-card lg:hidden"
+          >
+            <Menu className="size-5" aria-hidden="true" />
+          </Button>
         </SheetTrigger>
         <SheetContent side="left" className="w-64 overflow-y-auto p-0 pt-12">
           <SheetTitle className="sr-only">Navigation</SheetTitle>

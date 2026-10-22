@@ -1,6 +1,6 @@
 // Profile provisioning for better-auth sign-ups. The Supabase flow created
-// profiles in the GitHub OAuth callback; better-auth creates users for email
-// and social flows alike, so the profile row is provisioned from the
+// profiles in the GitHub OAuth callback; better-auth creates new social users,
+// so the profile row is provisioned from the
 // user-create database hook instead. Existing users migrated from Supabase
 // keep their profiles (the data copy preserves auth uids, so the hook only
 // fires for genuinely new users).

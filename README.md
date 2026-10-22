@@ -47,7 +47,7 @@ flowchart LR
 | --- | --- |
 | Next.js (App Router) | UI, API routes, MCP server, webhooks |
 | Neon Postgres | All application state; migrations in [`neon/migrations/`](./neon/migrations) |
-| Better Auth | Sign-in (GitHub, Google, email) and sessions |
+| Better Auth | Signup with GitHub, Google, or Microsoft; existing email/password sign-in and recovery; sessions |
 | GitHub App | Repo access, webhooks, checks |
 | Vercel Sandbox | Isolated compute for every agent session |
 | Vercel AI Gateway | Model routing, with OpenRouter and direct keys as alternatives |
@@ -80,11 +80,16 @@ The minimum set for a working local app:
 | `MOGPLEX_DATA_BACKEND=neon` and `NEXT_PUBLIC_MOGPLEX_DATA_BACKEND=neon` | Select the Postgres + Better Auth backend. Both must agree; the public one is inlined at build time. |
 | `DATABASE_URL`, `DATABASE_URL_UNPOOLED` | Pooled and direct Postgres connections |
 | `BETTER_AUTH_SECRET` | Session signing secret |
-| `AUTH_GITHUB_CLIENT_ID`, `AUTH_GITHUB_CLIENT_SECRET` | GitHub sign-in (or use Google / email) |
+| `AUTH_GITHUB_CLIENT_ID`, `AUTH_GITHUB_CLIENT_SECRET` | GitHub signup and sign-in. At least one social provider is required; Google (`AUTH_GOOGLE_*`) or Microsoft (`AUTH_MICROSOFT_*`) can replace GitHub. |
 | `NEXT_PUBLIC_APP_URL` | Canonical app URL, `http://localhost:3000` locally |
 | `CRON_SECRET`, `INTERNAL_API_SECRET`, `CONNECTIONS_ENCRYPTION_KEY` | Machine auth and credential encryption; generate random values |
 
 Every optional integration is documented inline in [`.env.example`](./.env.example).
+
+Configure a social provider before creating the first account. Register the matching
+callback URL listed in [`.env.example`](./.env.example).
+Microsoft also accepts `AUTH_MICROSOFT_TENANT_ID` (default: `common`). New accounts
+use social signup; existing email/password accounts keep login and recovery.
 
 ### 3. Apply migrations
 

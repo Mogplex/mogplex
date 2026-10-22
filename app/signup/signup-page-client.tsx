@@ -3,8 +3,6 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { AuthDivider } from "@/components/auth/auth-field";
-import { SignUpForm } from "@/components/auth/sign-up-form";
 import { SignedInPanel } from "@/components/auth/signed-in-panel";
 import { SocialButtons } from "@/components/auth/social-buttons";
 import { AuthShell } from "@/components/marketing/auth-shell";
@@ -24,9 +22,6 @@ function SignupContent() {
   const plan = parsePlanIntent(params.get("plan"));
   const planNext = plan ? checkoutPath(plan) : null;
   const next = planNext ?? resolveLoginNext(params.get("next"));
-  const verifiedNext = planNext
-    ? `/login?verified=1&next=${encodeURIComponent(planNext)}`
-    : "/login?verified=1";
   const summary = plan ? planIntentSummary(plan) : null;
   const { data: session } = useSession();
 
@@ -36,7 +31,7 @@ function SignupContent() {
       title="Start now."
       subtitle={
         <>
-          Create your account, then confirm the Individual plan you chose.
+          Create your account with GitHub, Google, or Microsoft, then confirm the Individual plan you chose.
           Your plan sets parallel agent runs, Storage, and Inference. Each $1 of
           inference credit pays for $1 of model usage.{" "}
           <Link href="/pricing">See the full rate card.</Link>
@@ -68,8 +63,6 @@ function SignupContent() {
           <SignedInPanel email={session.user.email} next={next} />
         ) : (
           <>
-            <SignUpForm verifiedNext={verifiedNext} />
-            <AuthDivider />
             <SocialButtons next={next} source="signup_page" />
             <p className="mpx-auth-muted" data-testid="signup-legal">
               By creating an account, you agree to the{" "}

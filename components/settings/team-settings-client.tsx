@@ -76,7 +76,7 @@ export function TeamSettingsClient({
       )}
 
       {section === "members" && (
-        <section className="flex flex-wrap items-center gap-4 rounded-lg border border-border/60 bg-card px-5 py-4">
+        <section className="grid grid-cols-[3.5rem_minmax(0,1fr)] items-center gap-4 rounded-lg border border-border/60 bg-card px-5 py-4 sm:grid-cols-[3.5rem_minmax(0,1fr)_auto]">
           <div
             className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-md bg-accent text-sm font-medium text-foreground/80"
             aria-hidden="true"
@@ -106,7 +106,7 @@ export function TeamSettingsClient({
             </div>
           </div>
           {canManageIcon && (
-            <div className="flex items-center gap-2">
+            <div className="col-span-2 flex flex-wrap items-center gap-2 sm:col-span-1">
               <input
                 ref={iconInputRef}
                 type="file"

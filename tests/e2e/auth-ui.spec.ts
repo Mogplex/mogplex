@@ -6,11 +6,11 @@ import crypto from "node:crypto";
 import { expect, test } from "@playwright/test";
 import { Pool } from "pg";
 import { resolveNeonDatabaseUrl } from "./helpers/neon";
+import { seedPasswordUser } from "./helpers/password-user";
 
 test.describe("auth pages render", () => {
   for (const surface of [
     { path: "/login", fields: [{ id: "signin-password", label: "password" }] },
-    { path: "/signup", fields: [{ id: "signup-password", label: "password" }] },
     {
       path: "/reset-password?token=visibility-preview",
       fields: [
@@ -69,24 +69,83 @@ test.describe("auth pages render", () => {
     ).toHaveCount(0);
   });
 
-  test("/signup shows the account creation form", async ({ page }) => {
+  test("/signup offers social signup without email or password fields", async ({
+    page,
+  }) => {
     await page.goto("/signup");
 
-    await expect(page.getByTestId("signup-form")).toBeVisible();
-    await expect(page.getByTestId("signup-name")).toBeVisible();
-    await expect(page.getByTestId("signup-email")).toBeVisible();
-    await expect(page.getByTestId("signup-password")).toBeVisible();
-    await expect(page.getByTestId("auth-social-github")).toBeVisible();
+    await expect(page.getByTestId("signup-form")).toHaveCount(0);
+    await expect(page.getByRole("textbox")).toHaveCount(0);
+    await expect(page.locator('input[type="password"]')).toHaveCount(0);
+    for (const provider of ["github", "google", "microsoft"]) {
+      await expect(page.getByTestId(`auth-social-${provider}`)).toBeVisible();
+    }
     await expect(
       page.getByRole("main").getByRole("link", { name: "Sign in" })
     ).toBeVisible();
   });
+
+  for (const [query, next] of [
+    ["?plan=plus", "/checkout?plan=plus"],
+    ["?next=%2Fwebrenew%2Fcontrol", "/webrenew/control"],
+    ["?next=https%3A%2F%2Fevil.example", "/"],
+  ]) {
+    test(`social signup preserves a safe destination ${query}`, async ({
+      page,
+    }) => {
+      await page.addInitScript(() => {
+        window.__mogplexTrackedEvents = [];
+      });
+      await page.route("**/api/auth/sign-in/social", (route) =>
+        route.fulfill({
+          status: 400,
+          contentType: "application/json",
+          body: JSON.stringify({ message: "Provider unavailable" }),
+        })
+      );
+      await page.goto(`/signup${query}`);
+      const request = page.waitForRequest("**/api/auth/sign-in/social");
+      await page.getByTestId("auth-social-github").click();
+      expect((await request).postDataJSON()).toMatchObject({
+        provider: "github",
+        callbackURL: next,
+      });
+      expect(
+        await page.evaluate(() => window.__mogplexTrackedEvents)
+      ).toContainEqual({
+        name: "signup_submitted",
+        properties: { source: "signup_page", provider: "github" },
+      });
+    });
+  }
 
   test("/forgot-password renders the reset request form", async ({ page }) => {
     await page.goto("/forgot-password");
 
     await expect(page.getByTestId("forgot-password-form")).toBeVisible();
     await expect(page.getByTestId("forgot-password-email")).toBeVisible();
+  });
+
+  test("social login does not count as a signup submission", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      window.__mogplexTrackedEvents = [];
+    });
+    await page.route("**/api/auth/sign-in/social", (route) => route.abort());
+    await page.goto("/login");
+    await page.getByTestId("auth-social-github").click();
+    await expect(page.getByTestId("auth-social-error")).toBeVisible();
+    const events = await page.evaluate(
+      () => window.__mogplexTrackedEvents ?? []
+    );
+    expect(events).toContainEqual({
+      name: "login_started",
+      properties: { source: "login_page", provider: "github" },
+    });
+    expect(events.some((event) => event.name === "signup_submitted")).toBe(
+      false
+    );
   });
 
   test("/reset-password without a token shows the invalid-link state", async ({
@@ -161,28 +220,14 @@ test.describe("auth UI against real Neon", () => {
     await pool.end();
   });
 
-  test("email/password journey: sign-up, verification gate, sign-in, sign-out", async ({
+  test("existing password user: verification gate, sign-in, sign-out", async ({
     page,
   }) => {
-    // Fresh email per attempt so a CI retry doesn't trip USER_ALREADY_EXISTS.
+    // Fresh fixture per attempt keeps CI retries independent.
     const email = uniqueEmail();
     createdEmails.push(email);
 
-    await page.goto("/signup");
-    await page.getByTestId("signup-name").fill("E2E Auth UI");
-    await page.getByTestId("signup-email").fill(email);
-    await page.getByTestId("signup-password").fill(password);
-    await page.getByTestId("signup-submit").click();
-
-    // The e2e server logs the verification email instead of sending; the UI
-    // lands on the check-your-email panel and the row is real.
-    await expect(page.getByTestId("signup-check-email")).toBeVisible();
-    const created = await pool.query(
-      'select id, "emailVerified" from "user" where email = $1',
-      [email]
-    );
-    expect(created.rowCount).toBe(1);
-    expect(created.rows[0].emailVerified).toBe(false);
+    await seedPasswordUser(pool, { email, password, verified: false });
 
     // requireEmailVerification gates the sign-in form until verified.
     await page.goto("/login");
@@ -211,9 +256,7 @@ test.describe("auth UI against real Neon", () => {
     // user into their scope's control surface.
     await page.waitForURL(/\/control$/);
 
-    // With the Neon backend, the better-auth session resolves through
-    // getResolvedAuth → profiles: the user-create hook provisioned a profile
-    // row, so the app's own user endpoint recognizes the session.
+    // Existing password accounts still resolve to their app profiles.
     if (process.env.MOGPLEX_DATA_BACKEND === "neon") {
       const profile = await pool.query(
         `select id, slug from profiles where auth_user_id =
@@ -248,21 +291,7 @@ test.describe("auth UI against real Neon", () => {
     createdEmails.push(email);
     const newPassword = "e2e-Ui-NewPassword-5678";
 
-    // Seed a verified user through the real sign-up API — this journey is
-    // about the reset pages, not the sign-up form.
-    const signUp = await page.request.post("/api/auth/sign-up/email", {
-      data: { name: "E2E Reset UI", email, password },
-    });
-    expect(signUp.status(), await signUp.text()).toBe(200);
-    const created = await pool.query('select id from "user" where email = $1', [
-      email,
-    ]);
-    expect(created.rowCount).toBe(1);
-    const userId = created.rows[0].id as string;
-    await pool.query(
-      'update "user" set "emailVerified" = true where email = $1',
-      [email]
-    );
+    const userId = await seedPasswordUser(pool, { email, password });
 
     await page.goto("/forgot-password");
     await page.getByTestId("forgot-password-email").fill(email);
