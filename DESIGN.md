@@ -163,11 +163,11 @@ behavior. Defaults can be overridden by the owning screen; inspect it first.
   padding of 12px, a transparent light background, and `input/30` in dark mode.
   Preserve the focus ring, `aria-invalid` treatment, responsive text size, and
   associated label. A placeholder is not a label.
-- **[Switch](./components/ui/switch.tsx):** 64px by 28px capsule with a visible
-  border, a 20px thumb, and On/Off text. Off uses a neutral track; On uses the
-  primary accent with fixed near-black ink (`neutral-11`, an intentional exception
-  so the ink stays legible in both themes). State text is 12px; keep a minimum
-  width of 64px to fit it. Thumb position and text convey state alongside color.
+- **[Switch](./components/ui/switch.tsx):** 48px by 28px capsule with a visible
+  outline and a 20px thumb. Off uses the secondary surface for its track; On
+  uses the primary accent with a fixed near-black thumb (`neutral-11`, an
+  intentional exception for contrast in both themes). Keep text outside the
+  control. Thumb position conveys state alongside color.
   Keep the Radix switch semantics, associated label, keyboard focus ring,
   disabled treatment, and reduced-motion behavior.
 - **[Card](./components/ui/card.tsx):** 6px corners, border, and `shadow-sm`.
