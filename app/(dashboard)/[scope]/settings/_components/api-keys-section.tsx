@@ -120,7 +120,7 @@ export function ApiKeysSection({ platformAiEnabled }: { platformAiEnabled: boole
             const isSaving = saving === provider
 
             return (
-              <div key={provider} className="rounded-lg border border-border bg-background/60 p-4">
+              <div key={provider} className="flex flex-col rounded-lg border border-border bg-background/60 p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="text-sm font-medium text-foreground">{meta.label}</div>
@@ -131,21 +131,20 @@ export function ApiKeysSection({ platformAiEnabled }: { platformAiEnabled: boole
                   </span>
                 </div>
                 {isConfigured ? (
-                  <div className="mt-3 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <PasswordInput
-                        label={`${meta.label} API key`}
-                        value=""
-                        placeholder={meta.masked}
-                        previewable={false}
-                        disabled
-                        aria-label={`${meta.label} saved API key`}
-                        containerClassName="flex-1"
-                        className="h-auto py-1 font-mono text-[11px] md:text-[11px] text-muted-foreground"
-                      />
+                  <div className="mt-auto space-y-2 pt-3">
+                    <PasswordInput
+                      label={`${meta.label} API key`}
+                      value=""
+                      placeholder={meta.masked}
+                      previewable={false}
+                      disabled
+                      aria-label={`${meta.label} saved API key`}
+                      className="font-mono text-muted-foreground"
+                    />
+                    <div className="flex min-h-9 flex-wrap items-center gap-2">
                       {keyEntry && (
                         <span className="text-[11px] text-muted-foreground">
-                          · added {new Date(keyEntry.created_at).toLocaleDateString()}
+                          Added {new Date(keyEntry.created_at).toLocaleDateString()}
                         </span>
                       )}
                       <div className="ml-auto flex gap-1.5">
@@ -193,23 +192,23 @@ export function ApiKeysSection({ platformAiEnabled }: { platformAiEnabled: boole
                     )}
                   </div>
                 ) : (
-                  <div className="mt-3 flex gap-2">
+                  <div className="mt-auto space-y-2 pt-3">
                     <PasswordInput
                       label={`${meta.label} API key`}
-                      containerClassName="flex-1"
                       type="password"
                       value={inputs[provider] || ""}
                       onChange={(e) => setInputs((p) => ({ ...p, [provider]: e.target.value }))}
                       placeholder={meta.placeholder}
-                      className="h-auto border border-border bg-input px-3 py-2 text-sm text-foreground"
                     />
-                    <button
-                      onClick={() => void handleSave(provider)}
-                      disabled={isSaving || !inputs[provider]?.trim()}
-                      className="border border-border px-3 py-2 text-sm text-foreground hover:bg-secondary disabled:opacity-50"
-                    >
-                      {isSaving ? "..." : "Save"}
-                    </button>
+                    <div className="flex justify-end">
+                      <button
+                        onClick={() => void handleSave(provider)}
+                        disabled={isSaving || !inputs[provider]?.trim()}
+                        className="h-9 border border-border px-3 text-sm text-foreground hover:bg-secondary disabled:opacity-50"
+                      >
+                        {isSaving ? "..." : "Save"}
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
