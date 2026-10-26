@@ -89,11 +89,8 @@ export async function runNativeMogplexAgent(
   let control: Awaited<ReturnType<typeof createNativeRunControl>> | undefined;
   let stream: Awaited<ReturnType<typeof createChatModelStream>> | undefined;
   const progress = deps.createProgress(run);
-  const guidance =
-    run.metadata.slack_guidance_enabled === true &&
-    readSlackRunControlsMetadata(run.metadata)
-      ? deps.createGuidance(run)
-      : null;
+  // Owner guidance from Slack or the workspace enters between model steps.
+  const guidance = deps.createGuidance(run);
   let skillCheck: Promise<void> | undefined;
   let usage = EMPTY_CAPTURED_USAGE;
   let output = "";

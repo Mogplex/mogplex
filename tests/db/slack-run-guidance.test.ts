@@ -8,6 +8,7 @@ import { createRunGuidancePostHandler } from "@/app/api/runs/[runId]/guidance/ro
 import { loadWorkspaceRun } from "@/lib/run-workspace/context";
 import {
   submitSlackRunGuidance,
+  submitWorkspaceRunGuidance,
   deliverRunGuidance,
   loadRunGuidance,
   findSlackGuidanceRuns,
@@ -113,6 +114,7 @@ it("workspace guidance authenticates the owner and persists once through the sam
         userId ?? NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
       loadRun: (userId, runId) => loadWorkspaceRun(userId, runId, client),
       submit: (input) => submitSlackRunGuidance(input, client),
+      submitWorkspace: (input) => submitWorkspaceRunGuidance(input, client),
     });
   const params = { params: Promise.resolve({ runId: run }) };
   expect(

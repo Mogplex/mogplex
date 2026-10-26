@@ -4,6 +4,7 @@ import { buildNativeRunMessages } from "@/lib/mogplex-api/native-run-context";
 import { SLACK_RUN_IMAGE_ATTACHMENTS_METADATA_KEY } from "./run-attachments";
 import { loadRunGuidance, deliverRunGuidance } from "./run-guidance-store";
 import { queueSlackRunDelivery } from "./run-delivery-queue";
+import { readSlackRunControlsMetadata } from "./run-controls";
 
 const defaultDeps = {
   load: loadRunGuidance,
@@ -57,7 +58,8 @@ export function createRunGuidanceSession(
         step,
       });
       pending = pending.filter((id) => !ids.includes(id));
-      if (delivered > 0) {
+      // Only a Slack thread has a run card to confirm delivery on.
+      if (delivered > 0 && readSlackRunControlsMetadata(run.metadata)) {
         try {
           await deps.queue({ runId: run.id, userId: run.user_id });
         } catch {
