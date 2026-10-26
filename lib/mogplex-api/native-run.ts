@@ -261,7 +261,7 @@ export async function runNativeMogplexAgent(
             usage,
             captureUsage(step.usage, step.providerMetadata)
           );
-          await guidance?.stepFinished();
+          await guidance?.stepFinished(step.text);
         },
         async onToolExecutionStart({ toolCall }) {
           toolCount += 1;

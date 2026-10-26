@@ -50,6 +50,7 @@ export async function exercise(
   const progress: HarnessProgressUpdate[] = [];
   let guidanceRows: RunGuidance[] = [];
   const guidanceSteps: number[] = [];
+  const guidanceReplies: string[] = [];
   let modelStep = 0;
   const controller = new AbortController();
   const events: string[] = [];
@@ -301,6 +302,10 @@ export async function exercise(
               }));
               return receipt.ids.length;
             },
+            recordReply: async (input) => {
+              guidanceReplies.push(input.text);
+              return input.ids.length;
+            },
             queue: async (input) => {
               slackCardQueues.push(input.runId);
             },
@@ -343,6 +348,7 @@ export async function exercise(
     progress,
     guidanceSteps,
     slackCardQueues,
+    guidanceReplies,
     systemSuffix,
     invokedModel,
     attachedSkillIds,

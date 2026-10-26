@@ -21,6 +21,7 @@ const slackRun = "00000000-0000-4000-8000-000000000005";
 const migrations = [
   "20260905124500_slack_run_guidance.sql",
   "20261026014000_workspace_run_guidance.sql",
+  "20261026021000_run_guidance_replies.sql",
 ];
 const readMigration = (name: string) =>
   readFile(new URL(`../../neon/migrations/${name}`, import.meta.url), "utf8");

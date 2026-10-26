@@ -16,7 +16,7 @@ beforeAll(async () => {
   await db.exec(`create table external_agent_runs(id uuid,user_id uuid,repo_id text,ai_call_id text,sandbox_record_id text,working_branch text,root_directory text,status text,prompt text,harness text,metadata jsonb);
     create table repos(id text,user_id uuid,full_name text,created_at text,default_branch text,root_directory text,sandbox_env_vars jsonb);
     create table sandboxes(id text,user_id uuid,repo_id text,working_branch text);
-    create table slack_run_guidance(id uuid,run_id uuid,user_id uuid,ai_call_id text,body text,attachments jsonb,status text,delivered_step int,created_at timestamptz);
+    create table slack_run_guidance(id uuid,run_id uuid,user_id uuid,ai_call_id text,body text,attachments jsonb,status text,delivered_step int,created_at timestamptz,reply_text text);
     insert into repos values ('repo','${owner}','acme/mobile','','main',null,'{"SECRET":"do-not-send"}');
     insert into sandboxes values ('sandbox','${owner}','repo','fix/mobile');
     insert into external_agent_runs values ('${runId}','${owner}','repo','call','sandbox','fix/mobile','apps/web','streaming','Fix the header','mogplex','{}');`);

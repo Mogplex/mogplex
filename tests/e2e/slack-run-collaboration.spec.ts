@@ -69,6 +69,16 @@ test("a Slack thread reply reaches the next agent step once and survives termina
       "utf8"
     )
   );
+  // Deploys apply every migration before the code that reads its columns.
+  await db.exec(
+    await readFile(
+      join(
+        process.cwd(),
+        "neon/migrations/20261026021000_run_guidance_replies.sql"
+      ),
+      "utf8"
+    )
+  );
   await db.query("insert into profiles values($1)", [owner]);
   await db.query("insert into ai_calls values($1)", [callId]);
   await db.query(

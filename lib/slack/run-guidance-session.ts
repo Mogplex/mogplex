@@ -2,13 +2,18 @@ import { convertToModelMessages, type ModelMessage } from "ai";
 import type { ExternalAgentRunRow } from "@/lib/mogplex-api/runs-types";
 import { buildNativeRunMessages } from "@/lib/mogplex-api/native-run-context";
 import { SLACK_RUN_IMAGE_ATTACHMENTS_METADATA_KEY } from "./run-attachments";
-import { loadRunGuidance, deliverRunGuidance } from "./run-guidance-store";
+import {
+  loadRunGuidance,
+  deliverRunGuidance,
+  recordRunGuidanceReply,
+} from "./run-guidance-store";
 import { queueSlackRunDelivery } from "./run-delivery-queue";
 import { readSlackRunControlsMetadata } from "./run-controls";
 
 const defaultDeps = {
   load: loadRunGuidance,
   deliver: deliverRunGuidance,
+  recordReply: recordRunGuidanceReply,
   buildMessages: buildNativeRunMessages,
   queue: queueSlackRunDelivery,
 };
@@ -21,7 +26,30 @@ export function createRunGuidanceSession(
   const deps = { ...defaultDeps, ...overrides };
   const seen = new Set<string>();
   let pending: string[] = [];
+  // Delivered guidance waits for the agent's first step that says something.
+  let awaitingReply: string[] = [];
   let step = 0;
+  /** Attach the agent's written answer to delivered guidance still owed one. */
+  async function recordAnswer(text: string): Promise<boolean> {
+    if (awaitingReply.length === 0 || !text.trim()) return false;
+    const replyIds = [...awaitingReply];
+    try {
+      const recorded = await deps.recordReply({
+        runId: run.id,
+        userId: run.user_id,
+        aiCallId: run.ai_call_id,
+        ids: replyIds,
+        text: text.trim(),
+      });
+      awaitingReply = awaitingReply.filter((id) => !replyIds.includes(id));
+      return recorded > 0;
+    } catch {
+      // Like the queue below, Slack bookkeeping never fails the run. The ids
+      // stay pending so the next written step answers instead.
+      console.warn("[slack-guidance] reply not recorded", run.id);
+      return false;
+    }
+  }
   return {
     async prepare(
       messages: ModelMessage[],
@@ -42,24 +70,34 @@ export function createRunGuidanceSession(
         additions.push(...(await convertToModelMessages(ui)));
         seen.add(row.id);
         if (row.status === "received") pending.push(row.id);
+        // A reconstructed worker still owes an answer to delivered guidance.
+        else if (!row.reply_text) awaitingReply.push(row.id);
       }
       // SDK 7 carries prepareStep messages into subsequent steps. Append each
       // update once; a reconstructed worker loads delivered guidance again.
       return additions.length === 0 ? messages : [...messages, ...additions];
     },
-    async stepFinished() {
+    /** `text` is what the agent wrote in the step that just ended. */
+    async stepFinished(text = "") {
       const ids = [...pending];
-      if (ids.length === 0) return;
-      const delivered = await deps.deliver({
-        runId: run.id,
-        userId: run.user_id,
-        aiCallId: run.ai_call_id,
-        ids,
-        step,
-      });
-      pending = pending.filter((id) => !ids.includes(id));
-      // Only a Slack thread has a run card to confirm delivery on.
-      if (delivered > 0 && readSlackRunControlsMetadata(run.metadata)) {
+      let changed = false;
+      if (ids.length > 0) {
+        const delivered = await deps.deliver({
+          runId: run.id,
+          userId: run.user_id,
+          aiCallId: run.ai_call_id,
+          ids,
+          step,
+        });
+        pending = pending.filter((id) => !ids.includes(id));
+        if (delivered > 0) {
+          awaitingReply.push(...ids);
+          changed = true;
+        }
+      }
+      changed = (await recordAnswer(text)) || changed;
+      // Only a Slack thread has a run card and a thread to answer in.
+      if (changed && readSlackRunControlsMetadata(run.metadata)) {
         try {
           await deps.queue({ runId: run.id, userId: run.user_id });
         } catch {
