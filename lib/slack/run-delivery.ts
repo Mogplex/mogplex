@@ -15,6 +15,7 @@ import {
 } from "./run-progress-store";
 import type { RunDeliveryPayload } from "./run-delivery-queue";
 import { loadRunGuidanceReceipts } from "./run-guidance-store";
+import { postGuidanceReplies } from "./run-guidance-replies";
 
 const defaultDeps = {
   loadRun: loadRunById,
@@ -24,6 +25,7 @@ const defaultDeps = {
   markDelivered: markTerminalSlackDelivery,
   markProgressDelivered: markRunProgressDelivered,
   loadGuidance: loadRunGuidanceReceipts,
+  postReplies: postGuidanceReplies,
   now: Date.now,
   wait: async (milliseconds: number) => {
     await delay(milliseconds);
@@ -50,6 +52,8 @@ export async function deliverSlackRunUpdate(
   }
   const slack = readSlackRunControlsMetadata(run.metadata);
   if (!slack) return { delivered: false };
+  // Answers to guidance go out first: the terminal card may already be final.
+  await deps.postReplies(run, slack.teamId);
   if (["success", "failed", "cancelled"].includes(run.status)) {
     const key = terminalSlackDeliveryKey(run, run.status);
     if (!key) return { delivered: false };

@@ -98,6 +98,8 @@ test("a real SDK run receives mid-command Slack guidance at its next model step 
     )
   );
   assert.deepEqual(result.guidanceSteps, [1]);
+  // The answer posted back to Slack is what the agent wrote after reading it.
+  assert.deepEqual(result.guidanceReplies, ["Fixed the header."]);
   assert.equal(result.slackCardQueues.length, 1);
 });
 

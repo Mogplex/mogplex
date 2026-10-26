@@ -145,3 +145,67 @@ it("preserves image guidance through the actual attachment and model-message con
   });
   expect(JSON.stringify(prepared)).not.toContain("test-bot");
 });
+
+it("records the agent's first written answer after guidance reaches it", async () => {
+  const replies: { ids: string[]; text: string }[] = [];
+  let rows = [row("g1", "sitrep")];
+  const session = createRunGuidanceSession(run, {
+    load: async () => rows,
+    deliver: async (input) => {
+      rows = rows.map((item) => ({ ...item, status: "delivered" }));
+      return input.ids.length;
+    },
+    recordReply: async (input) => {
+      replies.push({ ids: input.ids, text: input.text });
+      return input.ids.length;
+    },
+    queue: async () => {},
+  });
+  // A step that only calls tools says nothing; the answer comes later.
+  await session.prepare(initial, 0);
+  await session.stepFinished("");
+  expect(replies).toEqual([]);
+  await session.prepare(initial, 1);
+  await session.stepFinished("SITREP: PR #194 is open.");
+  await session.prepare(initial, 2);
+  await session.stepFinished("Now fixing review item 5.");
+  expect(replies).toEqual([{ ids: ["g1"], text: "SITREP: PR #194 is open." }]);
+});
+
+it("does not attach an answer to guidance the agent never received", async () => {
+  const replies: string[][] = [];
+  const session = createRunGuidanceSession(run, {
+    load: async () => [],
+    deliver: async () => 0,
+    recordReply: async (input) => {
+      replies.push(input.ids);
+      return 0;
+    },
+    queue: async () => {},
+  });
+  await session.prepare(initial, 0);
+  await session.stepFinished("Working on it.");
+  expect(replies).toEqual([]);
+});
+
+it("asks Slack delivery to post the answer only for runs with a Slack thread", async () => {
+  const queued: string[] = [];
+  const build = (metadata: Record<string, unknown>) =>
+    createRunGuidanceSession(buildRunRow({ harness: "mogplex", metadata }), {
+      load: async () => [row("g1", "sitrep")],
+      deliver: async (input) => input.ids.length,
+      recordReply: async (input) => input.ids.length,
+      queue: async (input) => {
+        queued.push(input.runId);
+      },
+    });
+  const slack = build({
+    slackRunControls: { teamId: "T1", channelId: "D1", messageTs: "1.2" },
+  });
+  await slack.prepare(initial, 0);
+  await slack.stepFinished("SITREP");
+  const workspace = build({});
+  await workspace.prepare(initial, 0);
+  await workspace.stepFinished("SITREP");
+  expect(queued).toHaveLength(1);
+});

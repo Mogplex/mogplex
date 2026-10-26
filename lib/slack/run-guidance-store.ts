@@ -207,3 +207,73 @@ export async function deliverRunGuidance(
   if (error) throw new Error("Could not record guidance receipt");
   return z.number().int().nonnegative().parse(Number(data));
 }
+
+/**
+ * Attach the agent's first answer after guidance reached it. Only delivered
+ * rows without a reply are touched, so a later step never overwrites it.
+ */
+export async function recordRunGuidanceReply(
+  input: {
+    runId: string;
+    userId: string;
+    aiCallId: string;
+    ids: string[];
+    text: string;
+  },
+  client: Pick<SupabaseClient, "from"> = supabaseAdmin
+): Promise<number> {
+  if (input.ids.length === 0 || !input.text.trim()) return 0;
+  const { data, error } = await client
+    .from("slack_run_guidance")
+    .update({ reply_text: input.text, updated_at: new Date().toISOString() })
+    .eq("run_id", input.runId)
+    .eq("user_id", input.userId)
+    .eq("ai_call_id", input.aiCallId)
+    .eq("status", "delivered")
+    .in("id", input.ids)
+    .is("reply_text", null)
+
+    .select("id");
+  if (error) throw new Error("Could not record the agent's reply");
+  return (data ?? []).length;
+}
+
+const pendingReplySchema = z.object({
+  id: z.string().uuid(),
+  channel_id: z.string(),
+  thread_ts: z.string(),
+  reply_text: z.string(),
+});
+export type PendingGuidanceReply = z.infer<typeof pendingReplySchema>;
+
+/** Slack-thread replies the delivery task has not posted yet, oldest first. */
+export async function loadPendingGuidanceReplies(
+  run: Pick<ExternalAgentRunRow, "id" | "user_id">,
+  client: Pick<SupabaseClient, "from"> = supabaseAdmin
+): Promise<PendingGuidanceReply[]> {
+  const { data, error } = await client
+    .from("slack_run_guidance")
+    .select("id,channel_id,thread_ts,reply_text")
+    .eq("run_id", run.id)
+    .eq("user_id", run.user_id)
+    .not("reply_text", "is", null)
+    .is("reply_posted_ts", null)
+    .not("thread_ts", "is", null)
+    .order("created_at", { ascending: true })
+    .order("id", { ascending: true });
+  if (error) throw new Error("Could not load guidance replies");
+  return z.array(pendingReplySchema).parse(data ?? []);
+}
+
+export async function markGuidanceReplyPosted(
+  input: { id: string; userId: string; messageTs: string },
+  client: Pick<SupabaseClient, "from"> = supabaseAdmin
+) {
+  const { error } = await client
+    .from("slack_run_guidance")
+    .update({ reply_posted_ts: input.messageTs })
+    .eq("id", input.id)
+    .eq("user_id", input.userId)
+    .is("reply_posted_ts", null);
+  if (error) throw new Error("Could not record the posted reply");
+}

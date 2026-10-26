@@ -168,7 +168,7 @@ export async function handleSlackRunGuidance(
   await reply(
     receipt.status === "delivered"
       ? "This guidance was already supplied to the agent. The run card shows its current progress."
-      : "Received. Your guidance is saved for the agent’s next step; the current command may need to finish first. The run card will confirm when it has been supplied."
+      : "Received. Your guidance is saved for the agent’s next step; the current command may need to finish first. The agent will answer in this thread once it has read it."
   );
   return {
     outcome: "run_guidance_received",
