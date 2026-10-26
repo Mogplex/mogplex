@@ -302,11 +302,18 @@ test("a Slack thread reply reaches the next agent step once and survives termina
       "update external_agent_runs set status='success' where id=$1",
       [runId]
     );
-    const finished = { ...run, status: "success" as const };
+    const finished = {
+      ...run,
+      status: "success" as const,
+      slack_progress_delivered_at: new Date().toISOString(),
+    };
     await deliverSlackRunUpdate(
       { runId, userId: owner },
       {
         loadRun: async () => finished,
+        wait: async () => {
+          throw new Error("Terminal delivery must bypass progress pacing");
+        },
         sendTerminal: (row, status, _deps, options) =>
           stripSlackRunControlsForTerminalRun(
             row,
