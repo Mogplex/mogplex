@@ -122,6 +122,51 @@ it("coalesces queued progress jobs against the latest durable snapshot", async (
   expect(f.getRun().slack_progress_delivered_key).toBeTruthy();
 });
 
+it("drains duplicate progress jobs without pacing waits and still answers guidance", async () => {
+  const f = fixture();
+  await deliverSlackRunUpdate(f.input, f.deps);
+  f.replies.push({
+    id: "00000000-0000-4000-8000-0000000000a1",
+    channel_id: "C1",
+    thread_ts: "1.2",
+    reply_text: "The desktop layout is unchanged.",
+  });
+  let waits = 0;
+  const deps = {
+    ...f.deps,
+    wait: async () => {
+      waits++;
+    },
+  };
+  for (let index = 0; index < 20; index++) {
+    await deliverSlackRunUpdate(f.input, deps);
+  }
+  expect(waits).toBe(0);
+  expect(f.updates).toHaveLength(1);
+  expect(f.posts.map((post) => post.text)).toEqual([
+    "The desktop layout is unchanged.",
+  ]);
+});
+
+it("delivers terminal state immediately even after a recent progress edit", async () => {
+  const f = fixture();
+  await deliverSlackRunUpdate(f.input, f.deps);
+  f.setRun({ status: "success" });
+  let waits = 0;
+  const deps = {
+    ...f.deps,
+    wait: async () => {
+      waits++;
+    },
+  };
+  await deliverSlackRunUpdate(f.input, deps);
+  await deliverSlackRunUpdate(f.input, deps);
+  expect(waits).toBe(0);
+  expect(f.updates).toHaveLength(2);
+  expect(f.posts).toHaveLength(1);
+  expect(f.updates[1].text).toContain("https://github.com/example/app/pull/42");
+});
+
 it("a late progress job renders the actual terminal result and cannot resurrect Cancel", async () => {
   const f = fixture();
   f.setRun({ status: "success" });

@@ -6,7 +6,11 @@ import {
 } from "@/lib/mogplex-api/run-terminal-notification";
 import { stripSlackRunControlsForTerminalRun } from "./run-controls-notify";
 import { getSlackBotToken, updateSlackMessage } from "./client";
-import { readSlackRunControlsMetadata } from "./run-controls";
+import {
+  readSlackRunControlsMetadata,
+  type SlackRunControlsMetadata,
+} from "./run-controls";
+import type { ExternalAgentRunRow } from "@/lib/mogplex-api/runs-types";
 import { buildRunProgressMessage } from "./run-progress-presentation";
 import { createRunProgressState } from "./run-progress-state";
 import {
@@ -32,6 +36,20 @@ const defaultDeps = {
   },
 };
 
+function progressDeliveryKey(
+  run: ExternalAgentRunRow,
+  slack: SlackRunControlsMetadata
+) {
+  return JSON.stringify([
+    run.ai_call_id,
+    run.status,
+    run.slack_progress_revision ?? 0,
+    slack.teamId,
+    slack.channelId,
+    slack.messageTs,
+  ]);
+}
+
 /** Called exclusively by the serialized delivery task, including terminal edits. */
 export async function deliverSlackRunUpdate(
   input: RunDeliveryPayload,
@@ -40,18 +58,25 @@ export async function deliverSlackRunUpdate(
   const deps = { ...defaultDeps, ...overrides };
   let run = await deps.loadRun(input.userId, input.runId);
   if (!run) return { delivered: false };
+  let slack = readSlackRunControlsMetadata(run.metadata);
+  if (!slack) return { delivered: false };
   const lastDeliveredAt = run.slack_progress_delivered_at
     ? Date.parse(run.slack_progress_delivered_at)
     : -Infinity;
   const remaining = 2500 - (deps.now() - lastDeliveredAt);
-  if (remaining > 0) {
-    // One wait for this actual delivery, not a loop or a liveness check.
+  if (
+    remaining > 0 &&
+    !["success", "failed", "cancelled"].includes(run.status) &&
+    run.slack_progress_delivered_key !== progressDeliveryKey(run, slack)
+  ) {
+    // Pace only new progress edits. Duplicate jobs drain immediately, and
+    // terminal results bypass progress pacing. Reload so completion wins.
     await deps.wait(remaining);
     run = await deps.loadRun(input.userId, input.runId);
     if (!run) return { delivered: false };
+    slack = readSlackRunControlsMetadata(run.metadata);
+    if (!slack) return { delivered: false };
   }
-  const slack = readSlackRunControlsMetadata(run.metadata);
-  if (!slack) return { delivered: false };
   // Answers to guidance go out first: the terminal card may already be final.
   // postReplies logs its own failures and never blocks the card below.
   await deps.postReplies(run, slack.teamId);
@@ -67,17 +92,10 @@ export async function deliverSlackRunUpdate(
     await deps.markDelivered(run, run.status, key);
     return { delivered: true };
   }
+  const key = progressDeliveryKey(run, slack);
+  if (run.slack_progress_delivered_key === key) return { delivered: true };
   const token = await deps.getToken(slack.teamId);
   if (!token) throw new Error("Slack delivery unavailable");
-  const key = JSON.stringify([
-    run.ai_call_id,
-    run.status,
-    run.slack_progress_revision ?? 0,
-    slack.teamId,
-    slack.channelId,
-    slack.messageTs,
-  ]);
-  if (run.slack_progress_delivered_key === key) return { delivered: true };
   const state =
     readRunProgressSnapshot(run.slack_progress) ??
     createRunProgressState(Date.parse(run.created_at));

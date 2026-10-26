@@ -59,7 +59,14 @@ it("the production reporter persists its scoped snapshot and queues delivery wit
     json: { runId: run.id, userId: run.user_id },
   });
   expect(calls[1].body).toMatchObject({
-    options: { concurrencyKey: `slack-run-delivery:${run.id}` },
+    options: {
+      concurrencyKey: `slack-run-delivery:${run.id}`,
+      debounce: {
+        key: `slack-run-delivery:${run.id}`,
+        delay: "1s",
+        maxDelay: "3s",
+      },
+    },
   });
   expect(calls.some((call) => call.url.includes("slack.com"))).toBe(false);
 });

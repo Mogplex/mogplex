@@ -9,10 +9,16 @@ export async function queueSlackRunDelivery(
   input: RunDeliveryPayload,
   trigger = tasks.trigger
 ) {
-  // A per-run single writer is a correctness lock, not an agent concurrency cap.
-  // The task reloads current state, so duplicate or delayed triggers safely coalesce.
+  // Collapse progress bursts before they reach the per-run single writer.
+  // Bound the debounce so continuous activity still gets fresh Slack updates.
+  // The worker reads durable state, including terminal changes and guidance.
   await trigger(TRIGGER_TASK_IDS.slackRunDelivery, input, {
     concurrencyKey: `slack-run-delivery:${input.runId}`,
+    debounce: {
+      key: `slack-run-delivery:${input.runId}`,
+      delay: "1s",
+      maxDelay: "3s",
+    },
     tags: [`external-run:${input.runId}`, `user:${input.userId}`],
   });
 }
