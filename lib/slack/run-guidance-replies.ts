@@ -8,11 +8,10 @@ import {
 } from "./run-guidance-store";
 
 // Slack errors that fail the same way on every retry. The row is marked so
-// one unpostable answer is not retried on every later delivery.
+// one unpostable answer is not retried on every later delivery. Channel
+// access errors stay retryable: re-inviting the bot fixes them.
 const PERMANENT_POST_ERRORS = new Set([
-  "channel_not_found",
   "is_archived",
-  "not_in_channel",
   "no_text",
   "msg_too_long",
   "thread_not_found",
@@ -48,31 +47,55 @@ function permanentFailure(error: unknown) {
 
 type ReplyDeps = typeof defaultDeps;
 type PendingReply = Awaited<ReturnType<ReplyDeps["loadReplies"]>>[number];
+type ReplyGroup = PendingReply & { ids: string[] };
 
-/** Post one answer and record it; a permanent Slack error is recorded too. */
+/**
+ * Guidance delivered in one step shares the agent's answer. Group rows by
+ * thread and text so the thread gets that answer once.
+ */
+function groupReplies(replies: PendingReply[]): ReplyGroup[] {
+  const groups = new Map<string, ReplyGroup>();
+  for (const reply of replies) {
+    const key = JSON.stringify([
+      reply.channel_id,
+      reply.thread_ts,
+      reply.reply_text,
+    ]);
+    const group = groups.get(key);
+    if (group) group.ids.push(reply.id);
+    else groups.set(key, { ...reply, ids: [reply.id] });
+  }
+  return [...groups.values()];
+}
+
+/** Post one answer and record it on every row it answers. */
 async function postOneReply(
   deps: ReplyDeps,
   token: string,
   run: { id: string; user_id: string },
-  reply: PendingReply
+  group: ReplyGroup
 ): Promise<boolean> {
-  const text = guidanceReplyText(reply.reply_text, run.id);
   const mark = (messageTs: string) =>
-    deps.markPosted({ id: reply.id, userId: run.user_id, messageTs });
+    Promise.all(
+      group.ids.map((id) =>
+        deps.markPosted({ id, userId: run.user_id, messageTs })
+      )
+    );
   try {
+    const text = guidanceReplyText(group.reply_text, run.id);
     if (!text.trim()) {
       await mark("skipped:empty");
       return false;
     }
     const result = await deps.post(token, {
-      channel: reply.channel_id,
-      thread_ts: reply.thread_ts,
+      channel: group.channel_id,
+      thread_ts: group.thread_ts,
       text,
     });
     await mark(result.ts);
     return true;
   } catch (error) {
-    console.warn("[slack-guidance] reply not posted", run.id, reply.id, error);
+    console.warn("[slack-guidance] reply not posted", run.id, group.ids, error);
     const code = permanentFailure(error);
     if (code) await mark(`failed:${code}`).catch(() => undefined);
     return false;
@@ -80,8 +103,8 @@ async function postOneReply(
 }
 
 /**
- * Answer each guidance message in the Slack thread it came from. Called only by
- * the serialized per-run delivery task. Delivery is at least once: if Slack
+ * Answer guidance in the Slack thread it came from. Called only by the
+ * serialized per-run delivery task. Delivery is at least once: if Slack
  * accepts a post but recording it fails, a later delivery posts it again.
  * Failures are logged and never thrown, so the run card always updates.
  */
@@ -100,8 +123,8 @@ export async function postGuidanceReplies(
       return 0;
     }
     let posted = 0;
-    for (const reply of replies)
-      if (await postOneReply(deps, token, run, reply)) posted += 1;
+    for (const group of groupReplies(replies))
+      if (await postOneReply(deps, token, run, group)) posted += 1;
     return posted;
   } catch (error) {
     console.warn("[slack-guidance] replies unavailable", run.id, error);

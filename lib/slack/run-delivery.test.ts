@@ -281,18 +281,25 @@ it("still updates the run card when a guidance answer cannot be posted", async (
   );
   expect(f.updates).toHaveLength(1);
   expect(marked).toEqual([]);
-  // A failure that can never succeed is recorded so it is not retried forever.
   f.setRun({ slack_progress_revision: 4 });
   await deliverSlackRunUpdate(
     f.input,
     failing("Slack chat.postMessage failed: channel_not_found")
   );
-  expect(f.updates).toHaveLength(2);
-  expect(marked).toEqual(["failed:channel_not_found"]);
-  // No bot token for the answer: the card still updates.
+  // Re-inviting the bot fixes a channel access error, so it stays pending.
+  expect(marked).toEqual([]);
+  // A failure no retry can fix is recorded so it is not retried forever.
   f.setRun({ slack_progress_revision: 5 });
-  await deliverSlackRunUpdate(f.input, failing("unused", null));
+  await deliverSlackRunUpdate(
+    f.input,
+    failing("Slack chat.postMessage failed: is_archived")
+  );
   expect(f.updates).toHaveLength(3);
+  expect(marked).toEqual(["failed:is_archived"]);
+  // No bot token for the answer: the card still updates.
+  f.setRun({ slack_progress_revision: 6 });
+  await deliverSlackRunUpdate(f.input, failing("unused", null));
+  expect(f.updates).toHaveLength(4);
 });
 
 it("cuts a long answer on a code point and closes an open code fence before the link", async () => {
@@ -310,4 +317,21 @@ it("cuts a long answer on a code point and closes an open code fence before the 
   const [, beforeLink] =
     /^([\s\S]*)…\n<[^>]+\|Read the full reply>$/.exec(text) ?? [];
   expect((beforeLink.match(/```/g) ?? []).length % 2).toBe(0);
+});
+
+it("answers two messages the agent read in the same step with one thread reply", async () => {
+  const f = fixture();
+  for (const id of [
+    "00000000-0000-4000-8000-0000000000b1",
+    "00000000-0000-4000-8000-0000000000b2",
+  ])
+    f.replies.push({
+      id,
+      channel_id: "C1",
+      thread_ts: "1.2",
+      reply_text: "SITREP, and the buttons now sit on an elevated surface.",
+    });
+  await deliverSlackRunUpdate(f.input, f.deps);
+  expect(f.posts).toHaveLength(1);
+  expect(f.replies.map((reply) => reply.posted)).toEqual(["9.1", "9.1"]);
 });
