@@ -8,6 +8,7 @@ function fixture(
     error?: string;
     guidance?: boolean;
     sandbox?: boolean;
+    harness?: string;
   } = {}
 ) {
   const calls: URL[] = [];
@@ -30,7 +31,7 @@ function fixture(
             user_id: "owner",
             repo_id: "repo",
             ai_call_id: "call",
-            harness: "mogplex",
+            harness: options.harness ?? "mogplex",
             status: "streaming",
             prompt: "Fix mobile",
             working_branch: "fix/mobile",
@@ -104,10 +105,27 @@ it("allows viewing runs whose sandbox has not been created or is no longer acces
     const { client } = fixture(options);
     expect(await loadRunWorkspace("owner", "run", client)).toMatchObject({
       sandboxRecordId: null,
-      canGuide: false,
-      guidance: [],
     });
   }
+});
+
+it("offers live guidance on native runs that did not start in Slack", async () => {
+  const { client } = fixture();
+  expect(await loadRunWorkspace("owner", "run", client)).toMatchObject({
+    canGuide: true,
+    guidance: [{ body: "Preserve desktop", status: "delivered" }],
+  });
+});
+
+it("does not offer live guidance to CLI harness runs", async () => {
+  const { client, calls } = fixture({ harness: "claude-code" });
+  expect(await loadRunWorkspace("owner", "run", client)).toMatchObject({
+    canGuide: false,
+    guidance: [],
+  });
+  expect(calls.some((url) => url.pathname.endsWith("slack_run_guidance"))).toBe(
+    false
+  );
 });
 
 it("returns no context for missing owned runs or repositories", async () => {

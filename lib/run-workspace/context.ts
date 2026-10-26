@@ -20,13 +20,18 @@ export async function loadWorkspaceRun(
   return data as ExternalAgentRunRow | null;
 }
 
-export function canGuideRun(run: ExternalAgentRunRow) {
+/** Slack-thread runs record workspace guidance on their thread's receipt. */
+export function isSlackGuidanceRun(run: ExternalAgentRunRow) {
   return (
-    run.harness === "mogplex" &&
     run.metadata.slack_guidance_enabled === true &&
     typeof run.metadata.slack_user_id === "string" &&
     Boolean(readSlackRunControlsMetadata(run.metadata))
   );
+}
+
+/** Every native run reads guidance between model steps, whatever started it. */
+export function canGuideRun(run: ExternalAgentRunRow) {
+  return run.harness === "mogplex";
 }
 
 export async function loadRunWorkspace(

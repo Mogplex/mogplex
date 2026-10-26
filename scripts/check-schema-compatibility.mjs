@@ -82,6 +82,7 @@ try {
   for (const filename of [
     "schema-compatibility-stage.ts",
     "schema-compatibility-contract.ts",
+    "schema-compatibility-guidance.ts",
   ]) {
     copyFileSync(
       path.join(candidate, "tests/support", filename),

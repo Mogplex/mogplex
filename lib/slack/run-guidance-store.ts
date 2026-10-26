@@ -138,6 +138,28 @@ export async function submitSlackRunGuidance(
   return data === null ? null : receiptSchema.parse(data);
 }
 
+/** Owner guidance typed in Mogplex for a native run with no Slack thread. */
+export async function submitWorkspaceRunGuidance(
+  input: {
+    userId: string;
+    runId: string;
+    aiCallId: string;
+    eventId: string;
+    body: string;
+  },
+  client: Pick<SupabaseClient, "rpc"> = supabaseAdmin
+) {
+  const { data, error } = await client.rpc("submit_run_guidance", {
+    p_run_id: input.runId,
+    p_user_id: input.userId,
+    p_ai_call_id: input.aiCallId,
+    p_event_id: input.eventId,
+    p_body: input.body,
+  });
+  if (error) throw new Error("Could not save your guidance");
+  return data === null ? null : receiptSchema.parse(data);
+}
+
 export async function loadRunGuidance(
   run: Pick<ExternalAgentRunRow, "id" | "user_id" | "ai_call_id">,
   client: Pick<SupabaseClient, "from"> = supabaseAdmin,

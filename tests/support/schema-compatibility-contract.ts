@@ -6,6 +6,10 @@ import { buildResourceOwnershipInsert } from "@/lib/team-resource-scope";
 import { WORKSPACE_COLUMNS } from "@/lib/workspaces";
 import { surfaceDefaultModel } from "@/lib/models/surface-defaults";
 import {
+  seedSlackGuidance,
+  verifySlackGuidance,
+} from "./schema-compatibility-guidance";
+import {
   claimPendingJob,
   recordStartAttempt,
 } from "@/lib/workflows/automation-job-persistence";
@@ -235,6 +239,7 @@ export async function checkSchemaCompatibility(
       .from("external_agent_runs")
       .select("status,metadata")
       .eq("user_id", BEFORE_USER)
+      .eq("idempotency_key", "compatibility-seed")
       .single();
     assert.equal(run.error, null, JSON.stringify(run.error));
     assert.deepEqual(run.data, {
@@ -245,6 +250,7 @@ export async function checkSchemaCompatibility(
       },
     });
   }
+  if (phase === "verify") await verifySlackGuidance(adminClient);
   const userId = phase === "seed" ? BEFORE_USER : AFTER_USER;
   const profile = await client.from("profiles").insert({
     id: userId,
@@ -355,6 +361,12 @@ export async function checkSchemaCompatibility(
     },
   });
   assert.equal(externalRun.error, null, JSON.stringify(externalRun.error));
+  await seedSlackGuidance(
+    adminClient,
+    userId,
+    (repo.data as { id: string }).id,
+    phase
+  );
   const job = await client
     .from("job_runs")
     .insert({

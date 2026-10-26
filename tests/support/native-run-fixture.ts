@@ -21,6 +21,7 @@ export async function exercise(
     | "lease_failure"
     | "tool_progress"
     | "guidance"
+    | "workspace_guidance"
     | "agent",
   response = "Fixed the header.",
   metadata: Record<string, unknown> = {}
@@ -43,6 +44,9 @@ export async function exercise(
         }
       : {}),
   });
+  // Workspace guidance steers a run that has no Slack thread at all.
+  const steered = mode === "guidance" || mode === "workspace_guidance";
+  const slackCardQueues: string[] = [];
   const progress: HarnessProgressUpdate[] = [];
   let guidanceRows: RunGuidance[] = [];
   const guidanceSteps: number[] = [];
@@ -70,7 +74,7 @@ export async function exercise(
               error: new Error("Provider disconnected"),
             });
           } else if (
-            (mode === "tool_progress" || mode === "guidance") &&
+            (mode === "tool_progress" || steered) &&
             modelStep++ === 0
           ) {
             sink.enqueue({
@@ -243,7 +247,7 @@ export async function exercise(
                 terminal_exec: tool({
                   inputSchema: z.object({ command: z.string() }),
                   execute: async () => {
-                    if (mode === "guidance")
+                    if (steered)
                       guidanceRows = [
                         {
                           id: "00000000-0000-4000-8000-000000000005",
@@ -297,7 +301,9 @@ export async function exercise(
               }));
               return receipt.ids.length;
             },
-            queue: async () => {},
+            queue: async (input) => {
+              slackCardQueues.push(input.runId);
+            },
           }),
         updateCall: async (_id, update) => {
           call = { ...call, ...update };
@@ -336,6 +342,7 @@ export async function exercise(
     model,
     progress,
     guidanceSteps,
+    slackCardQueues,
     systemSuffix,
     invokedModel,
     attachedSkillIds,

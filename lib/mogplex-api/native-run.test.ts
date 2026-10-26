@@ -98,6 +98,21 @@ test("a real SDK run receives mid-command Slack guidance at its next model step 
     )
   );
   assert.deepEqual(result.guidanceSteps, [1]);
+  assert.equal(result.slackCardQueues.length, 1);
+});
+
+test("a native run started without Slack still receives workspace guidance at its next model step", async () => {
+  const result = await exercise("workspace_guidance");
+  assert.equal(result.caught, undefined);
+  assert.equal(result.model.doStreamCalls.length, 2);
+  assert.ok(
+    JSON.stringify(result.model.doStreamCalls[1].prompt).includes(
+      "Keep the desktop header unchanged."
+    )
+  );
+  assert.deepEqual(result.guidanceSteps, [1]);
+  // No Slack thread exists, so no Slack run card is queued for the receipt.
+  assert.deepEqual(result.slackCardQueues, []);
 });
 
 test("native SDK tool hooks retain identities, inputs, failed exits and complete text boundaries", async () => {

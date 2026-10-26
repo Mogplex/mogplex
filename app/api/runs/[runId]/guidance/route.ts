@@ -1,8 +1,16 @@
 import { z } from "zod";
 import { requireUserId } from "@/lib/auth";
-import { canGuideRun, loadWorkspaceRun } from "@/lib/run-workspace/context";
-import { submitSlackRunGuidance } from "@/lib/slack/run-guidance-store";
+import {
+  canGuideRun,
+  isSlackGuidanceRun,
+  loadWorkspaceRun,
+} from "@/lib/run-workspace/context";
+import {
+  submitSlackRunGuidance,
+  submitWorkspaceRunGuidance,
+} from "@/lib/slack/run-guidance-store";
 import { readSlackRunControlsMetadata } from "@/lib/slack/run-controls";
+import type { ExternalAgentRunRow } from "@/lib/mogplex-api/runs-types";
 
 const inputSchema = z.object({
   id: z.string().uuid(),
@@ -13,7 +21,45 @@ const defaultDeps = {
   requireUserId,
   loadRun: loadWorkspaceRun,
   submit: submitSlackRunGuidance,
+  submitWorkspace: submitWorkspaceRunGuidance,
 };
+type GuidanceDeps = typeof defaultDeps;
+
+/** Slack-thread runs keep their thread receipt; other native runs use the workspace inbox. */
+function submitGuidance(
+  deps: GuidanceDeps,
+  run: ExternalAgentRunRow,
+  userId: string,
+  eventId: string,
+  body: string
+) {
+  const controls = readSlackRunControlsMetadata(run.metadata);
+  if (!isSlackGuidanceRun(run) || !controls)
+    return deps.submitWorkspace({
+      userId,
+      runId: run.id,
+      aiCallId: run.ai_call_id,
+      eventId,
+      body,
+    });
+  return deps.submit({
+    userId,
+    runId: run.id,
+    aiCallId: run.ai_call_id,
+    teamId: controls.teamId,
+    channelId: controls.channelId,
+    threadTs:
+      typeof run.metadata.slack_thread_ts === "string"
+        ? run.metadata.slack_thread_ts
+        : controls.messageTs,
+    slackUserId: String(run.metadata.slack_user_id),
+    eventId,
+    messageTs: eventId,
+    body,
+    attachments: null,
+  });
+}
+
 export function createRunGuidancePostHandler(deps = defaultDeps) {
   return async function POST(
     request: Request,
@@ -29,28 +75,18 @@ export function createRunGuidancePostHandler(deps = defaultDeps) {
       const run = await deps.loadRun(userId, runId);
       if (!run)
         return Response.json({ error: "Run not found" }, { status: 404 });
-      const controls = readSlackRunControlsMetadata(run.metadata);
-      if (!canGuideRun(run) || !controls)
+      if (!canGuideRun(run))
         return Response.json(
           { error: "This run cannot receive live guidance" },
           { status: 409 }
         );
-      const receipt = await deps.submit({
+      const receipt = await submitGuidance(
+        deps,
+        run,
         userId,
-        runId,
-        aiCallId: run.ai_call_id,
-        teamId: controls.teamId,
-        channelId: controls.channelId,
-        threadTs:
-          typeof run.metadata.slack_thread_ts === "string"
-            ? run.metadata.slack_thread_ts
-            : controls.messageTs,
-        slackUserId: String(run.metadata.slack_user_id),
-        eventId: `workspace:${input.data.id}`,
-        messageTs: `workspace:${input.data.id}`,
-        body: input.data.text,
-        attachments: null,
-      });
+        `workspace:${input.data.id}`,
+        input.data.text
+      );
       if (!receipt)
         return Response.json(
           {
