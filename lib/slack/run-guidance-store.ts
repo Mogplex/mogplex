@@ -12,6 +12,9 @@ export type GuidanceThread = {
   slackUserId: string;
   eventId?: string;
 };
+// slack_run_guidance holds two kinds of rows: Slack thread replies, and
+// workspace guidance for runs with no Slack thread (slack_team_id IS NULL).
+// Loading, delivery and answers serve both kinds.
 const receiptSchema = z.object({
   id: z.string().uuid(),
   status: z.enum(["received", "delivered", "not_applied"]),
