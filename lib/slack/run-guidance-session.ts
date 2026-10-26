@@ -29,6 +29,27 @@ export function createRunGuidanceSession(
   // Delivered guidance waits for the agent's first step that says something.
   let awaitingReply: string[] = [];
   let step = 0;
+  /** Attach the agent's written answer to delivered guidance still owed one. */
+  async function recordAnswer(text: string): Promise<boolean> {
+    if (awaitingReply.length === 0 || !text.trim()) return false;
+    const replyIds = [...awaitingReply];
+    try {
+      const recorded = await deps.recordReply({
+        runId: run.id,
+        userId: run.user_id,
+        aiCallId: run.ai_call_id,
+        ids: replyIds,
+        text: text.trim(),
+      });
+      awaitingReply = awaitingReply.filter((id) => !replyIds.includes(id));
+      return recorded > 0;
+    } catch {
+      // Like the queue below, Slack bookkeeping never fails the run. The ids
+      // stay pending so the next written step answers instead.
+      console.warn("[slack-guidance] reply not recorded", run.id);
+      return false;
+    }
+  }
   return {
     async prepare(
       messages: ModelMessage[],
@@ -49,6 +70,8 @@ export function createRunGuidanceSession(
         additions.push(...(await convertToModelMessages(ui)));
         seen.add(row.id);
         if (row.status === "received") pending.push(row.id);
+        // A reconstructed worker still owes an answer to delivered guidance.
+        else if (!row.reply_text) awaitingReply.push(row.id);
       }
       // SDK 7 carries prepareStep messages into subsequent steps. Append each
       // update once; a reconstructed worker loads delivered guidance again.
@@ -72,18 +95,7 @@ export function createRunGuidanceSession(
           changed = true;
         }
       }
-      if (awaitingReply.length > 0 && text.trim()) {
-        const replyIds = [...awaitingReply];
-        awaitingReply = [];
-        changed =
-          (await deps.recordReply({
-            runId: run.id,
-            userId: run.user_id,
-            aiCallId: run.ai_call_id,
-            ids: replyIds,
-            text: text.trim(),
-          })) > 0 || changed;
-      }
+      changed = (await recordAnswer(text)) || changed;
       // Only a Slack thread has a run card and a thread to answer in.
       if (changed && readSlackRunControlsMetadata(run.metadata)) {
         try {

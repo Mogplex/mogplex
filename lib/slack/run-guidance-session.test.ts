@@ -209,3 +209,50 @@ it("asks Slack delivery to post the answer only for runs with a Slack thread", a
   await workspace.stepFinished("SITREP");
   expect(queued).toHaveLength(1);
 });
+
+it("keeps the run going and retries the answer when recording it fails", async () => {
+  const recorded: string[] = [];
+  let failNext = true;
+  const session = createRunGuidanceSession(run, {
+    load: async () => [row("g1", "sitrep")],
+    deliver: async (input) => input.ids.length,
+    recordReply: async (input) => {
+      if (failNext) {
+        failNext = false;
+        throw new Error("Database unavailable");
+      }
+      recorded.push(input.text);
+      return input.ids.length;
+    },
+    queue: async () => {},
+  });
+  await session.prepare(initial, 0);
+  await expect(session.stepFinished("First answer")).resolves.toBeUndefined();
+  await session.prepare(initial, 1);
+  await session.stepFinished("Second answer");
+  expect(recorded).toEqual(["Second answer"]);
+});
+
+it("answers delivered guidance after a worker is reconstructed mid-run", async () => {
+  const recorded: { ids: string[]; text: string }[] = [];
+  const session = createRunGuidanceSession(run, {
+    load: async () => [
+      { ...row("g1", "sitrep"), status: "delivered", delivered_step: 3 },
+      {
+        ...row("g2", "done"),
+        status: "delivered",
+        delivered_step: 1,
+        reply_text: "Already answered",
+      },
+    ],
+    deliver: async () => 0,
+    recordReply: async (input) => {
+      recorded.push({ ids: input.ids, text: input.text });
+      return input.ids.length;
+    },
+    queue: async () => {},
+  });
+  await session.prepare(initial, 0);
+  await session.stepFinished("SITREP after restart");
+  expect(recorded).toEqual([{ ids: ["g1"], text: "SITREP after restart" }]);
+});

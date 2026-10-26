@@ -53,6 +53,7 @@ export async function deliverSlackRunUpdate(
   const slack = readSlackRunControlsMetadata(run.metadata);
   if (!slack) return { delivered: false };
   // Answers to guidance go out first: the terminal card may already be final.
+  // postReplies logs its own failures and never blocks the card below.
   await deps.postReplies(run, slack.teamId);
   if (["success", "failed", "cancelled"].includes(run.status)) {
     const key = terminalSlackDeliveryKey(run, run.status);

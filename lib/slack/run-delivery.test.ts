@@ -246,6 +246,68 @@ it("keeps a long guidance answer readable and links the full text", async () => 
     reply_text: "x".repeat(5000),
   });
   await deliverSlackRunUpdate(f.input, f.deps);
-  expect(f.posts[0].text.length).toBeLessThan(3700);
+  expect(Array.from(f.posts[0].text).length).toBeLessThanOrEqual(4000);
   expect(f.posts[0].text).toContain("|Read the full reply>");
+});
+
+it("still updates the run card when a guidance answer cannot be posted", async () => {
+  const f = fixture();
+  const marked: string[] = [];
+  const failing = (message: string, token: string | null = "test-token") => ({
+    ...f.deps,
+    postReplies: (row: { id: string; user_id: string }, teamId: string) =>
+      postGuidanceReplies(row, teamId, {
+        loadReplies: async () => [
+          {
+            id: "00000000-0000-4000-8000-0000000000a3",
+            channel_id: "C1",
+            thread_ts: "1.2",
+            reply_text: "SITREP",
+          },
+        ],
+        getToken: async () => token,
+        post: async () => {
+          throw new Error(message);
+        },
+        markPosted: async ({ messageTs }) => {
+          marked.push(messageTs);
+        },
+      }),
+  });
+  // A transient failure stays pending for the next delivery.
+  await deliverSlackRunUpdate(
+    f.input,
+    failing("Slack chat.postMessage failed: ratelimited")
+  );
+  expect(f.updates).toHaveLength(1);
+  expect(marked).toEqual([]);
+  // A failure that can never succeed is recorded so it is not retried forever.
+  f.setRun({ slack_progress_revision: 4 });
+  await deliverSlackRunUpdate(
+    f.input,
+    failing("Slack chat.postMessage failed: channel_not_found")
+  );
+  expect(f.updates).toHaveLength(2);
+  expect(marked).toEqual(["failed:channel_not_found"]);
+  // No bot token for the answer: the card still updates.
+  f.setRun({ slack_progress_revision: 5 });
+  await deliverSlackRunUpdate(f.input, failing("unused", null));
+  expect(f.updates).toHaveLength(3);
+});
+
+it("cuts a long answer on a code point and closes an open code fence before the link", async () => {
+  const f = fixture();
+  f.replies.push({
+    id: "00000000-0000-4000-8000-0000000000a4",
+    channel_id: "C1",
+    thread_ts: "1.2",
+    reply_text: `\`\`\`\n${"😀".repeat(5000)}\n\`\`\``,
+  });
+  await deliverSlackRunUpdate(f.input, f.deps);
+  const text = f.posts[0].text;
+  expect(Array.from(text).length).toBeLessThanOrEqual(4000);
+  expect(text).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/);
+  const [, beforeLink] =
+    /^([\s\S]*)…\n<[^>]+\|Read the full reply>$/.exec(text) ?? [];
+  expect((beforeLink.match(/```/g) ?? []).length % 2).toBe(0);
 });

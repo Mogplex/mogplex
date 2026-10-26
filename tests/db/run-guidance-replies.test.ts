@@ -6,6 +6,7 @@ import { createPostgrestShim } from "@/lib/db/postgrest-shim";
 import {
   deliverRunGuidance,
   loadPendingGuidanceReplies,
+  loadRunGuidance,
   markGuidanceReplyPosted,
   recordRunGuidanceReply,
   submitSlackRunGuidance,
@@ -97,6 +98,11 @@ it("hands the agent's answer to delivery once, in the thread the guidance came f
   expect(await reply([id], "SITREP: PR #194 is open.", other)).toBe(0);
   expect(await reply([id], "SITREP: PR #194 is open.")).toBe(1);
   expect(await reply([id], "A later step must not overwrite it")).toBe(0);
+  // A reconstructed worker reads this to know the answer is already recorded.
+  expect(
+    (await loadRunGuidance({ ...owned, ai_call_id: call }, client))[0]
+      .reply_text
+  ).toBe("SITREP: PR #194 is open.");
   expect(await loadPendingGuidanceReplies(owned, client)).toEqual([
     {
       id,

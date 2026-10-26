@@ -28,6 +28,8 @@ const guidanceSchema = receiptSchema.extend({
       typeof value === "string" ? value : value.toISOString()
     ),
   delivered_step: z.number().int().nullable(),
+  // The agent's recorded answer; absent on rows read before replies existed.
+  reply_text: z.string().nullable().optional(),
 });
 export type RunGuidance = z.infer<typeof guidanceSchema>;
 
@@ -168,7 +170,7 @@ export async function loadRunGuidance(
   let query = client
     .from("slack_run_guidance")
     .select(
-      "id,run_id,user_id,ai_call_id,body,attachments,status,delivered_step,created_at"
+      "id,run_id,user_id,ai_call_id,body,attachments,status,delivered_step,created_at,reply_text"
     )
     .eq("run_id", run.id)
     .eq("user_id", run.user_id);
@@ -232,7 +234,6 @@ export async function recordRunGuidanceReply(
     .eq("status", "delivered")
     .in("id", input.ids)
     .is("reply_text", null)
-
     .select("id");
   if (error) throw new Error("Could not record the agent's reply");
   return (data ?? []).length;

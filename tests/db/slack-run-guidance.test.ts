@@ -36,6 +36,16 @@ beforeAll(async () => {
     create table ai_calls(id uuid primary key);
     create table external_agent_runs(id uuid primary key, user_id uuid, ai_call_id uuid, status text, harness text, metadata jsonb, slack_progress jsonb, slack_progress_revision bigint not null default 0);`);
   await db.exec(await migration());
+  // Deploys apply every migration before the app that reads its columns.
+  await db.exec(
+    await readFile(
+      new URL(
+        "../../neon/migrations/20261026021000_run_guidance_replies.sql",
+        import.meta.url
+      ),
+      "utf8"
+    )
+  );
   client = createPostgrestShim({
     query: async (sql, values) => {
       const result = await db.query(sql, values);
