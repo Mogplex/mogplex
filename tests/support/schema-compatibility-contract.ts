@@ -10,6 +10,10 @@ import {
   verifySlackGuidance,
 } from "./schema-compatibility-guidance";
 import {
+  seedOAuthCompatibility,
+  verifyOAuthCompatibility,
+} from "./schema-compatibility-oauth";
+import {
   claimPendingJob,
   recordStartAttempt,
 } from "@/lib/workflows/automation-job-persistence";
@@ -267,6 +271,9 @@ export async function checkSchemaCompatibility(
     });
   }
   if (phase === "verify") await verifySlackGuidance(adminClient);
+  await (phase === "seed"
+    ? seedOAuthCompatibility(db)
+    : verifyOAuthCompatibility(db));
   const userId = phase === "seed" ? BEFORE_USER : AFTER_USER;
   const profile = await client.from("profiles").insert({
     id: userId,

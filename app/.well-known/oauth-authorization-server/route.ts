@@ -1,7 +1,8 @@
-import { oAuthDiscoveryMetadata } from "better-auth/plugins";
+import { oauthProviderAuthServerMetadata } from "@better-auth/oauth-provider";
 import { auth } from "@/lib/better-auth/server";
+import { legacyMcpMetadata } from "@/lib/better-auth/mcp-request-compatibility";
 
-const getBetterAuthMetadata = oAuthDiscoveryMetadata(auth);
+const getBetterAuthMetadata = oauthProviderAuthServerMetadata(auth);
 
 export async function GET(request: Request) {
   const response = await getBetterAuthMetadata(request);
@@ -12,7 +13,7 @@ export async function GET(request: Request) {
 
   return Response.json(
     {
-      ...metadata,
+      ...legacyMcpMetadata(metadata),
       scopes_supported: [
         ...new Set([...(metadata.scopes_supported ?? []), "read", "write"]),
       ],

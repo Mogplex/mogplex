@@ -146,6 +146,16 @@ test.describe("better-auth against real Neon", () => {
       await page.getByTestId("signin-password").fill(password);
       await page.getByTestId("signin-submit").click();
 
+      await expect(
+        page.getByRole("heading", { name: "Connect Mogplex CLI?" })
+      ).toBeVisible();
+      await expect(
+        page.getByText("Stay connected when you are away")
+      ).toBeVisible();
+      await page
+        .getByRole("button", { name: "Allow access", exact: true })
+        .click();
+
       const callbackUrl = new URL(await captured, redirectUri);
       expect(callbackUrl.searchParams.get("state")).toBe(state);
       const code = callbackUrl.searchParams.get("code");
