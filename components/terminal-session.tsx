@@ -158,6 +158,8 @@ export function TerminalSession({ paneId }: { paneId: string }) {
 
   const captureInitialFocus = useCallback((event: FocusEvent<HTMLDivElement>) => {
     if (readyRef.current) return;
+    // wterm creates and focuses its input synchronously just before onReady;
+    // subsequent user clicks are left alone once initialization completes.
     const previous = event.relatedTarget;
     if (
       previous instanceof HTMLElement &&

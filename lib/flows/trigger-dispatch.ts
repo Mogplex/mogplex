@@ -280,7 +280,18 @@ export function createFlowTriggerDispatcher(
       duplicateSensitive: input.event !== "schedule",
     });
 
-    if (enqueued.outcome !== "queued" || !enqueued.jobRunId) {
+    // A one-time provider retry can find the row inserted by an attempt that
+    // failed before starting it. The starter's atomic pending claim prevents
+    // restarting an already running/completed run. Other triggers keep their
+    // normal duplicate-suppression behavior.
+    const retryOneTimeRun =
+      input.event === "schedule" &&
+      Boolean(input.expectedRuntimeRunId) &&
+      enqueued.reason === "IDEMPOTENT_DUPLICATE";
+    if (
+      (enqueued.outcome !== "queued" && !retryOneTimeRun) ||
+      !enqueued.jobRunId
+    ) {
       return {
         matched: true,
         outcome: "suppressed",

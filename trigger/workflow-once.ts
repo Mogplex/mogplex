@@ -36,10 +36,7 @@ export async function runWorkflowOnce(
       startSource: "cron",
       payload: { scheduled_at: payload.runAt, run_once: true },
     });
-    if (
-      result.outcome === "queued" ||
-      result.reason === "IDEMPOTENT_DUPLICATE"
-    ) {
+    if (result.outcome === "queued") {
       const { error } = await supabaseAdmin
         .from("flows")
         .update({ status: "inactive", trigger_once_run_id: null })
@@ -73,14 +70,14 @@ export async function recordWorkflowOnceFailure(
   payload: WorkflowOncePayload,
   runtimeRunId: string
 ) {
-  return runWithFlowActivationLock(payload.flowId, async () => {
-    const { error } = await supabaseAdmin
-      .from("flows")
-      .update({ status: "inactive", trigger_once_run_id: null })
-      .eq("id", payload.flowId)
-      .eq("published_version_id", payload.versionId)
-      .eq("trigger_once_run_id", runtimeRunId);
-    if (error)
-      throw new Error("Could not record the failed one-time dispatch.");
-  });
+  // Exhaustion can itself be caused by an activation lock. This atomic update
+  // only clears the failed version/handle; it neither waits for that lock nor
+  // changes a replacement handle or its publisher's lock ownership.
+  const { error } = await supabaseAdmin
+    .from("flows")
+    .update({ status: "inactive", trigger_once_run_id: null })
+    .eq("id", payload.flowId)
+    .eq("published_version_id", payload.versionId)
+    .eq("trigger_once_run_id", runtimeRunId);
+  if (error) throw new Error("Could not record the failed one-time dispatch.");
 }
