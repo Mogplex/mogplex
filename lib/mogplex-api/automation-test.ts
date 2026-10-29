@@ -53,18 +53,24 @@ export function createTestMogplexApiAutomation(
           404
         );
       const installationId = repo.github_installation_id;
+      const scopedIds = getStartConfig(draft)?.filter?.installationIds;
+      // An explicit draft scope may change the installation on publication.
+      // Otherwise testing must retain the automation's existing installation.
+      if (
+        scopedIds?.length
+          ? !scopedIds.includes(installationId)
+          : installationId !== flow.installation_id
+      )
+        throw new MogplexApiAutomationError(
+          "REPO_SCOPE_MISMATCH",
+          "Repository is outside the draft's installation scope."
+        );
       const graph = await resolveFlowGraphPresetAgents(
         input.userId,
         draft,
         undefined,
         repo.product_team_id
       );
-      const scopedIds = getStartConfig(graph)?.filter?.installationIds;
-      if (scopedIds?.length && !scopedIds.includes(installationId))
-        throw new MogplexApiAutomationError(
-          "REPO_SCOPE_MISMATCH",
-          "Repository is outside the draft's installation scope."
-        );
       const validation = await validateFlowConfiguration(
         input.userId,
         graph,

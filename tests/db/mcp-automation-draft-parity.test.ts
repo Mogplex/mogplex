@@ -11,6 +11,67 @@ import {
   REPO_ID,
 } from "./helpers/mcp-automation-fixture";
 
+it.each([{ installationIds: undefined }, { installationIds: [] }])(
+  "draft testing keeps the publication installation when scope is $installationIds",
+  async ({ installationIds }) => {
+    const db = await createAutomationDb();
+    try {
+      await db.pg.exec(`
+        insert into github_installations values ('second-owned','owner',456,null);
+        update repos set github_installation_id=456;
+      `);
+      const graph = coerceGraph(structuredClone(scheduledTaskExample));
+      graph.nodes.find((node) => node.type === "start")!.data.filter = {
+        scope: "all",
+        installationIds,
+        repos: ["acme/widgets"],
+      };
+      graph.nodes.find((node) => node.type === "agent")!.data.agentId =
+        AGENT_ID;
+      const id = (
+        await db.pg.query<{ id: string }>(
+          "insert into flows(user_id,installation_id,draft_graph) values('owner',123,$1) returning id",
+          [JSON.stringify(graph)]
+        )
+      ).rows[0].id;
+      let queued = 0;
+      const test = createTestMogplexApiAutomation({
+        enqueue: async () => {
+          queued++;
+          return { jobRunId: "unused", outcome: "queued", reason: null };
+        },
+        start: async () => ({ started: true, status: "running" }),
+      });
+      const request = {
+        userId: "owner",
+        automationId: id,
+        repoId: REPO_ID,
+        idempotencyKey: "installation-scope",
+      };
+      await expect(test(request)).rejects.toMatchObject({
+        code: "REPO_SCOPE_MISMATCH",
+      });
+      expect(queued).toBe(0);
+      expect((await db.pg.query("select id from flow_versions")).rows).toEqual(
+        []
+      );
+      // A draft can explicitly select another installation before publishing;
+      // publication adopts exactly one scoped installation in the same way.
+      graph.nodes.find(
+        (node) => node.type === "start"
+      )!.data.filter!.installationIds = [456];
+      await db.pg.query("update flows set draft_graph=$2 where id=$1", [
+        id,
+        JSON.stringify(graph),
+      ]);
+      await expect(test(request)).resolves.toMatchObject({ started: true });
+      expect(queued).toBe(1);
+    } finally {
+      await db.close();
+    }
+  }
+);
+
 it("draft testing enforces the repository team's model allowlist before queueing", async () => {
   const db = await createAutomationDb();
   try {
