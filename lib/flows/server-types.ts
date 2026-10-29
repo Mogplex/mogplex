@@ -17,6 +17,7 @@ export type FlowRow = {
   draft_graph: unknown;
   published_version_id: string | null;
   trigger_schedule_id: string | null;
+  trigger_once_run_id?: string | null;
   vault_webhook_secret_id: string | null;
   created_at: string;
   updated_at: string;

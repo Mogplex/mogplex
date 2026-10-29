@@ -59,6 +59,7 @@ test("Mogplex MCP initialize and tools/list expose the run control tools", async
       "mogplex_list_sandboxes",
       "mogplex_create_sandbox",
       "mogplex_get_sandbox_logs",
+      "mogplex_test_automation",
       "mogplex_get_automation_schema",
       "mogplex_validate_automation",
       "mogplex_list_automations",

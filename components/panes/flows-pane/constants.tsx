@@ -63,7 +63,7 @@ export const TRIGGER_PRESETS: TriggerPreset[] = [
   {
     id: "schedule",
     label: "Schedule",
-    description: "Run on a cron",
+    description: "Run once or on a schedule",
     event: "schedule",
     icon: Clock,
   },

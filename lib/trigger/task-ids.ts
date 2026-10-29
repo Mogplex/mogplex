@@ -24,4 +24,5 @@ export const TRIGGER_TASK_IDS = {
   slackRunDelivery: "deliver-slack-run-update",
   slackToolExecutionRetention: "retain-slack-tool-executions",
   workflowSchedule: "dispatch-workflow-schedule",
+  workflowOnce: "dispatch-workflow-once",
 } as const;

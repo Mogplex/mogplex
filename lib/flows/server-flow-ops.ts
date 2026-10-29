@@ -203,6 +203,19 @@ export async function deleteFlow(userId: string, flowId: string) {
     throw new FlowServiceError("FLOW_NOT_FOUND", "Flow not found");
   }
 
+  if (flow.trigger_once_run_id) {
+    const { cancelOneTimeSchedule } = await import("./one-time-schedule");
+    try {
+      await cancelOneTimeSchedule(flow.trigger_once_run_id);
+    } catch (error) {
+      throw new FlowServiceError(
+        "FLOW_DELETE_SYNC_FAILED",
+        "Could not cancel the one-time schedule. The workflow was not deleted.",
+        { cause: error }
+      );
+    }
+  }
+
   const scheduleId = (flow as Flow & { trigger_schedule_id?: string | null })
     .trigger_schedule_id;
   if (scheduleId) {

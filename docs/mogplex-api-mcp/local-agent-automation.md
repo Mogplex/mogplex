@@ -38,11 +38,12 @@ For an existing automation:
 1. Call `mogplex_list_automations` for bounded, graph-free summaries. Pass its `nextCursor` back as `cursor` to continue, and use `mogplex_get_automation` when you need one automation's full draft and published graphs.
 2. Leave `modelOverride` omitted or `null` to keep the configured defaults. Call `mogplex_list_models` only when choosing an explicit override.
 3. Use `mogplex_set_automation_model` for a narrow node-level change, or `mogplex_update_automation` to replace the complete draft graph.
-4. Call `mogplex_publish_automation` to validate, version, and activate a draft.
-5. Call `mogplex_trigger_automation` with an automation id, a repo id, and an optional event-shaped input object.
-6. Read progress and diagnostics with `mogplex_list_automation_runs` and `mogplex_get_automation_run_logs`.
-7. To stop a Flow run, call `mogplex_cancel_automation_run` with its `automationId` and job `runId`. This requires `write` scope.
-8. To remove an automation, call `mogplex_delete_automation` with its `automationId`. This requires `write` scope and cannot be undone.
+4. Call `mogplex_test_automation` with `automationId`, `repoId`, representative `input`, and an optional stable `idempotencyKey`. This executes an immutable saved-draft snapshot even when inactive or unpublished. Read `mogplex_get_automation_run_logs` for terminal status and node errors; fix failures and retest after edits before publishing.
+5. Call `mogplex_publish_automation` to validate, version, and activate the tested draft.
+6. Call `mogplex_trigger_automation` with an automation id, a repo id, and an optional event-shaped input object.
+7. Read progress and diagnostics with `mogplex_list_automation_runs` and `mogplex_get_automation_run_logs`.
+8. To stop a Flow run, call `mogplex_cancel_automation_run` with its `automationId` and job `runId`. This requires `write` scope.
+9. To remove an automation, call `mogplex_delete_automation` with its `automationId`. This requires `write` scope and cannot be undone.
 
 `mogplex_delete_automation` removes the schedule, the draft, every published version, and the per-node run records. Job run rows are kept with no automation attached. An automation with pending or running job runs is refused with a conflict that names them: deleting under a live run would remove the node records and waits that run is still writing to. Cancel those runs with `mogplex_cancel_automation_run`, then delete. Delete only an automation the user asked to remove, or one the agent created as a test and has finished with. Name throwaway automations so they are easy to recognize, and delete them once their run logs have been read.
 
@@ -63,7 +64,15 @@ For a new automation:
 1. Call `mogplex_list_repos`; each repo includes `installation_id`.
 2. Call `mogplex_list_agents`; graph agent nodes accept returned real ids and `preset:*` ids.
 3. Call `mogplex_create_automation`. Without a graph, Mogplex creates a simple Start -> Agent -> End draft using the user's first agent when available.
-4. Supply a complete Flow graph through `mogplex_update_automation`, then publish it.
+4. Supply a complete Flow graph through `mogplex_update_automation`, test the saved draft with `mogplex_test_automation`, inspect completion and node errors, and only then publish it.
+
+### Run once and test before activation
+
+For a one-time future execution, use a schedule Start node with `scheduleRunAt`, an ISO timestamp with an explicit offset (for example `2027-01-15T15:00:00-05:00`). Omit `scheduleCron`. The schema guide includes a complete `oneTimeTask` recipe. Publishing arms a durable delayed dispatch pinned to the published version. Pausing cancels it, republishing replaces it, and dispatching its job makes the automation inactive. Completed jobs remain in run history; a one-time schedule does not repeat annually.
+
+Every trigger type supports draft testing, including schedules, API, webhook, Slack, and GitHub events. Tests do not publish, activate a trigger, change the live version, or consume a scheduled one-time run. They are **real billed executions with configured actions**, including repository writes or notifications, rather than simulations. Use a suitable test repository and destinations. For API triggers, pass declared inputs. For GitHub triggers, pass representative event metadata such as `pr_number` and `head_sha`; webhook and Slack inputs become their respective payload context. Reusing a test key with a changed draft or input fails with a conflict.
+
+Successful draft execution proves that the exercised workflow path ran. It does not prove event delivery or every condition branch: test each relevant branch and separately verify trigger delivery. A queued or running test is not a passing test. Use Full access for draft tests; Automations-only keys remain restricted to approved published API automations.
 
 The graph contract is the same as the Flow editor: `nodes`, `edges`, and a valid optional `viewport`. Create and update reject malformed graphs before touching the draft. Exactly one start and end node and at least one bound agent node are required at publish time.
 

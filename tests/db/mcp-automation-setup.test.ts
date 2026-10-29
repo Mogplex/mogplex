@@ -5,6 +5,8 @@ import { createMogplexMcpPostHandler } from "@/app/api/v1/mogplex/mcp/route";
 import { createAutomationValidateHandler } from "@/app/api/v1/mogplex/automations/validate/route";
 import { createMogplexApiAutomationsPostHandler } from "@/app/api/v1/mogplex/automations/route";
 import { createMogplexApiAutomationPublishPostHandler } from "@/app/api/v1/mogplex/automations/[automationId]/publish/route";
+import { createAutomationTestHandler } from "@/app/api/v1/mogplex/automations/[automationId]/test/route";
+import { createTestMogplexApiAutomation } from "@/lib/mogplex-api/automation-test";
 import { resolveJobContext } from "@/lib/workflows/automation-job-context-resolution";
 import { createAutomationJobTask } from "@/lib/workflows/automation-job-workflow";
 import { buildAutomationHarnessPrompt } from "@/lib/workflows/automation-job-prompts";
@@ -58,6 +60,25 @@ async function verifyScheduledSetup(harness: "claude-code" | "mogplex") {
     const publish = createMogplexApiAutomationPublishPostHandler({
       resolveApiKey: auth,
     });
+    const testDraft = createAutomationTestHandler({
+      resolveApiKey: auth,
+      testAutomation: createTestMogplexApiAutomation({
+        enqueue: async (input) => {
+          const job = (
+            await db.pg.query<{ id: string }>(
+              "insert into job_runs(flow_id,flow_version_id,metadata) values($1,$2,$3) returning id",
+              [
+                input.flowId,
+                input.flowVersionId,
+                JSON.stringify(input.metadata),
+              ]
+            )
+          ).rows[0];
+          return { jobRunId: job.id, outcome: "queued", reason: null };
+        },
+        start: async () => ({ started: true, status: "running" }),
+      }),
+    });
     const client = new MogplexApiClient({
       baseUrl: "https://mogplex.test",
       authorization: "mog_test",
@@ -68,6 +89,12 @@ async function verifyScheduledSetup(harness: "claude-code" | "mogplex") {
         });
         const pathname = new URL(String(url)).pathname;
         if (pathname.endsWith("/validate")) return validate(request);
+        if (pathname.endsWith("/test"))
+          return testDraft(request, {
+            params: Promise.resolve({
+              automationId: pathname.split("/").at(-2)!,
+            }),
+          });
         if (pathname.endsWith("/publish"))
           return publish(request, {
             params: Promise.resolve({
@@ -146,6 +173,27 @@ async function verifyScheduledSetup(harness: "claude-code" | "mogplex") {
     });
     expect(created.isError, JSON.stringify(created)).toBe(false);
     const id = created.structuredContent.automation.id;
+    const tested = await call("mogplex_test_automation", {
+      automationId: id,
+      repoId: REPO_ID,
+    });
+    expect(tested.isError, JSON.stringify(tested)).toBe(false);
+    expect(tested.structuredContent.run).toMatchObject({
+      automationId: id,
+      test: true,
+      started: true,
+    });
+    expect(schedules).toEqual([]);
+    const inactive = (
+      await db.pg.query(
+        "select status,published_version_id from flows where id=$1",
+        [id]
+      )
+    ).rows[0];
+    expect(inactive).toEqual({
+      status: "inactive",
+      published_version_id: null,
+    });
     const published = await call("mogplex_publish_automation", {
       automationId: id,
     });

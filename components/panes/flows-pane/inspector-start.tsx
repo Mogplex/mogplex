@@ -176,6 +176,31 @@ export function StartInspector({
       )}
       {node.data.event === "schedule" && (
         <>
+          <InspectorField label="Repeat">
+            <WorkflowSelect
+              ariaLabel="Repeat"
+              value={node.data.scheduleRunAt !== undefined ? "once" : "recurring"}
+              onValueChange={(value) => updateNodeData(node.id, (data) => ({
+                ...data,
+                scheduleRunAt: value === "once" ? "" : undefined,
+                scheduleCron: value === "once" ? undefined : "0 9 * * 1-5",
+                scheduleTimezone: "UTC",
+              }))}
+              options={[{ value: "once", label: "Run once" }, { value: "recurring", label: "Recurring" }]}
+            />
+          </InspectorField>
+          {node.data.scheduleRunAt !== undefined ? (
+            <InspectorField label="Run at">
+              <Input
+                data-testid="flow-trigger-run-at"
+                aria-label="Run at"
+                value={node.data.scheduleRunAt}
+                onChange={(event) => updateNodeData(node.id, (data) => ({ ...data, scheduleRunAt: event.target.value }), { mergeKey: `start-run-at-${node.id}` })}
+                placeholder="2027-01-15T15:00:00-05:00"
+              />
+              <p className="mt-2 text-[11px] text-muted-foreground">Include the date, time, and timezone offset. Runs once after publishing.</p>
+            </InspectorField>
+          ) : (<>
           <InspectorField label="Cron schedule">
             <Input
               data-testid="flow-trigger-schedule-cron"
@@ -213,6 +238,7 @@ export function StartInspector({
           <InspectorCallout variant="hint" icon={<Clock />}>
             Five-field cron, evaluated by Trigger.dev in the selected timezone.
           </InspectorCallout>
+          </>)}
         </>
       )}
       {node.data.event === "webhook" && (

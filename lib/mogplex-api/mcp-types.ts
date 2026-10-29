@@ -86,6 +86,7 @@ export type MogplexMcpClient = Pick<
   | "setAutomationModel"
   | "startAgentRun"
   | "triggerAutomation"
+  | "testAutomation"
   | "updateAutomation"
   | "validateAutomation"
   | "upsertRepoEnvVar"

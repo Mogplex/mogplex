@@ -103,6 +103,9 @@ export type FlowStartNodeData = {
   // selected IANA timezone and passes the scheduled timestamp into the flow.
   scheduleCron?: string;
   scheduleTimezone?: string;
+  // Mutually exclusive with scheduleCron. An ISO timestamp with an explicit
+  // UTC offset schedules a single durable execution.
+  scheduleRunAt?: string;
   // `slack_mention` event only. Both values identify one connected workspace
   // channel; channelName is display-only and may be absent on older drafts.
   slackTeamId?: string;
@@ -363,6 +366,7 @@ export type Flow = {
   created_at: string;
   updated_at: string;
   trigger_schedule_id?: string | null;
+  trigger_once_run_id?: string | null;
   webhook_configured?: boolean;
   published_version?: FlowVersion | null;
 } & Partial<JobRunSummary>;
