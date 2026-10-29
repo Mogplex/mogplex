@@ -1,8 +1,16 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { buildE2EAuthHeaders } from "./helpers/auth";
 import { connectedUser, fulfillJson } from "./helpers/flows-pane-runs-fixtures";
 
 test("recent runs open a detailed observability dialog", async ({ page }) => {
+  await checkRunDialog(page, false);
+});
+
+test("draft snapshots are identified in the run dialog", async ({ page }) => {
+  await checkRunDialog(page, true);
+});
+
+async function checkRunDialog(page: Page, draftTest: boolean) {
   await page.route("**/api/realtime/events?*", (route) =>
     route.fulfill({ status: 204 })
   );
@@ -198,6 +206,8 @@ test("recent runs open a detailed observability dialog", async ({ page }) => {
     metadata: {
       ...runSummary.metadata,
       flow_version_number: 1,
+      automation_test: draftTest,
+      flow_version_is_test: draftTest,
       working_branch: "mogplex/automation-0123456789abcdef",
       input: { slug: "acme-plumbing" },
       trigger: {
@@ -327,7 +337,10 @@ test("recent runs open a detailed observability dialog", async ({ page }) => {
     fulfillJson(route, { user: connectedUser })
   );
   await page.route("**/api/settings", (route) =>
-    fulfillJson(route, { default_model: "minimax/minimax-m2.5", theme: "dark" })
+    fulfillJson(route, {
+      default_model: "minimax/minimax-m2.5",
+      theme: "dark",
+    })
   );
   await page.route("**/api/models", (route) =>
     fulfillJson(route, {
@@ -438,6 +451,11 @@ test("recent runs open a detailed observability dialog", async ({ page }) => {
   );
   await expect(dialog.getByText("v1", { exact: true })).toBeVisible();
   await expect(
+    dialog.getByText(draftTest ? "Draft test snapshot" : "Automation version", {
+      exact: true,
+    })
+  ).toBeVisible();
+  await expect(
     dialog.getByText("Integration · Webrenew agent", { exact: true })
   ).toBeVisible();
   await expect(
@@ -479,4 +497,4 @@ test("recent runs open a detailed observability dialog", async ({ page }) => {
   await expect(dialog.getByText("postComment")).toBeVisible();
   await dialog.getByText("Call events").click();
   await expect(dialog.getByText("Agent finished")).toBeVisible();
-});
+}

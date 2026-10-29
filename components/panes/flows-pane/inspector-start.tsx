@@ -4,7 +4,7 @@ import { DEPENDABOT_ALERT_ACTIONS, normalizeDependabotAlertActions } from "@/lib
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
-import { Bell, Clock, Copy, InfoCircle, WarningTriangle } from "iconoir-react"
+import { Bell, Copy, InfoCircle, WarningTriangle } from "iconoir-react"
 import type { Flow, FlowNode, TriggerEvent } from "@/lib/types"
 import type { FlowCanvasNode } from "@/lib/flows/editor"
 import { SINGLE_INSTALLATION_TRIGGER_EVENTS } from "@/lib/flows/trigger-accounts"
@@ -13,12 +13,12 @@ import { EVENT_OPTIONS } from "./constants"
 import type { Installation, SlackChannel, SlackInstallation } from "./types"
 import {
   WorkflowSelect,
-  WorkflowCombobox,
   InspectorField,
   InspectorCallout,
 } from "./inspector-shared"
 import { StartFilterFields, ExternalTriggerTestPanel } from "./start-filter-fields"
 import { ApiTriggerFields } from "./inspector-start-api"
+import { StartScheduleFields } from "./inspector-start-schedule"
 
 type StartNodeData = Extract<FlowNode, { type: "start" }>["data"]
 
@@ -175,71 +175,7 @@ export function StartInspector({
         </InspectorField>
       )}
       {node.data.event === "schedule" && (
-        <>
-          <InspectorField label="Repeat">
-            <WorkflowSelect
-              ariaLabel="Repeat"
-              value={node.data.scheduleRunAt !== undefined ? "once" : "recurring"}
-              onValueChange={(value) => updateNodeData(node.id, (data) => ({
-                ...data,
-                scheduleRunAt: value === "once" ? "" : undefined,
-                scheduleCron: value === "once" ? undefined : "0 9 * * 1-5",
-                scheduleTimezone: "UTC",
-              }))}
-              options={[{ value: "once", label: "Run once" }, { value: "recurring", label: "Recurring" }]}
-            />
-          </InspectorField>
-          {node.data.scheduleRunAt !== undefined ? (
-            <InspectorField label="Run at">
-              <Input
-                data-testid="flow-trigger-run-at"
-                aria-label="Run at"
-                value={node.data.scheduleRunAt}
-                onChange={(event) => updateNodeData(node.id, (data) => ({ ...data, scheduleRunAt: event.target.value }), { mergeKey: `start-run-at-${node.id}` })}
-                placeholder="2027-01-15T15:00:00-05:00"
-              />
-              <p className="mt-2 text-[11px] text-muted-foreground">Include the date, time, and timezone offset. Runs once after publishing.</p>
-            </InspectorField>
-          ) : (<>
-          <InspectorField label="Cron schedule">
-            <Input
-              data-testid="flow-trigger-schedule-cron"
-              value={node.data.scheduleCron ?? ""}
-              onChange={(event) => updateNodeData(node.id, (data) => ({
-                ...data,
-                scheduleCron: event.target.value,
-              }), { mergeKey: `start-schedule-cron-${node.id}` })}
-              placeholder="0 9 * * 1-5"
-              className="font-mono"
-            />
-          </InspectorField>
-          <InspectorField label="Timezone">
-            <WorkflowCombobox
-              testId="flow-trigger-schedule-timezone"
-              ariaLabel="Timezone"
-              value={node.data.scheduleTimezone ?? "UTC"}
-              onValueChange={(value) => updateNodeData(node.id, (data) => ({
-                ...data,
-                scheduleTimezone: value,
-              }), { mergeKey: `start-schedule-timezone-${node.id}` })}
-              placeholder="America/New_York"
-              options={[
-                { value: "UTC", label: "UTC" },
-                { value: "America/New_York", label: "America/New_York" },
-                { value: "America/Chicago", label: "America/Chicago" },
-                { value: "America/Denver", label: "America/Denver" },
-                { value: "America/Los_Angeles", label: "America/Los_Angeles" },
-                { value: "Europe/London", label: "Europe/London" },
-                { value: "Europe/Berlin", label: "Europe/Berlin" },
-                { value: "Asia/Tokyo", label: "Asia/Tokyo" },
-              ]}
-            />
-          </InspectorField>
-          <InspectorCallout variant="hint" icon={<Clock />}>
-            Five-field cron, evaluated by Trigger.dev in the selected timezone.
-          </InspectorCallout>
-          </>)}
-        </>
+        <StartScheduleFields key={`${selectedFlow.id}:${node.id}`} node={node} updateNodeData={updateNodeData} />
       )}
       {node.data.event === "webhook" && (
         <>

@@ -27,6 +27,7 @@ export type FlowVersionRow = {
   id: string;
   flow_id: string;
   version_number: number;
+  is_test?: boolean;
   graph: unknown;
   created_at: string;
 };

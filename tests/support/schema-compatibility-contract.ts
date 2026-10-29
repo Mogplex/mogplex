@@ -13,6 +13,7 @@ import {
   claimPendingJob,
   recordStartAttempt,
 } from "@/lib/workflows/automation-job-persistence";
+import { checkRetainedFlowVersions } from "./schema-compatibility-flow-versions";
 
 const BEFORE_USER = "00000000-0000-4000-8000-000000000001";
 const AFTER_USER = "00000000-0000-4000-8000-000000000002";
@@ -289,6 +290,7 @@ export async function checkSchemaCompatibility(
     draft_graph: { nodes: [], edges: [] },
   });
   assert.equal(recurring.error, null, JSON.stringify(recurring.error));
+  await checkRetainedFlowVersions(client, phase, userId);
   const team = await client
     .from("teams")
     .insert({

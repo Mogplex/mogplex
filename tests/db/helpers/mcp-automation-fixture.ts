@@ -62,6 +62,15 @@ export async function createAutomationDb() {
       "utf8"
     )
   );
+  await pg.exec(
+    await readFile(
+      new URL(
+        "../../../neon/migrations/20261029110000_flow_version_test_snapshots.sql",
+        import.meta.url
+      ),
+      "utf8"
+    )
+  );
   const previousFrom = Object.getOwnPropertyDescriptor(supabaseAdmin, "from");
   const previousRpc = Object.getOwnPropertyDescriptor(supabaseAdmin, "rpc");
   const statements: string[] = [];

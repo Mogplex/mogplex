@@ -252,6 +252,12 @@ export function createTriggerMogplexApiAutomation(
       flow_id: flow.id,
       flow_version_id: version.id,
       flow_version_number: version.version_number,
+      ...(executionMode === "test"
+        ? {
+            flow_version_is_test:
+              "is_test" in version && version.is_test === true,
+          }
+        : {}),
       repo_id: repo.id,
       repo_full_name: repo.full_name,
       installation_id: repo.github_installation_id,

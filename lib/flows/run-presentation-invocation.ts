@@ -5,6 +5,7 @@ import { isRecord } from "./run-presentation-parsing";
 
 export type RunInvocation = {
   versionNumber: number | null;
+  isDraftTest: boolean;
   triggeredBy: string | null;
   input: string | null;
   workingBranch: string | null;
@@ -64,7 +65,7 @@ function buildRunLinks(
 }
 
 /**
- * Who started an automation run and with what: the published version, the
+ * Who started an automation run and with what: the immutable snapshot, the
  * credential, the accepted input snapshot and the branch it works on, plus
  * where to inspect its transcript and sandbox.
  */
@@ -74,6 +75,7 @@ export function getRunInvocation(
 ): RunInvocation {
   const metadata = isRecord(run.metadata) ? run.metadata : {};
   return {
+    isDraftTest: metadata.flow_version_is_test === true,
     versionNumber:
       typeof metadata.flow_version_number === "number"
         ? metadata.flow_version_number

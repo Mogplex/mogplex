@@ -10,6 +10,16 @@ export type WorkflowOncePayload = {
   runAt: string;
 };
 
+export const WORKFLOW_ONCE_RETRY = {
+  // A due dispatch may race the publisher that is still persisting its handle.
+  // Provider-managed backoff leaves several minutes for that lock to release.
+  maxAttempts: 10,
+  minTimeoutInMs: 5000,
+  maxTimeoutInMs: 30000,
+  factor: 2,
+  randomize: true,
+};
+
 export async function runWorkflowOnce(
   payload: WorkflowOncePayload,
   runtimeRunId: string,
@@ -48,7 +58,7 @@ export async function runWorkflowOnce(
 export const workflowOnceTask = task({
   id: TRIGGER_TASK_IDS.workflowOnce,
   maxDuration: 60,
-  retry: { maxAttempts: 3 },
+  retry: WORKFLOW_ONCE_RETRY,
   run: (payload: WorkflowOncePayload, { ctx }) =>
     runWorkflowOnce(payload, ctx.run.id),
   onFailure: async ({ payload, ctx }) =>

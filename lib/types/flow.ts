@@ -348,6 +348,7 @@ export type FlowVersion = {
   id: string;
   flow_id: string;
   version_number: number;
+  is_test?: boolean;
   graph: FlowGraph;
   created_at: string;
 };
