@@ -26,6 +26,7 @@ audience; new MCP credentials must target the configured MCP resource.
 
 New connections use a signed consent request and PKCE. Hosted refreshes retain
 their existing long lifetime; CLI issuance retains the 30-day inactivity window.
+The existing global auth-rate policy governs the OAuth endpoints.
 No resource rows are seeded by importing auth during an environment-free build.
 
 ## Release and compatibility

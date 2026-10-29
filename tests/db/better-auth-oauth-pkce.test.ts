@@ -13,6 +13,7 @@ import {
   existingBrowserSession,
   migrateAuth,
   oldAuthDatabase,
+  refreshRequest,
 } from "./helpers/better-auth-oauth-fixture";
 
 let db: PGlite;
@@ -50,6 +51,45 @@ afterEach(async () => {
 });
 
 describe("cached and fresh MCP authorization", () => {
+  it("preserves the existing auth-rate policy when several MCP clients register", async () => {
+    const { request } = authForDatabase(db, {
+      enabled: true,
+      storage: "memory",
+      window: 10,
+      max: 100,
+    });
+    for (let index = 0; index < 6; index++) {
+      const response = await request(
+        new Request("http://localhost:3000/api/auth/mcp/register", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-forwarded-for": "198.51.100.42",
+          },
+          body: JSON.stringify({
+            client_name: `MCP client ${index}`,
+            redirect_uris: ["https://client.example/callback"],
+            token_endpoint_auth_method: "none",
+          }),
+        })
+      );
+      expect(response.status).toBe(201);
+    }
+  });
+
+  it("preserves the existing auth-rate policy during a burst of refresh retries", async () => {
+    const { request } = authForDatabase(db, {
+      enabled: true,
+      storage: "memory",
+      window: 10,
+      max: 100,
+    });
+    for (let index = 0; index < 21; index++) {
+      const retry = refreshRequest();
+      retry.headers.set("x-forwarded-for", "198.51.100.43");
+      expect((await request(retry)).status).toBe(200);
+    }
+  });
   it("retains login context and requires explicit consent before issuing a code", async () => {
     const { request } = authForDatabase(db);
     const loggedOut = await request(authorize({}, false));

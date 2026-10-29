@@ -7,7 +7,7 @@ import {
   type PostgresCursor,
   type PostgresQueryResult,
 } from "kysely";
-import { betterAuth } from "better-auth";
+import { betterAuth, type BetterAuthOptions } from "better-auth";
 import { auth } from "@/lib/better-auth/server";
 import { rewriteLegacyMcpRequest } from "@/lib/better-auth/mcp-request-compatibility";
 import { legacyClientSecretMethod } from "@/lib/better-auth/mcp-client-auth-compatibility";
@@ -159,9 +159,13 @@ export async function migrateAuth(db: PGlite) {
   await db.exec("set role service_role");
 }
 
-export function authForDatabase(db: PGlite) {
+export function authForDatabase(
+  db: PGlite,
+  rateLimit?: BetterAuthOptions["rateLimit"]
+) {
   const instance = betterAuth({
     ...auth.options,
+    ...(rateLimit ? { rateLimit } : {}),
     secret: AUTH_SECRET,
     advanced: {
       ...auth.options.advanced,

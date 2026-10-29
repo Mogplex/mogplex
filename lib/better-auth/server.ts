@@ -126,6 +126,15 @@ const provider = oauthProvider({
   clientRegistrationRequirePKCE: true,
   allowDynamicClientRegistration: true,
   allowUnauthenticatedClientRegistration: true,
+  // Keep the existing Better Auth global policy across the endpoint migration.
+  rateLimit: {
+    token: false,
+    authorize: false,
+    introspect: false,
+    revoke: false,
+    register: false,
+    userinfo: false,
+  },
   // Preserve hosted-client continuity; CLI issuance is clamped separately.
   refreshTokenExpiresIn: 100 * 365 * 24 * 60 * 60,
   schema: {
