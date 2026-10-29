@@ -34,6 +34,9 @@ test("switching Repeat preserves the schedule and timestamp and validates the of
   await repeat.click();
   await page.getByRole("option", { name: "Run once", exact: true }).click();
   const runAt = page.getByTestId("flow-trigger-run-at");
+  await runAt.focus();
+  await page.keyboard.press("Tab");
+  await expect(runAt).toHaveAttribute("aria-invalid", "true");
   await runAt.fill("2027-01-16T16:00:00-05:00");
   await repeat.click();
   await page.getByRole("option", { name: "Recurring", exact: true }).click();
@@ -47,6 +50,7 @@ test("switching Repeat preserves the schedule and timestamp and validates the of
   await page.getByRole("option", { name: "Run once", exact: true }).click();
   await expect(runAt).toHaveValue("2027-01-16T16:00:00-05:00");
   await runAt.fill("2027-01-16T16:00:00");
+  await page.keyboard.press("Tab");
   await expect(runAt).toHaveAttribute("aria-invalid", "true");
   await expect(
     page.getByRole("alert").filter({ hasText: "explicit timezone offset" })

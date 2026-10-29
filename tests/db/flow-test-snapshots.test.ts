@@ -37,9 +37,11 @@ it("draft snapshots remain distinct from publication and never become repair can
     ).rows[0].id;
     const graph = coerceGraph({ nodes: [], edges: [] });
     const published = await saveFlowVersion(id, graph);
-    const draft = await saveFlowVersion(id, graph, true);
+    const draft = await saveFlowVersion(id, graph, { isTest: true });
     expect(draft.id).not.toBe(published.id);
-    expect((await saveFlowVersion(id, graph, true)).id).toBe(draft.id);
+    expect((await saveFlowVersion(id, graph, { isTest: true })).id).toBe(
+      draft.id
+    );
     expect(
       (
         await db.pg.query("select is_test from flow_versions where id=$1", [

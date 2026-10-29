@@ -82,7 +82,7 @@ export function createTestMogplexApiAutomation(
           "INVALID_INPUT",
           validation.errors.join(" ")
         );
-      const version = await saveFlowVersion(flow.id, graph, true);
+      const version = await saveFlowVersion(flow.id, graph, { isTest: true });
       const trigger = createTriggerMogplexApiAutomation(
         {
           ...overrides,

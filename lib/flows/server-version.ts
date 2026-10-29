@@ -8,8 +8,9 @@ import { coerceGraph } from "./graph";
 export async function saveFlowVersion(
   flowId: string,
   graph: FlowGraph,
-  isTest = false
+  options: { isTest?: boolean } = {}
 ) {
+  const isTest = options.isTest === true;
   const { data: latest, error: latestError } = await supabaseAdmin
     .from("flow_versions")
     .select("*")

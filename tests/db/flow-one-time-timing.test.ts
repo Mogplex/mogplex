@@ -63,38 +63,44 @@ async function setup(advanceOnCancel = false) {
   return { db, graph, flow, requests: () => requests, delays };
 }
 
-it("rejects an already-past publish before changing its live version or trigger", async () => {
-  const f = await setup();
-  try {
-    const before = (
-      await f.db.pg.query(
-        "select status,published_version_id,trigger_once_run_id from flows where id=$1",
-        [f.flow.id]
-      )
-    ).rows[0];
-    f.graph.nodes.find((node) => node.type === "start")!.data.scheduleRunAt =
-      "2027-01-14T00:00:00Z";
-    await f.db.pg.query("update flows set draft_graph=$2 where id=$1", [
-      f.flow.id,
-      JSON.stringify(f.graph),
-    ]);
-    const requests = f.requests();
-    await expect(
-      publishMogplexApiAutomation("owner", f.flow.id)
-    ).rejects.toMatchObject({ code: "FLOW_GRAPH_INVALID" });
-    expect(
-      (
+it.each(["2027-01-14T00:00:00Z", ""])(
+  "rejects invalid one-time timestamp %j before changing its live version or trigger",
+  async (runAt) => {
+    const f = await setup();
+    try {
+      const before = (
         await f.db.pg.query(
           "select status,published_version_id,trigger_once_run_id from flows where id=$1",
           [f.flow.id]
         )
-      ).rows[0]
-    ).toEqual(before);
-    expect(f.requests()).toBe(requests);
-  } finally {
-    await f.db.close();
+      ).rows[0];
+      f.graph.nodes.find((node) => node.type === "start")!.data.scheduleRunAt =
+        runAt;
+      await f.db.pg.query("update flows set draft_graph=$2 where id=$1", [
+        f.flow.id,
+        JSON.stringify(f.graph),
+      ]);
+      const requests = f.requests();
+      await expect(
+        publishMogplexApiAutomation("owner", f.flow.id)
+      ).rejects.toMatchObject({
+        code: "FLOW_GRAPH_INVALID",
+        message: expect.stringContaining("Run once"),
+      });
+      expect(
+        (
+          await f.db.pg.query(
+            "select status,published_version_id,trigger_once_run_id from flows where id=$1",
+            [f.flow.id]
+          )
+        ).rows[0]
+      ).toEqual(before);
+      expect(f.requests()).toBe(requests);
+    } finally {
+      await f.db.close();
+    }
   }
-});
+);
 
 it("a valid timestamp becoming due during trigger replacement still arms its dispatch", async () => {
   const f = await setup(true);

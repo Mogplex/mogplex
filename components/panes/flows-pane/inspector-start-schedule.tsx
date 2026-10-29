@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef } from "react"
+import { useRef, useState } from "react"
 import { Clock } from "iconoir-react"
 import { Input } from "@/components/ui/input"
 import { isValidRunAt } from "@/lib/flows/one-time-config"
@@ -13,8 +13,10 @@ export function StartScheduleFields({ node, updateNodeData }: Pick<StartInspecto
     timezone: node.data.scheduleTimezone ?? "UTC",
     runAt: node.data.scheduleRunAt ?? "",
   })
-  const runAt = node.data.scheduleRunAt
-  const error = runAt && !isValidRunAt(runAt)
+  const [touched, setTouched] = useState(false)
+  const isOnce = node.data.scheduleRunAt !== undefined
+  const runAt = node.data.scheduleRunAt ?? ""
+  const error = isOnce && touched && !isValidRunAt(runAt)
     ? "Enter a valid date and time with an explicit timezone offset."
     : null
   const hintId = `run-at-hint-${node.id}`
@@ -25,25 +27,26 @@ export function StartScheduleFields({ node, updateNodeData }: Pick<StartInspecto
       <InspectorField label="Repeat">
         <WorkflowSelect
           ariaLabel="Repeat"
-          value={runAt !== undefined ? "once" : "recurring"}
-          onValueChange={(value) => updateNodeData(node.id, (data) => {
-            if (data.scheduleRunAt !== undefined) {
-              previous.current.runAt = String(data.scheduleRunAt)
+          value={isOnce ? "once" : "recurring"}
+          onValueChange={(value) => {
+            if (isOnce) {
+              previous.current.runAt = runAt
             } else {
-              previous.current.cron = String(data.scheduleCron ?? "0 9 * * 1-5")
-              previous.current.timezone = String(data.scheduleTimezone ?? "UTC")
+              previous.current.cron = node.data.scheduleCron ?? "0 9 * * 1-5"
+              previous.current.timezone = node.data.scheduleTimezone ?? "UTC"
             }
-            return {
-              ...data,
+            const schedule = {
               scheduleRunAt: value === "once" ? previous.current.runAt : undefined,
               scheduleCron: value === "once" ? undefined : previous.current.cron,
               scheduleTimezone: previous.current.timezone,
             }
-          })}
+            setTouched(false)
+            updateNodeData(node.id, (data) => ({ ...data, ...schedule }))
+          }}
           options={[{ value: "once", label: "Run once" }, { value: "recurring", label: "Recurring" }]}
         />
       </InspectorField>
-      {runAt !== undefined ? (
+      {isOnce ? (
         <InspectorField label="Run at">
           <Input
             data-testid="flow-trigger-run-at"
@@ -51,6 +54,7 @@ export function StartScheduleFields({ node, updateNodeData }: Pick<StartInspecto
             aria-invalid={Boolean(error)}
             aria-describedby={error ? `${hintId} ${errorId}` : hintId}
             value={runAt}
+            onBlur={() => setTouched(true)}
             onChange={(event) => updateNodeData(node.id, (data) => ({ ...data, scheduleRunAt: event.target.value }), { mergeKey: `start-run-at-${node.id}` })}
             placeholder="2027-01-15T15:00:00-05:00"
           />
