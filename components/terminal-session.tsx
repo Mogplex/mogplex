@@ -20,12 +20,23 @@ import {
 } from "@/lib/sandbox/ui-state";
 import { MOGPLEX_WTERM_STYLE } from "@/lib/terminal/styles";
 import { describeExecFallback } from "@/lib/terminal/helpers";
+import { createTerminalScrollFollow } from "@/lib/terminal/scroll-follow";
 import {
   DevServerDialog,
   type PendingDevServerConfirmation,
 } from "@/components/terminal/dev-server-dialog";
 
 type WTermInstance = NonNullable<TerminalHandle["instance"]>;
+
+function readTerminalScrollMetrics(element: HTMLElement) {
+  return {
+    scrollTop: element.scrollTop,
+    scrollHeight: element.scrollHeight,
+    clientHeight: element.clientHeight,
+    rowHeight:
+      element.querySelector(".term-row")?.getBoundingClientRect().height || 17,
+  };
+}
 
 export function TerminalSession({ paneId }: { paneId: string }) {
   const binding = useTerminalSessionsStore((state) => state.bindings[paneId]);
@@ -214,7 +225,9 @@ export function TerminalSession({ paneId }: { paneId: string }) {
   );
 
   // Resize handling
-  const shouldStickToBottomRef = useRef(true);
+  const scrollFollowRef = useRef<ReturnType<
+    typeof createTerminalScrollFollow
+  > | null>(null);
   const resizeScrollFrameRef = useRef<number | null>(null);
   const terminalScrollCleanupRef = useRef<(() => void) | null>(null);
 
@@ -226,7 +239,9 @@ export function TerminalSession({ paneId }: { paneId: string }) {
       resizeScrollFrameRef.current = requestAnimationFrame(() => {
         const element = termHandleRef.current?.instance?.element;
         if (element) {
-          element.scrollTop = element.scrollHeight;
+          if (scrollFollowRef.current?.following) {
+            element.scrollTop = element.scrollHeight;
+          }
         }
         resizeScrollFrameRef.current = null;
       });
@@ -237,14 +252,29 @@ export function TerminalSession({ paneId }: { paneId: string }) {
     (terminal: WTermInstance) => {
       terminalScrollCleanupRef.current?.();
       const element = terminal.element;
+      const scrollFollow = createTerminalScrollFollow(
+        readTerminalScrollMetrics(element)
+      );
+      scrollFollowRef.current = scrollFollow;
       const updateStickToBottom = () => {
-        shouldStickToBottomRef.current =
-          element.scrollHeight - element.scrollTop - element.clientHeight < 5;
+        scrollFollow.onScroll(
+          readTerminalScrollMetrics(element),
+          resizeScrollFrameRef.current !== null
+        );
       };
       updateStickToBottom();
       element.addEventListener("scroll", updateStickToBottom, { passive: true });
-      terminalScrollCleanupRef.current = () =>
+      // wterm's async render can restore scrollback after the resize frames
+      // finish. Follow the actual grid growth instead of guessing its timing.
+      const gridObserver = new ResizeObserver(() => {
+        if (scrollFollow.following) element.scrollTop = element.scrollHeight;
+      });
+      const grid = element.querySelector(".term-grid");
+      if (grid) gridObserver.observe(grid);
+      terminalScrollCleanupRef.current = () => {
         element.removeEventListener("scroll", updateStickToBottom);
+        gridObserver.disconnect();
+      };
 
       setReady(true);
       readyRef.current = true;
@@ -296,9 +326,7 @@ export function TerminalSession({ paneId }: { paneId: string }) {
           /* send on closing socket */
         }
       }
-      if (shouldStickToBottomRef.current) {
-        keepTerminalAtBottomAfterResize();
-      }
+      keepTerminalAtBottomAfterResize();
       if (ptyConnectedRef.current) return;
       if (!readyRef.current || bannerShownRef.current) return;
       if (resizeDebounceRef.current) clearTimeout(resizeDebounceRef.current);
