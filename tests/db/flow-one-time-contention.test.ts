@@ -9,6 +9,19 @@ import { createAutomationDb } from "./helpers/mcp-automation-fixture";
 
 afterEach(() => vi.useRealTimers());
 
+it("reserves at least three minutes of provider backoff for activation contention", () => {
+  const minimumBackoff = Array.from(
+    { length: WORKFLOW_ONCE_RETRY.maxAttempts - 1 },
+    (_, attempt) =>
+      Math.min(
+        WORKFLOW_ONCE_RETRY.minTimeoutInMs *
+          WORKFLOW_ONCE_RETRY.factor ** attempt,
+        WORKFLOW_ONCE_RETRY.maxTimeoutInMs
+      )
+  ).reduce((sum, delay) => sum + delay, 0);
+  expect(minimumBackoff).toBeGreaterThanOrEqual(180_000);
+});
+
 it("a due run survives an activation that outlasts the old retry window and queues once", async () => {
   const db = await createAutomationDb();
   vi.useFakeTimers({ toFake: ["Date"] });
@@ -59,8 +72,10 @@ it("a due run survives an activation that outlasts the old retry window and queu
     });
     const payload = { flowId: flow.id, versionId: version.id, runAt };
     let delivered = false;
+    let contentions = 0;
     // Exercise the external scheduler contract with a virtual clock, while
     // lock ownership and dispatch read the real database on every attempt.
+    // Date is frozen, so slow database calls cannot skip the contention path.
     for (
       let attempt = 0;
       attempt < WORKFLOW_ONCE_RETRY.maxAttempts;
@@ -73,6 +88,7 @@ it("a due run survives an activation that outlasts the old retry window and queu
           .started;
         break;
       } catch (error) {
+        contentions++;
         expect(error).toMatchObject({ code: "FLOW_ACTIVATION_IN_PROGRESS" });
         expect(queued).toBe(0);
         const delay = Math.min(
@@ -84,6 +100,7 @@ it("a due run survives an activation that outlasts the old retry window and queu
       }
     }
     expect(delivered).toBe(true);
+    expect(contentions).toBeGreaterThan(0);
     expect(queued).toBe(1);
     expect(
       (await runWorkflowOnce(payload, "run_current", dispatch)).reason

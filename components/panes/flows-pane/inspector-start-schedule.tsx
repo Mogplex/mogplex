@@ -4,18 +4,21 @@ import { useRef, useState } from "react"
 import { Clock } from "iconoir-react"
 import { Input } from "@/components/ui/input"
 import { isValidRunAt } from "@/lib/flows/one-time-config"
+import { DEFAULT_FLOW_SCHEDULE } from "@/lib/flows/schedule-defaults"
 import type { StartInspectorProps } from "./inspector-start"
 import { InspectorCallout, InspectorField, WorkflowCombobox, WorkflowSelect } from "./inspector-shared"
 
 export function StartScheduleFields({ node, updateNodeData }: Pick<StartInspectorProps, "node" | "updateNodeData">) {
   const previous = useRef({
-    cron: node.data.scheduleCron ?? "0 9 * * 1-5",
-    timezone: node.data.scheduleTimezone ?? "UTC",
+    cron: node.data.scheduleCron ?? DEFAULT_FLOW_SCHEDULE.scheduleCron,
+    timezone: node.data.scheduleTimezone ?? DEFAULT_FLOW_SCHEDULE.scheduleTimezone,
     runAt: node.data.scheduleRunAt ?? "",
   })
   const [touched, setTouched] = useState(false)
   const isOnce = node.data.scheduleRunAt !== undefined
   const runAt = node.data.scheduleRunAt ?? ""
+  // Saved schedules can already have fired. Validate their shape here;
+  // publication separately requires a future timestamp before changing state.
   const error = isOnce && touched && !isValidRunAt(runAt)
     ? "Enter a valid date and time with an explicit timezone offset."
     : null
@@ -32,8 +35,8 @@ export function StartScheduleFields({ node, updateNodeData }: Pick<StartInspecto
             if (isOnce) {
               previous.current.runAt = runAt
             } else {
-              previous.current.cron = node.data.scheduleCron ?? "0 9 * * 1-5"
-              previous.current.timezone = node.data.scheduleTimezone ?? "UTC"
+              previous.current.cron = node.data.scheduleCron ?? DEFAULT_FLOW_SCHEDULE.scheduleCron
+              previous.current.timezone = node.data.scheduleTimezone ?? DEFAULT_FLOW_SCHEDULE.scheduleTimezone
             }
             const schedule = {
               scheduleRunAt: value === "once" ? previous.current.runAt : undefined,
@@ -68,7 +71,7 @@ export function StartScheduleFields({ node, updateNodeData }: Pick<StartInspecto
               data-testid="flow-trigger-schedule-cron"
               value={node.data.scheduleCron ?? ""}
               onChange={(event) => updateNodeData(node.id, (data) => ({ ...data, scheduleCron: event.target.value }), { mergeKey: `start-schedule-cron-${node.id}` })}
-              placeholder="0 9 * * 1-5"
+              placeholder={DEFAULT_FLOW_SCHEDULE.scheduleCron}
               className="font-mono"
             />
           </InspectorField>
@@ -76,7 +79,7 @@ export function StartScheduleFields({ node, updateNodeData }: Pick<StartInspecto
             <WorkflowCombobox
               testId="flow-trigger-schedule-timezone"
               ariaLabel="Timezone"
-              value={node.data.scheduleTimezone ?? "UTC"}
+              value={node.data.scheduleTimezone ?? DEFAULT_FLOW_SCHEDULE.scheduleTimezone}
               onValueChange={(value) => updateNodeData(node.id, (data) => ({ ...data, scheduleTimezone: value }), { mergeKey: `start-schedule-timezone-${node.id}` })}
               placeholder="America/New_York"
               options={[
