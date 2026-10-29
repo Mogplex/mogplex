@@ -182,6 +182,16 @@ test("workspace bootstrap shows default panes and pane add/close works", async (
   }
   await expect(terminal).toHaveClass(/has-scrollback/);
 
+  // Arrange the following state explicitly: wterm's input handler aligns
+  // scrollback to whole rows, so typing alone need not reach the exact bottom.
+  // This regression exercises resize while following, then resize after the
+  // user deliberately scrolls away below.
+  await terminal.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+    element.dispatchEvent(new Event("scroll"));
+  });
+  await waitForDeferredTerminalRender();
+
   await page.mouse.move(
     resizeHandleBox.x + resizeHandleBox.width / 2,
     resizeHandleBox.y + resizeHandleBox.height / 2
