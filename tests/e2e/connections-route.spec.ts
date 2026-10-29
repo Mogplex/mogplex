@@ -32,7 +32,9 @@ for (const width of [1920, 768, 390]) {
       name: "Integrations",
       exact: true,
     });
-    await expect(page.getByTestId("settings-preset-neon")).toBeVisible();
+    await expect(
+      page.getByTestId("dashboard-shell").getByTestId("settings-preset-neon")
+    ).toBeVisible();
     await expectFullRouteWidth(page, integrations);
     await page.screenshot({
       path: testInfo.outputPath("connections-width.png"),
@@ -90,7 +92,9 @@ test("Connections has its own navigation destination outside Settings", async ({
     "aria-current",
     "page"
   );
-  await expect(page.getByTestId("settings-preset-neon")).toBeVisible();
+  await expect(
+    page.getByTestId("dashboard-shell").getByTestId("settings-preset-neon")
+  ).toBeVisible();
   await expect(
     page.getByRole("link", { name: "Install to Slack" })
   ).toBeVisible();
@@ -243,7 +247,9 @@ test("Connections keeps service actions visible on a narrow screen", async ({
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(scopedPath("connections"));
-  const card = page.getByTestId("settings-preset-neon");
+  const card = page
+    .getByTestId("dashboard-shell")
+    .getByTestId("settings-preset-neon");
   await expect(card).toBeVisible();
   await card.getByRole("button", { name: "+ Add" }).click();
   await expect(card.getByPlaceholder("Neon API key")).toBeVisible();
