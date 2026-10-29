@@ -317,4 +317,8 @@ test("the workspace composer completes /skill and sends it instead of rejecting 
   await expect(page.getByText("Checklist done.")).toBeVisible();
   expect(sentTexts).toEqual(["/deploy-checklist staging"]);
   await expect(page.getByText(/Unknown command/)).toHaveCount(0);
+  await expect(page.getByTestId("agent-running-indicator")).toHaveCount(0);
+  await expect(
+    page.getByRole("alert").filter({ hasText: "Chat response interrupted." })
+  ).toHaveCount(0);
 });

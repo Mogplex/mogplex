@@ -28,13 +28,18 @@ export const modelId = "minimax/minimax-m2.5";
 
 export function buildUiMessageStreamBody(text: string) {
   return [
+    `data: ${JSON.stringify({ type: "start" })}`,
+    "",
     `data: ${JSON.stringify({ type: "text-start", id: "assistant-1" })}`,
     "",
     `data: ${JSON.stringify({ type: "text-delta", id: "assistant-1", delta: text })}`,
     "",
     `data: ${JSON.stringify({ type: "text-end", id: "assistant-1" })}`,
     "",
+    `data: ${JSON.stringify({ type: "finish", finishReason: "stop" })}`,
+    "",
     "data: [DONE]",
+    "",
     "",
   ].join("\n");
 }
