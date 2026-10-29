@@ -266,7 +266,7 @@ for (const method of ["GET", "PUT", "DELETE"] as const) {
     assert.equal(response.status, 400);
     assert.deepEqual(await response.json(), {
       error: "Invalid team ID.",
-      details: { formErrors: [], fieldErrors: { teamId: ["Invalid uuid"] } },
+      details: { formErrors: [], fieldErrors: { teamId: ["Invalid UUID"] } },
     });
     assert.deepEqual(f.calls, []);
   });

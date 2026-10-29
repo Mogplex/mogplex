@@ -431,7 +431,7 @@ test("Mogplex MCP returns protocol errors for invalid tool arguments", async () 
     id: "bad-args",
     error: {
       code: -32602,
-      message: "repoId: Required",
+      message: "repoId: Invalid input: expected string, received undefined",
     },
   });
 });
