@@ -366,12 +366,24 @@ export class MogplexApiClient {
     );
   }
 
-  triggerAutomation(input: {
+  testAutomation(input: {
     automationId: string;
     repoId: string;
     input?: Record<string, unknown>;
     idempotencyKey: string;
   }) {
+    return this.triggerAutomation(input, "test");
+  }
+
+  triggerAutomation(
+    input: {
+      automationId: string;
+      repoId: string;
+      input?: Record<string, unknown>;
+      idempotencyKey: string;
+    },
+    action: "trigger" | "test" = "trigger"
+  ) {
     const { automationId, idempotencyKey, ...body } = input;
     return this.request<{
       run: {
@@ -384,7 +396,7 @@ export class MogplexApiClient {
         runtime: { provider: string | null; runId: string | null } | null;
       };
     }>(
-      `/api/v1/mogplex/automations/${encodeURIComponent(automationId)}/trigger`,
+      `/api/v1/mogplex/automations/${encodeURIComponent(automationId)}/${action}`,
       { method: "POST", body, idempotencyKey }
     );
   }

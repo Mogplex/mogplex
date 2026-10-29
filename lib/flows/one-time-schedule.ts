@@ -1,0 +1,38 @@
+import { runs, tasks } from "@trigger.dev/sdk/v3";
+import { supabaseAdmin } from "@/lib/supabase/admin";
+import { TRIGGER_TASK_IDS } from "@/lib/trigger/task-ids";
+import { assertFutureRunAt } from "./one-time-config";
+
+export async function cancelOneTimeSchedule(runId: string | null | undefined) {
+  if (runId) await runs.cancel(runId);
+}
+
+export async function armOneTimeSchedule(input: {
+  flowId: string;
+  userId: string;
+  versionId: string;
+  runAt: string;
+  previousRunId?: string | null;
+}) {
+  assertFutureRunAt(input.runAt);
+  await cancelOneTimeSchedule(input.previousRunId);
+  const handle = await tasks.trigger(
+    TRIGGER_TASK_IDS.workflowOnce,
+    {
+      flowId: input.flowId,
+      versionId: input.versionId,
+      runAt: new Date(input.runAt).toISOString(),
+    },
+    { delay: new Date(input.runAt) }
+  );
+  const { error } = await supabaseAdmin
+    .from("flows")
+    .update({ trigger_once_run_id: handle.id })
+    .eq("id", input.flowId)
+    .eq("user_id", input.userId);
+  if (error) {
+    await cancelOneTimeSchedule(handle.id);
+    throw new Error("Could not save the one-time schedule.");
+  }
+  return handle.id;
+}

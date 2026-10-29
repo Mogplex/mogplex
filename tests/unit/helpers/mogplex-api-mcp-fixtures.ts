@@ -152,6 +152,17 @@ export function buildFakeMcpClient(
       name: automation.name,
     }),
     setAutomationModel: async () => ({ automation }),
+    testAutomation: async () => ({
+      run: {
+        automationId: automation.id,
+        jobRunId: "test-run",
+        outcome: "queued",
+        reason: null,
+        started: true,
+        status: "running",
+        runtime: null,
+      },
+    }),
     triggerAutomation: async () => ({
       run: {
         automationId: automation.id,

@@ -18,6 +18,9 @@ import {
   defaultFlowPresetAgentResolverDeps,
   resolveFlowGraphPresetAgents,
 } from "./server-preset-agents";
+import { saveFlowVersion } from "./server-version";
+import { armOneTimeSchedule, cancelOneTimeSchedule } from "./one-time-schedule";
+import { assertFutureRunAt } from "./one-time-config";
 
 export async function publishFlowDraft(
   userId: string,
@@ -82,6 +85,16 @@ export async function publishFlowDraft(
       "Flow start configuration is missing."
     );
   }
+  if (startConfig.scheduleRunAt) {
+    try {
+      assertFutureRunAt(startConfig.scheduleRunAt);
+    } catch {
+      throw new FlowServiceError(
+        "FLOW_GRAPH_INVALID",
+        "Run once must be scheduled in the future."
+      );
+    }
+  }
   if (
     startConfig.event === "webhook" &&
     !(flow as Flow & { webhook_configured?: boolean }).webhook_configured
@@ -130,129 +143,64 @@ export async function publishFlowDraft(
     }
   }
 
-  const { data: latestVersion, error: latestVersionError } = await supabaseAdmin
-    .from("flow_versions")
-    .select("version_number")
-    .eq("flow_id", flow.id)
-    .order("version_number", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  return runWithFlowActivationLock(flowId, async () => {
+    const storedFlow = await loadOwnedFlow(userId, flowId);
+    if (!storedFlow)
+      throw new FlowServiceError("FLOW_NOT_FOUND", "Flow not found");
+    const version = await saveFlowVersion(flow.id, graph);
 
-  if (latestVersionError) {
-    throw new FlowServiceError(
-      "FLOW_PUBLISH_SYNC_FAILED",
-      `Failed to compute next flow version: ${latestVersionError.message}`,
-      {
-        cause: latestVersionError,
-      }
-    );
-  }
-
-  const versionNumber = (latestVersion?.version_number ?? 0) + 1;
-
-  const { data: version, error: versionError } = await supabaseAdmin
-    .from("flow_versions")
-    .insert({
-      flow_id: flow.id,
-      version_number: versionNumber,
-      graph,
-    })
-    .select("*")
-    .single();
-
-  if (versionError) {
-    throw new FlowServiceError(
-      "FLOW_PUBLISH_SYNC_FAILED",
-      `Failed to publish flow: ${versionError.message}`,
-      {
-        cause: versionError,
-      }
-    );
-  }
-
-  const { error: flowError } = await supabaseAdmin
-    .from("flows")
-    .update({
-      installation_id: publishedInstallationId,
-      published_version_id: version.id,
-      draft_graph: graph,
-      status: "active",
-      source_kind: flowTriggerSourceKind(startConfig.event),
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", flow.id)
-    .eq("user_id", userId);
-
-  if (flowError) {
-    throw new FlowServiceError(
-      "FLOW_PUBLISH_SYNC_FAILED",
-      `Failed to save published flow version: ${flowError.message}`,
-      {
-        cause: flowError,
-      }
-    );
-  }
-
-  const storedFlow = flow as Flow & { trigger_schedule_id?: string | null };
-  if (startConfig.event === "schedule") {
-    let scheduleId: string | null = storedFlow.trigger_schedule_id ?? null;
-    try {
-      scheduleId = await upsertFlowSchedule(
-        flow.id,
-        {
-          cron: startConfig.scheduleCron ?? "",
-          timezone: startConfig.scheduleTimezone ?? "UTC",
-        },
-        scheduleId
-      );
-      await activateFlowSchedule(scheduleId);
-      if (scheduleId !== (storedFlow.trigger_schedule_id ?? null)) {
-        const { error: scheduleStoreError } = await supabaseAdmin
-          .from("flows")
-          .update({ trigger_schedule_id: scheduleId })
-          .eq("id", flow.id)
-          .eq("user_id", userId);
-        if (scheduleStoreError) {
-          await deleteFlowSchedule(scheduleId).catch(() => undefined);
-          throw scheduleStoreError;
-        }
-      }
-    } catch (error) {
-      if (scheduleId) {
-        await deactivateFlowSchedule(scheduleId).catch(() => undefined);
-      }
-      await supabaseAdmin
-        .from("flows")
-        .update({ status: "inactive" })
-        .eq("id", flow.id)
-        .eq("user_id", userId);
-      throw new FlowServiceError(
-        "FLOW_PUBLISH_SYNC_FAILED",
-        "The workflow was published but its schedule could not be activated.",
-        { cause: error }
-      );
-    }
-  } else if (storedFlow.trigger_schedule_id) {
-    try {
-      await deleteFlowSchedule(storedFlow.trigger_schedule_id);
-    } catch (error) {
-      await supabaseAdmin
-        .from("flows")
-        .update({ status: "inactive" })
-        .eq("id", flow.id)
-        .eq("user_id", userId);
-      throw new FlowServiceError(
-        "FLOW_PUBLISH_SYNC_FAILED",
-        "The workflow was published but its obsolete schedule could not be removed.",
-        { cause: error }
-      );
-    }
-    const { error: scheduleClearError } = await supabaseAdmin
+    const { error: flowError } = await supabaseAdmin
       .from("flows")
-      .update({ trigger_schedule_id: null })
+      .update({
+        installation_id: publishedInstallationId,
+        published_version_id: version.id,
+        draft_graph: graph,
+        status: "active",
+        source_kind: flowTriggerSourceKind(startConfig.event),
+        updated_at: new Date().toISOString(),
+      })
       .eq("id", flow.id)
       .eq("user_id", userId);
-    if (scheduleClearError) {
+
+    if (flowError) {
+      throw new FlowServiceError(
+        "FLOW_PUBLISH_SYNC_FAILED",
+        `Failed to save published flow version: ${flowError.message}`,
+        {
+          cause: flowError,
+        }
+      );
+    }
+
+    try {
+      await cancelOneTimeSchedule(storedFlow.trigger_once_run_id);
+      if (storedFlow.trigger_once_run_id) {
+        const { error } = await supabaseAdmin
+          .from("flows")
+          .update({ trigger_once_run_id: null })
+          .eq("id", flow.id)
+          .eq("user_id", userId);
+        if (error) throw error;
+      }
+      if (startConfig.scheduleRunAt) {
+        if (storedFlow.trigger_schedule_id) {
+          await deleteFlowSchedule(storedFlow.trigger_schedule_id);
+          const { error } = await supabaseAdmin
+            .from("flows")
+            .update({ trigger_schedule_id: null })
+            .eq("id", flow.id)
+            .eq("user_id", userId);
+          if (error) throw error;
+        }
+        await armOneTimeSchedule({
+          flowId: flow.id,
+          userId,
+          versionId: version.id,
+          runAt: startConfig.scheduleRunAt,
+        });
+        return loadOwnedFlow(userId, flowId);
+      }
+    } catch (error) {
       await supabaseAdmin
         .from("flows")
         .update({ status: "inactive" })
@@ -260,13 +208,84 @@ export async function publishFlowDraft(
         .eq("user_id", userId);
       throw new FlowServiceError(
         "FLOW_PUBLISH_SYNC_FAILED",
-        `The obsolete schedule was removed but its reference could not be cleared: ${scheduleClearError.message}`,
-        { cause: scheduleClearError }
+        "Could not update the one-time schedule. The workflow is inactive.",
+        { cause: error }
       );
     }
-  }
+    if (startConfig.event === "schedule") {
+      let scheduleId: string | null = storedFlow.trigger_schedule_id ?? null;
+      try {
+        scheduleId = await upsertFlowSchedule(
+          flow.id,
+          {
+            cron: startConfig.scheduleCron ?? "",
+            timezone: startConfig.scheduleTimezone ?? "UTC",
+          },
+          scheduleId
+        );
+        await activateFlowSchedule(scheduleId);
+        if (scheduleId !== (storedFlow.trigger_schedule_id ?? null)) {
+          const { error: scheduleStoreError } = await supabaseAdmin
+            .from("flows")
+            .update({ trigger_schedule_id: scheduleId })
+            .eq("id", flow.id)
+            .eq("user_id", userId);
+          if (scheduleStoreError) {
+            await deleteFlowSchedule(scheduleId).catch(() => undefined);
+            throw scheduleStoreError;
+          }
+        }
+      } catch (error) {
+        if (scheduleId) {
+          await deactivateFlowSchedule(scheduleId).catch(() => undefined);
+        }
+        await supabaseAdmin
+          .from("flows")
+          .update({ status: "inactive" })
+          .eq("id", flow.id)
+          .eq("user_id", userId);
+        throw new FlowServiceError(
+          "FLOW_PUBLISH_SYNC_FAILED",
+          "The workflow was published but its schedule could not be activated.",
+          { cause: error }
+        );
+      }
+    } else if (storedFlow.trigger_schedule_id) {
+      try {
+        await deleteFlowSchedule(storedFlow.trigger_schedule_id);
+      } catch (error) {
+        await supabaseAdmin
+          .from("flows")
+          .update({ status: "inactive" })
+          .eq("id", flow.id)
+          .eq("user_id", userId);
+        throw new FlowServiceError(
+          "FLOW_PUBLISH_SYNC_FAILED",
+          "The workflow was published but its obsolete schedule could not be removed.",
+          { cause: error }
+        );
+      }
+      const { error: scheduleClearError } = await supabaseAdmin
+        .from("flows")
+        .update({ trigger_schedule_id: null })
+        .eq("id", flow.id)
+        .eq("user_id", userId);
+      if (scheduleClearError) {
+        await supabaseAdmin
+          .from("flows")
+          .update({ status: "inactive" })
+          .eq("id", flow.id)
+          .eq("user_id", userId);
+        throw new FlowServiceError(
+          "FLOW_PUBLISH_SYNC_FAILED",
+          `The obsolete schedule was removed but its reference could not be cleared: ${scheduleClearError.message}`,
+          { cause: scheduleClearError }
+        );
+      }
+    }
 
-  return loadOwnedFlow(userId, flowId);
+    return loadOwnedFlow(userId, flowId);
+  });
 }
 
 export async function syncFlowActivation(
@@ -290,6 +309,49 @@ export async function syncFlowActivation(
         "FLOW_UNPUBLISHED_ACTIVATION",
         "A flow must be published before it can be activated."
       );
+    }
+
+    const runAt =
+      flow.published_version &&
+      getStartConfig(coerceGraph(flow.published_version.graph))?.scheduleRunAt;
+    if (runAt) {
+      try {
+        await (status === "active"
+          ? armOneTimeSchedule({
+              flowId,
+              userId,
+              versionId: flow.published_version_id!,
+              runAt,
+              previousRunId: flow.trigger_once_run_id,
+            })
+          : cancelOneTimeSchedule(flow.trigger_once_run_id));
+        const { error } = await supabaseAdmin
+          .from("flows")
+          .update({
+            status,
+            ...(status === "inactive" ? { trigger_once_run_id: null } : {}),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", flowId)
+          .eq("user_id", userId);
+        if (error) throw error;
+      } catch (error) {
+        const current = await loadOwnedFlow(userId, flowId);
+        await cancelOneTimeSchedule(current?.trigger_once_run_id).catch(
+          () => undefined
+        );
+        await supabaseAdmin
+          .from("flows")
+          .update({ status: "inactive" })
+          .eq("id", flowId)
+          .eq("user_id", userId);
+        throw new FlowServiceError(
+          "FLOW_STORAGE_FAILED",
+          "Could not update the one-time schedule. The workflow is inactive.",
+          { cause: error }
+        );
+      }
+      return loadOwnedFlow(userId, flowId);
     }
 
     const flowWithSchedule = flow as Flow & {

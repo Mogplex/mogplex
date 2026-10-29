@@ -4,7 +4,12 @@ import {
   CONDITION_OPERATORS,
   TRANSFORM_OPERATIONS,
 } from "@/lib/flows/assistant-tools-constants";
-import type { FlowGraph } from "@/lib/types";
+import {
+  oneTimeTaskExample,
+  scheduledTaskExample,
+} from "./automation-examples";
+
+export { scheduledTaskExample } from "./automation-examples";
 
 const string = { type: "string" };
 const boolean = { type: "boolean" };
@@ -83,7 +88,12 @@ export const automationGraphSchema = {
               scheduleCron: {
                 ...string,
                 description:
-                  "Required for schedule: five-field cron, for example 10 7 * * *.",
+                  "Recurring schedule: five-field cron, for example 10 7 * * *. Omit when using scheduleRunAt.",
+              },
+              scheduleRunAt: {
+                ...string,
+                description:
+                  "Run once at this future ISO timestamp with explicit offset, for example 2027-01-15T15:00:00-05:00. Mutually exclusive with scheduleCron. Publishing arms the run; draft tests do not consume it.",
               },
               scheduleTimezone: {
                 ...string,
@@ -427,63 +437,22 @@ export const automationGraphSchema = {
   },
 };
 
-export const scheduledTaskExample: FlowGraph = {
-  nodes: [
-    {
-      id: "start",
-      type: "start",
-      position: { x: 0, y: 0 },
-      data: {
-        label: "Daily",
-        event: "schedule",
-        scheduleCron: "10 7 * * *",
-        scheduleTimezone: "UTC",
-        filter: { scope: "org", installationIds: [123], repos: ["owner/repo"] },
-      },
-    },
-    {
-      id: "task",
-      type: "agent",
-      position: { x: 300, y: 0 },
-      data: {
-        label: "Repository task",
-        role: "task",
-        harness: "mogplex",
-        agentId: "REPLACE_WITH_AGENT_ID",
-        modelOverride: null,
-        systemPromptOverride:
-          "Inspect the repository for the requested maintenance. Check open PRs first. Apply only needed changes, run the repository checks, and open a PR for human review. If no change is needed, report NO_ACTION.",
-        autoMerge: false,
-        autofix: false,
-        autoRevert: false,
-        requireApproval: false,
-      },
-    },
-    {
-      id: "end",
-      type: "end",
-      position: { x: 600, y: 0 },
-      data: { label: "Done" },
-    },
-  ],
-  edges: [
-    { id: "start-task", source: "start", target: "task" },
-    { id: "task-end", source: "task", target: "end" },
-  ],
-};
-
 export const automationSchemaGuide = {
   graphSchema: automationGraphSchema,
-  examples: { scheduledTask: scheduledTaskExample },
+  examples: {
+    scheduledTask: scheduledTaskExample,
+    oneTimeTask: oneTimeTaskExample(scheduledTaskExample),
+  },
   instructions: [
     "Discover the repository with mogplex_list_repos. Replace owner/repo and installationIds in the example with its full_name and installation_id.",
     "For Mogplex, use agentId from mogplex_list_agents. preset: IDs work without a separate agent creation call. Leave modelOverride omitted or null to keep the configured Agent/API/MCP default; set an enabled ID only when an override is requested. Defaults resolve at run time; the graph stays unpinned.",
     "Use the requested harness. Do not switch to Claude Code or Codex to avoid choosing a Mogplex agent. CLI harnesses use agentId: null and modelOverride: null.",
-    "Task nodes run on a new branch from the default branch. They can run commands and open PRs without an upstream review node. They require a schedule trigger and systemPromptOverride.",
+    "Task nodes run on a new branch from the default branch. They require a schedule or API trigger and systemPromptOverride.",
     "Edit nodes fix an existing PR and require an upstream review, except on mention and pr_comment triggers. They do not support schedule triggers.",
     "Use a classify node to branch on meaning instead of an agent node: it answers one closed question about run state as true/false, a single choice, or a scale position (1-based), in well under a second. Wire every answer handle. A scale has one outgoing edge; branch on state.<resultKey>.answer with a condition node.",
     "Call mogplex_validate_automation with installationId and graph. It does not save, publish, run a model, or create a sandbox.",
-    "Create or update the draft, then publish it. Publishing activates the schedule. Published status is not evidence of successful execution.",
+    "Save the draft without publishing. Call mogplex_test_automation with representative input for ANY trigger type, then inspect mogplex_get_automation_run_logs for completion and node errors. Fix failures and retest each changed setup before publishing. Tests execute the saved draft with real billing and configured write actions, without activating triggers or consuming a one-time schedule.",
+    "For one-time scheduling, set event: schedule and scheduleRunAt to a future ISO timestamp with explicit timezone offset, and omit scheduleCron. Publish after testing to arm exactly one run. Pausing cancels the pending dispatch; republishing replaces it. The automation becomes inactive after its job is queued. A test does not prove webhook delivery, GitHub routing, or cron delivery.",
     "mogplex_trigger_automation starts a real billed run with the configured write access. There is no dry-run flag. Inspect runs and logs to verify execution.",
     "A prompt to check open PRs is not an atomic duplicate-work lock. Stop overlapping external schedules before handing recurring work to this automation.",
     "Task commands have repository write access. autoMerge: false disables built-in auto-merge, not shell permissions. Use GitHub branch rules to enforce required human review.",

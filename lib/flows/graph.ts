@@ -210,6 +210,7 @@ export function getStartConfig(graph: FlowGraph) {
     dependabotAlertActions: start.data.dependabotAlertActions,
     scheduleCron: start.data.scheduleCron,
     scheduleTimezone: start.data.scheduleTimezone,
+    scheduleRunAt: start.data.scheduleRunAt,
     slackTeamId: start.data.slackTeamId,
     slackChannelId: start.data.slackChannelId,
     slackChannelName: start.data.slackChannelName,

@@ -69,6 +69,7 @@ export function startDataForEvent(
     dependabotAlertActions: _dependabotAlertActions,
     scheduleCron: _scheduleCron,
     scheduleTimezone: _scheduleTimezone,
+    scheduleRunAt: _scheduleRunAt,
     slackTeamId: _slackTeamId,
     slackChannelId: _slackChannelId,
     slackChannelName: _slackChannelName,

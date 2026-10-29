@@ -263,6 +263,20 @@ export async function callMogplexTool(
           result
         );
       }
+      case "mogplex_test_automation": {
+        const input = parseArgs(triggerAutomationArgsSchema, args);
+        const result = await context.client.testAutomation({
+          ...input,
+          idempotencyKey: input.idempotencyKey ?? `mcp-test:${randomUUID()}`,
+        });
+        return textResult(
+          `Draft test ${result.run.outcome}. Job run: ${result.run.jobRunId ?? "none"}. Inspect logs for completion and node errors before publishing. This test does not activate the automation.`,
+          result,
+          !result.run.jobRunId ||
+            result.run.status === "failed" ||
+            result.run.outcome === "suppressed"
+        );
+      }
       case "mogplex_list_automation_runs": {
         const input = parseArgs(automationRunsArgsSchema, args);
         const result = await context.client.listAutomationRuns(input);

@@ -113,6 +113,8 @@ function triggerPayloadMetadata(
 
 export type FlowTriggerDispatchInput = {
   flowId: string;
+  expectedVersionId?: string;
+  expectedRunAt?: string;
   event: TriggerEvent;
   idempotencyKey: string;
   payload?: Record<string, unknown>;
@@ -166,6 +168,24 @@ export function createFlowTriggerDispatcher(
 
     const graph = coerceGraph(version.graph);
     const start = getStartConfig(graph);
+    if (
+      (input.expectedVersionId && version.id !== input.expectedVersionId) ||
+      (input.expectedRunAt &&
+        (!start?.scheduleRunAt ||
+          Date.parse(start.scheduleRunAt) !==
+            Date.parse(input.expectedRunAt))) ||
+      (input.event === "schedule" &&
+        start?.scheduleRunAt &&
+        !input.expectedRunAt)
+    ) {
+      return {
+        matched: false,
+        outcome: "suppressed",
+        jobRunId: null,
+        started: false,
+        reason: "SCHEDULE_REPLACED",
+      };
+    }
     if (start?.event !== input.event) {
       return {
         matched: false,

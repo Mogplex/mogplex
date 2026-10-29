@@ -203,6 +203,11 @@ export async function deleteFlow(userId: string, flowId: string) {
     throw new FlowServiceError("FLOW_NOT_FOUND", "Flow not found");
   }
 
+  if (flow.trigger_once_run_id) {
+    const { cancelOneTimeSchedule } = await import("./one-time-schedule");
+    await cancelOneTimeSchedule(flow.trigger_once_run_id);
+  }
+
   const scheduleId = (flow as Flow & { trigger_schedule_id?: string | null })
     .trigger_schedule_id;
   if (scheduleId) {

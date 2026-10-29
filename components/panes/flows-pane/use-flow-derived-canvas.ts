@@ -121,7 +121,7 @@ export function useFlowDerivedCanvas(
   const currentTriggerProvider = useMemo(() => {
     switch (selectedStartConfig?.event) {
       case "schedule":
-        return "Cron";
+        return selectedStartConfig.scheduleRunAt ? "One-time" : "Cron";
       case "webhook":
         return "Signed webhook";
       case "slack_mention":
@@ -131,7 +131,7 @@ export function useFlowDerivedCanvas(
       default:
         return "GitHub";
     }
-  }, [selectedStartConfig?.event]);
+  }, [selectedStartConfig?.event, selectedStartConfig?.scheduleRunAt]);
 
   const sandboxTestRepos = useMemo<Repo[]>(() => {
     const scopedRepoNames = new Set(

@@ -12,6 +12,7 @@ const startDataSchema = z
     event: z.enum(TRIGGER_EVENTS),
     scheduleCron: z.string().optional(),
     scheduleTimezone: z.string().optional(),
+    scheduleRunAt: z.string().optional(),
     filter: z
       .object({
         scope: z.enum(["all", "org", "personal"]),
