@@ -4,7 +4,19 @@ import { TRIGGER_TASK_IDS } from "@/lib/trigger/task-ids";
 import { assertFutureRunAt } from "./one-time-config";
 
 export async function cancelOneTimeSchedule(runId: string | null | undefined) {
-  if (runId) await runs.cancel(runId);
+  if (!runId) return;
+  try {
+    await runs.cancel(runId);
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "status" in error &&
+      error.status === 404
+    )
+      return;
+    throw error;
+  }
 }
 
 export async function armOneTimeSchedule(input: {

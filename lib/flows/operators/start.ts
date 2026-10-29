@@ -142,7 +142,7 @@ export const startOperator: FlowOperatorDefinition<StartNode> = {
       );
     }
     if (node.data.event === "schedule") {
-      if (node.data.scheduleRunAt) {
+      if (node.data.scheduleRunAt !== undefined) {
         if (!isValidRunAt(node.data.scheduleRunAt)) {
           errors.push(
             "Run once requires an ISO timestamp with an explicit timezone offset."
@@ -155,7 +155,7 @@ export const startOperator: FlowOperatorDefinition<StartNode> = {
         errors.push("Schedule triggers must define a valid five-field cron.");
       }
       if (
-        !node.data.scheduleRunAt &&
+        node.data.scheduleRunAt === undefined &&
         !isValidFlowTimezone(node.data.scheduleTimezone ?? "")
       ) {
         errors.push("Schedule triggers must define a valid IANA timezone.");

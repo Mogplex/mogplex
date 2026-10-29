@@ -13,6 +13,17 @@ export async function createAutomationDb() {
     create table repos(id uuid primary key, user_id text, full_name text, default_branch text, github_installation_id bigint, product_team_id uuid);
     create table agents(id uuid primary key default gen_random_uuid(), user_id text, name text, slug text,
       model text, system_prompt text, source_template text, created_at timestamptz default now());
+    create function resolve_agent_template_fork(p_user_id text, p_source_template text, p_name text, p_model text,
+      p_system_prompt text, p_description text, p_category text) returns uuid language plpgsql as $$
+      declare agent_id uuid;
+      begin
+        select id into agent_id from agents where user_id=p_user_id and source_template=p_source_template limit 1;
+        if agent_id is null then
+          insert into agents(user_id,name,slug,model,system_prompt,source_template)
+          values(p_user_id,p_name,lower(p_name),p_model,p_system_prompt,p_source_template) returning id into agent_id;
+        end if;
+        return agent_id;
+      end; $$;
     create table profiles(id text primary key, email text, default_model text, surface_models jsonb,
       auto_enable_new_models boolean default true, models_seen_at timestamptz,
       allow_platform_ai boolean default false, allow_platform_sandbox boolean default false);
@@ -52,6 +63,7 @@ export async function createAutomationDb() {
     )
   );
   const previousFrom = Object.getOwnPropertyDescriptor(supabaseAdmin, "from");
+  const previousRpc = Object.getOwnPropertyDescriptor(supabaseAdmin, "rpc");
   const statements: string[] = [];
   const db = createPostgrestShim({
     query: async (sql, values) => {
@@ -64,6 +76,10 @@ export async function createAutomationDb() {
     configurable: true,
     value: db.from.bind(db),
   });
+  Object.defineProperty(supabaseAdmin, "rpc", {
+    configurable: true,
+    value: db.rpc.bind(db),
+  });
   return {
     pg,
     statements,
@@ -71,6 +87,8 @@ export async function createAutomationDb() {
       if (previousFrom)
         Object.defineProperty(supabaseAdmin, "from", previousFrom);
       else Reflect.deleteProperty(supabaseAdmin, "from");
+      if (previousRpc) Object.defineProperty(supabaseAdmin, "rpc", previousRpc);
+      else Reflect.deleteProperty(supabaseAdmin, "rpc");
       await pg.close();
     },
   };

@@ -47,4 +47,23 @@ export const workflowOnceTask = task({
   maxDuration: 60,
   retry: { maxAttempts: 3 },
   run: (payload: WorkflowOncePayload) => runWorkflowOnce(payload),
+  onFailure: async ({ payload, ctx }) =>
+    recordWorkflowOnceFailure(payload, ctx.run.id),
 });
+
+/** Runs after exhausted dispatch attempts; never disarm a replacement. */
+export async function recordWorkflowOnceFailure(
+  payload: WorkflowOncePayload,
+  runtimeRunId: string
+) {
+  return runWithFlowActivationLock(payload.flowId, async () => {
+    const { error } = await supabaseAdmin
+      .from("flows")
+      .update({ status: "inactive", trigger_once_run_id: null })
+      .eq("id", payload.flowId)
+      .eq("published_version_id", payload.versionId)
+      .eq("trigger_once_run_id", runtimeRunId);
+    if (error)
+      throw new Error("Could not record the failed one-time dispatch.");
+  });
+}

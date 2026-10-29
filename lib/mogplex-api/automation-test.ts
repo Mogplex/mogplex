@@ -3,6 +3,7 @@ import { runWithFlowActivationLock } from "@/lib/flows/activation-lock";
 import { coerceGraph, getStartConfig } from "@/lib/flows/graph";
 import { validateFlowConfiguration } from "@/lib/flows/server-validation";
 import { saveFlowVersion } from "@/lib/flows/server-version";
+import { resolveFlowGraphPresetAgents } from "@/lib/flows/server-preset-agents";
 import {
   createTriggerMogplexApiAutomation,
   loadAutomationTriggerRepo,
@@ -40,7 +41,7 @@ export function createTestMogplexApiAutomation(
           "Automation not found",
           404
         );
-      const graph = coerceGraph(flow.draft_graph);
+      const draft = coerceGraph(flow.draft_graph);
       const repo = await (overrides.loadRepo ?? loadAutomationTriggerRepo)(
         input.userId,
         input.repoId
@@ -52,6 +53,12 @@ export function createTestMogplexApiAutomation(
           404
         );
       const installationId = repo.github_installation_id;
+      const graph = await resolveFlowGraphPresetAgents(
+        input.userId,
+        draft,
+        undefined,
+        repo.product_team_id
+      );
       const scopedIds = getStartConfig(graph)?.filter?.installationIds;
       if (scopedIds?.length && !scopedIds.includes(installationId))
         throw new MogplexApiAutomationError(
@@ -61,14 +68,15 @@ export function createTestMogplexApiAutomation(
       const validation = await validateFlowConfiguration(
         input.userId,
         graph,
-        installationId
+        installationId,
+        repo.product_team_id
       );
       if (!validation.valid)
         throw new MogplexApiAutomationError(
           "INVALID_INPUT",
           validation.errors.join(" ")
         );
-      const version = await saveFlowVersion(flow.id, graph);
+      const version = await saveFlowVersion(flow.id, graph, true);
       const trigger = createTriggerMogplexApiAutomation(
         {
           ...overrides,

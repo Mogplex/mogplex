@@ -87,7 +87,19 @@ it("executes saved draft snapshots for every trigger without publishing or activ
         args.input = { title: "Test path" } as typeof args.input;
       const run = await runTest(args);
       expect(run.started).toBe(true);
+      const versions = (
+        await db.pg.query("select id from flow_versions where flow_id=$1", [
+          flow.id,
+        ])
+      ).rows;
       const replay = await runTest(args);
+      expect(
+        (
+          await db.pg.query("select id from flow_versions where flow_id=$1", [
+            flow.id,
+          ])
+        ).rows
+      ).toEqual(versions);
       expect(replay.jobRunId).toBe(run.jobRunId);
       expect(replay.versionId).toBe(run.versionId);
       expect(replay.replayed).toBe(true);

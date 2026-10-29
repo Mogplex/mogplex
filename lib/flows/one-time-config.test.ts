@@ -21,6 +21,13 @@ describe("one-time schedule configuration", () => {
         Date.parse("2027-01-16T00:00:00Z")
       )
     ).toThrow(/future/);
+    const now = Date.parse("2027-01-15T15:00:00Z");
+    expect(() => assertFutureRunAt("2027-01-16T15:00:00Z", now)).not.toThrow();
+    expect(() => assertFutureRunAt("2027-01-15T15:00:00Z", now)).toThrow(
+      /future/
+    );
+    expect(() => assertFutureRunAt("not-a-date", now)).toThrow(/future/);
+    expect(isValidRunAt("2028-02-29T15:00:00+05:30")).toBe(true);
   });
 
   it("preserves one-time timestamps and rejects ambiguous recurring schedules", () => {
@@ -40,5 +47,8 @@ describe("one-time schedule configuration", () => {
       restored.nodes.find((node) => node.type === "start")!.data.scheduleRunAt
     ).toBe(start.data.scheduleRunAt);
     expect(validateFlowGraph(restored).errors).toEqual([]);
+    restored.nodes.find((node) => node.type === "start")!.data.scheduleRunAt =
+      "";
+    expect(validateFlowGraph(restored).errors.join(" ")).toMatch(/Run once/);
   });
 });
