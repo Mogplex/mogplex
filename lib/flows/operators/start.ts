@@ -12,6 +12,7 @@ import {
   validateAutomationInputFields,
 } from "@/lib/flows/automation-inputs";
 import type { FlowOperatorDefinition } from "./types";
+import { isValidRunAt } from "../one-time-config";
 
 type StartNode = Extract<FlowNode, { type: "start" }>;
 
@@ -141,10 +142,22 @@ export const startOperator: FlowOperatorDefinition<StartNode> = {
       );
     }
     if (node.data.event === "schedule") {
-      if (!isValidFlowCron(node.data.scheduleCron ?? "")) {
+      if (node.data.scheduleRunAt !== undefined) {
+        if (!isValidRunAt(node.data.scheduleRunAt)) {
+          errors.push(
+            "Run once requires an ISO timestamp with an explicit timezone offset."
+          );
+        }
+        if (node.data.scheduleCron) {
+          errors.push("Choose either run once or a recurring cron schedule.");
+        }
+      } else if (!isValidFlowCron(node.data.scheduleCron ?? "")) {
         errors.push("Schedule triggers must define a valid five-field cron.");
       }
-      if (!isValidFlowTimezone(node.data.scheduleTimezone ?? "")) {
+      if (
+        node.data.scheduleRunAt === undefined &&
+        !isValidFlowTimezone(node.data.scheduleTimezone ?? "")
+      ) {
         errors.push("Schedule triggers must define a valid IANA timezone.");
       }
     }
@@ -222,6 +235,9 @@ export const startOperator: FlowOperatorDefinition<StartNode> = {
       ...(tagPattern ? { tagPattern } : {}),
       ...(scheduleCron ? { scheduleCron } : {}),
       ...(scheduleTimezone ? { scheduleTimezone } : {}),
+      ...(event === "schedule" && typeof raw.scheduleRunAt === "string"
+        ? { scheduleRunAt: raw.scheduleRunAt.trim() }
+        : {}),
       ...(slackTeamId ? { slackTeamId } : {}),
       ...(slackChannelId ? { slackChannelId } : {}),
       ...(slackChannelName ? { slackChannelName } : {}),

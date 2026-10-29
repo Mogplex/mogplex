@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { enqueueAutomationJobRun } from "@/lib/automation-dispatch";
 import { loadOwnedFlow } from "@/lib/flows/api";
 import {
@@ -46,9 +46,12 @@ export type AutomationTriggerDeps = {
 // on a legacy (non-API) automation may pass extra metadata for conditions and
 // prompts, but never these: `flow_auto_merge`, for one, unlocks PR merge tools.
 const RESERVED_LEGACY_INPUT =
-  /^(flow_|repo_|sandbox_|source|dispatch_|trigger|input|working_branch$|installation_id$|team_id$|default_branch$|webhook$|slack$|schedule$)/;
+  /^(flow_|repo_|sandbox_|source|dispatch_|trigger|input|automation_test$|working_branch$|installation_id$|team_id$|default_branch$|webhook$|slack$|schedule$)/;
 
-async function loadRepo(userId: string, repoId: string) {
+export async function loadAutomationTriggerRepo(
+  userId: string,
+  repoId: string
+) {
   const { data, error } = await supabaseAdmin
     .from("repos")
     .select(
@@ -87,7 +90,7 @@ async function loadCredentialLabel(
 
 const defaultDeps: AutomationTriggerDeps = {
   loadFlow: loadOwnedFlow,
-  loadRepo,
+  loadRepo: loadAutomationTriggerRepo,
   loadJobRun,
   loadCredentialLabel,
   enqueue: enqueueAutomationJobRun,
@@ -192,7 +195,8 @@ function acceptInput(
  * is a conflict rather than a second build.
  */
 export function createTriggerMogplexApiAutomation(
-  overrides: Partial<AutomationTriggerDeps> = {}
+  overrides: Partial<AutomationTriggerDeps> = {},
+  executionMode: "live" | "test" = "live"
 ) {
   const deps: AutomationTriggerDeps = { ...defaultDeps, ...overrides };
 
@@ -209,18 +213,39 @@ export function createTriggerMogplexApiAutomation(
       flow.installation_id,
       start?.filter?.repos
     );
+    if (executionMode === "live" && start?.scheduleRunAt) {
+      throw new MogplexApiAutomationError(
+        "INVALID_INPUT",
+        "This automation is scheduled to run once. Use mogplex_test_automation to test its draft without consuming the scheduled run."
+      );
+    }
     const accepted = acceptInput(start, input.input);
     const version = flow.published_version!;
     const sourceType = start?.event ?? "flow";
-    const scopedKey = `api:${input.userId}:${flow.id}:${input.idempotencyKey || randomUUID()}`;
+    const scopedKey = `${executionMode === "test" ? "api-test" : "api"}:${input.userId}:${flow.id}:${input.idempotencyKey || randomUUID()}`;
     const isApiAutomation = sourceType === "api";
     const runInput = await buildApiRunInputMetadata({
       scopedIdempotencyKey: scopedKey,
       value: accepted.snapshot,
     });
+    if (executionMode === "test") {
+      runInput.input_hash = createHash("sha256")
+        .update(JSON.stringify([version.graph, runInput.input_hash]))
+        .digest("hex");
+    }
 
     const metadata = {
       ...accepted.legacy,
+      ...(executionMode === "test" ? { automation_test: true } : {}),
+      ...(executionMode === "test" && sourceType === "schedule"
+        ? { schedule: accepted.snapshot }
+        : {}),
+      ...(executionMode === "test" && sourceType === "webhook"
+        ? { webhook: accepted.snapshot }
+        : {}),
+      ...(executionMode === "test" && sourceType === "slack_mention"
+        ? { slack: accepted.snapshot }
+        : {}),
       source: isApiAutomation ? "api" : "mcp",
       source_type: sourceType,
       dispatch_source: credentialKind === "integration" ? "integration" : "mcp",
@@ -281,6 +306,14 @@ export function createTriggerMogplexApiAutomation(
       }
       return {
         ...base,
+        versionId:
+          typeof existing.metadata?.flow_version_id === "string"
+            ? existing.metadata.flow_version_id
+            : base.versionId,
+        versionNumber:
+          typeof existing.metadata?.flow_version_number === "number"
+            ? existing.metadata.flow_version_number
+            : base.versionNumber,
         outcome: "replayed" as const,
         reason: enqueue.reason,
         replayed: true,

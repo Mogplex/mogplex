@@ -30,6 +30,22 @@ export async function checkSchemaCompatibility(
   const client = createPostgrestShim(db);
   const adminClient = client as unknown as SupabaseClient;
   if (phase === "verify") {
+    const recurring = await client
+      .from("flows")
+      .select("status,trigger_schedule_id,draft_graph")
+      .eq("id", BEFORE_USER)
+      .single();
+    assert.equal(recurring.error, null, JSON.stringify(recurring.error));
+    assert.deepEqual(recurring.data, {
+      status: "inactive",
+      trigger_schedule_id: "sched-compatibility",
+      draft_graph: { nodes: [], edges: [] },
+    });
+    const edited = await client
+      .from("flows")
+      .update({ notes: "Retained release edit" })
+      .eq("id", BEFORE_USER);
+    assert.equal(edited.error, null, JSON.stringify(edited.error));
     const savedSandbox = await client
       .from("sandboxes")
       .select("sandbox_id,working_branch,snapshot_id,status,runtime")
@@ -262,6 +278,17 @@ export async function checkSchemaCompatibility(
         : "compatibility-after@example.test",
   });
   assert.equal(profile.error, null, JSON.stringify(profile.error));
+  const recurring = await client.from("flows").insert({
+    id: userId,
+    user_id: userId,
+    installation_id: 123,
+    name: "Retained recurring workflow",
+    source_kind: "schedule",
+    status: "inactive",
+    trigger_schedule_id: "sched-compatibility",
+    draft_graph: { nodes: [], edges: [] },
+  });
+  assert.equal(recurring.error, null, JSON.stringify(recurring.error));
   const team = await client
     .from("teams")
     .insert({

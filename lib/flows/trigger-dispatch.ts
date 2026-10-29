@@ -12,6 +12,7 @@ export type PublishedFlowTriggerRow = {
   installation_id: number;
   status: "active" | "inactive";
   published_version_id: string | null;
+  trigger_once_run_id?: string | null;
   published_version: PublishedVersionRow | PublishedVersionRow[] | null;
 };
 
@@ -58,7 +59,7 @@ async function loadPublishedFlow(
   const { data, error } = await supabaseAdmin
     .from("flows")
     .select(
-      "id, user_id, installation_id, status, published_version_id, published_version:flow_versions!flows_published_version_id_fkey(id, graph, version_number)"
+      "id, user_id, installation_id, status, published_version_id, trigger_once_run_id, published_version:flow_versions!flows_published_version_id_fkey(id, graph, version_number)"
     )
     .eq("id", flowId)
     .maybeSingle();
@@ -113,6 +114,11 @@ function triggerPayloadMetadata(
 
 export type FlowTriggerDispatchInput = {
   flowId: string;
+  expectedVersionId?: string;
+  expectedRunAt?: string;
+  expectedRuntimeRunId?: string;
+  /** Authenticated editor test event; does not consume a scheduled occurrence. */
+  testRun?: boolean;
   event: TriggerEvent;
   idempotencyKey: string;
   payload?: Record<string, unknown>;
@@ -166,6 +172,27 @@ export function createFlowTriggerDispatcher(
 
     const graph = coerceGraph(version.graph);
     const start = getStartConfig(graph);
+    if (
+      (input.expectedVersionId && version.id !== input.expectedVersionId) ||
+      (input.expectedRuntimeRunId &&
+        flow.trigger_once_run_id !== input.expectedRuntimeRunId) ||
+      (input.expectedRunAt &&
+        (!start?.scheduleRunAt ||
+          Date.parse(start.scheduleRunAt) !==
+            Date.parse(input.expectedRunAt))) ||
+      (input.event === "schedule" &&
+        start?.scheduleRunAt &&
+        !input.expectedRunAt &&
+        !input.testRun)
+    ) {
+      return {
+        matched: false,
+        outcome: "suppressed",
+        jobRunId: null,
+        started: false,
+        reason: "SCHEDULE_REPLACED",
+      };
+    }
     if (start?.event !== input.event) {
       return {
         matched: false,
@@ -214,6 +241,7 @@ export function createFlowTriggerDispatcher(
       });
     }
     const metadata = {
+      ...(input.testRun ? { automation_test: true } : {}),
       repo_id: repo.id,
       repo_full_name: repo.full_name,
       installation_id: flow.installation_id,
@@ -247,6 +275,8 @@ export function createFlowTriggerDispatcher(
       sourceType: input.event,
       idempotencyKey: input.idempotencyKey,
       metadata,
+      // Idempotency keys always deduplicate; this flag only suppresses other
+      // active runs of the same trigger, which recurring schedules permit.
       duplicateSensitive: input.event !== "schedule",
     });
 

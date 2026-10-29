@@ -7,6 +7,60 @@ import {
 } from "./helpers/flows-inspector-layout-fixtures";
 import type { FlowGraph } from "@/lib/types";
 
+test("one-time schedule survives editing, save and reload without a recurring cron", async ({
+  page,
+}, testInfo) => {
+  await setupWorkflowsPage(page);
+  let graph = structuredClone(flowPayload.draft_graph) as FlowGraph;
+  const start = graph.nodes.find((node) => node.type === "start")!;
+  start.data = {
+    label: "Run once",
+    event: "schedule",
+    scheduleRunAt: "2027-01-15T15:00:00-05:00",
+    filter: {
+      scope: "org",
+      installationIds: [101],
+      repos: ["webrenew/blackbox"],
+    },
+  };
+  const payload = () => ({ ...flowPayload, draft_graph: graph });
+  await page.route("**/api/flows", (route) => fulfillJson(route, [payload()]));
+  await page.route("**/api/flows/flow-1", async (route) => {
+    if (route.request().method() === "PUT")
+      graph = route.request().postDataJSON().draft_graph;
+    await fulfillJson(route, payload());
+  });
+  await page.goto("/alex/workflows");
+  await page.waitForLoadState("networkidle");
+  await page.locator('.react-flow__node[data-id="start"]').click();
+  await expect(
+    page.getByRole("combobox", { name: "Repeat", exact: true })
+  ).toHaveText("Run once");
+  await expect(page.getByTestId("flow-library-current-trigger")).toContainText(
+    "One-time trigger"
+  );
+  const timestamp = "2027-01-16T16:00:00-05:00";
+  await page.getByTestId("flow-trigger-run-at").fill(timestamp);
+  const saved = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/flows/flow-1") &&
+      response.request().method() === "PUT"
+  );
+  await page.keyboard.press("ControlOrMeta+s");
+  await saved;
+  expect(
+    graph.nodes.find((node) => node.type === "start")!.data.scheduleCron
+  ).toBeUndefined();
+  await page.reload();
+  await page.keyboard.press("Escape");
+  await page.locator('.react-flow__node[data-id="start"]').click();
+  await expect(page.getByTestId("flow-trigger-run-at")).toHaveValue(timestamp);
+  await page.screenshot({
+    path: testInfo.outputPath("run-once.png"),
+    fullPage: true,
+  });
+});
+
 test("scheduled Task instructions and role survive save and reload", async ({
   page,
 }, testInfo) => {

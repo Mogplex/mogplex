@@ -97,6 +97,7 @@ test("test trigger dispatches the immutable published event for its owner", asyn
       idempotencyKey: "flow-test:flow-1:test-1",
       payload: { release: "1.2.3" },
       startSource: "api",
+      testRun: true,
     },
   ]);
 });

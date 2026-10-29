@@ -7,6 +7,39 @@ import { automationGraphSchema } from "./automation-schema";
  */
 export const MCP_TOOLS_AUTOMATION: McpToolDefinition[] = [
   {
+    name: "mogplex_test_automation",
+    title: "Test Automation Draft",
+    description:
+      "Execute an immutable snapshot of the saved draft before publishing, for any trigger type, including inactive or unpublished automations. Does not activate a trigger or consume a one-time schedule. This is a real billed run with configured write actions, not a dry run. Pass representative input: declared inputs for API triggers, or event metadata (for example pr_number and head_sha) for GitHub triggers. Read mogplex_get_automation_run_logs until the run completes; fix node errors and retest after edits before publishing. Requires Full access.",
+    inputSchema: objectSchema({
+      properties: {
+        automationId: { type: "string", description: "Saved automation id." },
+        repoId: {
+          type: "string",
+          description: "Owned repository id within the draft's scope.",
+        },
+        input: {
+          type: "object",
+          description: "Representative declared API input or event context.",
+          additionalProperties: true,
+        },
+        idempotencyKey: {
+          type: "string",
+          maxLength: 200,
+          description:
+            "Stable test request key. Reusing it with changed draft or input is refused.",
+        },
+      },
+      required: ["automationId", "repoId"],
+    }),
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+  },
+  {
     name: "mogplex_get_automation_schema",
     title: "Get Automation Schema",
     description:
@@ -76,7 +109,7 @@ export const MCP_TOOLS_AUTOMATION: McpToolDefinition[] = [
     name: "mogplex_create_automation",
     title: "Create Mogplex Automation",
     description:
-      "Create a Mogplex Flow automation. Use installationId from mogplex_list_repos. Optionally provide a complete graph and publish it.",
+      "Create a Mogplex Flow draft. Use installationId from mogplex_list_repos and supply a complete graph. Leave publish false, run mogplex_test_automation, and inspect completion and node errors before publishing.",
     inputSchema: objectSchema({
       properties: {
         installationId: {
@@ -97,7 +130,7 @@ export const MCP_TOOLS_AUTOMATION: McpToolDefinition[] = [
         publish: {
           type: "boolean",
           description:
-            "Validate, publish, and activate immediately. Defaults to false.",
+            "Validate, publish, and activate immediately. Defaults to false. Save and test the draft before activating.",
         },
       },
       required: ["installationId"],
@@ -143,7 +176,7 @@ export const MCP_TOOLS_AUTOMATION: McpToolDefinition[] = [
     name: "mogplex_publish_automation",
     title: "Publish Mogplex Automation",
     description:
-      "Validate the draft graph, create a version, and activate the automation.",
+      "Validate the draft graph, create a version, and activate the automation. First execute the saved draft with mogplex_test_automation, inspect its terminal status and node errors, and fix and retest failures. Configuration validation alone does not prove execution.",
     inputSchema: objectSchema({
       properties: {
         automationId: { type: "string", description: "Automation id." },
@@ -182,7 +215,7 @@ export const MCP_TOOLS_AUTOMATION: McpToolDefinition[] = [
     name: "mogplex_set_automation_model",
     title: "Set Automation Model",
     description:
-      "Set an agent node's model override, or null to use the configured Agent/API/MCP default at run time. Leave defaults unchanged unless an override is requested. Optionally publish the change.",
+      "Set an agent node's model override, or null to inherit configured defaults. Leave defaults unchanged unless an override is requested. Save without publishing, then test the changed draft with mogplex_test_automation and inspect its run logs before activating it.",
     inputSchema: objectSchema({
       properties: {
         automationId: { type: "string", description: "Automation id." },
