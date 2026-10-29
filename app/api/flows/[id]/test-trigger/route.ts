@@ -71,6 +71,7 @@ export function createFlowTestTriggerPostHandler(
       idempotencyKey: `flow-test:${id}:${deps.randomId()}`,
       payload,
       startSource: "api",
+      testRun: true,
     });
     if (!result.matched) {
       return NextResponse.json(

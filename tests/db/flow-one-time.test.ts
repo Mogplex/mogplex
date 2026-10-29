@@ -8,6 +8,7 @@ import { coerceGraph } from "@/lib/flows/graph";
 import { syncFlowActivation } from "@/lib/flows/server-publish";
 import { createFlowTriggerDispatcher } from "@/lib/flows/trigger-dispatch";
 import { runWorkflowOnce } from "@/trigger/workflow-once";
+import { createFlowTestTriggerPostHandler } from "@/app/api/flows/[id]/test-trigger/route";
 import { createAutomationDb } from "./helpers/mcp-automation-fixture";
 
 it("arms one durable future dispatch, replaces and pauses it, and ignores stale or repeated deliveries", async () => {
@@ -56,16 +57,39 @@ it("arms one durable future dispatch, replaces and pauses it, and ignores stale 
     expect(requests.some((r) => r.path.includes("schedules"))).toBe(false);
     const second = await publishMogplexApiAutomation("owner", flow.id);
     expect(requests.some((r) => r.path.includes("/cancel"))).toBe(true);
-    await syncFlowActivation("owner", flow.id, "inactive");
-    await syncFlowActivation("owner", flow.id, "active");
     let jobs = 0;
+    const testRuns: boolean[] = [];
     const dispatch = createFlowTriggerDispatcher({
-      enqueue: async () => {
+      enqueue: async (input) => {
         jobs++;
+        testRuns.push(input.metadata?.automation_test === true);
         return { jobRunId: "job", outcome: "queued", reason: null };
       },
       start: async () => ({ started: true, status: "running" }),
     });
+    const editorTest = createFlowTestTriggerPostHandler({
+      requireUserId: async () => "owner",
+      dispatch,
+    });
+    const response = await editorTest(
+      new Request("https://mogplex.test/api/flows/test-trigger", {
+        method: "POST",
+        body: JSON.stringify({ payload: { test: true } }),
+      }),
+      { params: Promise.resolve({ id: flow.id }) }
+    );
+    expect(response.status).toBe(202);
+    expect(testRuns).toEqual([true]);
+    const stillScheduled = (
+      await db.pg.query<{ status: string; trigger_once_run_id: string | null }>(
+        "select status,trigger_once_run_id from flows where id=$1",
+        [flow.id]
+      )
+    ).rows[0];
+    expect(stillScheduled.status).toBe("active");
+    expect(stillScheduled.trigger_once_run_id).toBeTruthy();
+    await syncFlowActivation("owner", flow.id, "inactive");
+    await syncFlowActivation("owner", flow.id, "active");
     const payload = {
       flowId: flow.id,
       versionId: second.publishedVersion!.id,
@@ -79,12 +103,13 @@ it("arms one durable future dispatch, replaces and pauses it, and ignores stale 
         )
       ).reason
     ).toBe("SCHEDULE_REPLACED");
-    expect(jobs).toBe(0);
+    expect(jobs).toBe(1);
     expect((await runWorkflowOnce(payload, dispatch)).started).toBe(true);
     expect((await runWorkflowOnce(payload, dispatch)).reason).toBe(
       "FLOW_INACTIVE"
     );
-    expect(jobs).toBe(1);
+    expect(jobs).toBe(2);
+    expect(testRuns).toEqual([true, false]);
     const stored = (
       await db.pg.query<{ status: string; trigger_once_run_id: string | null }>(
         "select status,trigger_once_run_id from flows where id=$1",

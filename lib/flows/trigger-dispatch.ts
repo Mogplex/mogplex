@@ -115,6 +115,8 @@ export type FlowTriggerDispatchInput = {
   flowId: string;
   expectedVersionId?: string;
   expectedRunAt?: string;
+  /** Authenticated editor test event; does not consume a scheduled occurrence. */
+  testRun?: boolean;
   event: TriggerEvent;
   idempotencyKey: string;
   payload?: Record<string, unknown>;
@@ -176,7 +178,8 @@ export function createFlowTriggerDispatcher(
             Date.parse(input.expectedRunAt))) ||
       (input.event === "schedule" &&
         start?.scheduleRunAt &&
-        !input.expectedRunAt)
+        !input.expectedRunAt &&
+        !input.testRun)
     ) {
       return {
         matched: false,
@@ -234,6 +237,7 @@ export function createFlowTriggerDispatcher(
       });
     }
     const metadata = {
+      ...(input.testRun ? { automation_test: true } : {}),
       repo_id: repo.id,
       repo_full_name: repo.full_name,
       installation_id: flow.installation_id,
