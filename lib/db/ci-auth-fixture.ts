@@ -8,21 +8,61 @@ export type CiAuthFixtureTarget = {
   sourceDatabaseUrl: string;
 };
 
-function endpoint(connectionString: string) {
+/** Only authored, credential-free diagnostics belong in this error class. */
+export class CiAuthFixtureError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "CiAuthFixtureError";
+  }
+}
+
+function neonUrl(connectionString: string) {
+  let url: URL;
   try {
-    const url = new URL(connectionString);
-    if (
-      !["postgres:", "postgresql:"].includes(url.protocol) ||
-      !url.hostname.endsWith(".neon.tech")
-    ) {
-      throw new Error("Unexpected database endpoint");
-    }
-    return url.hostname.replace(/-pooler(?=\.)/, "");
+    url = new URL(connectionString);
   } catch {
-    throw new Error(
-      "CI auth fixtures require explicit Neon database endpoints"
+    throw new CiAuthFixtureError("Neon database URL is invalid");
+  }
+  if (!["postgres:", "postgresql:"].includes(url.protocol)) {
+    throw new CiAuthFixtureError("CI auth fixtures require PostgreSQL URLs");
+  }
+  if (!url.hostname.endsWith(".neon.tech")) {
+    throw new CiAuthFixtureError("CI auth fixtures require Neon endpoints");
+  }
+  return url;
+}
+
+function endpoint(connectionString: string) {
+  return neonUrl(connectionString).hostname.replace(/-pooler(?=\.)/, "");
+}
+
+export function ciConnectionParams(sourceUrl: string, branchId: string) {
+  if (!branchId) {
+    throw new CiAuthFixtureError("A temporary Neon branch id is required");
+  }
+  const source = neonUrl(sourceUrl);
+  let databaseName: string;
+  let roleName: string;
+  try {
+    databaseName = decodeURIComponent(source.pathname.slice(1));
+    roleName = decodeURIComponent(source.username);
+  } catch {
+    throw new CiAuthFixtureError(
+      "Source database name and role must be valid URI components"
     );
   }
+  if (!databaseName) {
+    throw new CiAuthFixtureError("Source Neon database name is required");
+  }
+  if (!roleName) {
+    throw new CiAuthFixtureError("Source Neon role name is required");
+  }
+  return new URLSearchParams({
+    branch_id: branchId,
+    database_name: databaseName,
+    role_name: roleName,
+    pooled: "false",
+  });
 }
 
 export function assertCiAuthFixtureTarget(target: CiAuthFixtureTarget) {
@@ -36,12 +76,12 @@ export function assertCiAuthFixtureTarget(target: CiAuthFixtureTarget) {
     target.branch.default ||
     target.branch.protected
   ) {
-    throw new Error(
+    throw new CiAuthFixtureError(
       "Auth fixtures may only initialize this run's temporary CI branch"
     );
   }
   if (endpoint(target.databaseUrl) === endpoint(target.sourceDatabaseUrl)) {
-    throw new Error(
+    throw new CiAuthFixtureError(
       "Auth fixtures must never reset the source database's keys"
     );
   }

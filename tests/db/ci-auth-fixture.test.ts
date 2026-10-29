@@ -90,26 +90,38 @@ it("replaces copied signing keys with fixture-secret keys while retaining creden
 
 it("rejects shared, production, protected, stale, and unverified targets before changing keys", async () => {
   const valid = target();
-  const unsafe: CiAuthFixtureTarget[] = [
-    { ...valid, githubActions: false },
-    { ...valid, runId: "" },
-    { ...valid, branchId: "br-other" },
-    { ...valid, branch: { ...valid.branch, name: "ci-run-123-2" } },
-    { ...valid, branch: { ...valid.branch, default: true } },
-    { ...valid, branch: { ...valid.branch, protected: true } },
-    { ...valid, sourceDatabaseUrl: valid.databaseUrl },
-    {
-      ...valid,
-      sourceDatabaseUrl: valid.databaseUrl.replace(
-        "ep-temporary.",
-        "ep-temporary-pooler."
-      ),
-    },
-    { ...valid, databaseUrl: "postgres://owner@localhost/app" },
-    { ...valid, sourceDatabaseUrl: "" },
+  const identity = /this run's temporary CI branch/;
+  const source = /must never reset the source database's keys/;
+  const unsafe: Array<[CiAuthFixtureTarget, RegExp]> = [
+    [{ ...valid, githubActions: false }, identity],
+    [{ ...valid, runId: "" }, identity],
+    [{ ...valid, branchId: "br-other" }, identity],
+    [{ ...valid, branch: { ...valid.branch, name: "ci-run-123-2" } }, identity],
+    [{ ...valid, branch: { ...valid.branch, default: true } }, identity],
+    [{ ...valid, branch: { ...valid.branch, protected: true } }, identity],
+    [{ ...valid, sourceDatabaseUrl: valid.databaseUrl }, source],
+    [
+      {
+        ...valid,
+        sourceDatabaseUrl: valid.databaseUrl.replace(
+          "ep-temporary.",
+          "ep-temporary-pooler."
+        ),
+      },
+      source,
+    ],
+    [
+      { ...valid, databaseUrl: "postgres://owner@localhost/app" },
+      /Neon endpoints/,
+    ],
+    [{ ...valid, sourceDatabaseUrl: "" }, /Neon database URL is invalid/],
+    [
+      { ...valid, sourceDatabaseUrl: "postgres://owner@db.example.com/app" },
+      /Neon endpoints/,
+    ],
   ];
-  for (const candidate of unsafe) {
-    await expect(prepareCiAuthFixture(db, candidate)).rejects.toThrow();
+  for (const [candidate, reason] of unsafe) {
+    await expect(prepareCiAuthFixture(db, candidate)).rejects.toThrow(reason);
     expect((await db.query("select id from jwks")).rows).toHaveLength(1);
   }
 });

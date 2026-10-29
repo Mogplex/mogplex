@@ -2,6 +2,8 @@ import { Client } from "pg";
 import { z } from "zod";
 import {
   assertCiAuthFixtureTarget,
+  CiAuthFixtureError,
+  ciConnectionParams,
   prepareCiAuthFixture,
 } from "../lib/db/ci-auth-fixture";
 
@@ -11,17 +13,21 @@ async function main() {
   const branchId = process.env.CI_NEON_BRANCH_ID;
   const sourceDatabaseUrl = process.env.SOURCE_DATABASE_URL;
   if (!project || !apiKey || !branchId || !sourceDatabaseUrl) {
-    throw new Error(
+    throw new CiAuthFixtureError(
       "CI branch identity and source database configuration are required"
     );
   }
+  const query = ciConnectionParams(sourceDatabaseUrl, branchId);
   const headers = { Authorization: `Bearer ${apiKey}` };
   const base = `https://console.neon.tech/api/v2/projects/${encodeURIComponent(project)}`;
   const metadata = await fetch(
     `${base}/branches/${encodeURIComponent(branchId)}`,
     { headers, signal: AbortSignal.timeout(15_000) }
   );
-  if (!metadata.ok) throw new Error("Could not verify the temporary CI branch");
+  if (!metadata.ok)
+    throw new CiAuthFixtureError(
+      `Could not verify the temporary CI branch (HTTP ${metadata.status})`
+    );
   const { branch } = z
     .object({
       branch: z.object({
@@ -34,19 +40,14 @@ async function main() {
     .parse(await metadata.json());
 
   // Resolve the target from the verified branch, not an inherited DATABASE_URL.
-  const source = new URL(sourceDatabaseUrl);
-  const query = new URLSearchParams({
-    branch_id: branchId,
-    database_name: decodeURIComponent(source.pathname.slice(1)),
-    role_name: decodeURIComponent(source.username),
-    pooled: "false",
-  });
   const connection = await fetch(`${base}/connection_uri?${query}`, {
     headers,
     signal: AbortSignal.timeout(15_000),
   });
   if (!connection.ok)
-    throw new Error("Could not resolve the temporary CI database");
+    throw new CiAuthFixtureError(
+      `Could not resolve the temporary CI database (HTTP ${connection.status})`
+    );
   const { uri: databaseUrl } = z
     .object({ uri: z.string().min(1) })
     .parse(await connection.json());
@@ -73,8 +74,12 @@ async function main() {
 }
 
 // eslint-disable-next-line unicorn/prefer-top-level-await
-main().catch(() => {
+main().catch((error: unknown) => {
   // Never echo connection URIs, provider responses, or copied key material.
-  console.error("Temporary CI auth fixture initialization failed");
+  console.error(
+    error instanceof CiAuthFixtureError
+      ? error.message
+      : "Temporary CI auth fixture initialization failed"
+  );
   process.exitCode = 1;
 });
