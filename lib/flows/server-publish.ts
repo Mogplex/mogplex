@@ -22,6 +22,17 @@ import { saveFlowVersion } from "./server-version";
 import { armOneTimeSchedule, cancelOneTimeSchedule } from "./one-time-schedule";
 import { assertFutureRunAt } from "./one-time-config";
 
+function assertFutureFlowRunAt(runAt: string) {
+  try {
+    assertFutureRunAt(runAt);
+  } catch {
+    throw new FlowServiceError(
+      "FLOW_GRAPH_INVALID",
+      "Run once must be scheduled in the future. Edit the time and publish again."
+    );
+  }
+}
+
 export async function publishFlowDraft(
   userId: string,
   flowId: string,
@@ -86,14 +97,7 @@ export async function publishFlowDraft(
     );
   }
   if (startConfig.scheduleRunAt) {
-    try {
-      assertFutureRunAt(startConfig.scheduleRunAt);
-    } catch {
-      throw new FlowServiceError(
-        "FLOW_GRAPH_INVALID",
-        "Run once must be scheduled in the future."
-      );
-    }
+    assertFutureFlowRunAt(startConfig.scheduleRunAt);
   }
   if (
     startConfig.event === "webhook" &&
@@ -147,6 +151,8 @@ export async function publishFlowDraft(
     const storedFlow = await loadOwnedFlow(userId, flowId);
     if (!storedFlow)
       throw new FlowServiceError("FLOW_NOT_FOUND", "Flow not found");
+    if (startConfig.scheduleRunAt)
+      assertFutureFlowRunAt(startConfig.scheduleRunAt);
     const version = await saveFlowVersion(flow.id, graph);
 
     const { error: flowError } = await supabaseAdmin
@@ -315,6 +321,13 @@ export async function syncFlowActivation(
       flow.published_version &&
       getStartConfig(coerceGraph(flow.published_version.graph))?.scheduleRunAt;
     if (runAt) {
+      if (
+        status === "active" &&
+        flow.status === "active" &&
+        flow.trigger_once_run_id
+      )
+        return flow;
+      if (status === "active") assertFutureFlowRunAt(runAt);
       try {
         await (status === "active"
           ? armOneTimeSchedule({

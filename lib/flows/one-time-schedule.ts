@@ -1,7 +1,7 @@
 import { runs, tasks } from "@trigger.dev/sdk/v3";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { TRIGGER_TASK_IDS } from "@/lib/trigger/task-ids";
-import { assertFutureRunAt } from "./one-time-config";
+import { isValidRunAt } from "./one-time-config";
 
 export async function cancelOneTimeSchedule(runId: string | null | undefined) {
   if (!runId) return;
@@ -26,7 +26,10 @@ export async function armOneTimeSchedule(input: {
   runAt: string;
   previousRunId?: string | null;
 }) {
-  assertFutureRunAt(input.runAt);
+  // Callers check the future timestamp before changing publication state.
+  // If provider I/O made that valid timestamp become due, dispatch now.
+  if (!isValidRunAt(input.runAt))
+    throw new Error("Run once requires a valid ISO timestamp.");
   await cancelOneTimeSchedule(input.previousRunId);
   const handle = await tasks.trigger(
     TRIGGER_TASK_IDS.workflowOnce,
@@ -35,7 +38,7 @@ export async function armOneTimeSchedule(input: {
       versionId: input.versionId,
       runAt: new Date(input.runAt).toISOString(),
     },
-    { delay: new Date(input.runAt) }
+    Date.parse(input.runAt) > Date.now() ? { delay: new Date(input.runAt) } : {}
   );
   const { error } = await supabaseAdmin
     .from("flows")
