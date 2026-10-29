@@ -4,6 +4,33 @@ import { loadOwnedFlow } from "@/lib/flows/server-flow-ops";
 import { coerceGraph } from "@/lib/flows/graph";
 import { createAutomationDb } from "./helpers/mcp-automation-fixture";
 import { createTestMogplexApiAutomation } from "@/lib/mogplex-api/automation-test";
+import { scheduledTaskExample } from "@/lib/mogplex-api/automation-schema";
+
+it("reuses equivalent populated draft graphs regardless of data key order, while publishing creates a new version", async () => {
+  const db = await createAutomationDb();
+  try {
+    const id = (
+      await db.pg.query<{ id: string }>(
+        "insert into flows(user_id,installation_id,status,draft_graph) values('owner',123,'inactive','{}') returning id"
+      )
+    ).rows[0].id;
+    const graph = coerceGraph(structuredClone(scheduledTaskExample));
+    const first = await saveFlowVersion(id, graph, { isTest: true });
+    const reordered = structuredClone(graph);
+    for (const node of reordered.nodes) {
+      node.data = Object.fromEntries(
+        Object.entries(node.data).toReversed()
+      ) as typeof node.data;
+    }
+    const repeated = await saveFlowVersion(id, reordered, { isTest: true });
+    expect(repeated.id).toBe(first.id);
+    const published = await saveFlowVersion(id, reordered);
+    expect(published.id).not.toBe(first.id);
+    expect(published.is_test).toBe(false);
+  } finally {
+    await db.close();
+  }
+});
 
 it("a restricted direct caller is refused before database access", async () => {
   const db = await createAutomationDb();

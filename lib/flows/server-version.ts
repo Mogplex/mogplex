@@ -29,7 +29,8 @@ export async function saveFlowVersion(
   if (
     isTest &&
     latest?.is_test === true &&
-    JSON.stringify(coerceGraph(latest.graph)) === JSON.stringify(graph)
+    JSON.stringify(coerceGraph(latest.graph)) ===
+      JSON.stringify(coerceGraph(graph))
   ) {
     return latest as FlowVersionRow;
   }
