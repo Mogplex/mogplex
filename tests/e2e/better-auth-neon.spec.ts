@@ -252,14 +252,14 @@ test.describe("better-auth against real Neon", () => {
       // The cliTokenTtl hook clamps CLI refresh tokens to 30 days even
       // though the provider-wide setting is effectively-never (MCP clients).
       const ttlRows = await pool.query(
-        `select "refreshTokenExpiresAt" from "oauthAccessToken"
-          where "clientId" = 'mogplex-cli' and "userId" = $1`,
+        `select "expiresAt" from "oauthRefreshToken"
+          where "clientId" = 'mogplex-cli' and "userId" = $1 and revoked is null`,
         [userId]
       );
       expect(ttlRows.rowCount).toBeGreaterThan(0);
       const maxTtlMs = 31 * 24 * 60 * 60 * 1000;
       for (const row of ttlRows.rows) {
-        const expiresAt = new Date(row.refreshTokenExpiresAt).getTime();
+        const expiresAt = new Date(row.expiresAt).getTime();
         expect(expiresAt).toBeLessThan(Date.now() + maxTtlMs);
         expect(expiresAt).toBeGreaterThan(Date.now());
       }

@@ -76,7 +76,7 @@ describe("OAuth credentials across retained and upgraded releases", () => {
     expect(session?.session.id).toBe("legacy-session-id");
   });
 
-  it("accepts an old server's subsequent token rotation and rejects its replaced bearer", async () => {
+  it("synchronizes retained token updates and rejects the replaced bearer", async () => {
     await migrateAuth(db);
     await db.query(
       `update "oauthAccessToken" set "accessToken" = 'old-server-next-access',
@@ -97,6 +97,31 @@ describe("OAuth credentials across retained and upgraded releases", () => {
     ).toMatchObject({ userId: AUTH_USER_ID });
     expect(
       (await request(refreshRequest("old-server-next-refresh"))).status
+    ).toBe(200);
+  });
+
+  it("accepts the retained provider's INSERT-based refresh without invalidating other existing credentials", async () => {
+    await migrateAuth(db);
+    await db.query(
+      `insert into "oauthAccessToken"
+      select $1, 'retained-issued-access', 'retained-issued-refresh', now() + interval '1 hour',
+        now() + interval '100 years', "clientId", "userId", scopes, now(), now()
+      from "oauthAccessToken" where id = $2`,
+      [crypto.randomUUID(), LEGACY_TOKEN_ID]
+    );
+    const { instance, request } = authForDatabase(db);
+    expect(
+      await instance.api.getMcpSession({
+        headers: bearer("retained-issued-access"),
+      })
+    ).toMatchObject({ userId: AUTH_USER_ID, clientId: AUTH_CLIENT_ID });
+    expect(
+      await instance.api.getMcpSession({
+        headers: bearer("legacy-access-token"),
+      })
+    ).toMatchObject({ userId: AUTH_USER_ID });
+    expect(
+      (await request(refreshRequest("retained-issued-refresh"))).status
     ).toBe(200);
   });
 

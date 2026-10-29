@@ -106,24 +106,38 @@ export async function verifyOAuthCompatibility(db: Queryable) {
   assert.equal(session?.userId, userId);
   assert.equal(session?.scopes, "read write offline_access");
 
-  // Representative retained-release rotation and connection deletion still
-  // operate against their original tables after the candidate migration.
+  // The 1.6 refresh handler INSERTs another token row, retaining the original.
+  // Exercise that exact old storage contract after the candidate migration.
+  const nextTokenId = crypto.randomUUID();
   await db.query(
-    `update "oauthAccessToken" set "accessToken" = 'retained-next-bearer',
-    "refreshToken" = 'retained-next-refresh', "accessTokenExpiresAt" = now() + interval '1 hour', "updatedAt" = now() where id = $1`,
-    [tokenId]
+    `insert into "oauthAccessToken" select $1, 'retained-next-bearer', 'retained-next-refresh',
+      now() + interval '1 hour', now() + interval '100 years', "clientId", "userId", scopes, now(), now()
+      from "oauthAccessToken" where id = $2`,
+    [nextTokenId, tokenId]
   );
   const rotated = (
     await db.query(
       `select "accessToken", "refreshToken" from "oauthAccessToken" where id = $1`,
-      [tokenId]
+      [nextTokenId]
     )
   ).rows[0];
   assert.deepEqual(rotated, {
     accessToken: "retained-next-bearer",
     refreshToken: "retained-next-refresh",
   });
-  await db.query(`delete from "oauthAccessToken" where id = $1`, [tokenId]);
+  const refreshedInstance = betterAuth({
+    ...auth.options,
+    database: memoryAdapter(await authRows(db)),
+  });
+  const refreshed = await refreshedInstance.api.getMcpSession({
+    headers: new Headers({ authorization: "Bearer retained-next-bearer" }),
+  });
+  assert.equal(refreshed?.userId, userId);
+  assert.equal(refreshed?.scopes, "read write offline_access");
+  await db.query(`delete from "oauthAccessToken" where id in ($1, $2)`, [
+    tokenId,
+    nextTokenId,
+  ]);
   assert.equal(
     (
       await db.query(`select id from "oauthAccessToken" where id = $1`, [
