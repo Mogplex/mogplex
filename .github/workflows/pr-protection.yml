@@ -77,7 +77,9 @@ jobs:
     name: diff-coverage
     if: github.event_name == 'pull_request'
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    timeout-minutes: 15
+    # All three coverage tiers run sequentially and take about 15 minutes.
+    # Leave time for installing the reporter and combining their results.
+    timeout-minutes: 20
     steps:
       - name: Check out repository
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -133,7 +135,7 @@ jobs:
             --test-coverage-exclude='**/node_modules/**' \
             --test-reporter=tap --test-reporter-destination=stdout \
             --test-reporter=lcov --test-reporter-destination=coverage/unit/lcov.info \
-            --test tests/unit/*.test.ts
+            --test --test-concurrency=4 tests/unit/*.test.ts
 
       - name: Install diff-cover
         run: pipx install diff-cover

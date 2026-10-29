@@ -12,6 +12,7 @@ export type PublishedFlowTriggerRow = {
   installation_id: number;
   status: "active" | "inactive";
   published_version_id: string | null;
+  trigger_once_run_id?: string | null;
   published_version: PublishedVersionRow | PublishedVersionRow[] | null;
 };
 
@@ -58,7 +59,7 @@ async function loadPublishedFlow(
   const { data, error } = await supabaseAdmin
     .from("flows")
     .select(
-      "id, user_id, installation_id, status, published_version_id, published_version:flow_versions!flows_published_version_id_fkey(id, graph, version_number)"
+      "id, user_id, installation_id, status, published_version_id, trigger_once_run_id, published_version:flow_versions!flows_published_version_id_fkey(id, graph, version_number)"
     )
     .eq("id", flowId)
     .maybeSingle();
@@ -115,6 +116,7 @@ export type FlowTriggerDispatchInput = {
   flowId: string;
   expectedVersionId?: string;
   expectedRunAt?: string;
+  expectedRuntimeRunId?: string;
   /** Authenticated editor test event; does not consume a scheduled occurrence. */
   testRun?: boolean;
   event: TriggerEvent;
@@ -172,6 +174,8 @@ export function createFlowTriggerDispatcher(
     const start = getStartConfig(graph);
     if (
       (input.expectedVersionId && version.id !== input.expectedVersionId) ||
+      (input.expectedRuntimeRunId &&
+        flow.trigger_once_run_id !== input.expectedRuntimeRunId) ||
       (input.expectedRunAt &&
         (!start?.scheduleRunAt ||
           Date.parse(start.scheduleRunAt) !==
@@ -271,6 +275,8 @@ export function createFlowTriggerDispatcher(
       sourceType: input.event,
       idempotencyKey: input.idempotencyKey,
       metadata,
+      // Idempotency keys always deduplicate; this flag only suppresses other
+      // active runs of the same trigger, which recurring schedules permit.
       duplicateSensitive: input.event !== "schedule",
     });
 

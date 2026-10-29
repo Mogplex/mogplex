@@ -95,19 +95,53 @@ it("arms one durable future dispatch, replaces and pauses it, and ignores stale 
       versionId: second.publishedVersion!.id,
       runAt: start.data.scheduleRunAt!,
     };
+    const staleDelivery = {
+      flowId: flow.id,
+      event: "schedule" as const,
+      expectedVersionId: payload.versionId,
+      expectedRunAt: payload.runAt,
+      expectedRuntimeRunId: stillScheduled.trigger_once_run_id!,
+      idempotencyKey: "obsolete-runtime",
+    };
+    expect((await dispatch(staleDelivery)).reason).toBe("SCHEDULE_REPLACED");
     expect(
       (
         await runWorkflowOnce(
-          { ...payload, versionId: first.publishedVersion!.id },
+          payload,
+          stillScheduled.trigger_once_run_id!,
           dispatch
         )
       ).reason
     ).toBe("SCHEDULE_REPLACED");
     expect(jobs).toBe(1);
-    expect((await runWorkflowOnce(payload, dispatch)).started).toBe(true);
-    expect((await runWorkflowOnce(payload, dispatch)).reason).toBe(
-      "FLOW_INACTIVE"
+    const rearmed = (
+      await db.pg.query<{ status: string; trigger_once_run_id: string }>(
+        "select status,trigger_once_run_id from flows where id=$1",
+        [flow.id]
+      )
+    ).rows[0];
+    expect(rearmed.status).toBe("active");
+    expect(rearmed.trigger_once_run_id).not.toBe(
+      stillScheduled.trigger_once_run_id
     );
+    expect(
+      (
+        await runWorkflowOnce(
+          { ...payload, versionId: first.publishedVersion!.id },
+          rearmed.trigger_once_run_id,
+          dispatch
+        )
+      ).reason
+    ).toBe("SCHEDULE_REPLACED");
+    expect(jobs).toBe(1);
+    expect(
+      (await runWorkflowOnce(payload, rearmed.trigger_once_run_id, dispatch))
+        .started
+    ).toBe(true);
+    expect(
+      (await runWorkflowOnce(payload, rearmed.trigger_once_run_id, dispatch))
+        .reason
+    ).toBe("FLOW_INACTIVE");
     expect(jobs).toBe(2);
     expect(testRuns).toEqual([true, false]);
     const stored = (

@@ -35,7 +35,7 @@ it("exhausted dispatch failures disarm only the matching version and runtime", a
       runAt: "2027-01-15T15:00:00Z",
     };
     await expect(
-      runWorkflowOnce(payload, async () => {
+      runWorkflowOnce(payload, "run_current", async () => {
         throw new Error("fixture enqueue failed");
       })
     ).rejects.toThrow("fixture enqueue failed");

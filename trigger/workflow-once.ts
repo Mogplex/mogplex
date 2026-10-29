@@ -12,6 +12,7 @@ export type WorkflowOncePayload = {
 
 export async function runWorkflowOnce(
   payload: WorkflowOncePayload,
+  runtimeRunId: string,
   dispatch = dispatchFlowTrigger
 ) {
   return runWithFlowActivationLock(payload.flowId, async () => {
@@ -19,6 +20,7 @@ export async function runWorkflowOnce(
       flowId: payload.flowId,
       expectedVersionId: payload.versionId,
       expectedRunAt: payload.runAt,
+      expectedRuntimeRunId: runtimeRunId,
       event: "schedule",
       idempotencyKey: `workflow-once:${payload.flowId}:${payload.versionId}`,
       startSource: "cron",
@@ -32,7 +34,8 @@ export async function runWorkflowOnce(
         .from("flows")
         .update({ status: "inactive", trigger_once_run_id: null })
         .eq("id", payload.flowId)
-        .eq("published_version_id", payload.versionId);
+        .eq("published_version_id", payload.versionId)
+        .eq("trigger_once_run_id", runtimeRunId);
       if (error)
         throw new Error("Could not mark the one-time schedule as dispatched.");
     } else if (result.matched) {
@@ -46,7 +49,8 @@ export const workflowOnceTask = task({
   id: TRIGGER_TASK_IDS.workflowOnce,
   maxDuration: 60,
   retry: { maxAttempts: 3 },
-  run: (payload: WorkflowOncePayload) => runWorkflowOnce(payload),
+  run: (payload: WorkflowOncePayload, { ctx }) =>
+    runWorkflowOnce(payload, ctx.run.id),
   onFailure: async ({ payload, ctx }) =>
     recordWorkflowOnceFailure(payload, ctx.run.id),
 });
