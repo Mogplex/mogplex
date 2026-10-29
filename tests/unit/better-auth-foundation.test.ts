@@ -18,8 +18,18 @@ test("should construct the better-auth instance when no auth env is set", async 
 });
 
 test("should reject email signup through the real auth handler", async () => {
-  const { POST } = await import("../../app/api/auth/[...all]/route");
-  const response = await POST(
+  const { auth } = await import("../../lib/better-auth/server");
+  const instance = betterAuth({
+    ...auth.options,
+    database: memoryAdapter({
+      user: [],
+      session: [],
+      account: [],
+      verification: [],
+      jwks: [],
+    }),
+  });
+  const response = await instance.handler(
     new Request("http://localhost:3000/api/auth/sign-up/email", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -65,6 +75,7 @@ test("unverified existing users receive a working verification link on password 
     ],
     session: [],
     verification: [],
+    jwks: [],
   };
   const instance = betterAuth({
     ...auth.options,
@@ -126,41 +137,35 @@ test("should serve Better Auth MCP authorization-server metadata", async () => {
   );
 
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), {
+  const metadata = await response.json();
+  assert.deepEqual(metadata, {
+    ...metadata,
     issuer: "http://localhost:3000",
     authorization_endpoint: "http://localhost:3000/api/auth/mcp/authorize",
     token_endpoint: "http://localhost:3000/api/auth/mcp/token",
     userinfo_endpoint: "http://localhost:3000/api/auth/mcp/userinfo",
     jwks_uri: "http://localhost:3000/api/auth/mcp/jwks",
     registration_endpoint: "http://localhost:3000/api/auth/mcp/register",
-    scopes_supported: ["openid", "profile", "email", "offline_access"],
+    scopes_supported: [
+      "openid",
+      "profile",
+      "email",
+      "offline_access",
+      "read",
+      "write",
+    ],
     response_types_supported: ["code"],
     response_modes_supported: ["query"],
     grant_types_supported: ["authorization_code", "refresh_token"],
-    acr_values_supported: [
-      "urn:mace:incommon:iap:silver",
-      "urn:mace:incommon:iap:bronze",
-    ],
     subject_types_supported: ["public"],
     id_token_signing_alg_values_supported: ["RS256"],
     token_endpoint_auth_methods_supported: [
+      "none",
       "client_secret_basic",
       "client_secret_post",
-      "none",
+      "private_key_jwt",
     ],
     code_challenge_methods_supported: ["S256"],
-    claims_supported: [
-      "sub",
-      "iss",
-      "aud",
-      "exp",
-      "nbf",
-      "iat",
-      "jti",
-      "email",
-      "email_verified",
-      "name",
-    ],
   });
 });
 

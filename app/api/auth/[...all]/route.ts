@@ -3,7 +3,17 @@
 // integrations finish moving off Supabase.
 
 import { toNextJsHandler } from "better-auth/next-js";
+import {
+  oauthProviderAuthServerMetadata,
+  oauthProviderOpenIdConfigMetadata,
+} from "@better-auth/oauth-provider";
 import { auth } from "@/lib/better-auth/server";
+import {
+  legacyMcpMetadata,
+  rewriteLegacyMcpRequest,
+} from "@/lib/better-auth/mcp-request-compatibility";
+import { getMogplexMcpResourceUrl } from "@/lib/mogplex-api/oauth-config";
+import { legacyClientSecretMethod } from "@/lib/better-auth/mcp-client-auth-compatibility";
 
 // Guards run at request time, not module load, so env-less CI/Docker builds
 // still import this route during page-data collection without throwing.
@@ -30,7 +40,32 @@ async function guardedHandler(request: Request): Promise<Response> {
     return Response.json({ error: "not_found" }, { status: 404 });
   }
 
-  return auth.handler(request);
+  const response =
+    pathname === "/api/auth/.well-known/oauth-authorization-server"
+      ? await oauthProviderAuthServerMetadata(auth)(request)
+      : pathname === "/api/auth/.well-known/openid-configuration"
+        ? await oauthProviderOpenIdConfigMetadata(auth)(request)
+        : await auth.handler(
+            await rewriteLegacyMcpRequest(
+              request,
+              getMogplexMcpResourceUrl(request),
+              async (clientId) =>
+                legacyClientSecretMethod(
+                  (await auth.$context).adapter,
+                  clientId
+                )
+            )
+          );
+  if (
+    response.ok &&
+    (pathname.endsWith("/.well-known/oauth-authorization-server") ||
+      pathname.endsWith("/.well-known/openid-configuration"))
+  ) {
+    const headers = new Headers(response.headers);
+    headers.delete("content-length");
+    return Response.json(legacyMcpMetadata(await response.json()), { headers });
+  }
+  return response;
 }
 
 export const { GET, POST } = toNextJsHandler(guardedHandler);

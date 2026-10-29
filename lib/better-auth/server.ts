@@ -9,10 +9,12 @@
 
 import { betterAuth } from "better-auth";
 import { nextCookies } from "better-auth/next-js";
-import { mcp } from "better-auth/plugins";
+import { jwt } from "better-auth/plugins";
+import { oauthProvider } from "@better-auth/oauth-provider";
 import { sso } from "@better-auth/sso";
 import { dash } from "@better-auth/infra";
 import { cliTokenTtl } from "@/lib/better-auth/cli-token-ttl";
+import { legacyMcpCompatibility } from "@/lib/better-auth/mcp-compatibility";
 import {
   hashAccountPassword,
   verifyAccountPassword,
@@ -104,6 +106,42 @@ if (
   };
 }
 
+// The app owns MCP protected-resource discovery. Register its OAuth resource
+// on the first OAuth request so builds never seed runtime resource records.
+const provider = oauthProvider({
+  loginPage: "/login",
+  consentPage: "/oauth/consent",
+  resources: [],
+  refreshTokenReuseInterval: 30,
+  scopes: ["openid", "profile", "email", "offline_access", "read", "write"],
+  clientRegistrationDefaultScopes: [
+    "openid",
+    "profile",
+    "email",
+    "offline_access",
+    "read",
+    "write",
+  ],
+  grantTypes: ["authorization_code", "refresh_token"],
+  clientRegistrationRequirePKCE: true,
+  allowDynamicClientRegistration: true,
+  allowUnauthenticatedClientRegistration: true,
+  // Keep the existing Better Auth global policy across the endpoint migration.
+  rateLimit: {
+    token: false,
+    authorize: false,
+    introspect: false,
+    revoke: false,
+    register: false,
+    userinfo: false,
+  },
+  // Preserve hosted-client continuity; CLI issuance is clamped separately.
+  refreshTokenExpiresIn: 100 * 365 * 24 * 60 * 60,
+  schema: {
+    oauthAccessToken: { modelName: "oauthAccessTokenV2" },
+    oauthConsent: { modelName: "oauthConsentV2" },
+  },
+});
 export const auth = betterAuth({
   baseURL,
   secret: process.env.BETTER_AUTH_SECRET,
@@ -127,6 +165,7 @@ export const auth = betterAuth({
   }),
   advanced: {
     database: {
+      validateSchema: Boolean(getRuntimeDatabaseUrl()),
       // uuid ids so better-auth users can FK-map onto the existing
       // uuid-keyed profiles/auth.users shim at cutover.
       generateId: () => crypto.randomUUID(),
@@ -189,21 +228,12 @@ export const auth = betterAuth({
   },
   socialProviders,
   plugins: [
-    mcp({
-      loginPage: "/login",
-      resource: mcpResource,
-      oidcConfig: {
-        loginPage: "/login",
-        defaultScope: "read write",
-        scopes: ["read", "write"],
-        requirePKCE: true,
-        // Hosted MCP clients must never be forced to re-authenticate:
-        // refresh tokens rotate on use, and ~100 years is "never" without
-        // overflowing a JS Date. The mogplex CLI is the exception — the
-        // cliTokenTtl hook below clamps its refresh tokens to 30 days.
-        refreshTokenExpiresIn: 100 * 365 * 24 * 60 * 60,
-      },
+    jwt({
+      jwt: { issuer: new URL(baseURL).origin },
+      jwks: { keyPairConfig: { alg: "RS256" } },
     }),
+    provider,
+    legacyMcpCompatibility(provider.options, mcpResource),
     cliTokenTtl(),
     sso(),
     // Better Auth cloud dashboard (ownership verification + remote admin).
