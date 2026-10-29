@@ -87,7 +87,7 @@ test("retired OAuth consent explains how to restart instead of initializing Supa
     "/oauth/consent?authorization_id=11111111-1111-4111-8111-111111111111"
   );
   await expect(
-    page.getByText(/Start a new connection from your MCP client/)
+    page.getByText("Return to the app and start connecting to Mogplex again.")
   ).toBeVisible();
   await expect(
     page.getByText("Something went wrong", { exact: true })

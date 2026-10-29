@@ -8,6 +8,10 @@ import {
 import { isMogplexBearerApiRequest } from "./internal-api-auth";
 
 describe("authenticated root route policy", () => {
+  it("lets the consent page validate its signed request before requiring a session", () => {
+    expect(isPublicRoutePath("/oauth/consent")).toBe(true);
+    expect(isPublicRoutePath("/oauth/consent-other")).toBe(false);
+  });
   it("keeps checkout authenticated and outside workspace scope resolution", () => {
     expect(isPublicRoutePath("/checkout")).toBe(false);
     expect(isUnscopedAuthedRoutePath("/checkout")).toBe(true);

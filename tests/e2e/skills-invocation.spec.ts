@@ -68,7 +68,7 @@ test("Control completes a skill handle and sends the message exactly as typed", 
     ])
   );
   await page.route("**/api/control/sessions**", (route) => {
-    if (route.request().method() !== "POST") return route.continue();
+    if (route.request().method() !== "POST") return route.fallback();
     return fulfillJson(route, {
       id: "sess-skills-1",
       title: "Session",
@@ -317,4 +317,8 @@ test("the workspace composer completes /skill and sends it instead of rejecting 
   await expect(page.getByText("Checklist done.")).toBeVisible();
   expect(sentTexts).toEqual(["/deploy-checklist staging"]);
   await expect(page.getByText(/Unknown command/)).toHaveCount(0);
+  await expect(page.getByTestId("agent-running-indicator")).toHaveCount(0);
+  await expect(
+    page.getByRole("alert").filter({ hasText: "Chat response interrupted." })
+  ).toHaveCount(0);
 });
