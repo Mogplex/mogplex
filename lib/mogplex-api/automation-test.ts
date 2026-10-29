@@ -91,7 +91,10 @@ export function createTestMogplexApiAutomation(
             installation_id: installationId,
             status: "active",
             published_version_id: version.id,
-            published_version: { ...version, graph },
+            published_version: {
+              ...version,
+              graph: coerceGraph(version.graph),
+            },
           }),
         },
         "test"

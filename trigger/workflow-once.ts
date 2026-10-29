@@ -49,6 +49,9 @@ export async function runWorkflowOnce(
       if (error)
         throw new Error("Could not mark the one-time schedule as dispatched.");
     } else if (result.matched) {
+      // Paused/replaced deliveries have matched=false and return quietly.
+      // Matched refusals (repository lookup or capacity) can be transient,
+      // just like the storage failures handled by the provider retry policy.
       throw new Error(`One-time workflow was not queued: ${result.reason}`);
     }
     return result;
