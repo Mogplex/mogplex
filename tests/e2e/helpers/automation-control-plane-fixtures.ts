@@ -25,6 +25,14 @@ export async function fulfillJson(route: Route, data: unknown, status = 200) {
 }
 
 export async function mockBaseChrome(page: Page) {
+  // Control restores the session list before showing a new mission. Keep the
+  // default empty account independent of a hosted database; tests can override
+  // this route when they need persisted sessions or request failures.
+  await page.route("**/api/control/sessions**", (route) =>
+    route.request().method() === "GET"
+      ? fulfillJson(route, [])
+      : route.fallback()
+  );
   await page.route("**/api/integrations/slack/installations", (route) =>
     fulfillJson(route, { installations: [] })
   );

@@ -68,7 +68,7 @@ test("Control completes a skill handle and sends the message exactly as typed", 
     ])
   );
   await page.route("**/api/control/sessions**", (route) => {
-    if (route.request().method() !== "POST") return route.continue();
+    if (route.request().method() !== "POST") return route.fallback();
     return fulfillJson(route, {
       id: "sess-skills-1",
       title: "Session",
