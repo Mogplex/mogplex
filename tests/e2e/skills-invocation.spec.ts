@@ -1,4 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import { enableScopedE2EAuth, scopedPath } from "./helpers/auth";
 import {
   fulfillJson,
@@ -264,6 +266,35 @@ test("the skills library shows the handle each skill answers to", async ({
 test("the workspace composer completes /skill and sends it instead of rejecting an unknown command", async ({
   page,
 }) => {
+  // Finish terminal startup after the user is already composing. Its async
+  // initialization must not redirect the next keystroke into the terminal.
+  const chunksDir = join(process.cwd(), ".next/static/chunks");
+  const terminalChunks = new Set(
+    readdirSync(chunksDir).filter(
+      (file) =>
+        file.endsWith(".js") &&
+        readFileSync(join(chunksDir, file), "utf8").includes(
+          "wterm: failed to initialize:"
+        )
+    )
+  );
+  expect(terminalChunks.size).toBeGreaterThan(0);
+  let releaseTerminal!: () => void;
+  const terminalReady = new Promise<void>((resolve) => {
+    releaseTerminal = resolve;
+  });
+  let reportTerminalRequest!: () => void;
+  const terminalRequested = new Promise<void>((resolve) => {
+    reportTerminalRequest = resolve;
+  });
+  await page.route("**/_next/static/chunks/*.js*", async (route) => {
+    const filename = new URL(route.request().url()).pathname.split("/").at(-1);
+    if (filename && terminalChunks.has(filename)) {
+      reportTerminalRequest();
+      await terminalReady;
+    }
+    await route.continue();
+  });
   await enableScopedE2EAuth(page);
   await mockBaseApp(page);
   await mockSkillCatalog(page);
@@ -313,6 +344,11 @@ test("the workspace composer completes /skill and sends it instead of rejecting 
   await expect(composer).toHaveValue("/deploy-checklist ");
 
   await composer.pressSequentially("staging");
+  await terminalRequested;
+  releaseTerminal();
+  const terminal = page.getByRole("textbox", { name: "Terminal", exact: true });
+  await expect(terminal.locator(".term-row").first()).toBeAttached();
+  await expect(composer).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page.getByText("Checklist done.")).toBeVisible();
   expect(sentTexts).toEqual(["/deploy-checklist staging"]);
@@ -321,4 +357,7 @@ test("the workspace composer completes /skill and sends it instead of rejecting 
   await expect(
     page.getByRole("alert").filter({ hasText: "Chat response interrupted." })
   ).toHaveCount(0);
+  // Explicitly clicking the terminal still chooses it for keyboard input.
+  await terminal.click();
+  await expect(terminal.locator("textarea")).toBeFocused();
 });

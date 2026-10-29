@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FocusEvent } from "react";
 import { createPortal } from "react-dom";
 import { Terminal, type TerminalHandle } from "@wterm/react";
 import "@wterm/react/css";
@@ -58,6 +58,7 @@ export function TerminalSession({ paneId }: { paneId: string }) {
   const shownStartingRef = useRef(false);
   const pendingCommandRef = useRef<string | null>(null);
   const readyRef = useRef(false);
+  const initialFocusTargetRef = useRef<HTMLElement | null>(null);
   const pendingDevServerConfirmationRef =
     useRef<PendingDevServerConfirmation | null>(null);
 
@@ -153,6 +154,18 @@ export function TerminalSession({ paneId }: { paneId: string }) {
 
   const focusTerminal = useCallback(() => {
     termHandleRef.current?.focus();
+  }, []);
+
+  const captureInitialFocus = useCallback((event: FocusEvent<HTMLDivElement>) => {
+    if (readyRef.current) return;
+    const previous = event.relatedTarget;
+    if (
+      previous instanceof HTMLElement &&
+      previous !== document.body &&
+      !event.currentTarget.contains(previous)
+    ) {
+      initialFocusTargetRef.current = previous;
+    }
   }, []);
 
   const openDevServerConfirmation = useCallback(
@@ -278,6 +291,13 @@ export function TerminalSession({ paneId }: { paneId: string }) {
 
       setReady(true);
       readyRef.current = true;
+      // wterm focuses its input after async initialization. Keep the user's
+      // current composer or other control selected when that finishes late.
+      const previousFocus = initialFocusTargetRef.current;
+      initialFocusTargetRef.current = null;
+      if (previousFocus?.isConnected && element.contains(document.activeElement)) {
+        previousFocus.focus({ preventScroll: true });
+      }
       readyFallbackRef.current = setTimeout(() => {
         paintBanner();
       }, 600);
@@ -410,6 +430,7 @@ export function TerminalSession({ paneId }: { paneId: string }) {
           autoResize
           cursorBlink
           onData={handleData}
+          onFocusCapture={captureInitialFocus}
           onReady={handleReady}
           onResize={handleResize}
           style={MOGPLEX_WTERM_STYLE}

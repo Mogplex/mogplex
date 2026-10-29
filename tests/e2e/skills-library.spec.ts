@@ -143,12 +143,11 @@ test("registry install saves the skill and takes the user to the installed list"
   });
 
   await page.goto(scopedPath("primitives?tab=skills"));
-  await page.waitForLoadState("networkidle");
-
-  await page
+  const install = page
     .getByRole("button", { name: "Install", exact: true })
-    .first()
-    .click();
+    .first();
+  await expect(install).toBeEnabled();
+  await install.click();
 
   await expect(
     page.getByText("Skill installed", { exact: true })
