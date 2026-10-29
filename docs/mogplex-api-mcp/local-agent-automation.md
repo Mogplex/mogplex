@@ -74,6 +74,8 @@ Every trigger type supports draft testing, including schedules, API, webhook, Sl
 
 Successful draft execution proves that the exercised workflow path ran. It does not prove event delivery or every condition branch: test each relevant branch and separately verify trigger delivery. A queued or running test is not a passing test. Use Full access for draft tests; Automations-only keys remain restricted to approved published API automations.
 
+Run details label draft-test snapshots separately from published automation versions. Snapshot numbers share one history and may increase during testing; tests never advance the live automation. Identical repeated tests reuse the saved test snapshot, and publication repair excludes snapshots marked as tests.
+
 The graph contract is the same as the Flow editor: `nodes`, `edges`, and a valid optional `viewport`. Create and update reject malformed graphs before touching the draft. Exactly one start and end node and at least one bound agent node are required at publish time.
 
 ## Sandbox workflow

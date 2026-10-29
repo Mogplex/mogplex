@@ -1,4 +1,5 @@
 import { expect, it } from "vitest";
+import { createHash } from "node:crypto";
 import { createTestMogplexApiAutomation } from "@/lib/mogplex-api/automation-test";
 import { createMogplexApiAutomation } from "@/lib/mogplex-api/automations";
 import { scheduledTaskExample } from "@/lib/mogplex-api/automation-schema";
@@ -175,6 +176,14 @@ it("legacy preset agents resolve to owned UUIDs in the test snapshot without pub
         [run.versionId]
       )
     ).rows[0].graph;
+    // Fingerprint the same persisted, normalized snapshot the executor loads.
+    const inputHash = createHash("sha256").update("{}").digest("hex");
+    const snapshotHash = createHash("sha256")
+      .update(JSON.stringify([coerceGraph(snapshot), inputHash]))
+      .digest("hex");
+    expect("context" in context && context.context.metadata.input_hash).toBe(
+      snapshotHash
+    );
     const agentId = snapshot.nodes.find((node) => node.type === "agent")!.data
       .agentId!;
     expect(agentId).toMatch(/^[a-f0-9-]{36}$/);

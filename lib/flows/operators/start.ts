@@ -13,6 +13,7 @@ import {
 } from "@/lib/flows/automation-inputs";
 import type { FlowOperatorDefinition } from "./types";
 import { isValidRunAt } from "../one-time-config";
+import { DEFAULT_FLOW_SCHEDULE } from "../schedule-defaults";
 
 type StartNode = Extract<FlowNode, { type: "start" }>;
 
@@ -253,9 +254,7 @@ export const startOperator: FlowOperatorDefinition<StartNode> = {
       ...(event === "dependabot_alert"
         ? { dependabotAlertActions: ["created"] }
         : {}),
-      ...(event === "schedule"
-        ? { scheduleCron: "0 9 * * 1-5", scheduleTimezone: "UTC" }
-        : {}),
+      ...(event === "schedule" ? { ...DEFAULT_FLOW_SCHEDULE } : {}),
     };
   },
   execute: async ({ node, label, completeNodeRun, emit }) => {

@@ -10,6 +10,7 @@ import {
   resolveMogplexApiUser,
 } from "@/lib/mogplex-api/response";
 import { requireScope } from "@/lib/mogplex-api/scopes";
+import { isAutomationOnly } from "@/lib/mogplex-api/credential-boundary";
 import {
   requireKeyAllowedOn,
   type LoadTeamKeyAccess,
@@ -57,7 +58,11 @@ export function createAutomationTestHandler(
         ...parsed.data,
         idempotencyKey: key.value,
         userId: user.userId,
-        credential: { kind: user.credentialKind, keyId: user.keyId },
+        credential: {
+          kind: user.credentialKind,
+          keyId: user.keyId,
+          automationOnly: isAutomationOnly(user),
+        },
       });
       return mogplexApiSuccess({ run }, { status: 202 });
     } catch (error) {

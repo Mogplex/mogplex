@@ -8,8 +8,9 @@ import { coerceGraph } from "./graph";
 export async function saveFlowVersion(
   flowId: string,
   graph: FlowGraph,
-  reuseLatest = false
+  options: { isTest?: boolean } = {}
 ) {
+  const isTest = options.isTest === true;
   const { data: latest, error: latestError } = await supabaseAdmin
     .from("flow_versions")
     .select("*")
@@ -26,9 +27,10 @@ export async function saveFlowVersion(
   // Draft-test retries and new inputs can share an identical immutable graph.
   // Publishing still always creates a new version.
   if (
-    reuseLatest &&
-    latest &&
-    JSON.stringify(coerceGraph(latest.graph)) === JSON.stringify(graph)
+    isTest &&
+    latest?.is_test === true &&
+    JSON.stringify(coerceGraph(latest.graph)) ===
+      JSON.stringify(coerceGraph(graph))
   ) {
     return latest as FlowVersionRow;
   }
@@ -38,6 +40,7 @@ export async function saveFlowVersion(
       flow_id: flowId,
       version_number: (latest?.version_number ?? 0) + 1,
       graph,
+      ...(isTest ? { is_test: true } : {}),
     })
     .select("*")
     .single();

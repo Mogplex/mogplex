@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
+import { DEFAULT_FLOW_SCHEDULE } from "@/lib/flows/schedule-defaults"
 import { MiniMap, useStore as useReactFlowStore } from "@xyflow/react"
 import { getMinimapSize } from "@/lib/flows/minimap-size"
 import type { FlowDraftSnapshot } from "@/lib/flows/editor"
@@ -84,7 +85,7 @@ export function startDataForEvent(
       ? { dependabotAlertActions: ["created"] }
       : {}),
     ...(nextEvent === "schedule"
-      ? { scheduleCron: "0 9 * * 1-5", scheduleTimezone: "UTC" }
+      ? { ...DEFAULT_FLOW_SCHEDULE }
       : {}),
   }
 }

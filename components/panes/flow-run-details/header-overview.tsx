@@ -64,7 +64,7 @@ function RunInvocationFields({ runDetail }: { runDetail: FlowRunDetail }) {
 
   return (
     <>
-      <OverviewField label="Automation version">
+      <OverviewField label={invocation.isDraftTest ? "Draft test snapshot" : "Automation version"}>
         {invocation.versionNumber === null ? "n/a" : `v${invocation.versionNumber}`}
       </OverviewField>
       <OverviewField label="Triggered by">{invocation.triggeredBy ?? "n/a"}</OverviewField>

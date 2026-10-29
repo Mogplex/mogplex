@@ -19,19 +19,19 @@ export function createTestMogplexApiAutomation(
   overrides: Partial<AutomationTriggerDeps> = {}
 ) {
   return async (input: TriggerMogplexApiAutomationInput) => {
+    // Defense for direct service callers; HTTP also checks both target teams.
+    if (input.credential?.automationOnly)
+      throw new MogplexApiAutomationError(
+        "AUTOMATION_NOT_INTEGRATION_ENABLED",
+        "Testing drafts requires Full access.",
+        403
+      );
     const owned = await loadOwnedFlow(input.userId, input.automationId);
     if (!owned)
       throw new MogplexApiAutomationError(
         "AUTOMATION_NOT_FOUND",
         "Automation not found",
         404
-      );
-    // A restricted integration may execute approved published API versions only.
-    if (input.credential?.automationOnly)
-      throw new MogplexApiAutomationError(
-        "AUTOMATION_NOT_INTEGRATION_ENABLED",
-        "Testing drafts requires Full access.",
-        403
       );
     return runWithFlowActivationLock(owned.id, async () => {
       const flow = await loadOwnedFlow(input.userId, owned.id);
@@ -82,7 +82,7 @@ export function createTestMogplexApiAutomation(
           "INVALID_INPUT",
           validation.errors.join(" ")
         );
-      const version = await saveFlowVersion(flow.id, graph, true);
+      const version = await saveFlowVersion(flow.id, graph, { isTest: true });
       const trigger = createTriggerMogplexApiAutomation(
         {
           ...overrides,
@@ -91,7 +91,10 @@ export function createTestMogplexApiAutomation(
             installation_id: installationId,
             status: "active",
             published_version_id: version.id,
-            published_version: { ...version, graph },
+            published_version: {
+              ...version,
+              graph: coerceGraph(version.graph),
+            },
           }),
         },
         "test"

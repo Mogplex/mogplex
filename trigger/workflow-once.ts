@@ -10,6 +10,16 @@ export type WorkflowOncePayload = {
   runAt: string;
 };
 
+export const WORKFLOW_ONCE_RETRY = {
+  // A due dispatch may race the publisher that is still persisting its handle.
+  // Provider-managed backoff leaves several minutes for that lock to release.
+  maxAttempts: 10,
+  minTimeoutInMs: 5000,
+  maxTimeoutInMs: 30000,
+  factor: 2,
+  randomize: true,
+};
+
 export async function runWorkflowOnce(
   payload: WorkflowOncePayload,
   runtimeRunId: string,
@@ -26,10 +36,7 @@ export async function runWorkflowOnce(
       startSource: "cron",
       payload: { scheduled_at: payload.runAt, run_once: true },
     });
-    if (
-      result.outcome === "queued" ||
-      result.reason === "IDEMPOTENT_DUPLICATE"
-    ) {
+    if (result.outcome === "queued") {
       const { error } = await supabaseAdmin
         .from("flows")
         .update({ status: "inactive", trigger_once_run_id: null })
@@ -39,6 +46,9 @@ export async function runWorkflowOnce(
       if (error)
         throw new Error("Could not mark the one-time schedule as dispatched.");
     } else if (result.matched) {
+      // Paused/replaced deliveries have matched=false and return quietly.
+      // Matched refusals (repository lookup or capacity) can be transient,
+      // just like the storage failures handled by the provider retry policy.
       throw new Error(`One-time workflow was not queued: ${result.reason}`);
     }
     return result;
@@ -48,7 +58,7 @@ export async function runWorkflowOnce(
 export const workflowOnceTask = task({
   id: TRIGGER_TASK_IDS.workflowOnce,
   maxDuration: 60,
-  retry: { maxAttempts: 3 },
+  retry: WORKFLOW_ONCE_RETRY,
   run: (payload: WorkflowOncePayload, { ctx }) =>
     runWorkflowOnce(payload, ctx.run.id),
   onFailure: async ({ payload, ctx }) =>
@@ -60,14 +70,14 @@ export async function recordWorkflowOnceFailure(
   payload: WorkflowOncePayload,
   runtimeRunId: string
 ) {
-  return runWithFlowActivationLock(payload.flowId, async () => {
-    const { error } = await supabaseAdmin
-      .from("flows")
-      .update({ status: "inactive", trigger_once_run_id: null })
-      .eq("id", payload.flowId)
-      .eq("published_version_id", payload.versionId)
-      .eq("trigger_once_run_id", runtimeRunId);
-    if (error)
-      throw new Error("Could not record the failed one-time dispatch.");
-  });
+  // Exhaustion can itself be caused by an activation lock. This atomic update
+  // only clears the failed version/handle; it neither waits for that lock nor
+  // changes a replacement handle or its publisher's lock ownership.
+  const { error } = await supabaseAdmin
+    .from("flows")
+    .update({ status: "inactive", trigger_once_run_id: null })
+    .eq("id", payload.flowId)
+    .eq("published_version_id", payload.versionId)
+    .eq("trigger_once_run_id", runtimeRunId);
+  if (error) throw new Error("Could not record the failed one-time dispatch.");
 }

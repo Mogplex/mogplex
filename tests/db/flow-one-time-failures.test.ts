@@ -4,6 +4,7 @@ import {
   runWorkflowOnce,
 } from "@/trigger/workflow-once";
 import { deleteFlow } from "@/lib/flows/server-flow-ops";
+import { acquireFlowActivationLock } from "@/lib/flows/activation-lock";
 import { createAutomationDb } from "./helpers/mcp-automation-fixture";
 
 afterEach(() => {
@@ -11,60 +12,84 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-it("exhausted dispatch failures disarm only the matching version and runtime", async () => {
-  const db = await createAutomationDb();
-  try {
-    const flow = (
-      await db.pg.query<{ id: string }>(
-        "insert into flows(user_id,installation_id,status,trigger_once_run_id) values('owner',123,'inactive','run_current') returning id"
-      )
-    ).rows[0];
-    const version = (
-      await db.pg.query<{ id: string }>(
-        "insert into flow_versions(flow_id,version_number,graph) values($1,1,'{}') returning id",
-        [flow.id]
-      )
-    ).rows[0];
-    await db.pg.query(
-      "update flows set status='active',published_version_id=$2 where id=$1",
-      [flow.id, version.id]
-    );
-    const payload = {
-      flowId: flow.id,
-      versionId: version.id,
-      runAt: "2027-01-15T15:00:00Z",
-    };
-    await expect(
-      runWorkflowOnce(payload, "run_current", async () => {
-        throw new Error("fixture enqueue failed");
-      })
-    ).rejects.toThrow("fixture enqueue failed");
-    await recordWorkflowOnceFailure(
-      { ...payload, versionId: "33333333-3333-4333-8333-333333333333" },
-      "run_current"
-    );
-    await recordWorkflowOnceFailure(payload, "run_obsolete");
-    expect(
-      (
-        await db.pg.query<{ status: string }>(
-          "select status from flows where id=$1",
+it.each([false, true])(
+  "exhausted dispatch failures disarm only the matching version and runtime (locked: %s)",
+  async (locked) => {
+    const db = await createAutomationDb();
+    try {
+      const flow = (
+        await db.pg.query<{ id: string }>(
+          "insert into flows(user_id,installation_id,status,trigger_once_run_id) values('owner',123,'inactive','run_current') returning id"
+        )
+      ).rows[0];
+      const version = (
+        await db.pg.query<{ id: string }>(
+          "insert into flow_versions(flow_id,version_number,graph) values($1,1,'{}') returning id",
           [flow.id]
         )
-      ).rows[0].status
-    ).toBe("active");
-    await recordWorkflowOnceFailure(payload, "run_current");
-    expect(
-      (
-        await db.pg.query(
-          "select status,trigger_once_run_id from flows where id=$1",
-          [flow.id]
-        )
-      ).rows[0]
-    ).toEqual({ status: "inactive", trigger_once_run_id: null });
-  } finally {
-    await db.close();
+      ).rows[0];
+      await db.pg.query(
+        "update flows set status='active',published_version_id=$2 where id=$1",
+        [flow.id, version.id]
+      );
+      const payload = {
+        flowId: flow.id,
+        versionId: version.id,
+        runAt: "2027-01-15T15:00:00Z",
+      };
+      await expect(
+        runWorkflowOnce(payload, "run_current", async () => {
+          throw new Error("fixture enqueue failed");
+        })
+      ).rejects.toThrow("fixture enqueue failed");
+      await expect(
+        runWorkflowOnce(payload, "run_current", async () => ({
+          matched: true,
+          outcome: "suppressed",
+          jobRunId: null,
+          started: false,
+          reason: "REPO_NOT_FOUND",
+        }))
+      ).rejects.toThrow("One-time workflow was not queued: REPO_NOT_FOUND");
+      const lock = locked ? await acquireFlowActivationLock(flow.id) : null;
+      if (lock) expect(lock.acquired).toBe(true);
+      await recordWorkflowOnceFailure(
+        { ...payload, versionId: "33333333-3333-4333-8333-333333333333" },
+        "run_current"
+      );
+      await recordWorkflowOnceFailure(payload, "run_obsolete");
+      expect(
+        (
+          await db.pg.query<{ status: string }>(
+            "select status from flows where id=$1",
+            [flow.id]
+          )
+        ).rows[0].status
+      ).toBe("active");
+      await recordWorkflowOnceFailure(payload, "run_current");
+      expect(
+        (
+          await db.pg.query(
+            "select status,trigger_once_run_id from flows where id=$1",
+            [flow.id]
+          )
+        ).rows[0]
+      ).toEqual({ status: "inactive", trigger_once_run_id: null });
+      if (lock?.acquired) {
+        expect(
+          (
+            await db.pg.query(
+              "select lock_token from flow_activation_locks where flow_id=$1",
+              [flow.id]
+            )
+          ).rows
+        ).toEqual([{ lock_token: lock.token }]);
+      }
+    } finally {
+      await db.close();
+    }
   }
-});
+);
 
 it.each([404, 403])(
   "deleting a one-time handle handles provider HTTP %s explicitly",

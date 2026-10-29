@@ -26,6 +26,21 @@ function run(overrides: Partial<InvocationRun> = {}): InvocationRun {
 }
 
 describe("getRunInvocation", () => {
+  it("distinguishes a draft-test snapshot from a published version", () => {
+    expect(
+      getRunInvocation(
+        run({
+          metadata: {
+            flow_version_number: 8,
+            automation_test: true,
+            flow_version_is_test: true,
+          },
+        }),
+        "acme"
+      )
+    ).toMatchObject({ versionNumber: 8, isDraftTest: true });
+    expect(getRunInvocation(run(), "acme").isDraftTest).toBe(false);
+  });
   it("should present the version, trigger, branch and input of an API run", () => {
     const invocation = getRunInvocation(run(), "acme");
     expect(invocation).toMatchObject({
@@ -62,6 +77,7 @@ describe("getRunInvocation", () => {
       getRunInvocation(run({ metadata: null, ai_calls: [] }), undefined)
     ).toEqual({
       versionNumber: null,
+      isDraftTest: false,
       triggeredBy: null,
       input: null,
       workingBranch: null,

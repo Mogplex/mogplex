@@ -7,6 +7,58 @@ import {
 } from "./helpers/flows-inspector-layout-fixtures";
 import type { FlowGraph } from "@/lib/types";
 
+test("switching Repeat preserves the schedule and timestamp and validates the offset", async ({
+  page,
+}) => {
+  await setupWorkflowsPage(page);
+  const graph = structuredClone(flowPayload.draft_graph) as FlowGraph;
+  graph.nodes.find((node) => node.type === "start")!.data = {
+    label: "Scheduled",
+    event: "schedule",
+    scheduleCron: "17 14 * * 2",
+    scheduleTimezone: "America/New_York",
+    filter: {
+      scope: "org",
+      installationIds: [101],
+      repos: ["webrenew/blackbox"],
+    },
+  };
+  const payload = { ...flowPayload, draft_graph: graph };
+  await page.route("**/api/flows", (route) => fulfillJson(route, [payload]));
+  await page.route("**/api/flows/flow-1", (route) =>
+    fulfillJson(route, payload)
+  );
+  await page.goto("/alex/workflows");
+  await page.locator('.react-flow__node[data-id="start"]').click();
+  const repeat = page.getByRole("combobox", { name: "Repeat", exact: true });
+  await repeat.click();
+  await page.getByRole("option", { name: "Run once", exact: true }).click();
+  const runAt = page.getByTestId("flow-trigger-run-at");
+  await runAt.focus();
+  await page.keyboard.press("Tab");
+  await expect(runAt).toHaveAttribute("aria-invalid", "true");
+  await runAt.fill("2027-01-16T16:00:00-05:00");
+  await repeat.click();
+  await page.getByRole("option", { name: "Recurring", exact: true }).click();
+  await expect(page.getByTestId("flow-trigger-schedule-cron")).toHaveValue(
+    "17 14 * * 2"
+  );
+  await expect(page.getByTestId("flow-trigger-schedule-timezone")).toHaveValue(
+    "America/New_York"
+  );
+  await repeat.click();
+  await page.getByRole("option", { name: "Run once", exact: true }).click();
+  await expect(runAt).toHaveValue("2027-01-16T16:00:00-05:00");
+  await runAt.fill("2027-01-16T16:00:00");
+  await page.keyboard.press("Tab");
+  await expect(runAt).toHaveAttribute("aria-invalid", "true");
+  await expect(
+    page.getByRole("alert").filter({ hasText: "explicit timezone offset" })
+  ).toBeVisible();
+  await runAt.fill("2027-01-16T16:00:00-05:00");
+  await expect(runAt).toHaveAttribute("aria-invalid", "false");
+});
+
 test("one-time schedule survives editing, save and reload without a recurring cron", async ({
   page,
 }, testInfo) => {

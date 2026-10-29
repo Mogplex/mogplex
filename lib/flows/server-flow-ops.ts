@@ -25,6 +25,7 @@ async function repairFlowPublicationConsistency(userId: string, row: FlowRow) {
     .from("flow_versions")
     .select("id")
     .eq("flow_id", row.id)
+    .eq("is_test", false)
     .order("version_number", { ascending: false })
     .limit(1)
     .maybeSingle();

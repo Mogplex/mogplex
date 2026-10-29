@@ -110,6 +110,9 @@ it("executes saved draft snapshots for every trigger without publishing or activ
       expect(
         "context" in context && context.context.metadata.automation_test
       ).toBe(true);
+      expect(
+        "context" in context && context.context.metadata.flow_version_is_test
+      ).toBe(true);
       const saved = (
         await db.pg.query<{
           status: string;

@@ -6,6 +6,68 @@ import {
   loadMcpRoute,
 } from "./helpers/mogplex-api-mcp-fixtures";
 
+test("draft-test endpoint forwards explicit key policy after checking both targets", async () => {
+  await loadMcpRoute();
+  const { createAutomationTestHandler } =
+    await import("../../app/api/v1/mogplex/automations/[automationId]/test/route");
+  const targets: unknown[] = [];
+  let credential: unknown;
+  const handler = createAutomationTestHandler({
+    resolveApiKey: async () => ({
+      ok: true,
+      auth: {
+        userId: "owner",
+        keyId: "key",
+        scopes: ["write"],
+        access: "full",
+      },
+    }),
+    loadTeamKeyAccess: async (_user, target) => {
+      targets.push(target);
+      return "full";
+    },
+    testAutomation: async (input) => {
+      credential = input.credential;
+      return {
+        automationId: "flow",
+        versionId: "version",
+        versionNumber: 1,
+        jobRunId: "job",
+        workingBranch: null,
+        outcome: "queued",
+        reason: null,
+        replayed: false,
+        started: true,
+        status: "running",
+        runtime: { provider: "trigger", runId: "run" },
+        test: true,
+        message: "Inspect completion",
+      };
+    },
+  });
+  const response = await handler(
+    new NextRequest(
+      "https://mogplex.test/api/v1/mogplex/automations/flow/test",
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer mog_fixture",
+          "idempotency-key": "policy",
+        },
+        body: JSON.stringify({ repoId: "repo" }),
+      }
+    ),
+    { params: Promise.resolve({ automationId: "flow" }) }
+  );
+  assert.equal(response.status, 202);
+  assert.deepEqual(targets, [{ automationId: "flow" }, { repoId: "repo" }]);
+  assert.deepEqual(credential, {
+    kind: "integration",
+    keyId: "key",
+    automationOnly: false,
+  });
+});
+
 test("draft-test tool reaches the saved-draft API and tells the caller to inspect completion", async () => {
   await loadMcpRoute();
   const { callMogplexTool } =

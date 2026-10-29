@@ -83,6 +83,7 @@ try {
     "schema-compatibility-stage.ts",
     "schema-compatibility-contract.ts",
     "schema-compatibility-guidance.ts",
+    "schema-compatibility-flow-versions.ts",
     "schema-compatibility-oauth.ts",
   ]) {
     copyFileSync(
