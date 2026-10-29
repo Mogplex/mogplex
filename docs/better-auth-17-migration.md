@@ -46,3 +46,18 @@ Preserving retained reads and writes is not an authorization to remove the old
 tables or bridge. Keep them until dependent releases and workers retire. An
 unmodified 1.6 app cannot interpret newly issued 1.7-only grants; recovery after
 new issuance should retain the 1.7 compatibility layer and roll forward.
+
+## CI database forks
+
+CI forks copy production's encrypted JWKS rows, but browser tests deliberately
+use a fixture-only `BETTER_AUTH_SECRET`. After applying candidate migrations,
+`scripts/prepare-ci-auth-fixture.ts` verifies the new branch's identity with
+Neon, resolves its own connection URI, and clears signing keys only in that
+run's temporary fork before any browser shard starts. The native provider then
+creates keys encrypted with the test secret. Client, session and refresh-token
+rows remain intact.
+
+The initializer rejects default/protected branches, unexpected run identities,
+and the source database endpoint (including its pooled alias). It never runs on
+the shared-database fallback. Keep production signing keys and
+`BETTER_AUTH_SECRET` unchanged when fixing CI fork failures.
