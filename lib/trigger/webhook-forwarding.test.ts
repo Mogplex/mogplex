@@ -14,6 +14,56 @@ const headers = new Headers({
 afterEach(() => vi.restoreAllMocks());
 
 describe("durable webhook forwarding", () => {
+  it.each([
+    ["slack", "https://api.trigger.dev"],
+    ["github", "https://api.trigger.dev"],
+    ["slack", undefined],
+    ["github", undefined],
+    ["slack", ""],
+    ["github", ""],
+  ] as const)(
+    "accepts the issued Trigger Cloud webhook host for %s with task API setting %j",
+    async (provider, apiOrigin) => {
+      const endpoint =
+        "https://webhooks.trigger.dev/webhooks/v1/ingest/synthetic-endpoint";
+      const settings: Partial<NodeJS.ProcessEnv> = {
+        ...(apiOrigin === undefined ? {} : { TRIGGER_API_URL: apiOrigin }),
+        [`TRIGGER_${provider.toUpperCase()}_WEBHOOK_URL`]: endpoint,
+      };
+      const send = vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(new Response(null, { status: 200 }));
+      const response = await forwardNativeWebhook(
+        provider,
+        "signed bytes",
+        headers,
+        { env: settings, fetch: send }
+      );
+      expect(response.status).toBe(200);
+      expect(String(send.mock.calls[0][0])).toBe(endpoint);
+      expect(send.mock.calls[0][1]?.body).toBe("signed bytes");
+      expect(settings.TRIGGER_API_URL).toBe(apiOrigin);
+    }
+  );
+
+  it("keeps self-hosted ingress pinned to its configured origin", async () => {
+    const send = vi.fn<typeof fetch>();
+    const response = await forwardNativeWebhook(
+      "github",
+      "private body",
+      headers,
+      {
+        env: {
+          TRIGGER_API_URL: "https://trigger.internal",
+          TRIGGER_GITHUB_WEBHOOK_URL:
+            "https://webhooks.trigger.dev/webhooks/v1/ingest/synthetic-endpoint",
+        },
+        fetch: send,
+      }
+    );
+    expect(response.status).toBe(503);
+    expect(send).not.toHaveBeenCalled();
+  });
   it("logs only a safe provider correlation identifier when receipt fails", async () => {
     const log = vi.spyOn(console, "error").mockImplementation(() => {});
     const deliveryId = "a0123456-7890-1234-5678-90abcdef1234";
@@ -157,6 +207,13 @@ describe("durable webhook forwarding", () => {
     "https://api.trigger.dev/webhook?secret=bad",
     "https://user:pass@api.trigger.dev/webhook",
     "https://api.trigger.dev/webhook#fragment",
+    // eslint-disable-next-line sonarjs/no-clear-text-protocols -- Intentionally rejected HTTP fixture.
+    "http://webhooks.trigger.dev/webhooks/v1/ingest/synthetic-endpoint",
+    "https://webhooks.trigger.dev.evil.example/webhook",
+    "https://evil.webhooks.trigger.dev/webhook",
+    "https://user:pass@webhooks.trigger.dev/webhook",
+    "https://webhooks.trigger.dev/webhook?secret=bad",
+    "https://webhooks.trigger.dev/webhook#fragment",
     "invalid",
   ])(
     "fails closed for invalid destinations without sending provider data: %s",
