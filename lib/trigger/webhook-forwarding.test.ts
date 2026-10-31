@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { forwardNativeWebhook } from "./webhook-forwarding";
 
 const env = {
@@ -11,7 +11,52 @@ const headers = new Headers({
   authorization: "must-not-forward",
 });
 
+afterEach(() => vi.restoreAllMocks());
+
 describe("durable webhook forwarding", () => {
+  it("logs only a safe provider correlation identifier when receipt fails", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const deliveryId = "a0123456-7890-1234-5678-90abcdef1234";
+    const send = vi
+      .fn<typeof fetch>()
+      .mockRejectedValue(new Error("private provider diagnostics"));
+    const input = new Headers({
+      "x-github-delivery": deliveryId,
+      "x-hub-signature-256": "private-signature",
+    });
+    await forwardNativeWebhook("github", "private body", input, {
+      env: {
+        TRIGGER_GITHUB_WEBHOOK_URL:
+          "https://api.trigger.dev/webhooks/private-endpoint",
+      },
+      fetch: send,
+    });
+    expect(log).toHaveBeenCalledWith(
+      "[native-webhook] github durable receipt failed",
+      { deliveryId }
+    );
+    await forwardNativeWebhook(
+      "slack",
+      "private body",
+      new Headers({ "x-slack-request-timestamp": "1793458500" }),
+      { env, fetch: send }
+    );
+    expect(log).toHaveBeenLastCalledWith(
+      "[native-webhook] slack durable receipt failed",
+      { requestTimestamp: "1793458500" }
+    );
+    await forwardNativeWebhook(
+      "github",
+      "private body",
+      new Headers({ "x-github-delivery": "private invalid identifier" }),
+      { env: {}, fetch: send }
+    );
+    expect(log).toHaveBeenLastCalledWith(
+      "[native-webhook] github durable receipt failed",
+      { deliveryId: null }
+    );
+    expect(JSON.stringify(log.mock.calls)).not.toContain("private");
+  });
   it("preserves signed bytes and waits for durable acceptance before ACK", async () => {
     let accept: (response: Response) => void = (response) => {
       throw new Error(`Unexpected receipt: ${response.status}`);

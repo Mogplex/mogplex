@@ -64,9 +64,12 @@ export async function dispatchVerifiedSlackWebhook(
   // Lazy-import the Trigger SDK so the route module can be exercised in unit
   // tests (and during the Slack url_verification handshake) without pulling in
   // the SDK's runtime configuration.
-  const { tasks } = await import("@trigger.dev/sdk/v3");
+  const { idempotencyKeys, tasks } = await import("@trigger.dev/sdk/v3");
   await tasks.trigger(TRIGGER_TASK_IDS.slackEventHandler, payload, {
-    idempotencyKey: `slack-event:${input.body.event_id}`,
+    idempotencyKey: await idempotencyKeys.create(
+      `slack-event:${input.body.event_id}`,
+      { scope: "global" }
+    ),
     concurrencyKey: buildSlackThreadConcurrencyKey(payload),
     tags: [
       `slack-team:${payload.teamId}`,

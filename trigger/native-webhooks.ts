@@ -1,7 +1,7 @@
 import { AbortTaskRunError, webhook, webhooks } from "@trigger.dev/sdk";
 import { webhookSource } from "@trigger.dev/slack";
 import { parseNativeSlackEvent } from "@/app/api/webhooks/slack/_lib/native-input";
-import { dispatchVerifiedSlackWebhook } from "@/app/api/webhooks/slack/_lib/verified-dispatch";
+import { dispatchNativeSlackWebhook } from "@/lib/slack/native-webhook-dispatch";
 import { handleNativeGithubWebhook } from "@/app/api/webhooks/github/_lib/native-handler";
 
 export const slackIngress = webhooks.endpoint.define({
@@ -36,8 +36,7 @@ export const receiveSlackWebhook = webhook({
         "A verified Slack endpoint delivery is required"
       );
     }
-    const input = parseNativeSlackEvent(event);
-    if (input) await dispatchVerifiedSlackWebhook(input);
+    await dispatchNativeSlackWebhook(event);
   },
 });
 

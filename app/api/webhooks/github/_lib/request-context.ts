@@ -62,7 +62,13 @@ export function parseWebhookRequestBody(
   context: RawWebhookRequestContext
 ): WebhookRequestContext {
   const body = JSON.parse(context.payload) as WebhookPayloadBody;
+  return createWebhookRequestContext(context, body);
+}
 
+export function createWebhookRequestContext(
+  context: RawWebhookRequestContext,
+  body: WebhookPayloadBody
+): WebhookRequestContext {
   return {
     event: context.event,
     deliveryId: context.deliveryId,

@@ -51,8 +51,19 @@ fail, the native task stops visibly for operator repair rather than retrying
 into a misleading zero-match success.
 
 Slack commands and button handlers are single-attempt because not all of their
-side effects are idempotent. A failed task remains recorded for deliberate
-recovery. Inspect prior effects before any replay or retry; do not replay a
+side effects are idempotent. Before dispatch, authorized commands and actions
+reserve an entry in the existing service-only `slack_tool_executions` ledger,
+keyed by the Slack team, actor, delivery kind and a hash of the signed body.
+Retry timestamps and signatures do not affect this identity; distinct clicks
+or command invocations do. A duplicate completed dispatch is skipped. A prior
+started or failed dispatch aborts visibly for inspection, including when an
+effect succeeded but persisting completion failed. Receipt keys contain no
+response URLs, credentials or message contents. These entries follow the
+ledger's existing 24-hour retention, so later manual replay still needs an
+effect audit. Unlinked actors reach only the existing authorization/linking
+response. Message tasks use an explicitly global event key across native runs.
+Unclassifiable hosted Slack payloads abort visibly without logging their content.
+A failed task remains recorded for deliberate recovery. Inspect prior effects before any replay or retry; do not replay a
 historical backlog automatically. Delivery `SUCCEEDED` confirms routing, not
 completion of the subscriber or the downstream agent/job.
 

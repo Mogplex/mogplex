@@ -10,6 +10,47 @@ import { loadGithubWebhookRoute } from "./helpers/github-webhook-route-fixtures"
 
 const NATIVE_URL = "https://api.trigger.dev/webhooks/synthetic-test";
 
+test("Slack forwarding honors injected ingress settings without changing the process flag", async () => {
+  const { createSlackWebhookPostHandler } = await loadSlackWebhookRoute();
+  const originalFetch = globalThis.fetch;
+  let forwarded = 0;
+  globalThis.fetch = async (input) => {
+    assert.equal(String(input), NATIVE_URL);
+    forwarded++;
+    return new Response(null, { status: 200 });
+  };
+  const handler = createSlackWebhookPostHandler({
+    getSigningSecret: () => SIGNING_SECRET,
+    getNativeIngressEnv: () => ({ TRIGGER_SLACK_WEBHOOK_URL: NATIVE_URL }),
+    dispatch: () => {
+      throw new Error("must not dispatch locally");
+    },
+    scheduleAfterResponse: () => {
+      throw new Error("must not defer locally");
+    },
+  });
+  try {
+    const body = command();
+    assert.equal(
+      (
+        await handler(
+          new Request("https://app.test/api/webhooks/slack", {
+            method: "POST",
+            body,
+            headers: signedHeaders(body, {
+              contentType: "application/x-www-form-urlencoded",
+            }),
+          })
+        )
+      ).status,
+      200
+    );
+    assert.equal(forwarded, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 async function withNativeEnv(run: () => Promise<void>) {
   const keys = [
     "TRIGGER_SLACK_WEBHOOK_URL",

@@ -5,6 +5,20 @@ const HEADER_NAMES = {
   slack: ["x-slack-request-timestamp", "x-slack-signature"],
 } as const;
 
+function receiptDiagnostics(provider: Provider, headers: Headers) {
+  if (provider === "github") {
+    const id = headers.get("x-github-delivery") ?? "";
+    return {
+      deliveryId:
+        /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(id)
+          ? id
+          : null,
+    };
+  }
+  const timestamp = headers.get("x-slack-request-timestamp") ?? "";
+  return { requestTimestamp: /^\d{10,13}$/.test(timestamp) ? timestamp : null };
+}
+
 /** Forward the exact signed bytes. A timeout is ambiguous: never fall back to
  * inline processing, since Trigger may already have durably accepted the event.
  */
@@ -51,7 +65,10 @@ export async function forwardNativeWebhook(
     return new Response(null, { status: 200 });
   } catch {
     // Provider bodies and endpoint URLs can contain sensitive data.
-    console.error(`[native-webhook] ${provider} durable receipt failed`);
+    console.error(
+      `[native-webhook] ${provider} durable receipt failed`,
+      receiptDiagnostics(provider, originalHeaders)
+    );
     return Response.json(
       { error: "Webhook temporarily unavailable" },
       { status: 503 }

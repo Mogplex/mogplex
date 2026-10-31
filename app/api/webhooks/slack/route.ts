@@ -69,6 +69,7 @@ async function handleSlashCommandRequest(
 
 const defaultDeps: SlackWebhookDeps = {
   getSigningSecret: () => process.env.SLACK_SIGNING_SECRET ?? null,
+  getNativeIngressEnv: () => process.env,
   dispatch: dispatchVerifiedSlackWebhook,
   scheduleAfterResponse: (work) => {
     after(work);
@@ -227,12 +228,15 @@ export function createSlackWebhookPostHandler(
     }
 
     const contentType = request.headers.get("content-type") ?? "";
+    const ingressEnv = deps.getNativeIngressEnv?.() ?? {};
 
     if (
-      process.env.TRIGGER_SLACK_WEBHOOK_URL &&
+      ingressEnv.TRIGGER_SLACK_WEBHOOK_URL &&
       parseDurableSlackWebhook(rawBody, contentType)
     ) {
-      return forwardNativeWebhook("slack", rawBody, request.headers);
+      return forwardNativeWebhook("slack", rawBody, request.headers, {
+        env: ingressEnv,
+      });
     }
 
     if (contentType.includes("application/x-www-form-urlencoded")) {

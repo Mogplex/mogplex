@@ -2,7 +2,7 @@ import { AbortTaskRunError } from "@trigger.dev/sdk";
 import { z } from "zod";
 import { HANDLED_GITHUB_WEBHOOK_EVENTS } from "./event-handlers";
 import { loadWebhookRepoRows } from "./data-loaders";
-import { parseWebhookRequestBody } from "./request-context";
+import { createWebhookRequestContext } from "./request-context";
 import { dispatchVerifiedGithubWebhook } from "./verified-dispatch";
 
 const EVENTS = new Set([
@@ -39,14 +39,17 @@ export async function handleNativeGithubWebhook(
   if (!body.success || !deliveryId) {
     throw new AbortTaskRunError("Invalid GitHub webhook identity");
   }
-  const context = parseWebhookRequestBody({
-    event: eventName,
-    deliveryId,
-    payload: JSON.stringify(body.data),
-    // Signature verification already happened against the original bytes.
-    signature: "",
-    globalSecret: null,
-  });
+  const context = createWebhookRequestContext(
+    {
+      event: eventName,
+      deliveryId,
+      payload: JSON.stringify(body.data),
+      // Signature verification already happened against the original bytes.
+      signature: "",
+      globalSecret: null,
+    },
+    body.data
+  );
   const repos = await loadWebhookRepoRows(
     context.repoGithubId,
     context.installationId,

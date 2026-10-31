@@ -10,6 +10,28 @@ const headers = (event: string) =>
     "x-github-event": event,
     "x-github-delivery": "delivery-stable",
   });
+
+test("verified GitHub context preserves the validated object without parsing it again", async () => {
+  const { createWebhookRequestContext } =
+    await import("../../app/api/webhooks/github/_lib/request-context");
+  const body = {
+    installation: { id: 99 },
+    repository: { id: 42, full_name: "acme/web" },
+  };
+  const context = createWebhookRequestContext(
+    {
+      event: "push",
+      deliveryId: "D1",
+      payload: JSON.stringify(body),
+      signature: "",
+      globalSecret: null,
+    },
+    body
+  );
+  assert.equal(context.body, body);
+  assert.equal(context.installationId, 99);
+  assert.equal(context.repoGithubId, 42);
+});
 const base = {
   installation: { id: 99, target_type: "Organization" },
   repository: { id: 42, full_name: "acme/web" },
