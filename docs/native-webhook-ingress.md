@@ -28,17 +28,21 @@ hosted ingress. Subscribers never synthesize signatures or expose an HTTP
 verification bypass. Runtime shape/event checks remain necessary even with
 hosted filtering. Application database idempotency and tenant checks remain
 authoritative; hosted deduplication has finite windows.
+Non-actionable GitHub event names, including `ping` and
+`github_app_authorization`, skip before installation validation or database access.
 
 ## Retry and failure behavior
 
 Forwarding uses a 2-second Slack / 8-second GitHub deadline. It does not retry,
 follow redirects or fall back to local dispatch after an ambiguous timeout.
 Such a timeout might mean Trigger already accepted the event. A failed receipt
-returns 503 with a generic error and logs only the provider name.
+returns 503 with a generic error. Logs contain the provider, a shape-validated
+delivery ID (GitHub) or request timestamp (Slack), and a coarse failure reason
+with HTTP status when available; bodies, signatures and endpoint URLs stay out.
 
 **GitHub does not automatically redeliver failed webhook deliveries.** If the
 edge fails before durable receipt, an operator must inspect GitHub's delivery
-history and Trigger's delivery records before choosing a targeted redelivery.
+history and Trigger's delivery records before choosing a recovery action.
 Slack's event delivery retry behavior does not imply automatic retries for
 every slash-command or interaction request.
 
@@ -61,7 +65,10 @@ started or failed dispatch aborts visibly for inspection, including when an
 effect succeeded but persisting completion failed. Receipt keys contain no
 response URLs, credentials or message contents. These entries follow the
 ledger's existing 24-hour retention, so later manual replay still needs an
-effect audit. Unlinked actors reach only the existing authorization/linking
+effect audit. A post-claim failure can leave the Slack interaction without a
+reply; the retry budget only recovers pre-claim failures. Inspect the receipt
+and prior effects before asking the user for a fresh interaction.
+Unlinked actors reach only the existing authorization/linking
 response. Message tasks use an explicitly global event key across native runs.
 Unclassifiable hosted Slack payloads abort visibly without logging their content.
 A failed task remains recorded for deliberate recovery. Inspect prior effects before any replay or retry; do not replay a
@@ -105,6 +112,17 @@ across the transition. Keep endpoints available until accepted work finishes.
 For a stranded wait rollback failure, inspect the wait row, token state and
 prior downstream effects before repairing that one wait and retrying its
 delivery. Do not clear installation state or replay unrelated events.
+
+If GitHub never reached hosted ingress, use GitHub's targeted redelivery after
+confirming no accepted delivery or effects exist. If Trigger already accepted
+it, inspect the subscriber run: resending the same `x-github-delivery` through
+the edge can return its existing delivery/run during the deduplication window.
+After repairing the cause and auditing prior effects, use Trigger's delivery
+replay targeted to `receive-github-webhook` to route a new delivery. Its preserved
+GitHub delivery ID still protects existing domain jobs. A delivery replay does
+not resume Trigger endpoint waiters; Mogplex's subscriber performs its own
+database-backed flow-wait routing. Never bypass a failed Slack execution receipt
+by replaying it.
 
 References: [Trigger beta requirements](https://trigger.dev/docs/webhooks/public-beta),
 [hosted delivery semantics](https://trigger.dev/docs/webhooks/deliveries),

@@ -61,6 +61,24 @@ async function withTransport(run: () => Promise<void>) {
   }
 }
 
+for (const eventName of ["ping", "github_app_authorization"]) {
+  test(`native GitHub skips ${eventName} without installation identity or database access`, async () => {
+    await withTransport(async () => {
+      const { handleNativeGithubWebhook } =
+        await import("../../app/api/webhooks/github/_lib/native-handler");
+      globalThis.fetch = async () => {
+        assert.fail("non-actionable app events must not access another tenant");
+      };
+      await handleNativeGithubWebhook(
+        eventName === "ping"
+          ? { zen: "Keep it logically awesome.", hook_id: 7 }
+          : { action: "revoked", sender: { login: "fixture-user" } },
+        headers(eventName)
+      );
+    });
+  });
+}
+
 test("native GitHub retries partial enqueue without creating a second successful domain job", async () => {
   await withTransport(async () => {
     const { handleNativeGithubWebhook } =
