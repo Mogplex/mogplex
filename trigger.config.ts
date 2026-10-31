@@ -17,7 +17,7 @@ const { ref: triggerProjectRef } = resolveTriggerProjectRef();
 export default defineConfig({
   project: triggerProjectRef,
   dirs: ["trigger"],
-  // Keep workers on the app's Node major. CLI 4.7.7 supplies the patched
+  // Keep workers on the app's Node major. The aligned CLI supplies the patched
   // Node 22.23.4 image; existing deployments require a redeploy to pick it up.
   runtime: "node-22",
   logLevel: "log",
