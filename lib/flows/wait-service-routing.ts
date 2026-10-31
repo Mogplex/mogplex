@@ -33,6 +33,8 @@ export type RouteFlowWaitsOutcome = {
   resumed: number;
   alreadyResumed: number;
   completeFailed: number;
+  /** A token completion and its rollback both failed; operator repair is required. */
+  rollbackFailed?: true;
   failures: string[];
 };
 
@@ -155,6 +157,7 @@ export async function routeGithubLabeledEventToFlowWaits(
   let resumed = 0;
   let alreadyResumed = 0;
   let completeFailed = 0;
+  let rollbackFailed = false;
   const failures: string[] = [];
 
   for (const candidate of matches) {
@@ -170,6 +173,7 @@ export async function routeGithubLabeledEventToFlowWaits(
         alreadyResumed += 1;
       } else {
         completeFailed += 1;
+        rollbackFailed ||= outcome.rollbackFailed === true;
         if (outcome.message) failures.push(outcome.message);
       }
     } catch (error) {
@@ -184,6 +188,7 @@ export async function routeGithubLabeledEventToFlowWaits(
     alreadyResumed,
     completeFailed,
     failures,
+    ...(rollbackFailed ? { rollbackFailed: true as const } : {}),
   };
 }
 
@@ -211,6 +216,7 @@ async function resumeMatchingFlowWaits(input: {
   let resumed = 0;
   let alreadyResumed = 0;
   let completeFailed = 0;
+  let rollbackFailed = false;
   const failures: string[] = [];
 
   for (const candidate of input.matches) {
@@ -226,6 +232,7 @@ async function resumeMatchingFlowWaits(input: {
         alreadyResumed += 1;
       } else {
         completeFailed += 1;
+        rollbackFailed ||= outcome.rollbackFailed === true;
         if (outcome.message) failures.push(outcome.message);
       }
     } catch (error) {
@@ -240,6 +247,7 @@ async function resumeMatchingFlowWaits(input: {
     alreadyResumed,
     completeFailed,
     failures,
+    ...(rollbackFailed ? { rollbackFailed: true as const } : {}),
   };
 }
 

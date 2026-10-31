@@ -38,7 +38,8 @@ function uniqueWebhookUserIds(
 
 export async function loadWebhookRepoRows(
   repoGithubId: number | null,
-  installationId: number | null
+  installationId: number | null,
+  throwOnError = false
 ) {
   if (!repoGithubId) {
     return [];
@@ -53,13 +54,15 @@ export async function loadWebhookRepoRows(
     repoQuery = repoQuery.eq("github_installation_id", installationId);
   }
 
-  const { data } = await repoQuery;
+  const { data, error } = await repoQuery;
+  if (error && throwOnError) throw error;
   return (data || []) as WebhookRepoRow[];
 }
 
 export async function loadFlowAgentSlugMap(
   agentIds: string[],
-  installationId: number
+  installationId: number,
+  throwOnError = false
 ) {
   const { data: agents, error } =
     agentIds.length > 0
@@ -67,6 +70,7 @@ export async function loadFlowAgentSlugMap(
       : { data: [], error: null };
 
   if (error) {
+    if (throwOnError) throw error;
     console.error("Failed to load flow routing agents:", {
       installationId,
       error: error.message,
@@ -88,6 +92,7 @@ export async function loadFlowAgentSlugMap(
 export async function loadWebhookFlowUserIds(input: {
   repoRows: WebhookRepoRow[];
   installationId: number | null;
+  throwOnError?: boolean;
 }) {
   const repoUserIds = uniqueWebhookUserIds(input.repoRows);
   if (repoUserIds.length > 0) {
@@ -104,6 +109,7 @@ export async function loadWebhookFlowUserIds(input: {
     .eq("installation_id", input.installationId);
 
   if (error) {
+    if (input.throwOnError) throw error;
     console.error("Failed to load flow routing users:", {
       installationId: input.installationId,
       error: error.message,

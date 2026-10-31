@@ -18,6 +18,7 @@ test-results/
 # Common ignores
 node_modules/
 .next/
+.trigger/
 .DS_Store
 .vercel
 next-env.d.ts

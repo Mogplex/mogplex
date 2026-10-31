@@ -86,6 +86,8 @@ export type SlackWebhookDispatchInput =
 export type SlackWebhookDeps = {
   /** Lookup of the signing secret — abstracted so tests can pass a literal. */
   getSigningSecret: () => string | null;
+  /** Server-only ingress settings; injectable without changing the process environment. */
+  getNativeIngressEnv?: () => Partial<NodeJS.ProcessEnv>;
   /**
    * Forward verified, parsed payloads onward (Trigger.dev dispatch in later slices).
    * Must return quickly — the webhook is expected to ack within 3 seconds.

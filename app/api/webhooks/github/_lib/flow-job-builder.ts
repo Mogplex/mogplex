@@ -283,13 +283,16 @@ function createFlowWebhookJob(
   }
 ): PendingWebhookJob {
   const repoForUser = pickWebhookRepoForUser(input.repoRows, flow.user_id);
-  const metadata = buildFlowWebhookJobMetadata(
-    flow,
-    result,
-    repoForUser,
-    input.repoFullName,
-    input.installationId
-  );
+  const metadata = {
+    ...buildFlowWebhookJobMetadata(
+      flow,
+      result,
+      repoForUser,
+      input.repoFullName,
+      input.installationId
+    ),
+    github_delivery_id: input.deliveryId,
+  };
   const dedup = applyReviewDedupMetadata({
     sourceKind: "flow",
     sourceType: result.triggerEvent ?? "unknown",
