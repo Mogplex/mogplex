@@ -337,12 +337,19 @@ for (const failingTable of ["repos", "flows", "agents", "flow_waits"]) {
     await withTransport(async () => {
       const { handleNativeGithubWebhook } =
         await import("../../app/api/webhooks/github/_lib/native-handler");
-      const { isSchemaDriftError, SCHEMA_DRIFT_MESSAGE } = await import("../../lib/schema-drift");
+      const { isSchemaDriftError, SCHEMA_DRIFT_MESSAGE } =
+        await import("../../lib/schema-drift");
       globalThis.fetch = async (input) => {
         const url = new URL(String(input));
         if (url.pathname.endsWith(`/${failingTable}`)) {
           return Response.json(
-            { code: "42703", message: failingTable === "flow_waits" ? SCHEMA_DRIFT_MESSAGE : "fixture column is missing" },
+            {
+              code: "42703",
+              message:
+                failingTable === "flow_waits"
+                  ? SCHEMA_DRIFT_MESSAGE
+                  : "fixture column is missing",
+            },
             { status: 400 }
           );
         }
