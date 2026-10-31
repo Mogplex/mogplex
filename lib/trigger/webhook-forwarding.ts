@@ -39,8 +39,14 @@ export async function forwardNativeWebhook(
       env[`TRIGGER_${provider.toUpperCase()}_WEBHOOK_URL`] ?? ""
     );
     const api = new URL(env.TRIGGER_API_URL ?? "https://api.trigger.dev");
+    // Trigger Cloud issues ingress URLs on a separate host from its task API.
+    // Custom instances stay pinned to their configured API origin.
+    const allowedOrigins =
+      api.origin === "https://api.trigger.dev"
+        ? [api.origin, "https://webhooks.trigger.dev"]
+        : [api.origin];
     if (
-      endpoint.origin !== api.origin ||
+      !allowedOrigins.includes(endpoint.origin) ||
       endpoint.username ||
       endpoint.password ||
       endpoint.search ||

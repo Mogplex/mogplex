@@ -96,8 +96,11 @@ completion of the subscriber or the downstream agent/job.
 3. Copy that environment's hosted URL into its corresponding **server-only**
    Vercel variable: `TRIGGER_SLACK_WEBHOOK_URL` or
    `TRIGGER_GITHUB_WEBHOOK_URL`. Activate one provider at a time. Match the
-   URL's origin to `TRIGGER_API_URL` (default `https://api.trigger.dev`), with no
-   credentials, query or fragment. Do not point previews at production ingress.
+   Cloud URL's origin to `https://webhooks.trigger.dev` or
+   `https://api.trigger.dev`, with no credentials, query or fragment. Keep
+   `TRIGGER_API_URL` on the task API origin; do not change it to the webhook
+   host. For a custom `TRIGGER_API_URL`, the webhook URL must use that same
+   origin. Do not point previews at production ingress.
    Redeploy the app to apply the variable.
 4. Keep the provider's configured URL on the existing Mogplex route. Check a
    controlled event's edge receipt, native delivery, subscriber run, and
