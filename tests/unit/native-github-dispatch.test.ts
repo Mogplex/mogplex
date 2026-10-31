@@ -335,7 +335,14 @@ test("native GitHub rejects malformed identity and never broadens a missing inst
         { repository: base.repository },
         headers("pull_request")
       ),
-      /Invalid GitHub webhook identity/
+      /Invalid GitHub payload identity/
+    );
+    await assert.rejects(
+      handleNativeGithubWebhook(
+        base,
+        new Headers({ "x-github-event": "pull_request" })
+      ),
+      /Missing GitHub delivery id header/
     );
     assert.equal(lookups, 0);
     await handleNativeGithubWebhook(

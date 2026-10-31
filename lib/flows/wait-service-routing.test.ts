@@ -1,20 +1,32 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
 import type { ResumeFlowWaitCandidate } from "./wait-service-core";
+
+let routing: typeof import("./wait-service-routing");
+
+function configureEnvironment() {
+  vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co");
+  vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "synthetic-test-service-role");
+  vi.stubEnv("TRIGGER_SECRET_KEY", "tr_dev_synthetic_wait_routing_test");
+}
+
+beforeAll(async () => {
+  configureEnvironment();
+  routing = await import("./wait-service-routing");
+});
+beforeEach(configureEnvironment);
 
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
 });
 
-for (const kind of ["github_label_added", "ci_workflow_completed"] as const) {
-  it(`${kind} preserves a stranded token rollback as an explicit operator-repair outcome`, async () => {
-    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co");
-    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "synthetic-test-service-role");
-    vi.stubEnv("TRIGGER_SECRET_KEY", "tr_dev_synthetic_wait_routing_test");
+it.each(["github_label_added", "ci_workflow_completed"] as const)(
+  "%s preserves a stranded token rollback as an explicit operator-repair outcome",
+  async (kind) => {
     const {
       routeGithubLabeledEventToFlowWaits,
       routeGithubCiCompletedEventToFlowWaits,
-    } = await import("./wait-service-routing");
+    } = routing;
     const candidate: ResumeFlowWaitCandidate = {
       id: "wait-1",
       user_id: "user-1",
@@ -92,5 +104,5 @@ for (const kind of ["github_label_added", "ci_workflow_completed"] as const) {
       rollbackFailed: true,
     });
     expect(result.failures).toHaveLength(1);
-  });
-}
+  }
+);

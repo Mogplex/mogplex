@@ -33,7 +33,7 @@ describe("durable webhook forwarding", () => {
     });
     expect(log).toHaveBeenCalledWith(
       "[native-webhook] github durable receipt failed",
-      { deliveryId }
+      { deliveryId, reason: "transport" }
     );
     await forwardNativeWebhook(
       "slack",
@@ -43,7 +43,7 @@ describe("durable webhook forwarding", () => {
     );
     expect(log).toHaveBeenLastCalledWith(
       "[native-webhook] slack durable receipt failed",
-      { requestTimestamp: "1793458500" }
+      { requestTimestamp: "1793458500", reason: "transport" }
     );
     await forwardNativeWebhook(
       "github",
@@ -53,7 +53,32 @@ describe("durable webhook forwarding", () => {
     );
     expect(log).toHaveBeenLastCalledWith(
       "[native-webhook] github durable receipt failed",
-      { deliveryId: null }
+      { deliveryId: null, reason: "config" }
+    );
+    expect(JSON.stringify(log.mock.calls)).not.toContain("private");
+  });
+
+  it("distinguishes hosted HTTP failures from timeouts without leaking diagnostics", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    await forwardNativeWebhook("slack", "private body", headers, {
+      env,
+      fetch: vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(new Response("private details", { status: 401 })),
+    });
+    expect(log).toHaveBeenLastCalledWith(
+      "[native-webhook] slack durable receipt failed",
+      { requestTimestamp: null, reason: "http", status: 401 }
+    );
+    await forwardNativeWebhook("slack", "private body", headers, {
+      env,
+      fetch: vi
+        .fn<typeof fetch>()
+        .mockRejectedValue(new DOMException("private timeout", "TimeoutError")),
+    });
+    expect(log).toHaveBeenLastCalledWith(
+      "[native-webhook] slack durable receipt failed",
+      { requestTimestamp: null, reason: "timeout" }
     );
     expect(JSON.stringify(log.mock.calls)).not.toContain("private");
   });

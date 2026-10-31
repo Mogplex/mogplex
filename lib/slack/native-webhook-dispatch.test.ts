@@ -41,15 +41,33 @@ function transport(
     completionFails?: boolean;
     missingInstallation?: boolean;
     unlinkedActor?: boolean;
+    failBeforeClaim?: "installation" | "mapping" | "reserve";
   } = {}
 ) {
   const receipts = new Map<string, Receipt>();
   let writes = 0;
   let replies = 0;
+  let failedBeforeClaim = false;
   vi.stubGlobal(
     "fetch",
     vi.fn<typeof fetch>(async (input, init) => {
       const url = new URL(String(input));
+      const failureTable = {
+        installation: "slack_installations",
+        mapping: "slack_user_mappings",
+        reserve: "slack_tool_executions",
+      };
+      if (
+        options.failBeforeClaim &&
+        !failedBeforeClaim &&
+        url.pathname.endsWith(`/${failureTable[options.failBeforeClaim]}`)
+      ) {
+        failedBeforeClaim = true;
+        return Response.json(
+          { message: "temporary lookup failure" },
+          { status: 400 }
+        );
+      }
       if (url.hostname === "hooks.slack.com") {
         replies++;
         return new Response(null, { status: 200 });
@@ -123,6 +141,20 @@ function transport(
 }
 
 describe("native Slack delivery handling", () => {
+  it.each(["installation", "mapping", "reserve"] as const)(
+    "can safely retry a transient %s failure before taking the durable claim",
+    async (failBeforeClaim) => {
+      const state = transport({ failBeforeClaim });
+      await expect(dispatchNativeSlackWebhook(command)).rejects.toThrow(
+        /temporary lookup failure/
+      );
+      expect(state.writes()).toBe(0);
+      expect(state.receipts.size).toBe(0);
+      await dispatchNativeSlackWebhook(command);
+      expect(state.writes()).toBe(1);
+      expect(state.receipts.size).toBe(1);
+    }
+  );
   it.each([{ missingInstallation: true }, { unlinkedActor: true }])(
     "preserves authorization/linking responses without recording or executing a mutation: %j",
     async (options) => {
@@ -247,7 +279,7 @@ describe("native Slack delivery handling", () => {
     expect(state.receipts.size).toBe(1);
   });
 
-  it("preserves global message identity when dispatch runs inside a native task", async () => {
+  it("uses an explicitly global message key and preserves conversation serialization", async () => {
     vi.stubEnv("TRIGGER_SECRET_KEY", "tr_dev_synthetic_slack_dispatch");
     const requests: Array<{
       options: {

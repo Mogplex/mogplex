@@ -43,15 +43,16 @@ Slack's event delivery retry behavior does not imply automatic retries for
 every slash-command or interaction request.
 
 After durable receipt, native subscribers retry up to three attempts for
-idempotent Slack event enqueue and GitHub dispatch. GitHub duplicate domain
+idempotent Slack event enqueue, pre-claim Slack lookups, and GitHub dispatch. GitHub duplicate domain
 jobs reuse the existing database identity; the existing atomic pending-job
 claim prevents restarting running/completed work. Partial wait completion is
 retried only for waits still waiting. If completion and its rollback both
 fail, the native task stops visibly for operator repair rather than retrying
 into a misleading zero-match success.
 
-Slack commands and button handlers are single-attempt because not all of their
-side effects are idempotent. Before dispatch, authorized commands and actions
+Slack command and button effects are single-attempt because not all of their
+side effects are idempotent. Transient failures before a receipt is claimed
+can retry safely; an uncertain existing claim aborts the retry. Before dispatch, authorized commands and actions
 reserve an entry in the existing service-only `slack_tool_executions` ledger,
 keyed by the Slack team, actor, delivery kind and a hash of the signed body.
 Retry timestamps and signatures do not affect this identity; distinct clicks

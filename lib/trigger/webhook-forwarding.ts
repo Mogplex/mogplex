@@ -32,6 +32,8 @@ export async function forwardNativeWebhook(
   } = {}
 ): Promise<Response> {
   const env = options.env ?? process.env;
+  let reason: "config" | "transport" | "timeout" | "http" = "config";
+  let status: number | undefined;
   try {
     const endpoint = new URL(
       env[`TRIGGER_${provider.toUpperCase()}_WEBHOOK_URL`] ?? ""
@@ -53,6 +55,7 @@ export async function forwardNativeWebhook(
       const value = originalHeaders.get(name);
       if (value) headers.set(name, value);
     }
+    reason = "transport";
     const response = await (options.fetch ?? fetch)(endpoint, {
       method: "POST",
       headers,
@@ -61,14 +64,24 @@ export async function forwardNativeWebhook(
       // Leave room for the edge's response within each provider's ACK window.
       signal: AbortSignal.timeout(provider === "slack" ? 2_000 : 8_000),
     });
-    if (!response.ok) throw new Error("Webhook was not accepted");
+    if (!response.ok) {
+      reason = "http";
+      status = response.status;
+      throw new Error("Webhook was not accepted");
+    }
     return new Response(null, { status: 200 });
-  } catch {
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      (error.name === "TimeoutError" || error.name === "AbortError")
+    )
+      reason = "timeout";
     // Provider bodies and endpoint URLs can contain sensitive data.
-    console.error(
-      `[native-webhook] ${provider} durable receipt failed`,
-      receiptDiagnostics(provider, originalHeaders)
-    );
+    console.error(`[native-webhook] ${provider} durable receipt failed`, {
+      ...receiptDiagnostics(provider, originalHeaders),
+      reason,
+      ...(status === undefined ? {} : { status }),
+    });
     return Response.json(
       { error: "Webhook temporarily unavailable" },
       { status: 503 }

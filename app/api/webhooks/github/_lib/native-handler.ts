@@ -36,9 +36,10 @@ export async function handleNativeGithubWebhook(
   if (!eventName || !EVENTS.has(eventName)) return;
   const deliveryId = headers.get("x-github-delivery")?.trim();
   const body = bodySchema.safeParse(event);
-  if (!body.success || !deliveryId) {
-    throw new AbortTaskRunError("Invalid GitHub webhook identity");
-  }
+  if (!deliveryId)
+    throw new AbortTaskRunError("Missing GitHub delivery id header");
+  if (!body.success)
+    throw new AbortTaskRunError("Invalid GitHub payload identity");
   const context = createWebhookRequestContext(
     {
       event: eventName,

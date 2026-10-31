@@ -1,6 +1,5 @@
 import { AbortTaskRunError, webhook, webhooks } from "@trigger.dev/sdk";
 import { webhookSource } from "@trigger.dev/slack";
-import { parseNativeSlackEvent } from "@/app/api/webhooks/slack/_lib/native-input";
 import { dispatchNativeSlackWebhook } from "@/lib/slack/native-webhook-dispatch";
 import { handleNativeGithubWebhook } from "@/app/api/webhooks/github/_lib/native-handler";
 
@@ -23,13 +22,8 @@ export const receiveSlackWebhook = webhook({
     maxTimeoutInMs: 10_000,
     factor: 2,
   },
-  // Retrying message enqueue is safe via slack-event:{event_id}. Commands and
-  // button handlers can have non-idempotent side effects: keep their failed
-  // runs visible for deliberate recovery instead of blindly repeating them.
-  catchError: ({ payload }) => {
-    if (parseNativeSlackEvent(payload.event)?.kind !== "event")
-      return { skipRetrying: true };
-  },
+  // Retry transient lookups before a claim. The durable command/action ledger
+  // prevents repeated effects; uncertain prior attempts abort without retrying.
   onEvent: async ({ event, endpoint }) => {
     if (endpoint?.declaredId !== slackIngress.id) {
       throw new AbortTaskRunError(
