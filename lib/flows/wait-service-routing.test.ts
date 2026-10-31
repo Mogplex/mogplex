@@ -20,9 +20,14 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-it.each(["github_label_added", "ci_workflow_completed"] as const)(
-  "%s preserves a stranded token rollback as an explicit operator-repair outcome",
-  async (kind) => {
+it.each([
+  ["github_label_added", true],
+  ["github_label_added", false],
+  ["ci_workflow_completed", true],
+  ["ci_workflow_completed", false],
+] as const)(
+  "%s reports operator repair only when rollback fails: %s",
+  async (kind, rollbackFails) => {
     const {
       routeGithubLabeledEventToFlowWaits,
       routeGithubCiCompletedEventToFlowWaits,
@@ -63,6 +68,7 @@ it.each(["github_label_added", "ci_workflow_completed"] as const)(
           if (body.status === "resumed")
             return Response.json({ resume_token: candidate.resume_token });
           rollbackAttempts++;
+          if (!rollbackFails) return Response.json(null);
           return Response.json(
             { message: "rollback unavailable" },
             { status: 400 }
@@ -101,8 +107,8 @@ it.each(["github_label_added", "ci_workflow_completed"] as const)(
       matched: 1,
       resumed: 0,
       completeFailed: 1,
-      rollbackFailed: true,
     });
+    expect(result.rollbackFailed).toBe(rollbackFails ? true : undefined);
     expect(result.failures).toHaveLength(1);
   }
 );

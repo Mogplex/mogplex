@@ -39,6 +39,7 @@ type Receipt = {
 function transport(
   options: {
     completionFails?: boolean;
+    failureReceiptFails?: boolean;
     missingInstallation?: boolean;
     unlinkedActor?: boolean;
     failBeforeClaim?: "installation" | "mapping" | "reserve";
@@ -73,6 +74,7 @@ function transport(
         return new Response(null, { status: 200 });
       }
       if (url.pathname.endsWith("/slack_installations")) {
+        expect(url.searchParams.get("team_id")).toBe("eq.T1");
         if (options.missingInstallation) return Response.json(null);
         return Response.json({
           id: "installation-1",
@@ -85,8 +87,13 @@ function transport(
           scopes: [],
         });
       }
-      if (url.pathname.endsWith("/slack_user_mappings"))
+      if (url.pathname.endsWith("/slack_user_mappings")) {
+        expect(url.searchParams.get("slack_installation_id")).toBe(
+          "eq.installation-1"
+        );
+        expect(url.searchParams.get("slack_user_id")).toBe("eq.U1");
         return Response.json(null);
+      }
       if (url.pathname.endsWith("/slack_harness_preferences")) {
         if (init?.method === "POST") writes++;
         return new Response(null, { status: 204 });
@@ -94,6 +101,15 @@ function transport(
       if (url.pathname.endsWith("/slack_tool_executions")) {
         if (init?.method === "POST") {
           const row = JSON.parse(String(init.body)) as Receipt;
+          expect(row).toMatchObject({
+            user_id: "owner-1",
+            scope_key: "slack-webhook:T1:U1",
+            occurrence: 1,
+          });
+          expect([
+            "slack_webhook_command",
+            "slack_webhook_interactivity",
+          ]).toContain(row.tool_name);
           const key = JSON.stringify([
             row.user_id,
             row.scope_key,
@@ -126,6 +142,12 @@ function transport(
           if (options.completionFails && values.status === "completed") {
             return Response.json(
               { message: "completion unavailable" },
+              { status: 400 }
+            );
+          }
+          if (options.failureReceiptFails && values.status === "failed") {
+            return Response.json(
+              { message: "private receipt failure" },
               { status: 400 }
             );
           }
@@ -332,5 +354,29 @@ describe("native Slack delivery handling", () => {
     });
     expect(state.writes()).toBe(1);
     expect([...state.receipts.values()][0].status).toBe("failed");
+  });
+
+  it("preserves the original failure and logs only the receipt ID if failure persistence also fails", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const state = transport({
+        completionFails: true,
+        failureReceiptFails: true,
+      });
+      await expect(dispatchNativeSlackWebhook(command)).rejects.toThrow(
+        /completion unavailable/
+      );
+      expect(log).toHaveBeenCalledExactlyOnceWith(
+        "[native-webhook] Slack execution receipt needs review",
+        { executionId: "receipt-0" }
+      );
+      await expect(dispatchNativeSlackWebhook(command)).rejects.toMatchObject({
+        name: "AbortTaskRunError",
+      });
+      expect(state.writes()).toBe(1);
+      expect([...state.receipts.values()][0].status).toBe("started");
+    } finally {
+      log.mockRestore();
+    }
   });
 });

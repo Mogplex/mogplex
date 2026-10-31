@@ -58,30 +58,33 @@ describe("durable webhook forwarding", () => {
     expect(JSON.stringify(log.mock.calls)).not.toContain("private");
   });
 
-  it("distinguishes hosted HTTP failures from timeouts without leaking diagnostics", async () => {
-    const log = vi.spyOn(console, "error").mockImplementation(() => {});
-    await forwardNativeWebhook("slack", "private body", headers, {
-      env,
-      fetch: vi
-        .fn<typeof fetch>()
-        .mockResolvedValue(new Response("private details", { status: 401 })),
-    });
-    expect(log).toHaveBeenLastCalledWith(
-      "[native-webhook] slack durable receipt failed",
-      { requestTimestamp: null, reason: "http", status: 401 }
-    );
-    await forwardNativeWebhook("slack", "private body", headers, {
-      env,
-      fetch: vi
-        .fn<typeof fetch>()
-        .mockRejectedValue(new DOMException("private timeout", "TimeoutError")),
-    });
-    expect(log).toHaveBeenLastCalledWith(
-      "[native-webhook] slack durable receipt failed",
-      { requestTimestamp: null, reason: "timeout" }
-    );
-    expect(JSON.stringify(log.mock.calls)).not.toContain("private");
-  });
+  it.each(["TimeoutError", "AbortError"])(
+    "distinguishes hosted HTTP failures from %s without leaking diagnostics",
+    async (errorName) => {
+      const log = vi.spyOn(console, "error").mockImplementation(() => {});
+      await forwardNativeWebhook("slack", "private body", headers, {
+        env,
+        fetch: vi
+          .fn<typeof fetch>()
+          .mockResolvedValue(new Response("private details", { status: 401 })),
+      });
+      expect(log).toHaveBeenLastCalledWith(
+        "[native-webhook] slack durable receipt failed",
+        { requestTimestamp: null, reason: "http", status: 401 }
+      );
+      await forwardNativeWebhook("slack", "private body", headers, {
+        env,
+        fetch: vi
+          .fn<typeof fetch>()
+          .mockRejectedValue(new DOMException("private timeout", errorName)),
+      });
+      expect(log).toHaveBeenLastCalledWith(
+        "[native-webhook] slack durable receipt failed",
+        { requestTimestamp: null, reason: "timeout" }
+      );
+      expect(JSON.stringify(log.mock.calls)).not.toContain("private");
+    }
+  );
   it("preserves signed bytes and waits for durable acceptance before ACK", async () => {
     let accept: (response: Response) => void = (response) => {
       throw new Error(`Unexpected receipt: ${response.status}`);
@@ -105,6 +108,10 @@ describe("durable webhook forwarding", () => {
     expect((await pending).status).toBe(200);
     const request = send.mock.calls[0][1];
     expect(request?.body).toBe(raw);
+    expect(request?.method).toBe("POST");
+    expect(new Headers(request?.headers).get("content-type")).toBe(
+      "application/json"
+    );
     expect(new Headers(request?.headers).get("x-slack-signature")).toBe(
       "test-signature"
     );
@@ -124,6 +131,9 @@ describe("durable webhook forwarding", () => {
         fetch: send,
       });
       expect(response.status).toBe(503);
+      expect(await response.clone().json()).toEqual({
+        error: "Webhook temporarily unavailable",
+      });
       expect(await response.text()).not.toContain("private diagnostics");
       expect(send).toHaveBeenCalledTimes(1);
     }
@@ -145,6 +155,8 @@ describe("durable webhook forwarding", () => {
   it.each([
     "https://wrong.example/webhook",
     "https://api.trigger.dev/webhook?secret=bad",
+    "https://user:pass@api.trigger.dev/webhook",
+    "https://api.trigger.dev/webhook#fragment",
     "invalid",
   ])(
     "fails closed for invalid destinations without sending provider data: %s",
@@ -161,6 +173,71 @@ describe("durable webhook forwarding", () => {
       );
       expect(response.status).toBe(503);
       expect(send).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each([
+    [
+      "github",
+      "x-github-delivery",
+      "private-a0123456-7890-1234-5678-90abcdef1234",
+    ],
+    [
+      "github",
+      "x-github-delivery",
+      "a0123456-7890-1234-5678-90abcdef1234-private",
+    ],
+    ["slack", "x-slack-request-timestamp", "private-1793458500"],
+    ["slack", "x-slack-request-timestamp", "1793458500-private"],
+  ] as const)(
+    "rejects extra content in %s correlation header %s: %s",
+    async (provider, header, value) => {
+      const log = vi.spyOn(console, "error").mockImplementation(() => {});
+      await forwardNativeWebhook(
+        provider,
+        "private body",
+        new Headers({ [header]: value }),
+        { env: {} }
+      );
+      expect(log.mock.calls[0][1]).toEqual(
+        provider === "github"
+          ? { deliveryId: null, reason: "config" }
+          : { requestTimestamp: null, reason: "config" }
+      );
+    }
+  );
+
+  it.each([
+    ["slack", "application/x-www-form-urlencoded", 2_000],
+    ["github", null, 8_000],
+  ] as const)(
+    "preserves %s content type and provider ACK deadline",
+    async (provider, contentType, deadline) => {
+      const timeout = vi
+        .spyOn(AbortSignal, "timeout")
+        .mockReturnValue(new AbortController().signal);
+      const send = vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(new Response(null, { status: 200 }));
+      await forwardNativeWebhook(
+        provider,
+        "signed bytes",
+        new Headers(contentType ? { "content-type": contentType } : {}),
+        {
+          env: {
+            TRIGGER_SLACK_WEBHOOK_URL: env.TRIGGER_SLACK_WEBHOOK_URL,
+            TRIGGER_GITHUB_WEBHOOK_URL: env.TRIGGER_SLACK_WEBHOOK_URL,
+          },
+          fetch: send,
+        }
+      );
+      expect(timeout).toHaveBeenCalledExactlyOnceWith(deadline);
+      const outgoing = new Headers(send.mock.calls[0][1]?.headers);
+      expect(outgoing.get("content-type")).toBe(
+        contentType ?? "application/json"
+      );
+      expect(outgoing.has("x-github-event")).toBe(false);
+      expect(outgoing.has("x-slack-signature")).toBe(false);
     }
   );
 
