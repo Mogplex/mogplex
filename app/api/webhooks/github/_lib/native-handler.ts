@@ -33,7 +33,13 @@ export async function handleNativeGithubWebhook(
   headers: Headers
 ) {
   const eventName = headers.get("x-github-event");
-  if (!eventName || !EVENTS.has(eventName)) return;
+  if (!eventName || !EVENTS.has(eventName)) {
+    console.info("[native-webhook] GitHub event skipped", {
+      eventName:
+        eventName && /^[a-z_]{1,64}$/.test(eventName) ? eventName : null,
+    });
+    return;
+  }
   const deliveryId = headers.get("x-github-delivery")?.trim();
   const body = bodySchema.safeParse(event);
   if (!deliveryId)
@@ -57,5 +63,7 @@ export async function handleNativeGithubWebhook(
     true
   );
   const response = await dispatchVerifiedGithubWebhook(context, repos, true);
+  if (response.status >= 400 && response.status < 500)
+    throw new AbortTaskRunError("GitHub webhook dispatch was rejected");
   if (!response.ok) throw new Error("GitHub webhook handling failed");
 }

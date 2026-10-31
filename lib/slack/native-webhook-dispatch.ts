@@ -51,6 +51,8 @@ export async function dispatchNativeSlackWebhook(
   }
   try {
     await dispatchVerifiedSlackWebhook(input);
+    // Completed means dispatched once. Handlers can report a business failure
+    // to Slack without throwing, so this receipt does not certify its outcome.
     await store.complete({ executionId: reservation.record.id, output: null });
   } catch (error) {
     try {

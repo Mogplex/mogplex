@@ -46,6 +46,8 @@ export async function forwardNativeWebhook(
       endpoint.search ||
       endpoint.hash
     ) {
+      // Explicit activation must fail visibly when misconfigured. Silently
+      // reverting to inline dispatch would restore its pre-durable ACK risks.
       throw new Error("Invalid webhook endpoint configuration");
     }
     const headers = new Headers({

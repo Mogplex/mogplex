@@ -261,6 +261,11 @@ export async function dispatchVerifiedGithubWebhook(
       };
       if (result.error) {
         preserveSchemaDrift([result.error]);
+        if (
+          checkRunRetryResponse.status >= 400 &&
+          checkRunRetryResponse.status < 500
+        )
+          throw new AbortTaskRunError("GitHub check run retry was rejected");
         throw new Error("GitHub check run retry dispatch failed");
       }
     }

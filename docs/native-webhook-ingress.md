@@ -39,6 +39,9 @@ Such a timeout might mean Trigger already accepted the event. A failed receipt
 returns 503 with a generic error. Logs contain the provider, a shape-validated
 delivery ID (GitHub) or request timestamp (Slack), and a coarse failure reason
 with HTTP status when available; bodies, signatures and endpoint URLs stay out.
+Configuration errors also fail closed before sending: an explicit activation
+must surface its broken configuration rather than silently restore inline ACK
+behavior. Correct the variable or use the deliberate rollback procedure below.
 
 **GitHub does not automatically redeliver failed webhook deliveries.** If the
 edge fails before durable receipt, an operator must inspect GitHub's delivery
@@ -56,6 +59,8 @@ into a misleading zero-match success. Wait-routing failures surface after
 independent flow jobs are admitted, so a failing wait cannot starve new work
 from the same delivery. Mention-loop snapshots exclude enqueues tagged with
 that delivery's ID; retrying cannot count its own previous attempt twice.
+Permanent GitHub dispatch rejections stop retries. Intentionally unsupported
+event names are logged as skips before installation checks.
 
 Slack command and button effects are single-attempt because not all of their
 side effects are idempotent. Transient failures before a receipt is claimed

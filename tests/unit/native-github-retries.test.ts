@@ -175,3 +175,71 @@ for (const kind of ["mention", "labeled"] as const) {
     }
   });
 }
+
+test("native check-run cross-repository rejection stops retries without starting work", async () => {
+  const originalFetch = globalThis.fetch;
+  const backend = process.env.MOGPLEX_DATA_BACKEND;
+  process.env.MOGPLEX_DATA_BACKEND = "supabase";
+  await loadGithubWebhookRoute();
+  try {
+    const { handleNativeGithubWebhook } =
+      await import("../../app/api/webhooks/github/_lib/native-handler");
+    globalThis.fetch = async (input) => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith("/repos"))
+        return url.searchParams.has("github_id")
+          ? Response.json([{ id: "repo-current", github_installation_id: 99 }])
+          : Response.json({
+              id: "repo-other",
+              user_id: "other-user",
+              github_installation_id: 100,
+            });
+      if (url.pathname.endsWith("/job_runs"))
+        return Response.json({
+          id: "job-other",
+          assignment_id: "assignment-other",
+          trigger_id: null,
+          flow_id: null,
+          flow_version_id: null,
+          metadata: {},
+        });
+      if (url.pathname.endsWith("/assignments"))
+        return Response.json({
+          id: "assignment-other",
+          repo_id: "repo-other",
+          type: "pr_review",
+        });
+      assert.fail(
+        `rejected retry must not start or enqueue work: ${url.pathname}`
+      );
+    };
+    await assert.rejects(
+      handleNativeGithubWebhook(
+        {
+          installation: { id: 99 },
+          repository: { id: 42, full_name: "acme/web" },
+          action: "rerequested",
+          check_run: {
+            id: 7,
+            name: "Mogplex PR Review",
+            external_id: "job-other",
+          },
+        },
+        new Headers({
+          "x-github-event": "check_run",
+          "x-github-delivery": "delivery-stable",
+        })
+      ),
+      (error) => {
+        assert.ok(error instanceof Error);
+        assert.equal(error.name, "AbortTaskRunError");
+        assert.match(error.message, /rejected/);
+        return true;
+      }
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (backend === undefined) delete process.env.MOGPLEX_DATA_BACKEND;
+    else process.env.MOGPLEX_DATA_BACKEND = backend;
+  }
+});

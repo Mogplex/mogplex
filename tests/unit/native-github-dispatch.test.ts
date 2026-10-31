@@ -62,10 +62,11 @@ async function withTransport(run: () => Promise<void>) {
 }
 
 for (const eventName of ["ping", "github_app_authorization"]) {
-  test(`native GitHub skips ${eventName} without installation identity or database access`, async () => {
+  test(`native GitHub skips ${eventName} without installation identity or database access`, async (t) => {
     await withTransport(async () => {
       const { handleNativeGithubWebhook } =
         await import("../../app/api/webhooks/github/_lib/native-handler");
+      const skipped = t.mock.method(console, "info", () => {});
       globalThis.fetch = async () => {
         assert.fail("non-actionable app events must not access another tenant");
       };
@@ -75,6 +76,10 @@ for (const eventName of ["ping", "github_app_authorization"]) {
           : { action: "revoked", sender: { login: "fixture-user" } },
         headers(eventName)
       );
+      assert.deepEqual(skipped.mock.calls[0]?.arguments, [
+        "[native-webhook] GitHub event skipped",
+        { eventName },
+      ]);
     });
   });
 }
