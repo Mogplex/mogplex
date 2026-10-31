@@ -67,7 +67,8 @@ export function countInBatchMentionSiblings(
  */
 export async function evaluateMentionLoopBreaker(
   jobs: PendingWebhookJob[],
-  countMentions: typeof countRecentMentionEnqueues = countRecentMentionEnqueues
+  countMentions: typeof countRecentMentionEnqueues = countRecentMentionEnqueues,
+  excludeDeliveryId?: string | null
 ): Promise<boolean[]> {
   const siblings = countInBatchMentionSiblings(jobs);
 
@@ -89,6 +90,7 @@ export async function evaluateMentionLoopBreaker(
             repoId: target.repoId,
             issueNumber: target.issueNumber,
             sinceMinutes: MENTION_LOOP_WINDOW_MINUTES,
+            excludeDeliveryId,
           })
         );
       } catch (error) {

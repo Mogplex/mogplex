@@ -168,16 +168,20 @@ export async function logAutomationDispatchEvent(input: {
  * Counts only `enqueue`/`queued` events (written by the enqueue RPC), so the
  * loop-breaker's own `suppressed` events do not inflate the count.
  */
-export async function countRecentMentionEnqueues(input: {
-  repoId: string;
-  issueNumber: number;
-  sinceMinutes: number;
-  now?: number;
-}): Promise<number> {
+export async function countRecentMentionEnqueues(
+  input: {
+    repoId: string;
+    issueNumber: number;
+    sinceMinutes: number;
+    now?: number;
+    excludeDeliveryId?: string | null;
+  },
+  client: Pick<typeof supabaseAdmin, "from"> = supabaseAdmin
+): Promise<number> {
   const now = input.now ?? Date.now();
   const cutoff = new Date(now - input.sinceMinutes * 60 * 1000).toISOString();
 
-  const { count, error } = await supabaseAdmin
+  let query = client
     .from("automation_dispatch_events")
     .select("id", { count: "exact", head: true })
     .eq("repo_id", input.repoId)
@@ -186,6 +190,14 @@ export async function countRecentMentionEnqueues(input: {
     .eq("outcome", "queued")
     .gte("created_at", cutoff)
     .filter("metadata->>issue_number", "eq", String(input.issueNumber));
+  if (input.excludeDeliveryId) {
+    query = query.not(
+      "metadata",
+      "cs",
+      JSON.stringify({ github_delivery_id: input.excludeDeliveryId })
+    );
+  }
+  const { count, error } = await query;
 
   if (error) {
     throw new Error(

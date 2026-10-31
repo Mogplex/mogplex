@@ -285,36 +285,41 @@ export async function dispatchVerifiedGithubWebhook(
     });
   }
 
-  if (retryFailures && waitResume?.rollbackFailed) {
-    console.error("Native GitHub wait requires operator repair", {
-      deliveryId: context.deliveryId,
-      installationId: context.installationId,
-      completeFailed: waitResume.completeFailed,
-      failureCount: waitResume.failures.length,
-      rollbackFailed: true,
-    });
-    throw new AbortTaskRunError(
-      "GitHub flow wait requires operator repair after rollback failure"
-    );
-  }
+  // Wait resumption and new jobs are independent. Surface wait failures only
+  // after admitting the delivery's idempotent jobs, including on every retry.
+  const assertWaitRoutingSucceeded = () => {
+    if (!retryFailures) return;
+    if (waitResume?.rollbackFailed) {
+      console.error("Native GitHub wait requires operator repair", {
+        deliveryId: context.deliveryId,
+        installationId: context.installationId,
+        completeFailed: waitResume.completeFailed,
+        failureCount: waitResume.failures.length,
+        rollbackFailed: true,
+      });
+      throw new AbortTaskRunError(
+        "GitHub flow wait requires operator repair after rollback failure"
+      );
+    }
+    if (
+      waitResumeFailed ||
+      (waitResume?.completeFailed ?? 0) > 0 ||
+      (waitResume?.failures.length ?? 0) > 0
+    ) {
+      console.error("Native GitHub wait routing failed", {
+        deliveryId: context.deliveryId,
+        installationId: context.installationId,
+        completeFailed: waitResume?.completeFailed ?? 0,
+        failureCount: waitResume?.failures.length ?? 0,
+        lookupFailed: waitResumeFailed,
+      });
+      throw new Error("GitHub webhook wait routing failed");
+    }
+  };
   if (retryFailures) preserveSchemaDrift(waitResume?.failures ?? []);
   const results = getWebhookEventResults(context.event, context.body);
-  if (
-    retryFailures &&
-    (waitResumeFailed ||
-      (waitResume?.completeFailed ?? 0) > 0 ||
-      (waitResume?.failures.length ?? 0) > 0)
-  ) {
-    console.error("Native GitHub wait routing failed", {
-      deliveryId: context.deliveryId,
-      installationId: context.installationId,
-      completeFailed: waitResume?.completeFailed ?? 0,
-      failureCount: waitResume?.failures.length ?? 0,
-      lookupFailed: waitResumeFailed,
-    });
-    throw new Error("GitHub webhook wait routing failed");
-  }
   if (results.length === 0) {
+    assertWaitRoutingSucceeded();
     return NextResponse.json({
       ok: true,
       skipped: true,
@@ -335,6 +340,7 @@ export async function dispatchVerifiedGithubWebhook(
   });
   if (jobs instanceof Response) return jobs;
   if (jobs.length === 0) {
+    assertWaitRoutingSucceeded();
     return NextResponse.json({
       ok: true,
       queued: 0,
@@ -345,8 +351,12 @@ export async function dispatchVerifiedGithubWebhook(
 
   // Evaluate the mention loop-breaker once for the whole delivery: snapshot the
   // recent count per repo+issue before any enqueue, so the in-batch tally is
-  // added to a count that cannot yet include the batch's own siblings.
-  const loopTripped = await evaluateMentionLoopBreaker(jobs);
+  // added without counting this delivery's previous native attempts again.
+  const loopTripped = await evaluateMentionLoopBreaker(
+    jobs,
+    undefined,
+    retryFailures ? context.deliveryId : null
+  );
   const enqueueResults = await Promise.all(
     jobs.map((job, index) =>
       loopTripped[index]
@@ -361,6 +371,7 @@ export async function dispatchVerifiedGithubWebhook(
   );
 
   if (retryFailures) preserveSchemaDrift(started.map((result) => result.error));
+  assertWaitRoutingSucceeded();
   if (
     retryFailures &&
     (enqueueResults.some((result) => result.reason === "ENQUEUE_FAILED") ||

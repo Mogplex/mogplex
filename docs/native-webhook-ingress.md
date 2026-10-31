@@ -52,7 +52,10 @@ jobs reuse the existing database identity; the existing atomic pending-job
 claim prevents restarting running/completed work. Partial wait completion is
 retried only for waits still waiting. If completion and its rollback both
 fail, the native task stops visibly for operator repair rather than retrying
-into a misleading zero-match success.
+into a misleading zero-match success. Wait-routing failures surface after
+independent flow jobs are admitted, so a failing wait cannot starve new work
+from the same delivery. Mention-loop snapshots exclude enqueues tagged with
+that delivery's ID; retrying cannot count its own previous attempt twice.
 
 Slack command and button effects are single-attempt because not all of their
 side effects are idempotent. Transient failures before a receipt is claimed
