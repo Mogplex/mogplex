@@ -286,6 +286,13 @@ export async function dispatchVerifiedGithubWebhook(
   }
 
   if (retryFailures && waitResume?.rollbackFailed) {
+    console.error("Native GitHub wait requires operator repair", {
+      deliveryId: context.deliveryId,
+      installationId: context.installationId,
+      completeFailed: waitResume.completeFailed,
+      failureCount: waitResume.failures.length,
+      rollbackFailed: true,
+    });
     throw new AbortTaskRunError(
       "GitHub flow wait requires operator repair after rollback failure"
     );
@@ -298,6 +305,13 @@ export async function dispatchVerifiedGithubWebhook(
       (waitResume?.completeFailed ?? 0) > 0 ||
       (waitResume?.failures.length ?? 0) > 0)
   ) {
+    console.error("Native GitHub wait routing failed", {
+      deliveryId: context.deliveryId,
+      installationId: context.installationId,
+      completeFailed: waitResume?.completeFailed ?? 0,
+      failureCount: waitResume?.failures.length ?? 0,
+      lookupFailed: waitResumeFailed,
+    });
     throw new Error("GitHub webhook wait routing failed");
   }
   if (results.length === 0) {

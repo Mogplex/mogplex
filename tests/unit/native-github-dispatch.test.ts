@@ -231,7 +231,7 @@ test("native GitHub retries an existing pending duplicate through atomic start a
 });
 
 for (const rollbackFails of [false, true]) {
-  test(`native GitHub ${rollbackFails ? "stops visibly after a stranded rollback" : "retries only uncompleted waits after a partial failure"}`, async () => {
+  test(`native GitHub ${rollbackFails ? "stops visibly after a stranded rollback" : "retries only uncompleted waits after a partial failure"}`, async (t) => {
     await withTransport(async () => {
       const { handleNativeGithubWebhook } =
         await import("../../app/api/webhooks/github/_lib/native-handler");
@@ -240,6 +240,7 @@ for (const rollbackFails of [false, true]) {
         ["wait-b", "waiting"],
       ]);
       const completed: string[] = [];
+      const diagnostic = t.mock.method(console, "error", () => {});
       let failSecond = true;
       globalThis.fetch = async (input, init) => {
         const url = new URL(String(input));
@@ -315,6 +316,20 @@ for (const rollbackFails of [false, true]) {
           );
           assert.deepEqual(completed, ["token-wait-a"]);
           assert.equal(statuses.get("wait-b"), "resumed");
+          assert.ok(
+            diagnostic.mock.calls.some(({ arguments: args }) => {
+              if (args[0] !== "Native GitHub wait requires operator repair")
+                return false;
+              assert.deepEqual(args[1], {
+                deliveryId: "delivery-stable",
+                installationId: 99,
+                completeFailed: 1,
+                failureCount: 1,
+                rollbackFailed: true,
+              });
+              return true;
+            })
+          );
           return;
         }
         await assert.rejects(
@@ -323,6 +338,19 @@ for (const rollbackFails of [false, true]) {
         );
         assert.deepEqual(completed, ["token-wait-a"]);
         assert.equal(statuses.get("wait-b"), "waiting");
+        assert.ok(
+          diagnostic.mock.calls.some(({ arguments: args }) => {
+            if (args[0] !== "Native GitHub wait routing failed") return false;
+            assert.deepEqual(args[1], {
+              deliveryId: "delivery-stable",
+              installationId: 99,
+              completeFailed: 1,
+              failureCount: 1,
+              lookupFailed: false,
+            });
+            return true;
+          })
+        );
         await handleNativeGithubWebhook(event, headers("pull_request"));
         assert.deepEqual(completed, ["token-wait-a", "token-wait-b"]);
       }
