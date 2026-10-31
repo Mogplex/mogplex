@@ -14,13 +14,20 @@ const headers = new Headers({
 afterEach(() => vi.restoreAllMocks());
 
 describe("durable webhook forwarding", () => {
-  it.each(["slack", "github"] as const)(
-    "accepts the issued Trigger Cloud webhook host for %s without changing the task API origin",
-    async (provider) => {
+  it.each([
+    ["slack", "https://api.trigger.dev"],
+    ["github", "https://api.trigger.dev"],
+    ["slack", undefined],
+    ["github", undefined],
+    ["slack", ""],
+    ["github", ""],
+  ] as const)(
+    "accepts the issued Trigger Cloud webhook host for %s with task API setting %j",
+    async (provider, apiOrigin) => {
       const endpoint =
         "https://webhooks.trigger.dev/webhooks/v1/ingest/synthetic-endpoint";
-      const settings = {
-        TRIGGER_API_URL: "https://api.trigger.dev",
+      const settings: Partial<NodeJS.ProcessEnv> = {
+        ...(apiOrigin === undefined ? {} : { TRIGGER_API_URL: apiOrigin }),
         [`TRIGGER_${provider.toUpperCase()}_WEBHOOK_URL`]: endpoint,
       };
       const send = vi
@@ -35,7 +42,7 @@ describe("durable webhook forwarding", () => {
       expect(response.status).toBe(200);
       expect(String(send.mock.calls[0][0])).toBe(endpoint);
       expect(send.mock.calls[0][1]?.body).toBe("signed bytes");
-      expect(settings.TRIGGER_API_URL).toBe("https://api.trigger.dev");
+      expect(settings.TRIGGER_API_URL).toBe(apiOrigin);
     }
   );
 

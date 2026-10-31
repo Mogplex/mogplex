@@ -100,7 +100,8 @@ completion of the subscriber or the downstream agent/job.
    `https://api.trigger.dev`, with no credentials, query or fragment. Keep
    `TRIGGER_API_URL` on the task API origin; do not change it to the webhook
    host. For a custom `TRIGGER_API_URL`, the webhook URL must use that same
-   origin. Do not point previews at production ingress.
+   origin. A separate self-hosted ingress origin requires an explicit allowlist
+   change. Do not point previews at production ingress.
    Redeploy the app to apply the variable.
 4. Keep the provider's configured URL on the existing Mogplex route. Check a
    controlled event's edge receipt, native delivery, subscriber run, and

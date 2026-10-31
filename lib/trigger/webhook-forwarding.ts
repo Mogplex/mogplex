@@ -1,5 +1,8 @@
 type Provider = "github" | "slack";
 
+const TRIGGER_CLOUD_API_ORIGIN = "https://api.trigger.dev";
+const TRIGGER_CLOUD_WEBHOOK_ORIGIN = "https://webhooks.trigger.dev";
+
 const HEADER_NAMES = {
   github: ["x-github-event", "x-github-delivery", "x-hub-signature-256"],
   slack: ["x-slack-request-timestamp", "x-slack-signature"],
@@ -38,12 +41,14 @@ export async function forwardNativeWebhook(
     const endpoint = new URL(
       env[`TRIGGER_${provider.toUpperCase()}_WEBHOOK_URL`] ?? ""
     );
-    const api = new URL(env.TRIGGER_API_URL ?? "https://api.trigger.dev");
+    const api = new URL(
+      env.TRIGGER_API_URL?.trim() || TRIGGER_CLOUD_API_ORIGIN
+    );
     // Trigger Cloud issues ingress URLs on a separate host from its task API.
     // Custom instances stay pinned to their configured API origin.
     const allowedOrigins =
-      api.origin === "https://api.trigger.dev"
-        ? [api.origin, "https://webhooks.trigger.dev"]
+      api.origin === TRIGGER_CLOUD_API_ORIGIN
+        ? [api.origin, TRIGGER_CLOUD_WEBHOOK_ORIGIN]
         : [api.origin];
     if (
       !allowedOrigins.includes(endpoint.origin) ||
