@@ -24,6 +24,8 @@ export type CapacityStripeProductSpec = {
 
 // Software as a service, business use. Managed Payments rejects Checkout line
 // items whose product has no tax code, so every catalog product carries one.
+// The classification is deliberately uniform: plans, add-ons, and prepaid
+// Inference credit all use it, as the earlier hand-made products did.
 export const CAPACITY_STRIPE_TAX_CODE = "txcd_10103001";
 
 const PLAN_DESCRIPTIONS = {

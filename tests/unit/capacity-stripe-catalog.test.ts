@@ -278,3 +278,15 @@ test("capacity Stripe catalog seed backfills a missing product tax code", async 
     )
   );
 });
+
+test("capacity Stripe catalog seed corrects a different product tax code", async () => {
+  const catalog = materializedCatalog();
+  catalog.products[0]!.tax_code = "txcd_99999999";
+  const result = await withTestMode(() =>
+    syncCapacityStripeCatalog({
+      deps: catalogDeps(catalog),
+    })
+  );
+  assert.equal(result.productsUpdated, 1);
+  assert.equal(catalog.products[0]!.tax_code, CAPACITY_STRIPE_TAX_CODE);
+});
