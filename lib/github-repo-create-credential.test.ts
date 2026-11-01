@@ -395,3 +395,39 @@ it("never mistakes an unbound App user token lookup for a missing authorization"
     warn.mockRestore();
   }
 });
+
+it("asks for reconnect when the identity grant cannot read org membership", async () => {
+  const credential = await resolveGithubRepoCreateCredential(
+    orgTarget,
+    "identity-token",
+    {
+      ...appDeps(),
+      fetchOrgMembership: async () => {
+        throw new GithubHttpError(403, "{}");
+      },
+    }
+  );
+  expect(credential).toMatchObject({
+    status: 400,
+    code: "GITHUB_REAUTHORIZE_REQUIRED",
+    reauthorizeScope: "read:org",
+  });
+});
+
+it("refuses a personal create where the App is not installed", async () => {
+  const lookups: string[] = [];
+  const credential = await resolveGithubRepoCreateCredential(
+    { ...personalTarget, github_installation_id: null },
+    "identity-token",
+    personalAppDeps(async (login) => {
+      lookups.push(login);
+      return "ghu_user";
+    })
+  );
+  expect(credential).toMatchObject({
+    ok: false,
+    status: 403,
+    code: "GITHUB_APP_INSTALLATION_REQUIRED",
+  });
+  expect(lookups).toEqual([]);
+});

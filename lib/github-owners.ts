@@ -29,6 +29,8 @@ export type GithubRepoOwnerTarget = {
   source: "oauth" | "installation" | "oauth+installation";
   /** The personal account needs the user's GitHub App authorization first. */
   authorization_required?: boolean;
+  /** The account has no Mogplex App installation to work in new repos. */
+  installation_required?: boolean;
 };
 
 function getInstallationScopeLabel(installation: {

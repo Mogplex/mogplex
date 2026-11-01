@@ -160,6 +160,16 @@ async function personalAccountCredential(
         "Creating a repository in a personal GitHub account is not available on this deployment. Choose an organization where the Mogplex GitHub App is installed.",
     };
   }
+  // The user token creates the repository, but Mogplex then works in it
+  // through the App installation, so the account must have one.
+  if (target.github_installation_id == null) {
+    return {
+      ok: false,
+      status: 403,
+      code: "GITHUB_APP_INSTALLATION_REQUIRED",
+      error: `Install the Mogplex GitHub App on ${target.login} to create repositories there.`,
+    };
+  }
   let token: string | null;
   try {
     token = await deps.getAppUserToken(target.login);
@@ -200,11 +210,14 @@ async function requireActiveOrgOwner(
     if (membership.state === "active" && membership.role === "admin")
       return null;
   } catch (error) {
-    // GitHub answers 404 for a non-member and 401 for a revoked grant;
-    // neither improves on retry.
+    // GitHub answers 404 for a non-member, 401 for a revoked grant and 403
+    // for a grant without read:org; none improves on retry.
     if (error instanceof GithubHttpError && error.status === 404)
       return ownerRequired(login);
-    if (error instanceof GithubHttpError && error.status === 401) {
+    if (
+      error instanceof GithubHttpError &&
+      (error.status === 401 || error.status === 403)
+    ) {
       return {
         ok: false,
         status: 400,

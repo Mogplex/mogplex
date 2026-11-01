@@ -9,7 +9,7 @@ const targets = [
   {
     login: "alex",
     kind: "personal" as const,
-    github_installation_id: null,
+    github_installation_id: 3 as number | null,
     scope_label: "Personal",
     source: "oauth" as const,
   },
@@ -57,4 +57,18 @@ test("should mark the personal account until the user authorizes the App", async
   assert.equal((await withGrant(false))[0]?.authorization_required, true);
   assert.equal((await withGrant(true))[0]?.authorization_required, false);
   assert.equal((await withGrant(false))[1]?.authorization_required, undefined);
+});
+
+test("should ask to install the App before authorizing a personal account", async () => {
+  const { markPersonalAuthorization } = await load();
+  const [personal] = await markPersonalAuthorization(
+    "user-1",
+    [{ ...targets[0], github_installation_id: null }],
+    {
+      appConfigured: () => true,
+      appUserAuthConfigured: () => true,
+      hasGrant: async () => true,
+    }
+  );
+  assert.equal(personal?.installation_required, true);
 });

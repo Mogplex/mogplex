@@ -179,19 +179,26 @@ export function useNewProjectTarget({
     };
   }, [enabled, nameValidation, ownerLogin]);
 
-  // A personal account in an App deployment needs the user's App
-  // authorization before Mogplex can create a repository there.
+  // A personal account in an App deployment needs the App installed there,
+  // then the user's App authorization, before Mogplex can create there.
   const selectedTarget = ownerTargets.find(
     (target) => target.login.toLowerCase() === ownerLogin.toLowerCase()
   );
+  const next = encodeURIComponent(returnPath);
   const authorizeAction: NewProjectAction =
-    selectedTarget?.authorization_required
-      ? {
-          href: `/api/auth/github/app-user?next=${encodeURIComponent(
-            returnPath
-          )}`,
-          label: "Authorize GitHub",
-        }
+    selectedTarget?.installation_required
+      ? { href: `/api/auth/github?next=${next}`, label: "Install GitHub App" }
+      : selectedTarget?.authorization_required
+        ? {
+            href: `/api/auth/github/app-user?next=${next}`,
+            label: "Authorize GitHub",
+          }
+        : null;
+  const authorizeMessage = selectedTarget?.installation_required
+    ? `Install the Mogplex GitHub App on ${selectedTarget.login} to create repositories there.`
+    : selectedTarget
+      ? (authorizeNotice ??
+        `Authorize Mogplex to create repositories in ${selectedTarget.login}.`)
       : null;
 
   /** Show the authorize action after a create finds the grant missing. */
@@ -211,12 +218,7 @@ export function useNewProjectTarget({
     ownerLogin,
     setOwnerLogin,
     ownersLoading,
-    ownersError:
-      ownersError ??
-      (authorizeAction && selectedTarget
-        ? (authorizeNotice ??
-          `Authorize Mogplex to create repositories in ${selectedTarget.login}.`)
-        : null),
+    ownersError: ownersError ?? (authorizeAction ? authorizeMessage : null),
     ownersAction: ownersAction ?? authorizeAction,
     availability,
     nameValidation,

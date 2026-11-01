@@ -129,3 +129,39 @@ test("new project explains an authorization made with another GitHub account", a
     page.getByRole("link", { name: "Authorize GitHub" })
   ).toHaveAttribute("href", /\/api\/auth\/github\/app-user\?next=/);
 });
+
+test("new project asks to install the App on a personal account first", async ({
+  page,
+}) => {
+  await enableScopedE2EAuth(page);
+  await mockBaseChrome(page);
+  await page.route("**/api/connections", (route) =>
+    fulfillJson(route, { connections: [] })
+  );
+  await page.route("**/api/repos**", (route) => fulfillJson(route, []));
+  await page.route("**/api/control/sessions**", (route) =>
+    fulfillJson(route, [])
+  );
+  await page.route("**/api/github/owners", (route) =>
+    fulfillJson(route, [
+      {
+        login: "alex",
+        kind: "personal",
+        github_installation_id: null,
+        scope_label: "Personal",
+        source: "oauth",
+        installation_required: true,
+      },
+    ])
+  );
+
+  await page.goto(scopedPath("control"));
+  await expect(
+    page.getByText(
+      "Install the Mogplex GitHub App on alex to create repositories there."
+    )
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Install GitHub App" })
+  ).toHaveAttribute("href", /^\/api\/auth\/github\?next=/);
+});

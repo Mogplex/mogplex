@@ -14,7 +14,8 @@ const defaultDeps = {
 
 /**
  * In an App deployment a personal repository is created with the user's own
- * App authorization, so the picker says when that step is still needed. A
+ * App authorization and needs the App installed on that account, so the
+ * picker says which step is still needed. A
  * deployment without the App's client credentials cannot create there at all,
  * so the personal account is not offered.
  */
@@ -30,6 +31,8 @@ export async function markPersonalAuthorization(
   return Promise.all(
     targets.map(async (target) => {
       if (target.kind !== "personal") return target;
+      if (target.github_installation_id == null)
+        return { ...target, installation_required: true };
       const authorized = await deps
         .hasGrant(userId, target.login)
         .catch(() => false);
