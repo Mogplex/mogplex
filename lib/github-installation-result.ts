@@ -9,9 +9,19 @@ export async function ignoreRevokedGithubInstallation<T>(
   } catch (error) {
     if (
       error instanceof GithubHttpError &&
-      [401, 403, 404].includes(error.status)
+      error.status === 403 &&
+      /rate[\s-]*limit/i.test(error.responseBody)
     )
+      throw error;
+    if (
+      error instanceof GithubHttpError &&
+      [401, 403, 404].includes(error.status)
+    ) {
+      console.warn("[github-installations] authorization unavailable", {
+        status: error.status,
+      });
       return null;
+    }
     throw error;
   }
 }

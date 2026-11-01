@@ -89,4 +89,13 @@ it("returns no credential for a revoked installation and preserves genuine provi
       github_installation_id: 12,
     })
   ).rejects.toThrow();
+  vi.stubGlobal("fetch", async () =>
+    Response.json({ message: "API rate limit exceeded" }, { status: 403 })
+  );
+  await expect(
+    getGithubAccessTokenForRepo({
+      user_id: "owner",
+      github_installation_id: 12,
+    })
+  ).rejects.toThrow(/rate limit/i);
 });
