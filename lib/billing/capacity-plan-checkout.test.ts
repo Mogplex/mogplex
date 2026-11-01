@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import type Stripe from "stripe";
+import Stripe from "stripe";
 import { describe, expect, test, vi } from "vitest";
 import type { BillingAccount } from "./accounts";
 import {
@@ -41,6 +41,8 @@ function depsFixture(
       url: "https://checkout.stripe.test/cs-1",
     }),
     appUrl: (path) => `https://mogplex.test${path}`,
+    advanceCheckoutGeneration: async (_accountId, fromGeneration) =>
+      fromGeneration + 1,
     ...overrides,
   };
 }
@@ -308,5 +310,100 @@ describe("Individual capacity plan checkout", () => {
       }),
     });
     expect(successUrl).toBe("https://mogplex.test/?billing=plan-submitted");
+  });
+
+  describe("a request Stripe refused", () => {
+    const request = {
+      planCode: "pro",
+      interval: "month",
+      returnPath: "/",
+    } as const;
+    const taxCodeRefusal = (headers: Record<string, string> = {}) =>
+      new Stripe.errors.StripeInvalidRequestError({
+        type: "invalid_request_error",
+        message: "Invalid line_items[0]: the product tax code is missing.",
+        headers,
+      });
+
+    function recordingDeps(failures: Error[]) {
+      const keys: Array<string | undefined> = [];
+      const advanced: number[] = [];
+      const deps = depsFixture({
+        createCheckoutSession: async (_params, options) => {
+          keys.push(options.idempotencyKey);
+          const failure = failures.shift();
+          if (failure) throw failure;
+          return { id: "cs-fresh", url: "https://stripe.test/fresh" };
+        },
+        advanceCheckoutGeneration: async (_accountId, fromGeneration) => {
+          advanced.push(fromGeneration);
+          return fromGeneration + 1;
+        },
+      });
+      return { deps, keys, advanced };
+    }
+
+    test("should retry on a fresh key when Stripe replays an earlier refusal", async () => {
+      const { deps, keys, advanced } = recordingDeps([
+        taxCodeRefusal({ "idempotent-replayed": "true" }),
+      ]);
+
+      const result = await createIndividualPlanCheckout({
+        account: accountFixture(),
+        actorEmail: null,
+        request,
+        deps,
+      });
+
+      expect(result.url).toBe("https://stripe.test/fresh");
+      expect(advanced).toEqual([3]);
+      expect(keys).toEqual([
+        "capacity-plan-subscribe:account-1:3",
+        "capacity-plan-subscribe:account-1:4",
+      ]);
+    });
+
+    test("should move off the key without retrying when the refusal is new", async () => {
+      const { deps, keys, advanced } = recordingDeps([taxCodeRefusal()]);
+
+      await expect(
+        createIndividualPlanCheckout({
+          account: accountFixture(),
+          actorEmail: null,
+          request,
+          deps,
+        })
+      ).rejects.toBeInstanceOf(Stripe.errors.StripeInvalidRequestError);
+      expect(advanced).toEqual([3]);
+      expect(keys).toHaveLength(1);
+    });
+
+    test("should keep the key when a session may exist or the outcome is unknown", async () => {
+      const failures = [
+        new Stripe.errors.StripeIdempotencyError({
+          type: "idempotency_error",
+          message:
+            "Keys for idempotent requests can only be used with the same parameters.",
+        }),
+        new Stripe.errors.StripeAPIError({
+          type: "api_error",
+          message: "Stripe had a problem.",
+        }),
+      ];
+      for (const failure of failures) {
+        const { deps, keys, advanced } = recordingDeps([failure]);
+
+        await expect(
+          createIndividualPlanCheckout({
+            account: accountFixture(),
+            actorEmail: null,
+            request,
+            deps,
+          })
+        ).rejects.toBe(failure);
+        expect(advanced).toEqual([]);
+        expect(keys).toHaveLength(1);
+      }
+    });
   });
 });
