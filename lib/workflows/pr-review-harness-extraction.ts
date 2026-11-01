@@ -11,9 +11,14 @@ import {
   toStringArray,
 } from "./pr-review-harness-utils";
 import {
+  hasReviewToolCalls,
   readReviewReportState,
   type ReviewReportState,
 } from "./pr-review-report-state";
+
+/** Authored, because a reviewer that never ran a tool has no review to summarize. */
+export const PR_REVIEW_NOT_STARTED_MESSAGE =
+  "The reviewer stopped before it read the pull request, so there is no verdict. Rerun the review for a full result.";
 
 function extractLastToolInput(
   result: AutomationAgentReviewResult,
@@ -215,6 +220,24 @@ export function extractPrReviewHarnessResult(
         hasIssues: true,
         summary: toOptionalString(result.text) ?? legacyCommentBody,
         commentBody: legacyCommentBody,
+        affectedFiles: [],
+        findings: [],
+      },
+      ...(autofix ? { autofix } : {}),
+    };
+  }
+
+  // No tool call at all means the reviewer never read the PR. Its text is
+  // then an opening line at best, and at worst a tool call the provider
+  // failed to parse, echoed as raw markup. Publish none of it.
+  if (!hasReviewToolCalls(result.steps)) {
+    return {
+      source: "not_started",
+      fallbackText: null,
+      reviewOutcome: {
+        hasIssues: false,
+        summary: PR_REVIEW_NOT_STARTED_MESSAGE,
+        commentBody: null,
         affectedFiles: [],
         findings: [],
       },

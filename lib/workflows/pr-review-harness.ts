@@ -1,6 +1,7 @@
 import type { ReviewFinding } from "@/lib/types";
 import type {
   PrReviewConclusion,
+  PrReviewContractSource,
   PrReviewFailureDetails,
   PrReviewHarnessResult,
   ReviewOutcome,
@@ -88,6 +89,25 @@ function buildStructuredReviewNarrative(reviewOutcome: ReviewOutcome | null) {
   return `${summary}\n\n${commentBody}`;
 }
 
+function buildPrReviewNarrative(
+  source: PrReviewContractSource | undefined,
+  reviewOutcome: ReviewOutcome | null,
+  fallbackText: string | null | undefined
+) {
+  if (source === "structured") {
+    return buildStructuredReviewNarrative(reviewOutcome);
+  }
+  // The caller's fallback is the model's raw text, which a review that never
+  // started must not publish; its authored summary is the whole message.
+  if (source === "not_started") {
+    return toOptionalString(reviewOutcome?.summary);
+  }
+  return (
+    toOptionalString(reviewOutcome?.commentBody) ??
+    toOptionalString(fallbackText)
+  );
+}
+
 export function buildPrReviewCheckText(input: {
   harnessResult: PrReviewHarnessResult | null;
   fallbackText: string | null | undefined;
@@ -109,11 +129,11 @@ export function buildPrReviewCheckText(input: {
     parts.push(contractNote);
   }
 
-  const narrative =
-    input.harnessResult?.source === "structured"
-      ? buildStructuredReviewNarrative(reviewOutcome)
-      : (toOptionalString(reviewOutcome?.commentBody) ??
-        toOptionalString(fallbackText));
+  const narrative = buildPrReviewNarrative(
+    input.harnessResult?.source,
+    reviewOutcome,
+    fallbackText
+  );
   if (narrative) {
     parts.push(demoteAgentMarkdownHeadings(narrative));
   }

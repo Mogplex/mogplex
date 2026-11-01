@@ -17,6 +17,8 @@ export function buildPrReviewContractNote(source: PrReviewContractSource) {
       return "Note: The reviewer said it found issues but its report did not list them, so there is no verdict. The text below is its summary only. Rerun the review for a full result.";
     case "legacy_text":
       return "Note: The reviewer finished without filing its structured report, so there is no verdict. The text below is its closing summary only. Rerun the review for a full result.";
+    case "not_started":
+      return null;
     case "structured":
       return null;
   }
