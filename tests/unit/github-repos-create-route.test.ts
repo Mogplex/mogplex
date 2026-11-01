@@ -13,6 +13,11 @@ async function loadRoute() {
 
 const TEAM_ID = "00000000-0000-4000-8000-000000000123";
 
+const owners = (
+  targets: GithubRepoOwnerTarget[],
+  oauthScopes: string[] | null = null
+) => ({ targets, oauthScopes });
+
 async function credentialFor(
   appConfigured: boolean,
   target: GithubRepoOwnerTarget,
@@ -23,6 +28,7 @@ async function credentialFor(
   return resolveGithubRepoCreateCredential(target, token, {
     appConfigured: () => appConfigured,
     createInstallationToken: async (id) => ({ token: `installation-${id}` }),
+    fetchOrgMembership: async () => ({ role: "admin", state: "active" }),
   });
 }
 const oauthOnlyCredential = (target: GithubRepoOwnerTarget, token: string) =>
@@ -46,22 +52,23 @@ function appModeHandler(
     }),
     getGithubToken: async () => "identity-token",
     resolveCreateCredential: appCredential,
-    loadOwnerTargets: async () => [
-      {
-        login: "alex",
-        kind: "personal",
-        github_installation_id: null,
-        scope_label: "Personal",
-        source: "oauth",
-      },
-      {
-        login: "acme",
-        kind: "org",
-        github_installation_id: 42,
-        scope_label: "Org",
-        source: "oauth+installation",
-      },
-    ],
+    loadOwnerTargets: async () =>
+      owners([
+        {
+          login: "alex",
+          kind: "personal",
+          github_installation_id: null,
+          scope_label: "Personal",
+          source: "oauth",
+        },
+        {
+          login: "acme",
+          kind: "org",
+          github_installation_id: 42,
+          scope_label: "Org",
+          source: "oauth+installation",
+        },
+      ]),
     createGithubRepo: async (token, input) => {
       tokens.push(token);
       if (refuseCreate) {
@@ -188,15 +195,16 @@ test("POST /api/github/repos creates an org repo before returning its Mogplex ro
     }),
     getGithubToken: async () => "github-token",
     resolveCreateCredential: oauthOnlyCredential,
-    loadOwnerTargets: async () => [
-      {
-        login: "acme",
-        kind: "org",
-        github_installation_id: 42,
-        scope_label: "Org",
-        source: "oauth+installation",
-      },
-    ],
+    loadOwnerTargets: async () =>
+      owners([
+        {
+          login: "acme",
+          kind: "org",
+          github_installation_id: 42,
+          scope_label: "Org",
+          source: "oauth+installation",
+        },
+      ]),
     createGithubRepo: async (_token, input) => {
       createInput = input;
       return {
@@ -267,7 +275,7 @@ test("POST /api/github/repos rejects owners that cannot create repos", async () 
     requireUserId: async () => "user-123",
     getGithubToken: async () => "github-token",
     resolveCreateCredential: oauthOnlyCredential,
-    loadOwnerTargets: async () => [],
+    loadOwnerTargets: async () => owners([]),
     createGithubRepo: async () => {
       creates += 1;
       throw new Error("must not create");
@@ -321,15 +329,16 @@ test("POST /api/github/repos maps GitHub name collisions to 409", async () => {
     requireUserId: async () => "user-123",
     getGithubToken: async () => "github-token",
     resolveCreateCredential: oauthOnlyCredential,
-    loadOwnerTargets: async () => [
-      {
-        login: "alex",
-        kind: "personal",
-        github_installation_id: null,
-        scope_label: "Personal",
-        source: "oauth",
-      },
-    ],
+    loadOwnerTargets: async () =>
+      owners([
+        {
+          login: "alex",
+          kind: "personal",
+          github_installation_id: null,
+          scope_label: "Personal",
+          source: "oauth",
+        },
+      ]),
     createGithubRepo: async () => {
       throw new GithubRepoCreateError(
         422,
@@ -364,15 +373,16 @@ test("POST /api/github/repos reconciles a repository left by a partial create", 
     requireUserId: async () => "user-123",
     getGithubToken: async () => "github-token",
     resolveCreateCredential: oauthOnlyCredential,
-    loadOwnerTargets: async () => [
-      {
-        login: "acme",
-        kind: "org",
-        github_installation_id: 42,
-        scope_label: "Org",
-        source: "oauth+installation",
-      },
-    ],
+    loadOwnerTargets: async () =>
+      owners([
+        {
+          login: "acme",
+          kind: "org",
+          github_installation_id: 42,
+          scope_label: "Org",
+          source: "oauth+installation",
+        },
+      ]),
     createGithubRepo: async () => {
       throw new GithubRepoCreateError(422, "name already exists");
     },
@@ -408,4 +418,53 @@ test("POST /api/github/repos reconciles a repository left by a partial create", 
   assert.equal(response.status, 200);
   assert.equal(importedGithubId, 456);
   assert.equal((await response.json()).id, "repo-456");
+});
+
+test("POST /api/github/repos asks to reconnect when the identity grant cannot read orgs", async () => {
+  const { createGithubRepoPostHandler } = await loadRoute();
+  const handler = createGithubRepoPostHandler({
+    requireUserId: async () => "user-123",
+    getGithubToken: async () => "identity-token",
+    loadOwnerTargets: async () =>
+      owners(
+        [
+          {
+            login: "alex",
+            kind: "personal",
+            github_installation_id: null,
+            scope_label: "Personal",
+            source: "oauth",
+          },
+        ],
+        ["read:user", "user:email"]
+      ),
+  });
+  const response = await handler(createRequest("acme"));
+  assert.equal(response.status, 400);
+  assert.equal((await response.json()).code, "GITHUB_REAUTHORIZE_REQUIRED");
+  assert.equal(
+    response.headers.get("x-mogplex-github-reauthorize"),
+    "read:org"
+  );
+});
+
+test("POST /api/github/repos reports a failed connection lookup instead of asking to connect", async () => {
+  const { createGithubRepoPostHandler } = await loadRoute();
+  const originalError = console.error;
+  console.error = () => {};
+  try {
+    const handler = createGithubRepoPostHandler({
+      requireUserId: async () => "user-123",
+      getGithubToken: async () => {
+        throw new Error("Could not verify GitHub repository authorization");
+      },
+    });
+    const response = await handler(createRequest("acme"));
+    assert.equal(response.status, 500);
+    assert.deepEqual(await response.json(), {
+      error: "Could not read your GitHub connection",
+    });
+  } finally {
+    console.error = originalError;
+  }
 });

@@ -12,13 +12,12 @@ import {
   GithubRepoCreateError,
   isRecoverableGithubRepoCreateConflict,
 } from "@/lib/github-create";
-import { loadGithubRepoCreationOwnerTargets } from "@/app/api/github/_lib/repo-owner-targets";
+import { githubRepoCreateErrorResponse } from "@/lib/github-repo-create-credential";
 import {
-  getGithubRepoCreationUserToken,
-  githubRepoCreateErrorResponse,
-  resolveGithubRepoCreateCredential,
-} from "@/lib/github-repo-create-credential";
-import type { GithubRepoOwnerTarget } from "@/lib/github-owners";
+  defaultRepoCreateTargetDeps,
+  resolveRepoCreateTarget,
+  type RepoCreateTargetDeps,
+} from "@/app/api/github/_lib/repo-create-target";
 import { validateGithubRepoName } from "@/lib/github-repo-name";
 import { REPO_SELECT_WITH_WORKSPACE } from "@/lib/repos";
 import {
@@ -70,15 +69,9 @@ export async function GET(request: Request) {
   }
 }
 
-type GithubRepoPostRouteDeps = {
+type GithubRepoPostRouteDeps = RepoCreateTargetDeps & {
   requireUserId: typeof requireUserId;
   resolveActiveTeamCapabilities: typeof resolveActiveTeamCapabilities;
-  getGithubToken: (userId: string) => Promise<string | null>;
-  resolveCreateCredential: typeof resolveGithubRepoCreateCredential;
-  loadOwnerTargets: (
-    userId: string,
-    token: string
-  ) => Promise<GithubRepoOwnerTarget[]>;
   createGithubRepo: typeof createGithubRepo;
   fetchGithubRepo: typeof fetchGithubRepo;
   upsertGithubReposForUser: typeof upsertGithubReposForUser;
@@ -111,10 +104,7 @@ export function createGithubRepoPostHandler(
   const deps: GithubRepoPostRouteDeps = {
     requireUserId,
     resolveActiveTeamCapabilities,
-    getGithubToken: (userId) => getGithubRepoCreationUserToken(userId),
-    resolveCreateCredential: resolveGithubRepoCreateCredential,
-    loadOwnerTargets: async (userId, token) =>
-      (await loadGithubRepoCreationOwnerTargets(userId, token)).targets,
+    ...defaultRepoCreateTargetDeps,
     createGithubRepo,
     fetchGithubRepo,
     upsertGithubReposForUser,
@@ -165,52 +155,14 @@ export function createGithubRepoPostHandler(
     const ownerLogin =
       typeof body.owner_login === "string" ? body.owner_login.trim() : "";
 
-    const token = await deps.getGithubToken(userId).catch(() => null);
-    if (!token) {
-      return NextResponse.json(
-        { error: "Connect GitHub account first" },
-        { status: 400 }
-      );
-    }
+    const target = await resolveRepoCreateTarget(userId, ownerLogin, deps);
+    if (!target.ok) return target.response;
+    const { ownerTarget, viaInstallation } = target;
 
-    let ownerTargets: GithubRepoOwnerTarget[];
     try {
-      // Revalidate live at the mutation boundary. Reusing a client-provided or
-      // cached target could create a repository after org permissions changed.
-      ownerTargets = await deps.loadOwnerTargets(userId, token);
-    } catch (error) {
-      console.error("[github-repo-create] owner lookup failed", {
-        userId,
-        error,
-      });
-      return NextResponse.json(
-        { error: "GitHub accounts unavailable" },
-        { status: 502 }
-      );
-    }
-    const ownerTarget = ownerTargets.find(
-      (target) => target.login.toLowerCase() === ownerLogin.toLowerCase()
-    );
-    if (!ownerTarget) {
-      return NextResponse.json(
-        { error: "Selected GitHub account is unavailable" },
-        { status: 400 }
-      );
-    }
-
-    let viaInstallation = false;
-    try {
-      const credential = await deps.resolveCreateCredential(ownerTarget, token);
-      if (!credential.ok) {
-        return NextResponse.json(
-          { error: credential.error, code: credential.code },
-          { status: credential.status }
-        );
-      }
-      viaInstallation = credential.viaInstallation;
       let createdRepo: Awaited<ReturnType<typeof createGithubRepo>>;
       try {
-        createdRepo = await deps.createGithubRepo(credential.token, {
+        createdRepo = await deps.createGithubRepo(target.token, {
           owner: ownerTarget.kind === "personal" ? null : ownerTarget.login,
           name: nameValidation.name,
           visibility: "private",
@@ -220,11 +172,7 @@ export function createGithubRepoPostHandler(
           throw error;
         }
         const existingRepo = await deps
-          .fetchGithubRepo(
-            credential.token,
-            ownerTarget.login,
-            nameValidation.name
-          )
+          .fetchGithubRepo(target.token, ownerTarget.login, nameValidation.name)
           .catch((lookupError) => {
             console.warn("[github-repo-create] conflict lookup failed", {
               userId,

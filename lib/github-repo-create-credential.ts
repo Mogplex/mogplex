@@ -6,13 +6,16 @@ import {
   extractGithubApiErrorMessage,
   type GithubRepoCreateError,
 } from "@/lib/github-create";
-import type { GithubRepoOwnerTarget } from "@/lib/github-owners";
+import {
+  fetchGithubOrgMembership,
+  type GithubRepoOwnerTarget,
+} from "@/lib/github-owners";
 import { getGithubOAuthRepositoryToken } from "@/lib/github-repository-auth";
 import { getOAuthToken } from "@/lib/oauth-tokens";
 
 export type GithubRepoCreateRefusal = {
   ok: false;
-  status: 403 | 409;
+  status: 403 | 409 | 502;
   code: string;
   error: string;
 };
@@ -26,12 +29,13 @@ const defaultDeps = {
   getIdentityToken: getOAuthToken,
   getRepositoryToken: getGithubOAuthRepositoryToken,
   createInstallationToken: createGithubInstallationAccessToken,
+  fetchOrgMembership: fetchGithubOrgMembership,
 };
 
 /**
  * The user's own GitHub token, used to list owners and check live org
- * permissions. In an App deployment it is the identity grant, which can read
- * org membership but never writes a repository.
+ * membership. In an App deployment this is the identity grant, and the App
+ * path never creates a repository with it.
  */
 export async function getGithubRepoCreationUserToken(
   userId: string,
@@ -73,6 +77,12 @@ export async function resolveGithubRepoCreateCredential(
       error: `Ask an owner of ${target.login} to install the Mogplex GitHub App and connect it in Mogplex.`,
     };
   }
+  const ownerRefusal = await requireActiveOrgOwner(
+    target.login,
+    userToken,
+    deps
+  );
+  if (ownerRefusal) return ownerRefusal;
   try {
     const { token } = await deps.createInstallationToken(
       target.github_installation_id
@@ -96,6 +106,40 @@ export async function resolveGithubRepoCreateCredential(
 }
 
 /**
+ * An installation token ignores the acting user's org policy, so only an
+ * active owner creates through it. Membership is read live, which also
+ * catches an owner demoted after connecting the installation.
+ */
+async function requireActiveOrgOwner(
+  login: string,
+  userToken: string,
+  deps: typeof defaultDeps
+): Promise<GithubRepoCreateRefusal | null> {
+  try {
+    const membership = await deps.fetchOrgMembership(userToken, login);
+    if (membership.state === "active" && membership.role === "admin")
+      return null;
+  } catch (error) {
+    console.warn("[github-repo-create] org membership unavailable", {
+      owner: login,
+      error,
+    });
+    return {
+      ok: false,
+      status: 502,
+      code: "GITHUB_MEMBERSHIP_UNAVAILABLE",
+      error: `Could not confirm your membership in ${login}. Try again.`,
+    };
+  }
+  return {
+    ok: false,
+    status: 403,
+    code: "GITHUB_ORG_OWNER_REQUIRED",
+    error: `Only an owner of ${login} can create repositories there through the Mogplex GitHub App.`,
+  };
+}
+
+/**
  * Map GitHub's refusal of a create to the route response. An installation
  * refused with 403 has not accepted the App's Administration permission, so
  * say that instead of GitHub's message.
@@ -103,11 +147,21 @@ export async function resolveGithubRepoCreateCredential(
 export function githubRepoCreateErrorResponse(
   error: GithubRepoCreateError,
   context: { ownerLogin: string; viaInstallation: boolean }
-): { status: number; body: { error: string; code?: string } } {
+): {
+  status: number;
+  body: { error: string; code?: string; detail?: string };
+} {
+  const detail = extractGithubApiErrorMessage(error.body);
   if (error.status === 403 && context.viaInstallation) {
+    // Other 403 causes exist (org policy, IP allow list); keep GitHub's text.
+    console.warn("[github-repo-create] installation create refused", {
+      owner: context.ownerLogin,
+      body: error.body,
+    });
     return {
       status: 403,
       body: {
+        ...(detail ? { detail } : {}),
         code: "GITHUB_APP_PERMISSION_REQUIRED",
         error: `The Mogplex GitHub App on ${context.ownerLogin} cannot create repositories yet. Ask an owner of ${context.ownerLogin} to accept the App's updated permissions on GitHub.`,
       },
@@ -122,9 +176,7 @@ export function githubRepoCreateErrorResponse(
   return {
     status,
     body: {
-      error:
-        extractGithubApiErrorMessage(error.body) ||
-        "GitHub repo creation failed",
+      error: detail || "GitHub repo creation failed",
     },
   };
 }

@@ -18,6 +18,11 @@ async function oauthOnlyCredential() {
     });
 }
 
+const owners = (
+  targets: GithubRepoOwnerTarget[],
+  oauthScopes: string[] | null = null
+) => ({ targets, oauthScopes });
+
 const acmeTarget: GithubRepoOwnerTarget = {
   login: "acme",
   kind: "org",
@@ -93,7 +98,7 @@ test("POST /api/workspaces/[id]/repos creates a repo in the selected workspace",
     requireUserId: async () => "user-123",
     getWorkspaceForScope: async () => ({ id: "ws-1", name: "Product Alpha" }),
     getGithubToken: async () => "github-token",
-    loadOwnerTargets: async () => [alexTarget, acmeTarget],
+    loadOwnerTargets: async () => owners([alexTarget, acmeTarget]),
     resolveCreateCredential: await oauthOnlyCredential(),
     createGithubRepo: async (_token, input) => {
       createInput = input;
@@ -182,7 +187,7 @@ test("POST /api/workspaces/[id]/repos creates team-scoped repo rows", async () =
       return { id: "ws-team", name: "Team Project" };
     },
     getGithubToken: async () => "github-token",
-    loadOwnerTargets: async () => [alexTarget],
+    loadOwnerTargets: async () => owners([alexTarget]),
     resolveCreateCredential: await oauthOnlyCredential(),
     createGithubRepo: async () => ({
       id: 456,
@@ -246,14 +251,15 @@ async function appModeHandler(created: string[]) {
     requireUserId: async () => "user-123",
     getWorkspaceForScope: async () => ({ id: "ws-1", name: "Product Alpha" }),
     getGithubToken: async () => "identity-token",
-    // The live owner check drops "locked" (no create permission).
-    loadOwnerTargets: async () => [alexTarget, acmeTarget],
+    // "locked" is absent, as if the live owner check had dropped it.
+    loadOwnerTargets: async () => owners([alexTarget, acmeTarget]),
     resolveCreateCredential: (target, token) =>
       resolveGithubRepoCreateCredential(target, token, {
         appConfigured: () => true,
         createInstallationToken: async (id) => ({
           token: `installation-${id}`,
         }),
+        fetchOrgMembership: async () => ({ role: "admin", state: "active" }),
       }),
     createGithubRepo: async (token, input) => {
       created.push(`${token}:${input.owner}/${input.name}`);

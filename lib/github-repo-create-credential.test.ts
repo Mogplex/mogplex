@@ -23,9 +23,13 @@ const personalTarget: GithubRepoOwnerTarget = {
   source: "oauth+installation",
 };
 
-function appDeps(minted: number[] = []) {
+type Membership = { role?: "admin" | "member"; state?: "active" | "pending" };
+const activeOwner: Membership = { role: "admin", state: "active" };
+
+function appDeps(minted: number[] = [], membership: Membership = activeOwner) {
   return {
     appConfigured: () => true,
+    fetchOrgMembership: async () => membership,
     createInstallationToken: async (installationId: number) => {
       minted.push(installationId);
       return { token: `installation-${installationId}` };
@@ -122,7 +126,7 @@ it("turns an installation GitHub will not mint a token for into an owner action"
       orgTarget,
       "identity-token",
       {
-        appConfigured: () => true,
+        ...appDeps(),
         createInstallationToken: async () => {
           throw new GithubHttpError(403, '{"message":"suspended"}');
         },
@@ -139,7 +143,8 @@ it("turns an installation GitHub will not mint a token for into an owner action"
   }
 });
 
-it("names the missing App permission instead of GitHub's refusal", () => {
+it("names the missing App permission and keeps GitHub's refusal as detail", () => {
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
   const refusal = new GithubRepoCreateError(
     403,
     '{"message":"Resource not accessible by integration"}'
@@ -150,6 +155,9 @@ it("names the missing App permission instead of GitHub's refusal", () => {
   });
   expect(viaInstallation.status).toBe(403);
   expect(viaInstallation.body.code).toBe("GITHUB_APP_PERMISSION_REQUIRED");
+  expect(viaInstallation.body.detail).toBe(
+    "Resource not accessible by integration"
+  );
   expect(
     githubRepoCreateErrorResponse(refusal, {
       ownerLogin: "acme",
@@ -159,6 +167,8 @@ it("names the missing App permission instead of GitHub's refusal", () => {
     status: 403,
     body: { error: "Resource not accessible by integration" },
   });
+  expect(warn).toHaveBeenCalledOnce();
+  warn.mockRestore();
 });
 
 it("maps a name collision to 409 and other GitHub failures to 502", () => {
@@ -170,4 +180,48 @@ it("maps a name collision to 409 and other GitHub failures to 502", () => {
   expect(
     githubRepoCreateErrorResponse(new GithubRepoCreateError(500, "{}"), context)
   ).toEqual({ status: 502, body: { error: "GitHub repo creation failed" } });
+});
+
+it("refuses a member who is not an active owner before minting a token", async () => {
+  const minted: number[] = [];
+  const member = await resolveGithubRepoCreateCredential(
+    orgTarget,
+    "identity-token",
+    appDeps(minted, { role: "member", state: "active" })
+  );
+  expect(member).toMatchObject({
+    ok: false,
+    status: 403,
+    code: "GITHUB_ORG_OWNER_REQUIRED",
+  });
+  const pendingOwner = await resolveGithubRepoCreateCredential(
+    orgTarget,
+    "identity-token",
+    appDeps(minted, { role: "admin", state: "pending" })
+  );
+  expect(pendingOwner).toMatchObject({ code: "GITHUB_ORG_OWNER_REQUIRED" });
+  expect(minted).toEqual([]);
+});
+
+it("reports an unreadable membership as retryable, not as a refusal", async () => {
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  try {
+    const credential = await resolveGithubRepoCreateCredential(
+      orgTarget,
+      "identity-token",
+      {
+        ...appDeps(),
+        fetchOrgMembership: async () => {
+          throw new Error("GitHub owner lookup failed (502)");
+        },
+      }
+    );
+    expect(credential).toMatchObject({
+      ok: false,
+      status: 502,
+      code: "GITHUB_MEMBERSHIP_UNAVAILABLE",
+    });
+  } finally {
+    warn.mockRestore();
+  }
 });

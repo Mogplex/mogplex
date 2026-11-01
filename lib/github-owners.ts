@@ -101,6 +101,14 @@ export async function fetchGithubUserOrgs(token: string) {
     .filter(Boolean);
 }
 
+/** The signed-in user's membership in `login`, read with their own grant. */
+export function fetchGithubOrgMembership(token: string, login: string) {
+  return githubOAuthFetch<GithubOrgMembership>(
+    token,
+    `https://api.github.com/user/memberships/orgs/${encodeURIComponent(login)}`
+  );
+}
+
 export function canCreatePrivateGithubOrgRepo(
   settings: GithubOrgCreationSettings,
   membership: GithubOrgMembership
@@ -110,8 +118,8 @@ export function canCreatePrivateGithubOrgRepo(
   // GitHub can omit repository-creation policy fields when the token cannot
   // read org settings. Treat unknown as potentially allowed so valid private
   // memberships stay visible. With a user's repo grant, the create API
-  // enforces org policy; in an App deployment the installation token does
-  // not, and only an owner who connected the installation reaches that path.
+  // enforces org policy. An installation token does not, so an App
+  // deployment requires an active owner membership before it creates.
   if (settings.members_can_create_repositories === false) return false;
   return settings.members_can_create_private_repositories !== false;
 }
@@ -133,10 +141,7 @@ export async function filterCreatableGithubOrgLogins(
               token,
               `https://api.github.com/orgs/${encodedLogin}`
             ),
-            githubOAuthFetch<GithubOrgMembership>(
-              token,
-              `https://api.github.com/user/memberships/orgs/${encodedLogin}`
-            ),
+            fetchGithubOrgMembership(token, login),
           ]);
           return canCreatePrivateGithubOrgRepo(settings, membership)
             ? login

@@ -42,12 +42,12 @@ OAuth grants are not revoked by this code change.
 In an App deployment a repository is created with the installation token of
 the organization that owns it, which needs the App's Administration (write)
 permission, and each installation's owner must accept that permission before
-creation works there. The user's identity grant lists owners and rechecks the
-user's active membership at creation time; it never writes. Because the
-installation token does not carry the user's own org policy, the boundary is
-the installation itself: it is attached only to an organization owner who
-connected it, and an organization without an installation attached to the
-user is refused. A personal account is refused until the App has user authorization,
+creation works there. The installation token does not carry the user's own
+org policy, so the user must be an active owner of the organization, read live
+with their identity grant at creation time, and the installation must be
+attached to them. The identity grant never writes. An organization without an
+installation attached to the user is refused, and so is a member who is not
+an owner. A personal account is refused until the App has user authorization,
 because GitHub creates personal repositories only with a user token. The new
 repository is imported alone, so creation never imports the rest of the
 installation.

@@ -2,15 +2,14 @@ import { parseJsonBody } from "@/lib/api/parse-json-body";
 import { NextResponse } from "next/server";
 import { requireUserId } from "@/lib/auth";
 import { createGithubRepo, GithubRepoCreateError } from "@/lib/github-create";
-import type { GithubRepoOwnerTarget } from "@/lib/github-owners";
+import { githubRepoCreateErrorResponse } from "@/lib/github-repo-create-credential";
 import {
-  getGithubRepoCreationUserToken,
-  githubRepoCreateErrorResponse,
-  resolveGithubRepoCreateCredential,
-} from "@/lib/github-repo-create-credential";
+  defaultRepoCreateTargetDeps,
+  resolveRepoCreateTarget,
+  type RepoCreateTargetDeps,
+} from "@/app/api/github/_lib/repo-create-target";
 import { upsertGithubReposForUser } from "@/lib/github-sync";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { loadGithubRepoCreationOwnerTargets } from "@/app/api/github/_lib/repo-owner-targets";
 import {
   getWorkspaceForScope,
   normalizeWorkspaceDescription,
@@ -26,7 +25,7 @@ import {
   type ProductResourceScope,
 } from "@/lib/team-resource-scope";
 
-type WorkspaceRepoRouteDeps = {
+type WorkspaceRepoRouteDeps = RepoCreateTargetDeps & {
   requireUserId: typeof requireUserId;
   resolveActiveTeamCapabilities: typeof resolveActiveTeamCapabilities;
   getWorkspaceForScope: (
@@ -34,12 +33,6 @@ type WorkspaceRepoRouteDeps = {
     scope: ProductResourceScope,
     select: string
   ) => Promise<Record<string, unknown> | null>;
-  getGithubToken: (userId: string) => Promise<string | null>;
-  loadOwnerTargets: (
-    userId: string,
-    token: string
-  ) => Promise<GithubRepoOwnerTarget[]>;
-  resolveCreateCredential: typeof resolveGithubRepoCreateCredential;
   createGithubRepo: typeof createGithubRepo;
   upsertGithubReposForUser: typeof upsertGithubReposForUser;
   loadWorkspaceRepoByGithubId: (
@@ -93,10 +86,7 @@ export function createWorkspaceRepoPostHandler(
     resolveActiveTeamCapabilities,
     getWorkspaceForScope: (workspaceId, scope, select) =>
       getWorkspaceForScope(workspaceId, scope, select),
-    getGithubToken: (userId) => getGithubRepoCreationUserToken(userId),
-    loadOwnerTargets: async (userId, token) =>
-      (await loadGithubRepoCreationOwnerTargets(userId, token)).targets,
-    resolveCreateCredential: resolveGithubRepoCreateCredential,
+    ...defaultRepoCreateTargetDeps,
     createGithubRepo,
     upsertGithubReposForUser,
     loadWorkspaceRepoByGithubId,
@@ -151,55 +141,15 @@ export function createWorkspaceRepoPostHandler(
       );
     }
 
-    const githubToken = await deps.getGithubToken(userId).catch(() => null);
-    if (!githubToken) {
-      return NextResponse.json(
-        { error: "Connect GitHub account first" },
-        { status: 400 }
-      );
-    }
+    // The workspace dialog always sends owner_login. Omitting it selects the
+    // personal account, which an App deployment refuses until the App has
+    // user authorization.
+    const target = await resolveRepoCreateTarget(userId, ownerLogin, deps);
+    if (!target.ok) return target.response;
+    const { ownerTarget, viaInstallation } = target;
 
-    // Revalidate live at the mutation boundary: an org is a target only
-    // while this user may create repositories in it.
-    let targets: GithubRepoOwnerTarget[];
     try {
-      targets = await deps.loadOwnerTargets(userId, githubToken);
-    } catch (error) {
-      console.error("[workspace-repo-create] owner lookup failed", {
-        userId,
-        error,
-      });
-      return NextResponse.json(
-        { error: "GitHub accounts unavailable" },
-        { status: 502 }
-      );
-    }
-    const ownerTarget = targets.find((target) =>
-      ownerLogin
-        ? target.login.toLowerCase() === ownerLogin.toLowerCase()
-        : target.kind === "personal"
-    );
-    if (!ownerTarget) {
-      return NextResponse.json(
-        { error: "Selected GitHub account is unavailable" },
-        { status: 400 }
-      );
-    }
-
-    let viaInstallation = false;
-    try {
-      const credential = await deps.resolveCreateCredential(
-        ownerTarget,
-        githubToken
-      );
-      if (!credential.ok) {
-        return NextResponse.json(
-          { error: credential.error, code: credential.code },
-          { status: credential.status }
-        );
-      }
-      viaInstallation = credential.viaInstallation;
-      const createdRepo = await deps.createGithubRepo(credential.token, {
+      const createdRepo = await deps.createGithubRepo(target.token, {
         owner: ownerTarget.kind === "personal" ? null : ownerTarget.login,
         name,
         description,
