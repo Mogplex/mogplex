@@ -160,15 +160,21 @@ export async function GET(request: Request) {
   }
 
   const ghUser = await userRes.json();
+  let repositoryAuthMode: "app" | "oauth";
+  try {
+    repositoryAuthMode = getGithubOAuthGrantConfiguration(
+      !(await isGithubOAuthRepositoryAccessAllowed(userId))
+    ).repositoryAuthMode;
+  } catch {
+    return redirect("/?error=github_repository_authorization");
+  }
 
   const { error: profileError } = await supabaseAdmin
     .from("profiles")
     .update({
       github_username: ghUser.login,
       github_user_id: typeof ghUser.id === "number" ? ghUser.id : null,
-      github_auth_mode: getGithubOAuthGrantConfiguration(
-        !(await isGithubOAuthRepositoryAccessAllowed(userId))
-      ).repositoryAuthMode,
+      github_auth_mode: repositoryAuthMode,
     })
     .eq("id", userId);
 

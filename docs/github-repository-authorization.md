@@ -17,6 +17,10 @@ The synchronized inventory uses the current App repository IDs. A repository
 transferred outside an installation or left over from OAuth synchronization
 is excluded from that inventory. Its stored workspace, drafts, and history are
 retained. An empty App grant must not restore cached OAuth-only repositories.
+Team inventory verifies each shared row against its originating owner's
+attached installation and current repository grant. Team members can use
+already-shared repositories without attaching a duplicate personal installation;
+this does not import teammates' personal repositories into the team.
 
 OAuth remains available for identity and membership discovery. Reconnection
 for an App-based account requests `read:org`, `read:user`, and `user:email`,
@@ -29,6 +33,10 @@ than restoring the broad fallback.
 Self-hosted deployments configured only for OAuth retain their existing
 repository OAuth flow. An account already in App mode does not regain that
 flow merely because App environment configuration is absent.
+An intentional migration back to OAuth-only hosting requires an operator to
+explicitly change the affected profile's `github_auth_mode` to `oauth`, then
+have that user reconnect and approve repository access. Configuration loss alone
+does not authorize that change.
 
 For a requested repository without authorization, use the existing GitHub
 connector flow with its exact `owner/repository`. The user approves the App

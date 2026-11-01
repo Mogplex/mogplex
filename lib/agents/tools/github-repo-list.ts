@@ -2,6 +2,7 @@ import { z } from "zod";
 import { defineTool } from "./shared";
 import { normalizeLogin, findInstallationToken } from "./github-shared";
 import { hasGithubAppConfig } from "@/lib/github-app";
+import { mapGithubRequests } from "@/lib/github-request-concurrency";
 
 const GITHUB_API_ORIGIN = "https://api.github.com";
 
@@ -143,13 +144,17 @@ async function resolveAuths(input: {
       const { hasGithubAppConfig, createGithubInstallationAccessToken } =
         await import("@/lib/github-app");
       if (hasGithubAppConfig()) {
-        for (const row of await listUserGithubInstallations(input.userId)) {
-          if (!row.installation_id) continue;
-          const { token } = await createGithubInstallationAccessToken(
-            row.installation_id
-          );
-          auths.push({ token, source: "github_app_installation" });
-        }
+        auths.push(
+          ...(await mapGithubRequests(
+            await listUserGithubInstallations(input.userId),
+            async (row) => {
+              const { token } = await createGithubInstallationAccessToken(
+                row.installation_id
+              );
+              return { token, source: "github_app_installation" as const };
+            }
+          ))
+        );
       }
     } catch (error) {
       warnings.push(
@@ -169,7 +174,7 @@ const repoListParams = z
       .string()
       .optional()
       .describe(
-        "GitHub organization or user login to scope the listing, e.g. 'mogplex'. Omit to list repos across every connected installation and the user's OAuth account."
+        "GitHub organization or user login to scope the listing, e.g. 'mogplex'. Omit to list repos across all approved installations."
       ),
     query: z
       .string()
@@ -192,7 +197,7 @@ const repoListParams = z
 export function createGithubRepoList(options: GithubRepoListOptions = {}) {
   return defineTool({
     description:
-      "List GitHub repositories visible to the connected GitHub account, including private repositories covered by the Mogplex GitHub App installation or the user's OAuth connection. Read-only. Use this for 'what repos do I have access to', org repo inventory, or finding a repo by name. Never use unauthenticated web_fetch against api.github.com for repo inventory — it only returns public data.",
+      "List GitHub repositories covered by approved Mogplex GitHub App installations. OAuth-only deployments use their explicit repository grant. Read-only. Use this for 'what repos do I have access to', org repo inventory, or finding a repo by name. Never use unauthenticated web_fetch against api.github.com for repo inventory — it only returns public data.",
     inputSchema: repoListParams,
     execute: async ({
       owner,
@@ -216,12 +221,14 @@ export function createGithubRepoList(options: GithubRepoListOptions = {}) {
       if (auths.length === 0) return unavailableError(warnings, filters.owner);
 
       const byFullName = new Map<string, GithubRepo>();
-      for (const auth of auths) {
+      const inventories = await mapGithubRequests(auths, async (auth) => {
         const path =
           auth.source === "github_app_installation"
             ? "/installation/repositories?per_page=100"
             : "/user/repos?per_page=100&sort=updated&affiliation=owner,collaborator,organization_member";
-        const result = await fetchJson(path, auth);
+        return { auth, result: await fetchJson(path, auth) };
+      });
+      for (const { auth, result } of inventories) {
         if (!result.ok) {
           warnings.push(result.warning);
           continue;

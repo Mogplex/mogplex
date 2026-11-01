@@ -89,3 +89,11 @@ it("surfaces failed grant lookups instead of claiming that authorization is abse
     })
   ).rejects.toThrow();
 });
+
+it("normalizes an installation identifier serialized as a database bigint string", async () => {
+  expect(
+    await listUserGithubInstallations("user", {
+      db: database([{ ...known, installation_id: "12" as unknown as number }]),
+    })
+  ).toEqual([known]);
+});

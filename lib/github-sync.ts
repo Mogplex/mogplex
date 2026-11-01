@@ -1,6 +1,7 @@
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { isGithubOAuthRepositoryAccessAllowed } from "@/lib/github-repository-auth";
 import { filterVisibleGithubRepos } from "@/lib/github-repo-visibility";
+import { filterAuthorizedTeamGithubRepos } from "@/lib/github-team-repo-visibility";
 import {
   fetchGithubInstallationRepos,
   hasGithubAppConfig,
@@ -484,6 +485,8 @@ export async function syncGithubReposForUser(
     throw new Error(`Failed to load synced repos: ${error.message}`);
   }
 
+  if (scope.kind === "team" && !allowOAuth)
+    return filterAuthorizedTeamGithubRepos(data || []);
   return filterVisibleGithubRepos(data || [], {
     preferInstallationCoverage: !allowOAuth || installationScopedSync,
     authorizedGithubRepoIds,
