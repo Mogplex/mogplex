@@ -179,6 +179,12 @@ export function createWorkspaceRepoPostHandler(
         workspace.id,
         createdRepo.id
       );
+      if (!repo) {
+        return NextResponse.json(
+          { error: "Created repository was not imported" },
+          { status: 500 }
+        );
+      }
       return NextResponse.json(repo);
     } catch (error) {
       if (error instanceof GithubRepoCreateError) {

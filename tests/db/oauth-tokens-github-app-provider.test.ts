@@ -8,7 +8,7 @@ beforeAll(async () => {
   // The table as the baseline defines it, before this migration, and a
   // stand-in for the vault the token functions read.
   await db.exec(`
-    create role anon; create role authenticated; create role service_role;
+    create role service_role;
     CREATE SCHEMA vault;
     CREATE TABLE vault.secrets (id uuid PRIMARY KEY, secret text NOT NULL);
     CREATE VIEW vault.decrypted_secrets AS

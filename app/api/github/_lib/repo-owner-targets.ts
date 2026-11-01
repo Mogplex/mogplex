@@ -16,10 +16,16 @@ type OwnerTargetOptions = {
 async function creatableOrgLoginsFor(
   userId: string,
   token: string,
-  options: OwnerTargetOptions
+  options: OwnerTargetOptions,
+  personalLogin: string | null
 ) {
   // A personal-account create needs no organization reads at all.
-  if (options.personalOnly) return [];
+  if (
+    options.personalOnly ||
+    (options.onlyLogin &&
+      options.onlyLogin.toLowerCase() === personalLogin?.toLowerCase())
+  )
+    return [];
   // A create names one owner: check that org directly, so a GitHub failure
   // surfaces as one instead of reading as a refusal.
   if (options.onlyLogin) {
@@ -81,18 +87,19 @@ export async function loadGithubRepoCreationOwnerTargets(
     );
   }
 
+  const githubUsername =
+    currentUser.login || (profileResult.data?.github_username as string | null);
   const creatableOrgLogins = await creatableOrgLoginsFor(
     userId,
     token,
-    options
+    options,
+    githubUsername
   );
   const creatableOrgSet = new Set(
     creatableOrgLogins.map((login) => login.toLowerCase())
   );
   const targets = buildGithubRepoOwnerTargets({
-    githubUsername:
-      currentUser.login ||
-      (profileResult.data?.github_username as string | null),
+    githubUsername,
     installations: installationsResult.data || [],
     orgLogins: creatableOrgLogins,
   }).filter(

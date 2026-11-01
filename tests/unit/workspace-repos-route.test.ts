@@ -271,7 +271,16 @@ test("POST /api/workspaces/[id]/repos creates team-scoped repo rows", async () =
   });
 });
 
-async function appModeHandler(created: string[]) {
+async function appModeHandler(
+  created: string[],
+  overrides: Partial<
+    Parameters<
+      Awaited<
+        ReturnType<typeof loadWorkspaceRepoRoute>
+      >["createWorkspaceRepoPostHandler"]
+    >[0]
+  > = {}
+) {
   const { createWorkspaceRepoPostHandler } = await loadWorkspaceRepoRoute();
   const { resolveGithubRepoCreateCredential } =
     await import("../../lib/github-repo-create-credential");
@@ -308,6 +317,7 @@ async function appModeHandler(created: string[]) {
     },
     upsertGithubReposForUser: async () => {},
     loadWorkspaceRepoByGithubId: async () => ({ id: "repo-321" }),
+    ...overrides,
   });
 }
 
@@ -392,4 +402,17 @@ test("POST /api/workspaces/[id]/repos adopts a repository a previous attempt alr
   );
   assert.equal(response.status, 200);
   assert.deepEqual(imported, [existing]);
+});
+
+test("POST /api/workspaces/[id]/repos reports a created repo it cannot read back instead of a null success", async () => {
+  const handler = await appModeHandler([], {
+    loadWorkspaceRepoByGithubId: async () => null,
+  });
+  const response = await handler(createRequest("acme"), {
+    params: Promise.resolve({ id: "ws-1" }),
+  });
+  assert.equal(response.status, 500);
+  assert.deepEqual(await response.json(), {
+    error: "Created repository was not imported",
+  });
 });

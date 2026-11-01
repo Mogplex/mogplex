@@ -51,6 +51,6 @@ end;
 $$;
 
 revoke all on function public.delete_oauth_token_if_unchanged(uuid, text, text)
-  from public, anon, authenticated;
+  from public;
 grant execute on function public.delete_oauth_token_if_unchanged(uuid, text, text)
   to service_role;
