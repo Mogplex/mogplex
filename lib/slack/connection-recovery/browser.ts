@@ -20,7 +20,7 @@ export async function resolveConnectionRecoveryBrowser(
 ) {
   const deps = { ...defaultDeps, ...overrides };
   const request = await deps.loadRequest(input.requestId, input.userId);
-  if (request?.user_id !== input.userId) return null;
+  if (request?.user_id !== input.userId || request.cancelled_at) return null;
   const installation = await deps.getInstallation(request.payload.teamId);
   if (installation?.id !== request.slack_installation_id) return null;
   const mapping = await deps.getMapping({

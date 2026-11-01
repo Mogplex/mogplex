@@ -24,10 +24,14 @@ workspace or rewriting the completed harness pass.
 
 DM questions and channel mentions receive replies under the original question.
 Follow-ups, progress cards, failures, account-link notices, and run results stay
-in that thread. Replies stream into the thread as the agent writes them, with
-each tool step (checking GitHub, reading a file) shown as a task card. If Slack
-does not accept a streamed reply, Mogplex edits a single message instead; set
-`SLACK_STREAMING_REPLIES=off` to always do that. Each new DM root starts its own conversation; replies use that
+in that thread. Conversational replies use one compact updating status with a
+**Stop request** button. Stopping interrupts that conversational turn; it does
+not undo actions already completed or stop a repository agent it launched.
+The final answer appears as a separate message below any connection cards.
+Connection cards are compact, repeated requests reuse one card, and **Cancel
+request** dismisses the saved authorization request without changing credentials.
+A dismissed request stays cancelled across delivery retries; send a new message
+to start again. Each new DM root starts its own conversation; replies use that
 root's conversation and history.
 
 A finished run's card is short: the outcome, an excerpt of the agent's report,

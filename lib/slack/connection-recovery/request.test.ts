@@ -86,3 +86,17 @@ it("does not reveal or authorize another user's connection", async () => {
   ).toEqual({ ok: false, error: "Connection not found in your account." });
   expect(deps.postMessage).not.toHaveBeenCalled();
 });
+
+it("does not recreate or post a cancelled request on a delivery retry", async () => {
+  const { input, deps } = setup();
+  deps.saveRequest.mockResolvedValue({
+    ...recoveryRequest(),
+    cancelled_at: "2026-11-01",
+  });
+  expect(await requestSlackConnectionRecovery(input, deps)).toMatchObject({
+    ok: false,
+    error: expect.stringContaining("cancelled"),
+  });
+  expect(deps.postMessage).not.toHaveBeenCalled();
+  expect(deps.describe).not.toHaveBeenCalled();
+});

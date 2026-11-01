@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { SlackBlock } from "@/lib/slack/client";
 import type { SlackEventTaskPayload } from "@/trigger/slack-event-lib/types";
 
+export const CONNECTION_CANCEL_ACTION = "mogplex_connection_cancel";
 export const CONNECTION_OPEN_ACTION = "mogplex_connection_open";
 export const CONNECTION_CONTINUE_ACTION = "mogplex_connection_continue";
 export const CONNECTION_AUTHORIZE_ACTION = "mogplex_connection_authorize";
@@ -93,33 +94,31 @@ export function buildConnectionRecoveryCard(input: RecoveryPresentation): {
   const name = connectorName(input);
   const text = input.restoreRepository
     ? `This GitHub repository is removed from Mogplex. Restore it to continue: ${requestedAccess(input.target)}.`
-    : `Connect ${name} to continue: ${requestedAccess(input.target)}.`;
+    : `${name} access needed: ${requestedAccess(input.target)}.`;
   return {
     text,
     blocks: [
       {
-        type: "section",
-        text: { type: "plain_text", text },
-        accessory: {
-          type: "image",
-          image_url: connectorIcon(input),
-          alt_text: name,
-        },
+        type: "context",
+        elements: [
+          { type: "image", image_url: connectorIcon(input), alt_text: name },
+          { type: "plain_text", text },
+        ],
       },
       {
         type: "actions",
         elements: [
           {
             ...button(
-              (input.restoreRepository
+              input.restoreRepository
                 ? "Restore repository"
-                : `Connect ${name}`
-              ).slice(0, 75),
+                : `Connect ${name}`,
               CONNECTION_OPEN_ACTION,
               input.id
             ),
             style: "primary",
           },
+          button("Cancel request", CONNECTION_CANCEL_ACTION, input.id),
         ],
       },
     ],
@@ -223,6 +222,11 @@ export function buildConnectionRecoveryModal(
                         input.appUrl
                       ).toString(),
                     },
+                    button(
+                      "Cancel request",
+                      CONNECTION_CANCEL_ACTION,
+                      input.id
+                    ),
                     button(
                       "Check access & continue",
                       CONNECTION_CONTINUE_ACTION,

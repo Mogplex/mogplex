@@ -1,5 +1,5 @@
 import { metadata } from "@trigger.dev/sdk/v3";
-import type { updateSlackMessage } from "@/lib/slack/client";
+import type { SlackBlock, updateSlackMessage } from "@/lib/slack/client";
 import type { SlackEventTaskDeps, SlackPostedMessageRef } from "./types";
 
 /** Slack rate-limits chat.update at roughly 1/sec/channel. */
@@ -45,7 +45,7 @@ export async function saveSlackMessageRef(
 }
 
 export async function postOrReuseSlackMessage(input: {
-  deps: SlackEventTaskDeps;
+  deps: Pick<SlackEventTaskDeps, "postMessage">;
   botToken: string;
   channelId: string;
   // Cache identity key for idempotent retries. For one-to-one DMs this stays
@@ -56,6 +56,7 @@ export async function postOrReuseSlackMessage(input: {
   eventId: string;
   metadataKey: string;
   text: string;
+  blocks?: SlackBlock[];
 }) {
   const stored = readSlackMessageRef(input.metadataKey);
   if (
@@ -70,6 +71,7 @@ export async function postOrReuseSlackMessage(input: {
     channel: input.channelId,
     thread_ts: input.postThreadTs,
     text: input.text,
+    ...(input.blocks ? { blocks: input.blocks } : {}),
   });
   await saveSlackMessageRef(input.metadataKey, {
     channel: posted.channel,

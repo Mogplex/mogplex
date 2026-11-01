@@ -35,3 +35,9 @@ it.each(["account", "installation", "mapping", "capability"])(
     expect(deps.authorizePath).not.toHaveBeenCalled();
   }
 );
+it("does not generate provider authorization for a cancelled request", async () => {
+  const { request, input, deps } = setup();
+  request.cancelled_at = "2026-11-01";
+  expect(await resolveConnectionRecoveryBrowser(input, deps)).toBeNull();
+  expect(deps.authorizePath).not.toHaveBeenCalled();
+});

@@ -1,3 +1,7 @@
+import {
+  seedSlackConnectionCompatibility,
+  verifySlackConnectionCompatibility,
+} from "./schema-compatibility-slack-connections";
 import assert from "node:assert/strict";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createPostgrestShim, type Queryable } from "@/lib/db/postgrest-shim";
@@ -271,7 +275,10 @@ export async function checkSchemaCompatibility(
       },
     });
   }
-  if (phase === "verify") await verifySlackGuidance(adminClient);
+  if (phase === "verify") {
+    await verifySlackGuidance(adminClient);
+    await verifySlackConnectionCompatibility(db);
+  }
   await (phase === "seed"
     ? seedOAuthCompatibility(db)
     : verifyOAuthCompatibility(db));
@@ -403,6 +410,7 @@ export async function checkSchemaCompatibility(
     (repo.data as { id: string }).id,
     phase
   );
+  await seedSlackConnectionCompatibility(db, userId, phase);
   const job = await client
     .from("job_runs")
     .insert({

@@ -5,6 +5,7 @@ import {
 } from "./interactions";
 import {
   CONNECTION_OPEN_ACTION,
+  CONNECTION_CANCEL_ACTION,
   CONNECTION_RESTORE_ACTION,
   CONNECTION_SCOPE_ACTION,
 } from "./presentation";
@@ -17,6 +18,8 @@ function setup() {
     getUserMapping: async () => null,
     getBotToken: async () => "test-bot-token",
     loadRequest: vi.fn(async () => request),
+    cancelRequest: vi.fn(async () => true),
+    updateMessage: vi.fn(async () => ({ channel: "D1", ts: "10.3" })),
     markDispatched: vi.fn(async () => {
       request.dispatched_at = "2026-10-10";
     }),
@@ -41,6 +44,52 @@ function setup() {
 }
 
 describe("Slack connection modal actions", () => {
+  it("cancels the saved task and replaces its card without authorizing or dispatching", async () => {
+    const { deps } = setup();
+    const payload = {
+      ...recoveryAction(CONNECTION_CANCEL_ACTION),
+      view: undefined,
+      channel: { id: "D1" },
+      message: { ts: "10.3" },
+    };
+    expect(await handleConnectionRecoveryAction(payload, deps)).toBe(
+      "cancelled"
+    );
+    expect(deps.cancelRequest).toHaveBeenCalledWith(
+      recoveryRequest().id,
+      installation.installed_by_user_id
+    );
+    expect(JSON.stringify(deps.updateMessage.mock.calls)).toContain(
+      "Connection request cancelled"
+    );
+    expect(JSON.stringify(deps.updateMessage.mock.calls)).not.toContain(
+      "mogplex_connection_open"
+    );
+    expect(deps.dispatch).not.toHaveBeenCalled();
+    expect(deps.checkAccess).not.toHaveBeenCalled();
+  });
+  it("refuses another Slack user cancelling the saved task", async () => {
+    const { deps } = setup();
+    expect(
+      await handleConnectionRecoveryAction(
+        { ...recoveryAction(CONNECTION_CANCEL_ACTION), user: { id: "U2" } },
+        deps
+      )
+    ).toBe("not_linked");
+    expect(deps.cancelRequest).not.toHaveBeenCalled();
+  });
+  it("cannot continue a request after it was cancelled", async () => {
+    const { request, deps } = setup();
+    request.cancelled_at = "2026-11-01";
+    expect(await handleConnectionRecoveryAction(recoveryAction(), deps)).toBe(
+      "cancelled"
+    );
+    expect(deps.dispatch).not.toHaveBeenCalled();
+    expect(deps.checkAccess).not.toHaveBeenCalled();
+    expect(JSON.stringify(deps.updateView.mock.calls)).not.toContain(
+      "mogplex_connection_authorize"
+    );
+  });
   it("opens a native modal on the connector button without waiting for a provider check", async () => {
     const { deps } = setup();
     const payload = {

@@ -110,14 +110,11 @@ test("posts a visible DM placeholder, runs the agent, and finalises the reply", 
     "Slack retries must reuse the same tool-execution scope"
   );
   assert.equal(typeof agentCall.onProgress, "function");
-  // The completion milestone arrives while the start milestone is still in
-  // flight, so the updater intentionally coalesces it into the next visible
-  // partial response instead of adding a fourth Slack edit.
   assert.deepEqual(
     calls
       .filter((call) => call.op === "update")
       .map((call) => (call.input as { text: string }).text),
-    ["_Starting the sandbox..._", "Build is", "Build is green"]
+    ["_Starting the sandbox…_", "_Working on your request…_", "_Finished._"]
   );
   assert.equal(agentCall.messages.length, 3);
   assert.equal(agentCall.messages[2].role, "user");
@@ -129,10 +126,15 @@ test("posts a visible DM placeholder, runs the agent, and finalises the reply", 
   assert.equal(
     calls.filter((c) => c.op === "update").length,
     3,
-    "tool progress, partial text, and the final answer should update in order"
+    "progress and terminal status should update in order"
   );
   assert.equal(finalUpdate.input.ts, "1700000000.000999");
-  assert.equal(finalUpdate.input.text, "Build is green");
+  assert.equal(finalUpdate.input.text, "_Finished._");
+  assert.equal(
+    (calls.findLast((call) => call.op === "post")?.input as { text: string })
+      .text,
+    "Build is green"
+  );
 
   const persistCall = calls.find((c) => c.op === "persist") as {
     input: {
@@ -151,7 +153,7 @@ test("posts a visible DM placeholder, runs the agent, and finalises the reply", 
 test("formats conversational final replies as Slack mrkdwn", async () => {
   const { runSlackEventTask } = await loadSlackEventTask();
 
-  const updates: Array<{ text: string }> = [];
+  const posts: Array<{ text: string }> = [];
   const result = await runSlackEventTask(basePayload, {
     getInstallation: async () => baseInstallation,
     getBotToken: async () => "xoxb-test",
@@ -169,18 +171,18 @@ test("formats conversational final replies as Slack mrkdwn", async () => {
         finalText:
           "Public GitHub shows **5 open PRs**: [webrenew/drawit#49](https://github.com/webrenew/drawit/pull/49).",
       }),
-    postMessage: async (_token, input) => ({
-      channel: input.channel,
-      ts: "1700000000.000999",
-    }),
-    updateMessage: async (_token, input) => {
-      updates.push({ text: input.text });
-      return { channel: input.channel, ts: input.ts };
+    postMessage: async (_token, input) => {
+      posts.push({ text: input.text });
+      return { channel: input.channel, ts: "1700000000.000999" };
     },
+    updateMessage: async (_token, input) => ({
+      channel: input.channel,
+      ts: input.ts,
+    }),
   });
 
   assert.equal(result.outcome, "conversational_reply");
-  assert.deepEqual(updates, [
+  assert.deepEqual(posts.slice(1), [
     {
       text: "Public GitHub shows *5 open PRs*: <https://github.com/webrenew/drawit/pull/49|webrenew/drawit#49>.",
     },
@@ -208,14 +210,14 @@ test("sanitizes internal capability details before posting a Slack reply", async
         finalText:
           "Still blocked — github_api only supports GET/HEAD and is scoped to the current workspace repo; cross-repository paths are rejected.",
       }),
-    postMessage: async (_token, input) => ({
-      channel: input.channel,
-      ts: "1700000000.000999",
-    }),
-    updateMessage: async (_token, input) => {
+    postMessage: async (_token, input) => {
       updates.push(input.text);
-      return { channel: input.channel, ts: input.ts };
+      return { channel: input.channel, ts: "1700000000.000999" };
     },
+    updateMessage: async (_token, input) => ({
+      channel: input.channel,
+      ts: input.ts,
+    }),
   });
 
   const finalText = updates.at(-1) ?? "";

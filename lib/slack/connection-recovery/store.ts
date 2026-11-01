@@ -14,6 +14,7 @@ export type ConnectionRecoveryRequest = {
   product_team_id: string | null;
   repo_id: string | null;
   dispatched_at: string | null;
+  cancelled_at?: string | null;
 };
 
 type Client = Pick<typeof supabaseAdmin, "from">;
@@ -21,7 +22,7 @@ type Client = Pick<typeof supabaseAdmin, "from">;
 export async function saveConnectionRecoveryRequest(
   input: Omit<
     ConnectionRecoveryRequest,
-    "id" | "request_key" | "dispatched_at"
+    "id" | "request_key" | "dispatched_at" | "cancelled_at"
   >,
   db: Client = supabaseAdmin
 ): Promise<ConnectionRecoveryRequest> {
@@ -31,8 +32,14 @@ export async function saveConnectionRecoveryRequest(
         input.user_id,
         input.slack_installation_id,
         input.payload.eventId,
-        input.target,
-        input.resume_text,
+        input.target.provider === "github"
+          ? {
+              ...input.target,
+              repository: input.target.repository?.toLowerCase(),
+            }
+          : input.target.provider === "vercel"
+            ? { ...input.target, team: input.target.team?.toLowerCase() }
+            : input.target,
         input.product_team_id,
         input.repo_id,
       ])
@@ -82,6 +89,26 @@ export async function markConnectionRecoveryDispatched(
     .update({ dispatched_at: new Date().toISOString() })
     .eq("id", id)
     .eq("user_id", userId)
-    .is("dispatched_at", null);
+    .is("dispatched_at", null)
+    .is("cancelled_at", null);
   if (error) throw new Error("Could not save the connection continuation");
+}
+
+/** Cancels only a pending request; credentials and installations are untouched. */
+export async function cancelConnectionRecoveryRequest(
+  id: string,
+  userId: string,
+  db: Client = supabaseAdmin
+) {
+  const { data, error } = await db
+    .from("slack_connection_requests")
+    .update({ cancelled_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("user_id", userId)
+    .is("dispatched_at", null)
+    .is("cancelled_at", null)
+    .select("id")
+    .maybeSingle();
+  if (error) throw new Error("Could not cancel the connection request");
+  return Boolean(data);
 }

@@ -14,10 +14,33 @@ export function createSlackConnectionTools(
   input: Omit<RequestSlackConnectionInput, "target" | "resumeText"> & {
     deps: Pick<SlackEventTaskDeps, "requestConnectionRecovery">;
     repoFullName?: string;
-  }
+  },
+  overrides: Partial<{
+    canRecover: typeof canRecoverConnection;
+    loadProjects: typeof loadSlackVercelProjects;
+  }> = {}
 ): Record<string, Tool> {
+  const canRecover = overrides.canRecover ?? canRecoverConnection;
+  const loadProjects = overrides.loadProjects ?? loadSlackVercelProjects;
   const request = input.deps.requestConnectionRecovery;
   if (!request) return {};
+  const requests = new Map<string, ReturnType<typeof request>>();
+  const requestOnce = (
+    target: Parameters<typeof request>[0]["target"],
+    resumeText: string,
+    repoId: string | null | undefined
+  ) => {
+    const key = JSON.stringify(
+      connectionRecoveryTargetSchema.parse(target)
+    ).toLowerCase();
+    let pending = requests.get(key);
+    if (!pending) {
+      pending = request({ ...input, target, resumeText, repoId });
+      requests.set(key, pending);
+      void pending.catch(() => requests.delete(key));
+    }
+    return pending;
+  };
   return {
     request_connection: tool({
       description:
@@ -27,17 +50,15 @@ export function createSlackConnectionTools(
         resumeText: z.string().trim().min(1),
       }),
       execute: async ({ target, resumeText }) =>
-        request({
-          ...input,
+        requestOnce(
           target,
           resumeText,
-          repoId:
-            target.provider === "github" &&
+          target.provider === "github" &&
             target.repository?.toLowerCase() !==
               input.repoFullName?.toLowerCase()
-              ? undefined
-              : input.repoId,
-        }),
+            ? undefined
+            : input.repoId
+        ),
     }),
     list_connections: tool({
       description:
@@ -45,7 +66,7 @@ export function createSlackConnectionTools(
       inputSchema: z.object({}),
       execute: async () => {
         if (
-          !(await canRecoverConnection(
+          !(await canRecover(
             input.userId,
             input.productTeamId ?? null,
             "connection"
@@ -68,7 +89,7 @@ export function createSlackConnectionTools(
     }),
     find_vercel_projects: tool({
       description:
-        "Find Vercel projects and their linked GitHub repositories using the user's connection. Pass the exact team slug from the user (or personal), and optionally a project name. If access is missing, proposes a Vercel authorization dialog in this thread.",
+        "Find Vercel projects and their linked GitHub repositories using the user's connection. Pass the exact team slug from the user (or personal), and optionally a project name. Reports missing authorization without posting a connection card. Request a connection only if Vercel is needed for the user's task.",
       inputSchema: z.object({
         team: z
           .string()
@@ -78,7 +99,7 @@ export function createSlackConnectionTools(
       }),
       execute: async ({ team, query }) => {
         if (
-          !(await canRecoverConnection(
+          !(await canRecover(
             input.userId,
             input.productTeamId ?? null,
             "vercel"
@@ -86,7 +107,7 @@ export function createSlackConnectionTools(
         )
           return { error: "Your team role does not allow connection access." };
         try {
-          const projects = await loadSlackVercelProjects(input.userId, team);
+          const projects = await loadProjects(input.userId, team);
           return {
             ok: true,
             projects: query
@@ -107,11 +128,13 @@ export function createSlackConnectionTools(
               error:
                 "Vercel could not load projects right now. Try again shortly.",
             };
-          return request({
-            ...input,
+          return {
+            ok: false,
+            authorizationRequired: true,
             target: { provider: "vercel", team },
-            resumeText: input.payload.text,
-          });
+            error:
+              "Vercel project access requires authorization. Only request it if the user's task needs Vercel.",
+          };
         }
       },
     }),

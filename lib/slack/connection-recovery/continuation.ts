@@ -22,6 +22,7 @@ export async function validateConnectionContinuation(
   const saved = await deps.loadRequest(id, input.userId);
   if (
     saved?.user_id !== input.userId ||
+    saved.cancelled_at ||
     saved.slack_installation_id !== input.installationId
   )
     return false;

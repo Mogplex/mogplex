@@ -76,3 +76,28 @@ it("rechecks a queued continuation's current account, workspace, thread, and rol
     )
   ).toBe(false);
 });
+it("rejects a queued continuation cancelled before the worker started", async () => {
+  const saved = recoveryRequest();
+  saved.cancelled_at = "2026-11-01";
+  const payload = buildConnectionResumePayload({
+    id: saved.id,
+    payload: saved.payload,
+    resumeText: saved.resume_text,
+    target: saved.target,
+  });
+  expect(
+    await validateConnectionContinuation(
+      {
+        payload,
+        userId: saved.user_id,
+        installationId: saved.slack_installation_id,
+      },
+      {
+        loadRequest: async () => saved,
+        canRecover: async () => {
+          throw new Error("Cancelled requests cannot check providers");
+        },
+      }
+    )
+  ).toBe(false);
+});

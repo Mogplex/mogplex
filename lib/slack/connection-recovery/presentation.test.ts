@@ -31,6 +31,9 @@ describe("Slack connection recovery", () => {
       appUrl: "https://mogplex.example",
     });
     expect(card.text).toContain("acme/widgets");
+    expect(card.blocks).toHaveLength(2);
+    expect(JSON.stringify(card.blocks)).not.toContain("accessory");
+    expect(JSON.stringify(card.blocks)).toContain("Cancel request");
     expect(card.blocks).toContainEqual(
       expect.objectContaining({
         type: "actions",
