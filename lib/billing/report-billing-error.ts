@@ -14,6 +14,12 @@ export type BillingSurface =
   | "stripe_catalog_sync"
   | "stripe_webhook";
 
+/** Which billing account a route failure belongs to; unset if resolving it failed. */
+export type BillingErrorContext = {
+  scope: "personal" | "team";
+  accountId: string | undefined;
+};
+
 /**
  * Report a billing failure that a route catches and answers itself. Caught
  * errors never reach Next's `onRequestError` hook, so without this a broken

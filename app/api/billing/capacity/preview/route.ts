@@ -11,7 +11,10 @@ import {
 } from "@/lib/billing/capacity-stripe-changes";
 import { areCapacityBillingOperationsEnabled } from "@/lib/billing/stripe";
 import { resolveProductResourceScope } from "@/lib/team-resource-scope";
-import { reportBillingError } from "@/lib/billing/report-billing-error";
+import {
+  reportBillingError,
+  type BillingErrorContext,
+} from "@/lib/billing/report-billing-error";
 
 type PreviewRouteDeps = {
   requireUserId: typeof requireUserId;
@@ -39,20 +42,21 @@ async function requestBody(request: Request): Promise<unknown> {
   }
 }
 
-async function routeError(error: unknown) {
+async function routeError(error: unknown, context: BillingErrorContext) {
   if (error instanceof CapacityChangeError) {
     // Typed refusals are expected; a typed 5xx is a provider anomaly.
     if (error.status >= 500)
-      await reportBillingError("capacity_preview", error);
+      await reportBillingError("capacity_preview", error, context);
     return NextResponse.json(
       { error: error.message, code: error.code },
       { status: error.status }
     );
   }
   console.error("[capacity-billing] preview failed", {
+    ...context,
     error: error instanceof Error ? error.message : "Unknown error",
   });
-  await reportBillingError("capacity_preview", error);
+  await reportBillingError("capacity_preview", error, context);
   return NextResponse.json(
     { error: "Capacity pricing is unavailable" },
     { status: 500 }
@@ -89,8 +93,10 @@ export function createCapacityPreviewPostHandler(
     if (!validation.ok) {
       return NextResponse.json({ error: validation.error }, { status: 400 });
     }
+    let accountId: string | undefined;
     try {
       const account = await deps.getOrCreateBillingAccount(resolution.scope);
+      accountId = account.id;
       const preview = await deps.previewCapacityChange({
         account,
         request: validation.value as CapacityChangePreviewRequest,
@@ -98,7 +104,10 @@ export function createCapacityPreviewPostHandler(
       });
       return NextResponse.json(preview);
     } catch (error) {
-      return await routeError(error);
+      return await routeError(error, {
+        scope: resolution.scope.kind,
+        accountId,
+      });
     }
   };
 }

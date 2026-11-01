@@ -6,7 +6,10 @@ import { CapacityChangeError } from "@/lib/billing/capacity-stripe-changes";
 import { scheduleCapacityDecrease } from "@/lib/billing/capacity-stripe-schedule";
 import { areCapacityBillingOperationsEnabled } from "@/lib/billing/stripe";
 import { resolveProductResourceScope } from "@/lib/team-resource-scope";
-import { reportBillingError } from "@/lib/billing/report-billing-error";
+import {
+  reportBillingError,
+  type BillingErrorContext,
+} from "@/lib/billing/report-billing-error";
 
 type ScheduleRouteDeps = {
   requireUserId: typeof requireUserId;
@@ -34,20 +37,21 @@ async function requestBody(request: Request): Promise<unknown> {
   }
 }
 
-async function routeError(error: unknown) {
+async function routeError(error: unknown, context: BillingErrorContext) {
   if (error instanceof CapacityChangeError) {
     // Typed refusals are expected; a typed 5xx is a provider anomaly.
     if (error.status >= 500)
-      await reportBillingError("capacity_schedule", error);
+      await reportBillingError("capacity_schedule", error, context);
     return NextResponse.json(
       { error: error.message, code: error.code },
       { status: error.status }
     );
   }
   console.error("[capacity-billing] schedule failed", {
+    ...context,
     error: error instanceof Error ? error.message : "Unknown error",
   });
-  await reportBillingError("capacity_schedule", error);
+  await reportBillingError("capacity_schedule", error, context);
   return NextResponse.json(
     { error: "The capacity change could not be scheduled" },
     { status: 500 }
@@ -84,8 +88,10 @@ export function createCapacitySchedulePostHandler(
     if (!validation.ok) {
       return NextResponse.json({ error: validation.error }, { status: 400 });
     }
+    let accountId: string | undefined;
     try {
       const account = await deps.getOrCreateBillingAccount(resolution.scope);
+      accountId = account.id;
       const result = await deps.scheduleCapacityDecrease({
         account,
         previewToken: validation.value.previewToken,
@@ -94,7 +100,10 @@ export function createCapacitySchedulePostHandler(
       });
       return NextResponse.json(result);
     } catch (error) {
-      return await routeError(error);
+      return await routeError(error, {
+        scope: resolution.scope.kind,
+        accountId,
+      });
     }
   };
 }
