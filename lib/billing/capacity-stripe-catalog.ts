@@ -22,6 +22,10 @@ export type CapacityStripeProductSpec = {
   prices: readonly CapacityStripePriceSpec[];
 };
 
+// Software as a service, business use. Managed Payments rejects Checkout line
+// items whose product has no tax code, so every catalog product carries one.
+export const CAPACITY_STRIPE_TAX_CODE = "txcd_10103001";
+
 const PLAN_DESCRIPTIONS = {
   pro: "Includes 5 parallel agent runs, 1 GB Storage, and $20 monthly Inference at dollar-for-dollar value.",
   plus: "Includes 25 parallel agent runs, 5 GB Storage, and $100 monthly Inference at dollar-for-dollar value.",
@@ -106,7 +110,7 @@ export const CAPACITY_STRIPE_PRODUCTS: readonly CapacityStripeProductSpec[] = [
 
 type ProductSummary = Pick<
   Stripe.Product,
-  "id" | "active" | "name" | "description" | "metadata"
+  "id" | "active" | "name" | "description" | "metadata" | "tax_code"
 >;
 type PriceSummary = Pick<
   Stripe.Price,
@@ -151,12 +155,20 @@ function metadataMatches(
   );
 }
 
+function taxCodeId(product: ProductSummary): string | null {
+  if (!product.tax_code) return null;
+  return typeof product.tax_code === "string"
+    ? product.tax_code
+    : product.tax_code.id;
+}
+
 function productMatches(
   product: ProductSummary,
   spec: CapacityStripeProductSpec
 ): boolean {
   return (
     product.active &&
+    taxCodeId(product) === CAPACITY_STRIPE_TAX_CODE &&
     product.name === spec.name &&
     product.description === spec.description &&
     metadataMatches(product.metadata, spec.metadata)
@@ -248,6 +260,7 @@ export async function syncCapacityStripeCatalog(input: {
           active: true,
           name: productSpec.name,
           description: productSpec.description,
+          tax_code: CAPACITY_STRIPE_TAX_CODE,
           metadata: {
             ...productSpec.metadata,
             mogplex_catalog_key: productSpec.catalogKey,
@@ -260,6 +273,7 @@ export async function syncCapacityStripeCatalog(input: {
         {
           name: productSpec.name,
           description: productSpec.description,
+          tax_code: CAPACITY_STRIPE_TAX_CODE,
           metadata: {
             ...productSpec.metadata,
             mogplex_catalog_key: productSpec.catalogKey,
