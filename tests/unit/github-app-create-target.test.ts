@@ -7,8 +7,12 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ||= "test-service-role-key";
 
 const originalFetch = globalThis.fetch;
 const orderings: string[] = [];
+let restoreFrom: (() => void) | null = null;
 afterEach(() => {
   globalThis.fetch = originalFetch;
+  restoreFrom?.();
+  restoreFrom = null;
+  orderings.length = 0;
 });
 
 async function loadWith(
@@ -23,6 +27,11 @@ async function loadWith(
       orderings.push(`${column}:${options.ascending ? "asc" : "desc"}`);
       return { data: rows, error: null };
     },
+  };
+  const original = Object.getOwnPropertyDescriptor(supabaseAdmin, "from");
+  restoreFrom = () => {
+    if (original) Object.defineProperty(supabaseAdmin, "from", original);
+    else delete (supabaseAdmin as { from?: unknown }).from;
   };
   Object.defineProperty(supabaseAdmin, "from", {
     configurable: true,
@@ -51,7 +60,7 @@ test("an App create target attaches the user's installation for the named org", 
   assert.equal(target?.github_installation_id, 42);
   assert.deepEqual(oauthScopes, ["read:org", "read:user"]);
   // After a reinstall the newest installation row must win.
-  assert.deepEqual(orderings.at(-1), "created_at:desc");
+  assert.deepEqual(orderings, ["created_at:desc"]);
 });
 
 test("an App create target without an owner is the user's personal account", async () => {

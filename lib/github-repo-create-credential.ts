@@ -11,14 +11,17 @@ import {
   fetchGithubOrgMembership,
   type GithubRepoOwnerTarget,
 } from "@/lib/github-owners";
+import { GITHUB_ORG_READ_SCOPE } from "@/lib/github-oauth";
 import { getGithubOAuthRepositoryToken } from "@/lib/github-repository-auth";
 import { getOAuthToken } from "@/lib/oauth-tokens";
 
 export type GithubRepoCreateRefusal = {
   ok: false;
-  status: 400 | 403 | 409 | 502;
+  status: 400 | 403 | 409 | 500 | 502;
   code: string;
   error: string;
+  /** OAuth scope a reconnect must grant, sent as the reauthorize header. */
+  reauthorizeScope?: string;
 };
 
 export type GithubRepoCreateCredential =
@@ -95,8 +98,22 @@ export async function resolveGithubRepoCreateCredential(
       installationId: target.github_installation_id,
       error,
     });
+    // GitHub rejected the App's own JWT: a deployment key or clock problem
+    // that retrying cannot fix.
+    if (error instanceof GithubHttpError && error.status === 401) {
+      console.error("[github-repo-create] GitHub App credentials rejected", {
+        installationId: target.github_installation_id,
+      });
+      return {
+        ok: false,
+        status: 500,
+        code: "GITHUB_APP_MISCONFIGURED",
+        error:
+          "Mogplex's GitHub App connection needs attention. Try again later.",
+      };
+    }
     // A suspended (403) or removed (404) installation is the owner's to fix.
-    // Anything else (App key, rate limit, outage) is ours, and retryable.
+    // Anything else (rate limit, outage) is ours, and retryable.
     if (
       !(error instanceof GithubHttpError) ||
       (error.status !== 403 && error.status !== 404)
@@ -142,6 +159,7 @@ async function requireActiveOrgOwner(
         status: 400,
         code: "GITHUB_REAUTHORIZE_REQUIRED",
         error: "Reconnect GitHub to continue.",
+        reauthorizeScope: GITHUB_ORG_READ_SCOPE,
       };
     }
     console.warn("[github-repo-create] org membership unavailable", {

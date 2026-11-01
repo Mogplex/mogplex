@@ -123,7 +123,6 @@ it("reports a token failure that no org owner can fix as retryable", async () =>
   const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
   try {
     for (const failure of [
-      new GithubHttpError(401, "{}"),
       new GithubHttpError(503, "{}"),
       new Error("fetch failed"),
     ]) {
@@ -144,6 +143,31 @@ it("reports a token failure that no org owner can fix as retryable", async () =>
     }
   } finally {
     warn.mockRestore();
+  }
+});
+
+it("reports a rejected App key as a deployment problem, not a retry", async () => {
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  const error = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    const credential = await resolveGithubRepoCreateCredential(
+      orgTarget,
+      "identity-token",
+      {
+        ...appDeps(),
+        createInstallationToken: async () => {
+          throw new GithubHttpError(401, "{}");
+        },
+      }
+    );
+    expect(credential).toMatchObject({
+      status: 500,
+      code: "GITHUB_APP_MISCONFIGURED",
+    });
+    expect(error).toHaveBeenCalledOnce();
+  } finally {
+    warn.mockRestore();
+    error.mockRestore();
   }
 });
 
@@ -270,6 +294,7 @@ it("treats a non-member as not an owner and a revoked grant as reconnect", async
   ).resolves.toMatchObject({
     status: 400,
     code: "GITHUB_REAUTHORIZE_REQUIRED",
+    reauthorizeScope: "read:org",
   });
 });
 

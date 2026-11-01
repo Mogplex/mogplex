@@ -170,3 +170,28 @@ test("POST /api/github/repos refuses a blank owner_login instead of choosing the
   });
   assert.deepEqual(tokens, []);
 });
+
+test("POST /api/github/repos sends the reconnect header when the identity grant was revoked", async () => {
+  const { createGithubRepoPostHandler } = await loadRoute();
+  const tokens: string[] = [];
+  const response = await appModeHandler(
+    createGithubRepoPostHandler,
+    tokens,
+    false,
+    {
+      resolveCreateCredential: async () => ({
+        ok: false,
+        status: 400,
+        code: "GITHUB_REAUTHORIZE_REQUIRED",
+        error: "Reconnect GitHub to continue.",
+        reauthorizeScope: "read:org",
+      }),
+    }
+  )(createRequest("acme"));
+  assert.equal(response.status, 400);
+  assert.equal(
+    response.headers.get("x-mogplex-github-reauthorize"),
+    "read:org"
+  );
+  assert.deepEqual(tokens, []);
+});

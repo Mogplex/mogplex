@@ -141,7 +141,10 @@ export async function resolveRepoCreateTarget(
   if (!credential.ok) {
     return refuse(
       { error: credential.error, code: credential.code },
-      credential.status
+      credential.status,
+      credential.reauthorizeScope
+        ? { [GITHUB_REAUTHORIZE_HEADER]: credential.reauthorizeScope }
+        : undefined
     );
   }
   return {
