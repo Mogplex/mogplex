@@ -127,10 +127,7 @@ test("POST /api/github/repos refuses a personal repo in an App deployment", asyn
     tokens
   )(createRequest("alex"));
   assert.equal(response.status, 403);
-  assert.equal(
-    (await response.json()).code,
-    "GITHUB_APP_USER_AUTHORIZATION_REQUIRED"
-  );
+  assert.equal((await response.json()).code, "GITHUB_APP_USER_UNAVAILABLE");
   assert.deepEqual(tokens, []);
 });
 

@@ -346,10 +346,7 @@ test("POST /api/workspaces/[id]/repos refuses a personal repo in an App deployme
     params: Promise.resolve({ id: "ws-1" }),
   });
   assert.equal(response.status, 403);
-  assert.equal(
-    (await response.json()).code,
-    "GITHUB_APP_USER_AUTHORIZATION_REQUIRED"
-  );
+  assert.equal((await response.json()).code, "GITHUB_APP_USER_UNAVAILABLE");
   assert.deepEqual(created, []);
 });
 

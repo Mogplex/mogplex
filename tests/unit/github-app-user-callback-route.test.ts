@@ -112,3 +112,27 @@ test("refuses a callback with no state cookie", async () => {
   assert.equal(outcome(response).result, "state_mismatch");
   assert.deepEqual(stored, []);
 });
+
+test("reports a cancelled authorization as denied, not as a state failure", async () => {
+  let exchanged = false;
+  const { handler, stored } = await handlerWith({
+    exchangeCode: async () => {
+      exchanged = true;
+      return tokens;
+    },
+  });
+  const warn = console.warn;
+  console.warn = () => {};
+  try {
+    const response = await handler(
+      new Request(
+        `https://mogplex.com/api/auth/github/app-user/callback?error=access_denied&state=${STATE}`
+      )
+    );
+    assert.equal(outcome(response).result, "denied");
+  } finally {
+    console.warn = warn;
+  }
+  assert.equal(exchanged, false);
+  assert.deepEqual(stored, []);
+});

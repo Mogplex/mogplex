@@ -164,10 +164,11 @@ async function personalAccountCredential(
   deps: typeof defaultDeps
 ): Promise<GithubRepoCreateCredential> {
   if (!deps.appUserAuthConfigured()) {
+    // Nothing the user can authorize: the deployment lacks client credentials.
     return {
       ok: false,
       status: 403,
-      code: "GITHUB_APP_USER_AUTHORIZATION_REQUIRED",
+      code: "GITHUB_APP_USER_UNAVAILABLE",
       error:
         "Creating a repository in a personal GitHub account is not available on this deployment. Choose an organization where the Mogplex GitHub App is installed.",
     };

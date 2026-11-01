@@ -236,6 +236,22 @@ async function recoverRejectedRefresh(
 }
 
 /**
+ * Forget the stored grant after GitHub rejected its access token (the user
+ * revoked Mogplex), so the picker asks for authorization again. Only the grant
+ * that still holds that token is deleted; a newer grant survives.
+ */
+export async function forgetRejectedGithubAppUserToken(
+  userId: string,
+  accessToken: string,
+  overrides: Partial<Deps> = {}
+) {
+  const deps = { ...defaultDeps, ...overrides };
+  const stored = await deps.getToken(userId);
+  if (!stored || parseGrant(stored)?.accessToken !== accessToken) return;
+  await deps.deleteTokenIfUnchanged(userId, stored);
+}
+
+/**
  * Refresh errors that mean the grant itself is dead (revoked or already
  * used). Anything else, such as rejected client credentials, is a deployment
  * problem and must not erase users' grants.

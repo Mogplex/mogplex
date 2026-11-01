@@ -77,7 +77,7 @@ it("refuses a personal account in an App deployment even when it has an installa
   expect(credential).toMatchObject({
     ok: false,
     status: 403,
-    code: "GITHUB_APP_USER_AUTHORIZATION_REQUIRED",
+    code: "GITHUB_APP_USER_UNAVAILABLE",
   });
   expect(minted).toEqual([]);
 });

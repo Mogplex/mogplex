@@ -5,6 +5,7 @@ import {
   isRecoverableGithubRepoCreateConflict,
 } from "@/lib/github-create";
 import { NextResponse } from "next/server";
+import { forgetRejectedGithubAppUserToken } from "@/lib/github-app-user-auth";
 import type { GithubRepoOwnerTarget } from "@/lib/github-owners";
 import {
   GITHUB_APP_USER_AUTHORIZE_PATH,
@@ -77,7 +78,10 @@ export async function createAndImportGithubRepo(input: {
   >;
   loadImported: (githubId: number) => Promise<unknown>;
   logScope: string;
+  forgetAppUserToken?: (userId: string, accessToken: string) => Promise<void>;
 }): Promise<NextResponse> {
+  const forgetAppUserToken =
+    input.forgetAppUserToken ?? forgetRejectedGithubAppUserToken;
   const { ownerTarget, token, viaApp } = input.target;
   try {
     const createdRepo = await createGithubRepoWithRecovery(
@@ -100,13 +104,20 @@ export async function createAndImportGithubRepo(input: {
     return NextResponse.json(repo);
   } catch (error) {
     // GitHub rejects a revoked App user token with 401 even before it
-    // expires; ask for authorization again instead of a dead-end error.
+    // expires; forget it and ask for authorization again instead of a
+    // dead-end error.
     if (
       error instanceof GithubRepoCreateError &&
       error.status === 401 &&
       viaApp &&
       ownerTarget.kind === "personal"
     ) {
+      await forgetAppUserToken(input.userId, token).catch((forgetError) => {
+        console.warn(`[${input.logScope}] could not forget rejected grant`, {
+          userId: input.userId,
+          error: forgetError,
+        });
+      });
       return NextResponse.json(
         {
           code: "GITHUB_APP_USER_AUTHORIZATION_REQUIRED",

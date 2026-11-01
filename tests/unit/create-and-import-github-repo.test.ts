@@ -8,7 +8,8 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ||= "test-service-role-key";
 async function createWithRefusal(
   status: number,
   kind: "personal" | "org",
-  viaApp: boolean
+  viaApp: boolean,
+  forgotten: string[] = []
 ) {
   const { createAndImportGithubRepo } =
     await import("../../app/api/github/_lib/create-repo-with-recovery");
@@ -47,6 +48,9 @@ async function createWithRefusal(
       importOptions: {},
       loadImported: async () => null,
       logScope: "test",
+      forgetAppUserToken: async (userId, token) => {
+        forgotten.push(`${userId}:${token}`);
+      },
     });
   } finally {
     console.warn = warn;
@@ -54,7 +58,9 @@ async function createWithRefusal(
 }
 
 test("should ask to authorize again when GitHub rejects a personal App user token", async () => {
-  const response = await createWithRefusal(401, "personal", true);
+  const forgotten: string[] = [];
+  const response = await createWithRefusal(401, "personal", true, forgotten);
+  assert.deepEqual(forgotten, ["user-1:ghu_revoked"]);
   assert.equal(response.status, 403);
   assert.deepEqual(await response.json(), {
     code: "GITHUB_APP_USER_AUTHORIZATION_REQUIRED",
@@ -64,7 +70,9 @@ test("should ask to authorize again when GitHub rejects a personal App user toke
 });
 
 test("should keep GitHub's refusal for a 401 outside the personal App path", async () => {
-  const response = await createWithRefusal(401, "personal", false);
+  const forgotten: string[] = [];
+  const response = await createWithRefusal(401, "personal", false, forgotten);
+  assert.deepEqual(forgotten, []);
   assert.equal(response.status, 403);
   const body = await response.json();
   assert.equal(body.code, undefined);

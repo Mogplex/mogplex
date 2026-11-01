@@ -54,10 +54,23 @@ export function createGithubAppUserCallbackHandler(
 
     const userId = await deps.getUserId();
     if (!userId) return NextResponse.redirect(buildAppUrl("/login", request));
+    // GitHub sends `error` (access_denied when the user cancels) instead of
+    // a code; report it apart from a state failure.
+    const githubError = url.searchParams.get("error");
+    if (githubError) {
+      console.warn("[github-app-user] authorization not granted", {
+        userId,
+        error: githubError,
+        description: url.searchParams.get("error_description"),
+      });
+      return back(githubError === "access_denied" ? "denied" : "failed");
+    }
     const code = url.searchParams.get("code");
     const state = url.searchParams.get("state");
-    if (!code || !state || !storedState || state !== storedState)
+    if (!code || !state || !storedState || state !== storedState) {
+      console.warn("[github-app-user] state mismatch", { userId });
       return back("state_mismatch");
+    }
 
     try {
       const redirectUri = buildAppUrl(

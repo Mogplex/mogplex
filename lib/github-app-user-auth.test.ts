@@ -1,6 +1,7 @@
 import { expect, it } from "vitest";
 import {
   buildGithubAppUserAuthorizeUrl,
+  forgetRejectedGithubAppUserToken,
   exchangeGithubAppUserCode,
   getGithubAppUserToken,
   type GithubAppUserGrant,
@@ -238,4 +239,12 @@ it("agrees with token lookup on grants at the edges of expiry", async () => {
       hasGithubAppUserGrant("user-1", "alex", deps({}))
     ).resolves.toBe(token !== null);
   }
+});
+
+it("forgets a grant whose access token GitHub rejected, but not a newer one", async () => {
+  const { state, deps } = store(grant());
+  await forgetRejectedGithubAppUserToken("user-1", "ghu_older", deps({}));
+  expect(state.deleted).toBe(0);
+  await forgetRejectedGithubAppUserToken("user-1", "ghu_current", deps({}));
+  expect(state.deleted).toBe(1);
 });

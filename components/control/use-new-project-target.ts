@@ -21,6 +21,8 @@ export type NewProjectAction = { href: string; label: string } | null;
 const AUTHORIZE_OUTCOME_MESSAGES: Record<string, string> = {
   account_mismatch:
     "GitHub authorized a different account. Authorize again with the GitHub account connected to Mogplex.",
+  denied:
+    "GitHub authorization was cancelled. Authorize to create repositories here.",
   failed: "GitHub authorization did not finish. Try again.",
   state_mismatch: "GitHub authorization did not finish. Try again.",
 };
