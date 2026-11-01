@@ -9,6 +9,7 @@ import {
 import { areCapacityBillingOperationsEnabled } from "@/lib/billing/stripe";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { resolveProductResourceScope } from "@/lib/team-resource-scope";
+import { reportBillingError } from "@/lib/billing/report-billing-error";
 
 type IndividualPlanCheckoutRouteDeps = {
   requireUserId: typeof requireUserId;
@@ -56,6 +57,7 @@ function routeError(error: unknown) {
   console.error("[capacity-billing] Individual plan checkout failed", {
     error: error instanceof Error ? error.message : "Unknown error",
   });
+  reportBillingError("plan_checkout", error);
   return NextResponse.json(
     { error: "Individual plan checkout is unavailable" },
     { status: 500 }

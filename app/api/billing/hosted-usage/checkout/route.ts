@@ -9,6 +9,7 @@ import {
 import { areCapacityBillingOperationsEnabled } from "@/lib/billing/stripe";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { resolveProductResourceScope } from "@/lib/team-resource-scope";
+import { reportBillingError } from "@/lib/billing/report-billing-error";
 
 type HostedUsageRouteDeps = {
   requireUserId: typeof requireUserId;
@@ -56,6 +57,7 @@ function routeError(error: unknown) {
   console.error("[capacity-billing] hosted-usage checkout failed", {
     error: error instanceof Error ? error.message : "Unknown error",
   });
+  reportBillingError("hosted_usage_checkout", error);
   return NextResponse.json(
     { error: "Hosted-usage checkout is unavailable" },
     { status: 500 }

@@ -6,6 +6,7 @@ import { CapacityChangeError } from "@/lib/billing/capacity-stripe-changes";
 import { scheduleCapacityDecrease } from "@/lib/billing/capacity-stripe-schedule";
 import { areCapacityBillingOperationsEnabled } from "@/lib/billing/stripe";
 import { resolveProductResourceScope } from "@/lib/team-resource-scope";
+import { reportBillingError } from "@/lib/billing/report-billing-error";
 
 type ScheduleRouteDeps = {
   requireUserId: typeof requireUserId;
@@ -43,6 +44,7 @@ function routeError(error: unknown) {
   console.error("[capacity-billing] schedule failed", {
     error: error instanceof Error ? error.message : "Unknown error",
   });
+  reportBillingError("capacity_schedule", error);
   return NextResponse.json(
     { error: "The capacity change could not be scheduled" },
     { status: 500 }

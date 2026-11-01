@@ -44,6 +44,7 @@ import {
   type BillingPeriodGrant,
   type LedgerEntry,
 } from "@/lib/billing/ledger";
+import { reportBillingError } from "@/lib/billing/report-billing-error";
 
 // Single Stripe webhook endpoint (pricing-plan 02 §4): verify signature,
 // claim event id in billing_events before processing, ack duplicates fast.
@@ -465,6 +466,10 @@ export async function POST(request: Request) {
       `[stripe-webhook] ${event.type} ${event.id} failed:`,
       error instanceof Error ? error.message : error
     );
+    reportBillingError("stripe_webhook", error, {
+      eventType: event.type,
+      eventId: event.id,
+    });
     return NextResponse.json({ error: "Processing failed" }, { status: 500 });
   }
 

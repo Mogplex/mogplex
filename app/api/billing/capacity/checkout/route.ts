@@ -6,6 +6,7 @@ import { CapacityChangeError } from "@/lib/billing/capacity-stripe-changes";
 import { confirmCapacityIncrease } from "@/lib/billing/capacity-stripe-increase";
 import { areCapacityBillingOperationsEnabled } from "@/lib/billing/stripe";
 import { resolveProductResourceScope } from "@/lib/team-resource-scope";
+import { reportBillingError } from "@/lib/billing/report-billing-error";
 
 type CheckoutRouteDeps = {
   requireUserId: typeof requireUserId;
@@ -43,6 +44,7 @@ function routeError(error: unknown) {
   console.error("[capacity-billing] checkout failed", {
     error: error instanceof Error ? error.message : "Unknown error",
   });
+  reportBillingError("capacity_checkout", error);
   return NextResponse.json(
     { error: "The capacity change could not be submitted" },
     { status: 500 }

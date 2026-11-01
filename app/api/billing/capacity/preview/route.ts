@@ -11,6 +11,7 @@ import {
 } from "@/lib/billing/capacity-stripe-changes";
 import { areCapacityBillingOperationsEnabled } from "@/lib/billing/stripe";
 import { resolveProductResourceScope } from "@/lib/team-resource-scope";
+import { reportBillingError } from "@/lib/billing/report-billing-error";
 
 type PreviewRouteDeps = {
   requireUserId: typeof requireUserId;
@@ -48,6 +49,7 @@ function routeError(error: unknown) {
   console.error("[capacity-billing] preview failed", {
     error: error instanceof Error ? error.message : "Unknown error",
   });
+  reportBillingError("capacity_preview", error);
   return NextResponse.json(
     { error: "Capacity pricing is unavailable" },
     { status: 500 }
