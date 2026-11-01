@@ -1,9 +1,11 @@
 import { z } from "zod";
 import { defineTool } from "./shared";
 import { normalizeLogin, findInstallationToken } from "./github-shared";
+import { hasGithubAppConfig } from "@/lib/github-app";
+import { mapGithubRequests } from "@/lib/github-request-concurrency";
+import { ignoreRevokedGithubInstallation } from "@/lib/github-installation-result";
 
 const GITHUB_API_ORIGIN = "https://api.github.com";
-const MAX_INSTALLATION_AUTHS = 5;
 
 export type GithubRepoListOptions = {
   oauthToken?: string | null;
@@ -35,10 +37,13 @@ function githubHeaders(token: string) {
   };
 }
 
-function unavailableError(warnings: string[] = []) {
+function unavailableError(warnings: string[] = [], owner?: string | null) {
   return {
-    error:
-      "Authenticated GitHub repo listing is unavailable. Connect GitHub OAuth or install the Mogplex GitHub App for the requested owner.",
+    error: hasGithubAppConfig()
+      ? "Authenticated GitHub repo listing is unavailable. Authorize the Mogplex GitHub App for the requested owner."
+      : "Authenticated GitHub repo listing is unavailable. Connect GitHub OAuth or install the Mogplex GitHub App for the requested owner.",
+    authorizationRequired: true,
+    ...(owner ? { requestedOwner: owner } : {}),
     ...(warnings.length > 0 ? { warnings } : {}),
   };
 }
@@ -109,9 +114,9 @@ function matchesFilters(
 
 /**
  * Auth candidates: a GitHub App installation token per accessible
- * installation (just the requested owner's when scoped), plus the user's
- * OAuth token as fallback. Installation tokens cover private repos the app
- * can access; OAuth covers everything the user can see.
+ * installation (just the requested owner's when scoped). OAuth-only
+ * deployments retain their legacy flow; an App deployment never widens its
+ * installation grants with a stored OAuth identity credential.
  */
 async function resolveAuths(input: {
   oauthToken?: string | null;
@@ -135,23 +140,26 @@ async function resolveAuths(input: {
     }
   } else if (input.userId) {
     try {
-      const { supabaseAdmin } = await import("@/lib/supabase/admin");
+      const { listUserGithubInstallations } =
+        await import("@/lib/github-user-installations");
       const { hasGithubAppConfig, createGithubInstallationAccessToken } =
         await import("@/lib/github-app");
       if (hasGithubAppConfig()) {
-        const { data, error } = await supabaseAdmin
-          .from("github_installations")
-          .select("installation_id, account_login")
-          .eq("user_id", input.userId)
-          .limit(MAX_INSTALLATION_AUTHS);
-        if (error) throw new Error(error.message);
-        for (const row of data ?? []) {
-          if (!row.installation_id) continue;
-          const { token } = await createGithubInstallationAccessToken(
-            row.installation_id
-          );
-          auths.push({ token, source: "github_app_installation" });
-        }
+        const resolved = await mapGithubRequests(
+          await listUserGithubInstallations(input.userId),
+          async (row) => {
+            const grant = await ignoreRevokedGithubInstallation(
+              createGithubInstallationAccessToken(row.installation_id)
+            );
+            return grant
+              ? {
+                  token: grant.token,
+                  source: "github_app_installation" as const,
+                }
+              : null;
+          }
+        );
+        auths.push(...resolved.filter((auth) => auth !== null));
       }
     } catch (error) {
       warnings.push(
@@ -160,7 +168,7 @@ async function resolveAuths(input: {
     }
   }
 
-  const oauthToken = input.oauthToken?.trim();
+  const oauthToken = hasGithubAppConfig() ? null : input.oauthToken?.trim();
   if (oauthToken) auths.push({ token: oauthToken, source: "oauth" });
   return { auths, warnings };
 }
@@ -171,7 +179,7 @@ const repoListParams = z
       .string()
       .optional()
       .describe(
-        "GitHub organization or user login to scope the listing, e.g. 'mogplex'. Omit to list repos across every connected installation and the user's OAuth account."
+        "GitHub organization or user login to scope the listing, e.g. 'mogplex'. Omit to list repos across all approved installations."
       ),
     query: z
       .string()
@@ -194,7 +202,7 @@ const repoListParams = z
 export function createGithubRepoList(options: GithubRepoListOptions = {}) {
   return defineTool({
     description:
-      "List GitHub repositories visible to the connected GitHub account, including private repositories covered by the Mogplex GitHub App installation or the user's OAuth connection. Read-only. Use this for 'what repos do I have access to', org repo inventory, or finding a repo by name. Never use unauthenticated web_fetch against api.github.com for repo inventory — it only returns public data.",
+      "List GitHub repositories covered by approved Mogplex GitHub App installations. OAuth-only deployments use their explicit repository grant. Returns one page of up to 100 repositories per credential, so name searches and filtered results may be partial. Read-only. Never use unauthenticated web_fetch against api.github.com for private repo inventory.",
     inputSchema: repoListParams,
     execute: async ({
       owner,
@@ -215,15 +223,17 @@ export function createGithubRepoList(options: GithubRepoListOptions = {}) {
         userId: options.userId,
         owner: filters.owner,
       });
-      if (auths.length === 0) return unavailableError(warnings);
+      if (auths.length === 0) return unavailableError(warnings, filters.owner);
 
       const byFullName = new Map<string, GithubRepo>();
-      for (const auth of auths) {
+      const inventories = await mapGithubRequests(auths, async (auth) => {
         const path =
           auth.source === "github_app_installation"
             ? "/installation/repositories?per_page=100"
             : "/user/repos?per_page=100&sort=updated&affiliation=owner,collaborator,organization_member";
-        const result = await fetchJson(path, auth);
+        return { auth, result: await fetchJson(path, auth) };
+      });
+      for (const { auth, result } of inventories) {
         if (!result.ok) {
           warnings.push(result.warning);
           continue;

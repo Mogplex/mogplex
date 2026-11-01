@@ -1,4 +1,10 @@
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { isGithubOAuthRepositoryAccessAllowed } from "@/lib/github-repository-auth";
+import { filterVisibleGithubRepos } from "@/lib/github-repo-visibility";
+import { filterAuthorizedTeamGithubRepos } from "@/lib/github-team-repo-visibility";
+import { ignoreRevokedGithubInstallation } from "@/lib/github-installation-result";
+import { mapGithubRequests } from "@/lib/github-request-concurrency";
+import type { GithubRepoPayload } from "@/lib/github-repo-payload";
 import {
   fetchGithubInstallationRepos,
   hasGithubAppConfig,
@@ -10,17 +16,9 @@ import {
   type ProductResourceScope,
 } from "@/lib/team-resource-scope";
 
-export type GithubRepoPayload = {
-  id: number;
-  full_name: string;
-  default_branch?: string;
-  created_at?: string;
-  size?: number;
-  owner?: {
-    login?: string;
-  };
-  name?: string;
-};
+export { filterVisibleGithubRepos } from "@/lib/github-repo-visibility";
+
+export type { GithubRepoPayload } from "@/lib/github-repo-payload";
 
 type RebindAutomationInstallationsDeps = {
   loadCurrentInstallations: (
@@ -157,23 +155,6 @@ type UpsertGithubReposOptions = {
   workspaceId?: string | null;
   productTeamId?: string | null;
 };
-
-export function filterVisibleGithubRepos<
-  T extends { github_installation_id?: number | null },
->(repos: T[], options: { preferInstallationCoverage: boolean }) {
-  if (!options.preferInstallationCoverage) {
-    return repos;
-  }
-
-  const coveredRepos = repos.filter((repo) =>
-    Number.isFinite(repo.github_installation_id)
-  );
-
-  // When installation-backed sync is active, covered repos are the current
-  // source of truth. Older OAuth-only rows can linger in the table after a
-  // user moves to the GitHub App and should not crowd the active Projects list.
-  return coveredRepos.length > 0 ? coveredRepos : repos;
-}
 
 export async function upsertGithubReposForUser(
   userId: string,
@@ -439,6 +420,7 @@ export async function syncGithubInstallationReposForUser(
       });
     }
   }
+  return githubRepos;
 }
 
 export async function syncGithubReposForUser(
@@ -462,10 +444,13 @@ export async function syncGithubReposForUser(
 
   const installationScopedSync =
     Boolean(installations?.length) && hasGithubAppConfig();
+  const allowOAuth = await isGithubOAuthRepositoryAccessAllowed(userId);
+  const authorizedGithubRepoIds = new Set<number>();
+  const verifiedInstallations = new Map<number, ReadonlySet<number>>();
 
   if (installationScopedSync) {
-    await Promise.all(
-      installations.map((inst) =>
+    const current = await mapGithubRequests(installations, (inst) =>
+      ignoreRevokedGithubInstallation(
         syncGithubInstallationReposForUser(
           userId,
           Number(inst.installation_id),
@@ -473,7 +458,15 @@ export async function syncGithubReposForUser(
         )
       )
     );
-  } else if (oauthToken) {
+    for (const [index, repos] of current.entries()) {
+      const ids = new Set((repos ?? []).map((repo) => repo.id));
+      verifiedInstallations.set(
+        Number(installations[index].installation_id),
+        ids
+      );
+      for (const id of ids) authorizedGithubRepoIds.add(id);
+    }
+  } else if (oauthToken && allowOAuth) {
     const githubRepos = await fetchAllGithubRepos(oauthToken);
     await upsertGithubReposForUser(userId, githubRepos, {
       productTeamId: options.productTeamId,
@@ -483,7 +476,7 @@ export async function syncGithubReposForUser(
   let query = supabaseAdmin
     .from("repos")
     .select("*")
-    .or("is_hidden.is.null,is_hidden.eq.false")
+    .or("is_hidden.is.null,is_hidden.is.false")
     .order("is_favorite", { ascending: false })
     .order("full_name", { ascending: true });
   query = applyResourceOwnerScope(query, scope);
@@ -493,7 +486,10 @@ export async function syncGithubReposForUser(
     throw new Error(`Failed to load synced repos: ${error.message}`);
   }
 
+  if (scope.kind === "team" && !allowOAuth)
+    return filterAuthorizedTeamGithubRepos(data || [], verifiedInstallations);
   return filterVisibleGithubRepos(data || [], {
-    preferInstallationCoverage: installationScopedSync,
+    preferInstallationCoverage: !allowOAuth || installationScopedSync,
+    authorizedGithubRepoIds,
   });
 }

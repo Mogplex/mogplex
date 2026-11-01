@@ -2,7 +2,9 @@ import {
   createGithubInstallationAccessToken,
   hasGithubAppConfig,
 } from "@/lib/github-app";
-import { getOAuthToken } from "@/lib/oauth-tokens";
+import { getGithubOAuthRepositoryToken } from "@/lib/github-repository-auth";
+import { listUserGithubInstallations } from "@/lib/github-user-installations";
+import { ignoreRevokedGithubInstallation } from "@/lib/github-installation-result";
 import { getOwnedRepo, getRepoForScope } from "@/lib/repos";
 import type { ProductResourceScope } from "@/lib/team-resource-scope";
 
@@ -29,14 +31,26 @@ export async function getGithubAccessTokenForRepo(
   },
   actorUserId = repo.user_id
 ) {
-  if (repo.github_installation_id && hasGithubAppConfig()) {
-    const { token } = await createGithubInstallationAccessToken(
-      repo.github_installation_id
+  const installationId = Number(repo.github_installation_id);
+  if (
+    Number.isSafeInteger(installationId) &&
+    installationId > 0 &&
+    hasGithubAppConfig()
+  ) {
+    const owned = await listUserGithubInstallations(repo.user_id);
+    if (
+      !owned.some(
+        (installation) => installation.installation_id === installationId
+      )
+    )
+      return null;
+    const grant = await ignoreRevokedGithubInstallation(
+      createGithubInstallationAccessToken(installationId)
     );
-    return token;
+    return grant?.token ?? null;
   }
 
-  return getOAuthToken(actorUserId, "github");
+  return getGithubOAuthRepositoryToken(actorUserId);
 }
 
 export async function getOwnedRepoWithGithubAccessToken<

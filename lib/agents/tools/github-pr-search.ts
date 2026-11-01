@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { defineTool } from "./shared";
+import { hasGithubAppConfig } from "@/lib/github-app";
 import {
   normalizeLogin,
   normalizeRepoName,
@@ -83,10 +84,13 @@ query MogplexPullRequestSearch($query: String!, $first: Int!) {
   rateLimit { limit remaining resetAt }
 }`.trim();
 
-function unavailableError(warnings: string[] = []) {
+function unavailableError(warnings: string[] = [], owner?: string | null) {
   return {
-    error:
-      "Authenticated GitHub PR search is unavailable. Connect GitHub OAuth or install the Mogplex GitHub App for the requested owner.",
+    error: hasGithubAppConfig()
+      ? "Authenticated GitHub PR search is unavailable. Authorize the Mogplex GitHub App for the requested owner."
+      : "Authenticated GitHub PR search is unavailable. Connect GitHub OAuth or install the Mogplex GitHub App for the requested owner.",
+    authorizationRequired: true,
+    ...(owner ? { requestedOwner: owner } : {}),
     ...(warnings.length > 0 ? { warnings } : {}),
   };
 }
@@ -96,6 +100,12 @@ async function resolveAuthCandidates(input: {
   userId?: string | null;
   owner?: string | null;
 }) {
+  if (hasGithubAppConfig() && !input.owner)
+    return {
+      error:
+        "Specify the GitHub organization or user owner for App-scoped PR search.",
+      ownerRequired: true,
+    };
   const auths: GithubPrSearchAuth[] = [];
   const warnings: string[] = [];
   if (input.owner) {
@@ -113,10 +123,10 @@ async function resolveAuthCandidates(input: {
       );
     }
   }
-  const oauthToken = input.oauthToken?.trim();
+  const oauthToken = hasGithubAppConfig() ? null : input.oauthToken?.trim();
   if (oauthToken)
     auths.push({ token: oauthToken, source: "oauth", coverage: "oauth" });
-  if (auths.length === 0) return unavailableError(warnings);
+  if (auths.length === 0) return unavailableError(warnings, input.owner);
   return { auths, warnings };
 }
 
@@ -397,7 +407,7 @@ const prSearchParams = z
 export function createGithubPrSearch(options: GithubPrSearchOptions = {}) {
   return defineTool({
     description:
-      "Search GitHub pull requests visible to the connected GitHub account, including private repositories covered by the user's OAuth token or the Mogplex GitHub App installation for the requested owner. Read-only. Use this for org-wide, user-wide, repo-wide, or 'my PRs' questions. Do not use public web search for GitHub PR inventory when this tool is available.",
+      "Search pull requests within the approved GitHub App installation for the requested organization or user owner. Supply an owner, including for 'my PRs' questions in App deployments. OAuth-only deployments use their explicit repository grant. Read-only. Do not use public web search for GitHub PR inventory when this tool is available.",
     inputSchema: prSearchParams,
     execute: async ({
       owner,

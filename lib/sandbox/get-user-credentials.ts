@@ -1,6 +1,7 @@
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { getDelegatedUserIdFromRequest } from "@/lib/internal-api-auth";
 import { getOAuthToken } from "@/lib/oauth-tokens";
+import { getGithubOAuthRepositoryToken } from "@/lib/github-repository-auth";
 import {
   loadUserPlatformAccess,
   PLATFORM_SANDBOX_ACCESS_ERROR,
@@ -140,7 +141,7 @@ export async function getUserCredentials() {
   if (!profile) return null;
 
   const [githubToken, vercelToken] = await Promise.all([
-    getOAuthToken(profile.id, "github"),
+    getGithubOAuthRepositoryToken(profile.id),
     getOAuthToken(profile.id, "vercel"),
   ]);
 

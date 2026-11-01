@@ -4,7 +4,8 @@ import {
   syncGithubReposForUser,
   upsertGithubReposForUser,
 } from "@/lib/github-sync";
-import { getOAuthToken } from "@/lib/oauth-tokens";
+import { getGithubOAuthRepositoryToken } from "@/lib/github-repository-auth";
+import { hasGithubAppConfig } from "@/lib/github-app";
 import { requireUserId } from "@/lib/auth";
 import {
   createGithubRepo,
@@ -43,9 +44,8 @@ export async function GET(request: Request) {
     );
   }
 
-  const githubToken = await getOAuthToken(userId, "github");
-
   try {
+    const githubToken = await getGithubOAuthRepositoryToken(userId);
     const repos = await syncGithubReposForUser(userId, githubToken, {
       productTeamId: scopeResolution.scope.productTeamId,
     });
@@ -70,7 +70,7 @@ export async function GET(request: Request) {
 type GithubRepoPostRouteDeps = {
   requireUserId: typeof requireUserId;
   resolveActiveTeamCapabilities: typeof resolveActiveTeamCapabilities;
-  getGithubToken: typeof getOAuthToken;
+  getGithubToken: typeof getGithubOAuthRepositoryToken;
   loadOwnerTargets: (
     userId: string,
     token: string
@@ -107,7 +107,7 @@ export function createGithubRepoPostHandler(
   const deps: GithubRepoPostRouteDeps = {
     requireUserId,
     resolveActiveTeamCapabilities,
-    getGithubToken: getOAuthToken,
+    getGithubToken: getGithubOAuthRepositoryToken,
     loadOwnerTargets: async (userId, token) =>
       (await loadGithubRepoCreationOwnerTargets(userId, token)).targets,
     createGithubRepo,
@@ -162,6 +162,15 @@ export function createGithubRepoPostHandler(
 
     const token = await deps.getGithubToken(userId, "github").catch(() => null);
     if (!token) {
+      if (hasGithubAppConfig())
+        return NextResponse.json(
+          {
+            error:
+              "Repository creation is unavailable with the current GitHub App authorization.",
+            code: "GITHUB_APP_AUTHORIZATION_REQUIRED",
+          },
+          { status: 403 }
+        );
       return NextResponse.json(
         { error: "Connect GitHub account first" },
         { status: 400 }

@@ -124,7 +124,7 @@ test("filterVisibleGithubRepos prefers app-covered repos when installation-backe
   ]);
 });
 
-test("filterVisibleGithubRepos keeps synced-only repos visible until covered repos exist", async () => {
+test("filterVisibleGithubRepos does not restore OAuth-only rows when App coverage is empty", async () => {
   const { filterVisibleGithubRepos } = await loadGithubSync();
 
   const repos = [
@@ -142,7 +142,7 @@ test("filterVisibleGithubRepos keeps synced-only repos visible until covered rep
 
   assert.deepEqual(
     filterVisibleGithubRepos(repos, { preferInstallationCoverage: true }),
-    repos
+    []
   );
   assert.deepEqual(
     filterVisibleGithubRepos(repos, { preferInstallationCoverage: false }),

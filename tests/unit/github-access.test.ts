@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { withEnv } from "./helpers/agents-tools-fixtures";
 
 async function loadGithubAccessHelpers() {
   process.env.NEXT_PUBLIC_SUPABASE_URL ||= "https://example.supabase.co";
@@ -58,4 +59,54 @@ test("getOwnedRepoWithGithubAccessToken returns the owned repo and its token", a
   assert.equal(seenSelect, "id, user_id, github_installation_id");
   assert.equal(result.repo, repo);
   assert.equal(result.githubToken, "github-token");
+});
+
+test("App-mode repositories without an installation never receive the older OAuth credential", async () => {
+  await withEnv({ GITHUB_APP_ID: undefined }, async () => {
+    const { supabaseAdmin } = await import("../../lib/supabase/admin");
+    const descriptors = ["from", "rpc"].map(
+      (name) =>
+        [name, Object.getOwnPropertyDescriptor(supabaseAdmin, name)] as const
+    );
+    const query = {
+      select: () => query,
+      eq: () => query,
+      maybeSingle: async () => ({
+        data: { github_auth_mode: "app" },
+        error: null,
+      }),
+    };
+    let vaultReads = 0;
+    Object.defineProperty(supabaseAdmin, "from", {
+      configurable: true,
+      value: () => query,
+    });
+    Object.defineProperty(supabaseAdmin, "rpc", {
+      configurable: true,
+      value: async () => {
+        vaultReads++;
+        return { data: "older-oauth-token", error: null };
+      },
+    });
+    try {
+      const { getGithubAccessTokenForRepo } = await loadGithubAccessHelpers();
+      assert.equal(
+        await getGithubAccessTokenForRepo({
+          user_id: "user-1",
+          github_installation_id: null,
+        }),
+        null
+      );
+      assert.equal(
+        vaultReads,
+        0,
+        "a denied repository credential must stay in the vault"
+      );
+    } finally {
+      for (const [name, descriptor] of descriptors) {
+        if (descriptor) Object.defineProperty(supabaseAdmin, name, descriptor);
+        else Reflect.deleteProperty(supabaseAdmin, name);
+      }
+    }
+  });
 });

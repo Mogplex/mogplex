@@ -3,9 +3,12 @@ import { cookies } from "next/headers";
 import { buildAppUrl, normalizeAppRedirectPath } from "@/lib/app-url";
 import { getGithubAppInstallUrl, hasGithubAppConfig } from "@/lib/github-app";
 import { getUserId } from "@/lib/auth";
+import { isGithubOAuthRepositoryAccessAllowed } from "@/lib/github-repository-auth";
+import { getOAuthToken } from "@/lib/oauth-tokens";
 import {
-  GITHUB_OAUTH_SCOPE,
+  getGithubOAuthGrantConfiguration,
   GITHUB_RETURN_TO_COOKIE,
+  GITHUB_INSTALL_STATE_COOKIE,
 } from "@/lib/github-oauth";
 
 function requireEnv(name: "GITHUB_CLIENT_ID") {
@@ -51,17 +54,52 @@ export async function GET(request: Request) {
   const reauthorize = url.searchParams.get("reauthorize") === "1";
 
   if (hasGithubAppConfig() && !reauthorize) {
-    cookieStore.set("github_app_install_pending", "1", {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24,
-      path: "/",
-    });
-    cookieStore.delete("github_reconcile_skip");
-    return NextResponse.redirect(getGithubAppInstallUrl());
+    // Identity is verified separately from the installation repository grant.
+    const identityToken = await getOAuthToken(userId, "github").catch(
+      () => null
+    );
+    if (identityToken) {
+      const installState = crypto.randomUUID();
+      cookieStore.set(GITHUB_INSTALL_STATE_COOKIE, installState, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: 600,
+        path: "/",
+      });
+      cookieStore.set("github_app_install_pending", "1", {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: 60 * 60 * 24,
+        path: "/",
+      });
+      cookieStore.delete("github_reconcile_skip");
+      const installUrl = new URL(getGithubAppInstallUrl());
+      installUrl.searchParams.set("state", installState);
+      return NextResponse.redirect(installUrl);
+    }
+    cookieStore.set(
+      GITHUB_RETURN_TO_COOKIE,
+      `/api/auth/github?${new URLSearchParams({ next: returnTo })}`,
+      {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: 600,
+        path: "/",
+      }
+    );
   }
 
+  let identityOnlyGrant: boolean;
+  try {
+    identityOnlyGrant = !(await isGithubOAuthRepositoryAccessAllowed(userId));
+  } catch {
+    return NextResponse.redirect(
+      buildAppUrl("/?error=github_repository_authorization", request)
+    );
+  }
   const state = crypto.randomUUID();
   cookieStore.set("github_oauth_state", state, {
     httpOnly: true,
@@ -73,7 +111,7 @@ export async function GET(request: Request) {
   const params = new URLSearchParams({
     client_id: requireEnv("GITHUB_CLIENT_ID"),
     redirect_uri: buildAppUrl("/api/auth/github/callback", request).toString(),
-    scope: GITHUB_OAUTH_SCOPE,
+    scope: getGithubOAuthGrantConfiguration(identityOnlyGrant).scope,
     state,
   });
 

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { NextResponse } from "next/server";
+import { withEnv } from "./helpers/agents-tools-fixtures";
 
 async function loadRoute() {
   process.env.NEXT_PUBLIC_SUPABASE_URL ||= "https://example.supabase.co";
@@ -10,6 +11,45 @@ async function loadRoute() {
 }
 
 const TEAM_ID = "00000000-0000-4000-8000-000000000123";
+
+test("POST /api/github/repos cannot use a stored legacy OAuth grant in an App deployment", async () => {
+  await withEnv(
+    {
+      GITHUB_APP_ID: "1",
+      GITHUB_APP_NAME: "fixture",
+      GITHUB_APP_PRIVATE_KEY: "configured",
+    },
+    async () => {
+      const { createGithubRepoPostHandler } = await loadRoute();
+      const handler = createGithubRepoPostHandler({
+        requireUserId: async () => "user-123",
+        resolveActiveTeamCapabilities: async () => ({
+          ok: true,
+          teamId: TEAM_ID,
+          capabilities: new Set(["*"]),
+        }),
+        loadOwnerTargets: async () => {
+          throw new Error("must not use OAuth owner discovery");
+        },
+        createGithubRepo: async () => {
+          throw new Error("must not create a repository");
+        },
+      });
+      const response = await handler(
+        new Request("http://localhost/api/github/repos", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ owner_login: "new-org", name: "widgets" }),
+        })
+      );
+      assert.equal(response.status, 403);
+      assert.equal(
+        (await response.json()).code,
+        "GITHUB_APP_AUTHORIZATION_REQUIRED"
+      );
+    }
+  );
+});
 
 test("POST /api/github/repos preserves authentication failures", async () => {
   const { createGithubRepoPostHandler } = await loadRoute();
