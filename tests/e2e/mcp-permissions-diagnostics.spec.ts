@@ -56,6 +56,12 @@ async function setup(page: Page, extra: Record<string, unknown> = {}) {
   return { saved, testCount: () => testCount };
 }
 
+/** The save request lands after the Save click resolves; wait for it. */
+async function waitForSave(saved: Record<string, unknown>[], index: number) {
+  await expect.poll(() => saved[index]).toBeDefined();
+  return saved[index];
+}
+
 test("tests saved connections on demand and edits approval rules without losing saved restrictions or secrets", async ({
   page,
 }) => {
@@ -97,7 +103,7 @@ test("tests saved connections on demand and edits approval rules without losing 
     .click();
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByText("Not tested in this visit.")).toBeVisible();
-  expect(fixture.saved[0]).toMatchObject({
+  expect(await waitForSave(fixture.saved, 0)).toMatchObject({
     headerSecrets: {},
     extra: {
       cwd: "/repo",
@@ -131,7 +137,9 @@ test("allowlist editing supports keyboard newlines and never makes an empty allo
     page.getByLabel("Allowed tools (one name per line)")
   ).toHaveValue("");
   await page.getByRole("button", { name: "Save changes" }).click();
-  expect(fixture.saved[0]).toMatchObject({ extra: { enabled_tools: [] } });
+  expect(await waitForSave(fixture.saved, 0)).toMatchObject({
+    extra: { enabled_tools: [] },
+  });
   await page
     .getByRole("button", { name: "Test connection", exact: true })
     .click();
@@ -152,7 +160,7 @@ test("allowlist editing supports keyboard newlines and never makes an empty allo
     .getByLabel("Blocked tools (one name per line)")
     .fill(" publish \n\npublish");
   await page.getByRole("button", { name: "Save changes" }).click();
-  expect(fixture.saved[1]).toMatchObject({
+  expect(await waitForSave(fixture.saved, 1)).toMatchObject({
     extra: {
       enabled_tools: ["search", "publish"],
       disabled_tools: ["publish"],
@@ -177,7 +185,7 @@ test("invalid saved permissions stay blocked and can be repaired without changin
     .getByLabel("Extra JSON", { exact: true })
     .fill('{"cwd":"/repo","enabled_tools":[]}');
   await page.getByRole("button", { name: "Save changes" }).click();
-  expect(fixture.saved[0]).toMatchObject({
+  expect(await waitForSave(fixture.saved, 0)).toMatchObject({
     extra: { cwd: "/repo", enabled_tools: [] },
   });
 });
@@ -249,7 +257,7 @@ test("lets users add and remove tool approval overrides, and preserves disabled 
   await page.getByRole("combobox", { name: "Approval for publish" }).click();
   await page.getByRole("option", { name: "Block", exact: true }).click();
   await page.getByRole("button", { name: "Save changes" }).click();
-  expect(fixture.saved[0]).toMatchObject({
+  expect(await waitForSave(fixture.saved, 0)).toMatchObject({
     extra: {
       tools: {
         search: { enabled: true, custom: true },
@@ -262,7 +270,11 @@ test("lets users add and remove tool approval overrides, and preserves disabled 
   await page.getByRole("option", { name: "Use default", exact: true }).click();
   await page.getByRole("button", { name: "Save changes" }).click();
   expect(
-    (fixture.saved[1].extra as { tools: { publish: object } }).tools.publish
+    (
+      (await waitForSave(fixture.saved, 1)).extra as {
+        tools: { publish: object };
+      }
+    ).tools.publish
   ).toEqual({});
 });
 
