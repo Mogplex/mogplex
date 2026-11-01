@@ -121,7 +121,7 @@ export function NewProjectStatus({
         ) : (
           <>
             {ownersNotice ? (
-              <span className="text-accent-green mr-2">{ownersNotice}</span>
+              <span className="text-muted-foreground mr-2">{ownersNotice}</span>
             ) : null}
             {nameValidation.normalized ? (
               <span className="text-muted-foreground mr-2">

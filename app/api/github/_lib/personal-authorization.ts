@@ -53,3 +53,13 @@ export async function markPersonalAuthorization(
     })
   );
 }
+
+/** Whether annotation dropped the personal account, so the picker can say why. */
+export function personalAccountHidden(
+  before: GithubRepoOwnerTarget[],
+  after: GithubRepoOwnerTarget[]
+) {
+  const hasPersonal = (targets: GithubRepoOwnerTarget[]) =>
+    targets.some((target) => target.kind === "personal");
+  return hasPersonal(before) && !hasPersonal(after);
+}

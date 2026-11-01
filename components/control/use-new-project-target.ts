@@ -5,6 +5,7 @@ import {
   GITHUB_APP_USER_AUTHORIZE_PATH,
   GITHUB_APP_USER_OUTCOME_PARAM,
   GITHUB_ORG_READ_SCOPE,
+  GITHUB_PERSONAL_UNAVAILABLE_HEADER,
   GITHUB_REAUTHORIZE_HEADER,
 } from "@/lib/github-oauth";
 import type { GithubRepoOwnerTarget } from "@/lib/github-owners";
@@ -30,6 +31,10 @@ const AUTHORIZE_OUTCOME_MESSAGES: Record<string, string> = {
   unavailable:
     "Creating repositories in personal accounts is not available on this deployment.",
 };
+
+/** Explains a personal account missing from the owner list. */
+const PERSONAL_UNAVAILABLE_NOTICE =
+  "Creating repositories in your personal account is not available on this deployment.";
 
 /** Confirms a completed authorization, which otherwise leaves no trace. */
 const AUTHORIZED_NOTICE =
@@ -92,15 +97,24 @@ export function useNewProjectTarget({
         return {
           targets: Array.isArray(data) ? (data as GithubRepoOwnerTarget[]) : [],
           reauthorizeScope: response.headers.get(GITHUB_REAUTHORIZE_HEADER),
+          personalUnavailable: response.headers.has(
+            GITHUB_PERSONAL_UNAVAILABLE_HEADER
+          ),
         };
       })
-      .then(({ targets, reauthorizeScope }) => {
+      .then(({ targets, reauthorizeScope, personalUnavailable }) => {
         setOwnerTargets(targets);
         const outcome = takeAuthorizeOutcome();
         setAuthorizeNotice(
           outcome ? (AUTHORIZE_OUTCOME_MESSAGES[outcome] ?? null) : null
         );
-        setOwnersNotice(outcome === "authorized" ? AUTHORIZED_NOTICE : null);
+        setOwnersNotice(
+          outcome === "authorized"
+            ? AUTHORIZED_NOTICE
+            : personalUnavailable
+              ? PERSONAL_UNAVAILABLE_NOTICE
+              : null
+        );
         const saved = window.localStorage.getItem(LAST_GITHUB_OWNER_KEY);
         const preferred = targets.find(
           (target) => target.login.toLowerCase() === saved?.toLowerCase()
@@ -120,7 +134,11 @@ export function useNewProjectTarget({
         const next = `${window.location.pathname}${window.location.search}`;
         setReturnPath(next);
         const connectHref = `/api/auth/github?next=${encodeURIComponent(next)}`;
-        if (targets.length === 0) {
+        if (targets.length === 0 && personalUnavailable) {
+          setOwnersError(
+            "Creating repositories in your personal account is not available on this deployment. Install the Mogplex GitHub App on an organization you own."
+          );
+        } else if (targets.length === 0) {
           setOwnersError("GitHub must be connected to create a project.");
           setOwnersAction({ href: connectHref, label: "Connect GitHub" });
         } else if (reauthorizeScope === GITHUB_ORG_READ_SCOPE) {
@@ -223,6 +241,8 @@ export function useNewProjectTarget({
   const requireAuthorization = useCallback((login: string) => {
     setOwnerTargets((targets) =>
       targets.map((target) =>
+        // Only personal accounts use the App user authorization.
+        target.kind === "personal" &&
         target.login.toLowerCase() === login.toLowerCase()
           ? { ...target, authorization_required: true }
           : target

@@ -208,3 +208,46 @@ test("new project confirms a completed GitHub authorization", async ({
     page.getByRole("link", { name: "Authorize GitHub" })
   ).toHaveCount(0);
 });
+
+test("new project explains a personal account this deployment cannot create in", async ({
+  page,
+}) => {
+  await enableScopedE2EAuth(page);
+  await mockBaseChrome(page);
+  await page.route("**/api/connections", (route) =>
+    fulfillJson(route, { connections: [] })
+  );
+  await page.route("**/api/repos**", (route) => fulfillJson(route, []));
+  await page.route("**/api/control/sessions**", (route) =>
+    fulfillJson(route, [])
+  );
+  await page.route("**/api/github/owners", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: { "x-mogplex-github-personal-unavailable": "1" },
+      body: JSON.stringify([
+        {
+          login: "acme",
+          kind: "org",
+          github_installation_id: 42,
+          scope_label: "Org",
+          source: "installation",
+        },
+      ]),
+    })
+  );
+  await page.route("**/api/github/repos/availability**", (route) =>
+    fulfillJson(route, { availability: "available" })
+  );
+
+  await page.goto(scopedPath("control"));
+  await page
+    .getByPlaceholder("Ask anything or run a command...")
+    .fill("Ship account settings");
+  await expect(
+    page.getByText(
+      "Creating repositories in your personal account is not available on this deployment."
+    )
+  ).toBeVisible();
+});

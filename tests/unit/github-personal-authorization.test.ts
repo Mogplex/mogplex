@@ -85,3 +85,14 @@ test("should ask to install the App on an org that has no installation", async (
   );
   assert.equal(org?.installation_required, true);
 });
+
+test("should report when annotation hid the personal account", async () => {
+  const { markPersonalAuthorization, personalAccountHidden } = await load();
+  const hidden = await markPersonalAuthorization("user-1", targets, {
+    appConfigured: () => true,
+    appUserAuthConfigured: () => false,
+  });
+  assert.equal(personalAccountHidden(targets, hidden), true);
+  assert.equal(personalAccountHidden(targets, targets), false);
+  assert.equal(personalAccountHidden([targets[1]], [targets[1]]), false);
+});
