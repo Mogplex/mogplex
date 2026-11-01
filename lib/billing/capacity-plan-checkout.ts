@@ -1,5 +1,8 @@
 import type Stripe from "stripe";
-import type { BillingAccount } from "@/lib/billing/accounts";
+import {
+  advanceSubscriptionCheckoutGeneration,
+  type BillingAccount,
+} from "@/lib/billing/accounts";
 import {
   CAPACITY_CATALOG_VERSION,
   INDIVIDUAL_CAPACITY_PLANS,
@@ -65,6 +68,10 @@ export type IndividualPlanCheckoutDeps = {
     options: Stripe.RequestOptions
   ) => Promise<Pick<Stripe.Checkout.Session, "id" | "url">>;
   appUrl: (path: string) => string;
+  advanceCheckoutGeneration: (
+    accountId: string,
+    fromGeneration: number
+  ) => Promise<number>;
 };
 
 const REQUEST_KEYS = new Set(["planCode", "interval", "returnPath"]);
@@ -143,6 +150,8 @@ function defaultCheckoutDeps(): IndividualPlanCheckoutDeps {
       const base = readAppUrlEnv() ?? "https://mogplex.com";
       return `${base.replace(/\/$/, "")}${path}`;
     },
+    advanceCheckoutGeneration: (accountId, fromGeneration) =>
+      advanceSubscriptionCheckoutGeneration(accountId, fromGeneration),
   };
 }
 
@@ -182,6 +191,51 @@ function assertAccountCanSubscribe(account: BillingAccount) {
       409,
       "subscription_exists"
     );
+  }
+}
+
+/** Stripe refused the request itself, so no Checkout Session exists under its key. */
+function isStripeRejection(error: unknown): error is Stripe.errors.StripeError {
+  return (
+    error instanceof Error &&
+    (error as { type?: unknown }).type === "StripeInvalidRequestError"
+  );
+}
+
+function isReplayedResponse(error: Stripe.errors.StripeError): boolean {
+  return error.headers?.["idempotent-replayed"] === "true";
+}
+
+/**
+ * Stripe stores the first response under an idempotency key for 24 hours,
+ * failures included, and a generation only advances when a subscription
+ * ends. A refused request created no session, so its key protects nothing:
+ * move the account to a fresh key. When the refusal was a replay of an
+ * earlier attempt, the cause may since have been fixed, so try once more on
+ * the fresh key; an original refusal would only fail the same way again.
+ */
+async function createSessionAwayFromRefusedKey(
+  deps: IndividualPlanCheckoutDeps,
+  account: BillingAccount,
+  params: Stripe.Checkout.SessionCreateParams
+) {
+  try {
+    return await deps.createCheckoutSession(params, {
+      idempotencyKey: individualPlanCheckoutIdempotencyKey(account),
+    });
+  } catch (error) {
+    if (!isStripeRejection(error)) throw error;
+    const generation = await deps.advanceCheckoutGeneration(
+      account.id,
+      account.subscription_checkout_generation ?? 0
+    );
+    if (!isReplayedResponse(error)) throw error;
+    return deps.createCheckoutSession(params, {
+      idempotencyKey: individualPlanCheckoutIdempotencyKey({
+        ...account,
+        subscription_checkout_generation: generation,
+      }),
+    });
   }
 }
 
@@ -246,21 +300,18 @@ export async function createIndividualPlanCheckout(input: {
     price_lookup_key: catalogPrice.lookupKey,
     max_named_users: String(plan.maxNamedUsers),
   };
-  const session = await deps.createCheckoutSession(
-    {
-      mode: "subscription",
-      customer: customerId,
-      client_reference_id: input.account.id,
-      line_items: [{ price: priceId, quantity: 1 }],
-      managed_payments: { enabled: true },
-      billing_address_collection: "auto",
-      metadata,
-      subscription_data: { metadata },
-      success_url: deps.appUrl(billingResultPath(returnPath, "plan-submitted")),
-      cancel_url: deps.appUrl(billingResultPath(returnPath, "cancelled")),
-    },
-    { idempotencyKey: individualPlanCheckoutIdempotencyKey(input.account) }
-  );
+  const session = await createSessionAwayFromRefusedKey(deps, input.account, {
+    mode: "subscription",
+    customer: customerId,
+    client_reference_id: input.account.id,
+    line_items: [{ price: priceId, quantity: 1 }],
+    managed_payments: { enabled: true },
+    billing_address_collection: "auto",
+    metadata,
+    subscription_data: { metadata },
+    success_url: deps.appUrl(billingResultPath(returnPath, "plan-submitted")),
+    cancel_url: deps.appUrl(billingResultPath(returnPath, "cancelled")),
+  });
   if (!session.url) {
     throw new CapacityPlanCheckoutError(
       "This checkout can no longer be used. Try again from billing settings.",

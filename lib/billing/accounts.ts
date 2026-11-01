@@ -121,3 +121,38 @@ export async function updateBillingAccount(
     throw new Error(`billing_accounts update failed: ${error.message}`);
   }
 }
+
+/**
+ * Move a billing account to its next subscription Checkout generation, unless
+ * a concurrent caller already has. Returns the generation now current.
+ */
+export async function advanceSubscriptionCheckoutGeneration(
+  id: string,
+  fromGeneration: number,
+  client: SupabaseClient = supabaseAdmin
+): Promise<number> {
+  const { data, error } = await client
+    .from("billing_accounts")
+    .update({
+      subscription_checkout_generation: fromGeneration + 1,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .eq("subscription_checkout_generation", fromGeneration)
+    .select("subscription_checkout_generation")
+    .maybeSingle();
+  if (error) {
+    throw new Error(`billing_accounts update failed: ${error.message}`);
+  }
+  if (data) return Number(data.subscription_checkout_generation);
+  const current = await client
+    .from("billing_accounts")
+    .select("subscription_checkout_generation")
+    .eq("id", id)
+    .maybeSingle();
+  if (current.error) {
+    throw new Error(`billing_accounts lookup failed: ${current.error.message}`);
+  }
+  if (!current.data) throw new Error(`billing account ${id} not found`);
+  return Number(current.data.subscription_checkout_generation);
+}
