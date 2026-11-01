@@ -205,9 +205,11 @@ describe("durable webhook forwarding", () => {
   it("processes inline when Trigger rate-limits without storing the event", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const cancel = vi.fn();
+    const refusal = new ReadableStream({ cancel });
     const send = vi
       .fn<typeof fetch>()
-      .mockResolvedValue(new Response(null, { status: 429 }));
+      .mockResolvedValue(new Response(refusal, { status: 429 }));
     const onRateLimited = vi
       .fn<() => Promise<Response>>()
       .mockResolvedValue(new Response("inline", { status: 202 }));
@@ -220,6 +222,7 @@ describe("durable webhook forwarding", () => {
     expect(await response.text()).toBe("inline");
     expect(send).toHaveBeenCalledTimes(1);
     expect(onRateLimited).toHaveBeenCalledTimes(1);
+    expect(cancel).toHaveBeenCalledTimes(1);
     expect(warn).toHaveBeenCalledTimes(1);
     expect(error).not.toHaveBeenCalled();
   });

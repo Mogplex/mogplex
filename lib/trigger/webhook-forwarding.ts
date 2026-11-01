@@ -41,7 +41,7 @@ export async function forwardNativeWebhook(
   const env = options.env ?? process.env;
   let reason: "config" | "transport" | "timeout" | "http" = "config";
   let status: number | undefined;
-  let fallback: (() => Promise<Response>) | undefined;
+  let fallback: () => Promise<Response>;
   try {
     const endpoint = new URL(
       env[`TRIGGER_${provider.toUpperCase()}_WEBHOOK_URL`] ?? ""
@@ -82,12 +82,15 @@ export async function forwardNativeWebhook(
       // Leave room for the edge's response within each provider's ACK window.
       signal: AbortSignal.timeout(provider === "slack" ? 2_000 : 8_000),
     });
-    if (response.status === 429) fallback = options.onRateLimited;
-    if (!response.ok && !fallback) {
+    if (response.ok) return new Response(null, { status: 200 });
+    if (response.status !== 429 || !options.onRateLimited) {
       reason = "http";
       status = response.status;
       throw new Error("Webhook was not accepted");
     }
+    // Release the unread refusal so bursts do not pin pooled connections.
+    await response.body?.cancel();
+    fallback = options.onRateLimited;
   } catch (error) {
     if (
       error instanceof Error &&
@@ -105,7 +108,6 @@ export async function forwardNativeWebhook(
       { status: 503 }
     );
   }
-  if (!fallback) return new Response(null, { status: 200 });
   console.warn(`[native-webhook] ${provider} rate limited, processing inline`, {
     ...receiptDiagnostics(provider, originalHeaders),
   });

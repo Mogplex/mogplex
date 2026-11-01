@@ -41,9 +41,10 @@ deliveries fall back to the existing inline dispatch instead of failing (GitHub
 never redelivers on its own). Inline dispatch then shares GitHub's ~10-second
 response window with the forwarding attempt; a rate-limit refusal normally
 returns quickly, but a slow one leaves less time. Slack keeps the 503 and
-relies on its own retries. Any other failed receipt returns 503 with a generic error. Logs contain the provider, a shape-validated
-delivery ID (GitHub) or request timestamp (Slack), and a coarse failure reason
-with HTTP status when available; bodies, signatures and endpoint URLs stay out.
+relies on its own retries. Any other failed receipt returns 503 with a
+generic error. Logs contain the provider, a shape-validated delivery ID
+(GitHub) or request timestamp (Slack), and a coarse failure reason with HTTP
+status when available; bodies, signatures and endpoint URLs stay out.
 Configuration errors also fail closed before sending: an explicit activation
 must surface its broken configuration rather than silently restore inline ACK
 behavior. Correct the variable or use the deliberate rollback procedure below.
