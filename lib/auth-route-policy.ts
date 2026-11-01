@@ -141,10 +141,20 @@ function matchesDeclaredPaths(
   return entries.some((entry) => matchesDeclaredPath(pathname, entry));
 }
 
+// `*`, not `+`: withSentryConfig's rewrite matches `o`/`p` with `\d*`, so an
+// empty value is still a tunnel request it serves.
 const SENTRY_TUNNEL_ID_RE = /^\d*$/;
 
-/** True for a request under the tunnel path that the Sentry rewrite won't match. */
-export function isStraySentryTunnelRequest(url: URL): boolean {
+/**
+ * True for a request under the tunnel path that no Sentry rewrite will serve.
+ * next.config.mjs sets MOGPLEX_SENTRY_TUNNEL_ROUTE only for builds that
+ * install the rewrite; without it, everything under the path is stray.
+ */
+export function isStraySentryTunnelRequest(
+  url: URL,
+  tunnelInstalled = process.env.MOGPLEX_SENTRY_TUNNEL_ROUTE ===
+    SENTRY_TUNNEL_ROUTE
+): boolean {
   if (
     !matchesDeclaredPath(url.pathname, {
       path: SENTRY_TUNNEL_ROUTE,
@@ -153,6 +163,7 @@ export function isStraySentryTunnelRequest(url: URL): boolean {
   ) {
     return false;
   }
+  if (!tunnelInstalled) return true;
   const orgId = url.searchParams.get("o");
   const projectId = url.searchParams.get("p");
   const isTunnelPath =

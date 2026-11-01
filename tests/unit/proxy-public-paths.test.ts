@@ -106,7 +106,9 @@ test("the Sentry tunnel route matches next.config.mjs", async () => {
     new URL("../../next.config.mjs", import.meta.url),
     "utf8"
   );
-  assert.match(nextConfig, new RegExp(`tunnelRoute: "${SENTRY_TUNNEL_ROUTE}"`));
+  assert.match(nextConfig, new RegExp(`\\? "${SENTRY_TUNNEL_ROUTE}"`));
+  assert.match(nextConfig, /MOGPLEX_SENTRY_TUNNEL_ROUTE: sentryTunnelRoute/);
+  assert.match(nextConfig, /tunnelRoute: sentryTunnelRoute/);
 });
 
 test("isStraySentryTunnelRequest passes only requests the Sentry rewrite matches", () => {
@@ -123,9 +125,19 @@ test("isStraySentryTunnelRequest passes only requests the Sentry rewrite matches
   ];
   for (const [path, stray] of cases) {
     assert.equal(
-      isStraySentryTunnelRequest(new URL(path, "https://mogplex.com")),
+      isStraySentryTunnelRequest(new URL(path, "https://mogplex.com"), true),
       stray,
       path
     );
   }
+});
+
+test("isStraySentryTunnelRequest treats the whole path as stray without a tunnel", () => {
+  const url = (path: string) => new URL(path, "https://mogplex.com");
+  assert.equal(
+    isStraySentryTunnelRequest(url("/monitoring?o=4507&p=4508"), false),
+    true
+  );
+  assert.equal(isStraySentryTunnelRequest(url("/monitoring"), false), true);
+  assert.equal(isStraySentryTunnelRequest(url("/agents"), false), false);
 });

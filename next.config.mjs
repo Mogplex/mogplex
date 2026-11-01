@@ -58,9 +58,25 @@ const allowedDevOrigins = process.env.MOGPLEX_ALLOWED_DEV_ORIGINS
       .filter(Boolean)
   : undefined;
 
+const sentryOrg = process.env.SENTRY_ORG;
+const sentryProject = process.env.SENTRY_PROJECT;
+const sentryAuthToken = process.env.SENTRY_AUTH_TOKEN;
+
+const shouldWrapWithSentry = Boolean(
+  sentryOrg && sentryProject && sentryAuthToken
+);
+
+// SENTRY_TUNNEL_ROUTE in lib/auth-route-policy.ts; keep aligned. Empty when the
+// build installs no tunnel rewrite, so the proxy 404s the whole path.
+const sentryTunnelRoute =
+  shouldWrapWithSentry && process.env.NODE_ENV !== "development"
+    ? "/monitoring"
+    : "";
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   env: {
+    MOGPLEX_SENTRY_TUNNEL_ROUTE: sentryTunnelRoute,
     // Compile the serving release into browser code, so an old tab keeps its
     // own ID after a deploy. Git builds use Vercel's ID; prebuilt builds use ours.
     NEXT_PUBLIC_MOGPLEX_DEPLOYMENT_ID:
@@ -175,14 +191,6 @@ const nextConfig = {
   },
 };
 
-const sentryOrg = process.env.SENTRY_ORG;
-const sentryProject = process.env.SENTRY_PROJECT;
-const sentryAuthToken = process.env.SENTRY_AUTH_TOKEN;
-
-const shouldWrapWithSentry = Boolean(
-  sentryOrg && sentryProject && sentryAuthToken
-);
-
 export default shouldWrapWithSentry
   ? withSentryConfig(nextConfig, {
       org: sentryOrg,
@@ -192,9 +200,6 @@ export default shouldWrapWithSentry
       widenClientFileUpload: true,
       disableLogger: true,
       automaticVercelMonitors: false,
-      ...(process.env.NODE_ENV === "development"
-        ? {}
-        : // SENTRY_TUNNEL_ROUTE in lib/auth-route-policy.ts; keep aligned.
-          { tunnelRoute: "/monitoring" }),
+      ...(sentryTunnelRoute ? { tunnelRoute: sentryTunnelRoute } : {}),
     })
   : nextConfig;

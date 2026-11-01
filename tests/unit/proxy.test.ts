@@ -242,12 +242,18 @@ test("proxy 404s stray Sentry tunnel requests before they reach /[scope]", async
   assert.equal(stray.status, 404);
   assert.equal(stray.headers.get("x-middleware-next"), null);
 
-  const tunnel = await proxy(
+  const tunnelRequest = () =>
     new NextRequest("https://mogplex.com/monitoring?o=4507&p=4508", {
       method: "POST",
-    })
-  );
-  assert.equal(tunnel.headers.get("x-middleware-next"), "1");
+    });
+  await withEnv({ MOGPLEX_SENTRY_TUNNEL_ROUTE: "/monitoring" }, async () => {
+    const tunnel = await proxy(tunnelRequest());
+    assert.equal(tunnel.headers.get("x-middleware-next"), "1");
+  });
+  await withEnv({ MOGPLEX_SENTRY_TUNNEL_ROUTE: "" }, async () => {
+    const untunneled = await proxy(tunnelRequest());
+    assert.equal(untunneled.status, 404);
+  });
 });
 
 test("proxy lets unauthenticated MCP initialization reach the OAuth challenge", async () => {
