@@ -85,3 +85,11 @@ test("an App create target propagates a GitHub failure instead of denying", asyn
   const load = await loadWith([], new Response("unavailable", { status: 503 }));
   await assert.rejects(load("user-1", "identity", "acme"), /503/);
 });
+
+test("an App create target refuses to classify an owner without the signed-in login", async () => {
+  const load = await loadWith([], Response.json({}));
+  await assert.rejects(
+    load("user-1", "identity", "alex"),
+    /did not return the signed-in login/
+  );
+});

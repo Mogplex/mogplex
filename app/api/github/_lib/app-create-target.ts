@@ -31,7 +31,11 @@ export async function loadGithubAppCreateTarget(
       `Failed to load GitHub installations: ${installations.error.message}`
     );
   }
-  const personal = currentUser.login?.toLowerCase() === login.toLowerCase();
+  // Without the signed-in login a personal account would read as an org and
+  // be refused as not owned; treat it as a GitHub failure to retry instead.
+  if (!currentUser.login)
+    throw new Error("GitHub did not return the signed-in login");
+  const personal = currentUser.login.toLowerCase() === login.toLowerCase();
   const installation = (installations.data ?? []).find(
     (row) =>
       typeof row.account_login === "string" &&

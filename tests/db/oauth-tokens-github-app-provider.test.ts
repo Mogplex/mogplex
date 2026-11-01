@@ -113,3 +113,21 @@ it("leaves the conditional delete executable by service_role only", async () => 
     { role: "anon", allowed: false },
   ]);
 });
+
+it("never deletes for a null expected value, even when the secret is unreadable", async () => {
+  const userId = "00000000-0000-4000-8000-000000000002";
+  await db.query(
+    "INSERT INTO public.oauth_tokens (user_id, provider, vault_secret_id) VALUES ($1, 'github_app', gen_random_uuid())",
+    [userId]
+  );
+  const { rows } = await db.query<{ deleted: boolean }>(
+    "SELECT public.delete_oauth_token_if_unchanged($1, 'github_app', NULL) AS deleted",
+    [userId]
+  );
+  expect(rows[0]?.deleted).toBe(false);
+  const remaining = await db.query(
+    "SELECT 1 FROM public.oauth_tokens WHERE user_id = $1",
+    [userId]
+  );
+  expect(remaining.rows).toHaveLength(1);
+});

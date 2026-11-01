@@ -26,6 +26,11 @@ declare
   v_secret_id uuid;
   v_current text;
 begin
+  -- Fail closed: delete only what the caller actually saw.
+  if p_expected is null then
+    return false;
+  end if;
+
   select vault_secret_id into v_secret_id
   from public.oauth_tokens
   where user_id = p_user_id and provider = p_provider
