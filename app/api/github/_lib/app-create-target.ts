@@ -19,6 +19,10 @@ export async function loadGithubAppCreateTarget(
 }> {
   const [currentUser, installations] = await Promise.all([
     fetchGithubCurrentUserContext(token),
+    // Only installations this user connected count, never one another org
+    // admin installed: gaining access to an org must not let Mogplex act on
+    // it without this user's own consent (#694). Such an owner sees the
+    // install step and connects the existing installation once.
     loadUserGithubInstallations(userId),
   ]);
   if (installations.error) {
