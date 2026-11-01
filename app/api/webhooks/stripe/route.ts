@@ -44,6 +44,8 @@ import {
   type BillingPeriodGrant,
   type LedgerEntry,
 } from "@/lib/billing/ledger";
+import { CapacityBillingDisabledError } from "@/lib/billing/capacity-billing-errors";
+import { reportBillingError } from "@/lib/billing/report-billing-error";
 
 // Single Stripe webhook endpoint (pricing-plan 02 §4): verify signature,
 // claim event id in billing_events before processing, ack duplicates fast.
@@ -258,7 +260,7 @@ async function syncCapacitySchedule(
     // Do not acknowledge a marked capacity event that we did not project.
     // The durable event claim stays unprocessed so an operator can replay it
     // after the test-mode operations gate is restored.
-    throw new Error("Capacity billing operations are disabled");
+    throw new CapacityBillingDisabledError();
   }
   const customerId = customerIdOf(schedule.customer);
   if (!customerId) throw new TypeError("capacity schedule has no customer");
@@ -465,6 +467,10 @@ export async function POST(request: Request) {
       `[stripe-webhook] ${event.type} ${event.id} failed:`,
       error instanceof Error ? error.message : error
     );
+    await reportBillingError("stripe_webhook", error, {
+      eventType: event.type,
+      eventId: event.id,
+    });
     return NextResponse.json({ error: "Processing failed" }, { status: 500 });
   }
 

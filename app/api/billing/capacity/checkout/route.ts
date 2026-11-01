@@ -6,6 +6,7 @@ import { CapacityChangeError } from "@/lib/billing/capacity-stripe-changes";
 import { confirmCapacityIncrease } from "@/lib/billing/capacity-stripe-increase";
 import { areCapacityBillingOperationsEnabled } from "@/lib/billing/stripe";
 import { resolveProductResourceScope } from "@/lib/team-resource-scope";
+import { reportBillingError } from "@/lib/billing/report-billing-error";
 
 type CheckoutRouteDeps = {
   requireUserId: typeof requireUserId;
@@ -33,8 +34,11 @@ async function requestBody(request: Request): Promise<unknown> {
   }
 }
 
-function routeError(error: unknown) {
+async function routeError(error: unknown) {
   if (error instanceof CapacityChangeError) {
+    // Typed refusals are expected; a typed 5xx is a provider anomaly.
+    if (error.status >= 500)
+      await reportBillingError("capacity_checkout", error);
     return NextResponse.json(
       { error: error.message, code: error.code },
       { status: error.status }
@@ -43,6 +47,7 @@ function routeError(error: unknown) {
   console.error("[capacity-billing] checkout failed", {
     error: error instanceof Error ? error.message : "Unknown error",
   });
+  await reportBillingError("capacity_checkout", error);
   return NextResponse.json(
     { error: "The capacity change could not be submitted" },
     { status: 500 }
@@ -89,7 +94,7 @@ export function createCapacityCheckoutPostHandler(
       });
       return NextResponse.json(result);
     } catch (error) {
-      return routeError(error);
+      return await routeError(error);
     }
   };
 }
