@@ -346,6 +346,14 @@ test("activated GitHub processes a delivery inline when Trigger rate-limits it",
     assert.equal(forwarded, 1);
     // GitHub never redelivers a failed delivery, so a 503 here loses it.
     assert.equal(response.status, 200);
+    // Hosted acceptance answers with an empty body; only inline dispatch
+    // reports what it did with the event.
+    assert.deepEqual(await response.json(), {
+      ok: true,
+      skipped: true,
+      flow_waits: null,
+      sync: { handled: false, matchedUsers: 0 },
+    });
   });
 });
 

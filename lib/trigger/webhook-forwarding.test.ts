@@ -224,6 +224,22 @@ describe("durable webhook forwarding", () => {
     expect(error).not.toHaveBeenCalled();
   });
 
+  it("does not report a failing inline fallback as a receipt failure", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const send = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(null, { status: 429 }));
+    await expect(
+      forwardNativeWebhook("github", "{}", headers, {
+        env: { TRIGGER_GITHUB_WEBHOOK_URL: env.TRIGGER_SLACK_WEBHOOK_URL },
+        fetch: send,
+        onRateLimited: () => Promise.reject(new Error("inline failed")),
+      })
+    ).rejects.toThrow("inline failed");
+    expect(error).not.toHaveBeenCalled();
+  });
+
   it("returns 503 on a rate limit when no inline fallback is offered", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     const send = vi

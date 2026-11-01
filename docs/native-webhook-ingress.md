@@ -38,8 +38,10 @@ follow redirects or fall back to local dispatch after an ambiguous timeout.
 Such a timeout might mean Trigger already accepted the event. A 429 from
 Trigger is different: the event was refused without being stored, so GitHub
 deliveries fall back to the existing inline dispatch instead of failing (GitHub
-never redelivers on its own). Slack keeps the 503 and relies on its own
-retries. Any other failed receipt returns 503 with a generic error. Logs contain the provider, a shape-validated
+never redelivers on its own). Inline dispatch then shares GitHub's ~10-second
+response window with the forwarding attempt; a rate-limit refusal normally
+returns quickly, but a slow one leaves less time. Slack keeps the 503 and
+relies on its own retries. Any other failed receipt returns 503 with a generic error. Logs contain the provider, a shape-validated
 delivery ID (GitHub) or request timestamp (Slack), and a coarse failure reason
 with HTTP status when available; bodies, signatures and endpoint URLs stay out.
 Configuration errors also fail closed before sending: an explicit activation
