@@ -212,10 +212,17 @@ export async function getGithubAppUserToken(
       { grant_type: "refresh_token", refresh_token: grant.refreshToken },
       deps
     );
-    await deps.storeToken(
-      userId,
-      JSON.stringify({ ...refreshed, login: grant.login })
-    );
+    // GitHub rotates the refresh token; if a response ever omits it, keep
+    // the old one rather than leaving the grant unrecoverable.
+    const next: GithubAppUserGrant = refreshed.refreshToken
+      ? { ...refreshed, login: grant.login }
+      : {
+          ...refreshed,
+          login: grant.login,
+          refreshToken: grant.refreshToken,
+          refreshTokenExpiresAt: grant.refreshTokenExpiresAt,
+        };
+    await deps.storeToken(userId, JSON.stringify(next));
     return refreshed.accessToken;
   } catch (error) {
     if (

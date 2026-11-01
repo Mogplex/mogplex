@@ -254,3 +254,18 @@ it("forgets a grant whose access token GitHub rejected, but not a newer one", as
   await forgetRejectedGithubAppUserToken("user-1", "ghu_current", deps({}));
   expect(state.deleted).toBe(1);
 });
+
+it("keeps the old refresh token when a refresh response omits a new one", async () => {
+  const { state, deps } = store(
+    grant({ accessTokenExpiresAt: NOW + 60 * 1000 })
+  );
+  await getGithubAppUserToken(
+    "user-1",
+    "alex",
+    deps({ access_token: "ghu_rotated", expires_in: 28_800 })
+  );
+  expect(JSON.parse(state.raw ?? "{}")).toMatchObject({
+    accessToken: "ghu_rotated",
+    refreshToken: "ghr_current",
+  });
+});

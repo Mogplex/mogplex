@@ -2,7 +2,7 @@ import {
   fetchGithubCurrentUserContext,
   type GithubRepoOwnerTarget,
 } from "@/lib/github-owners";
-import { supabaseAdmin } from "@/lib/supabase/admin";
+import { loadUserGithubInstallations } from "@/app/api/github/_lib/user-installations";
 
 /**
  * The single owner an App-deployment create names, without listing every org.
@@ -19,12 +19,7 @@ export async function loadGithubAppCreateTarget(
 }> {
   const [currentUser, installations] = await Promise.all([
     fetchGithubCurrentUserContext(token),
-    supabaseAdmin
-      .from("github_installations")
-      .select("installation_id, account_login")
-      .eq("user_id", userId)
-      // After a reinstall the newest row holds the live installation id.
-      .order("created_at", { ascending: false }),
+    loadUserGithubInstallations(userId),
   ]);
   if (installations.error) {
     throw new Error(

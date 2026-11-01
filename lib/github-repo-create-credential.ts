@@ -174,7 +174,9 @@ async function personalAccountCredential(
     };
   }
   // The user token creates the repository, but Mogplex then works in it
-  // through the App installation, so the account must have one.
+  // through the App installation, so the account must have one. GitHub gives
+  // the App that created a repository (Repository creation permission) access
+  // to it, so a selected-repositories installation covers it too.
   if (target.github_installation_id == null) {
     return {
       ok: false,

@@ -5,6 +5,7 @@ import {
   fetchGithubUserOrgs,
   filterCreatableGithubOrgLogins,
 } from "@/lib/github-owners";
+import { loadUserGithubInstallations } from "@/app/api/github/_lib/user-installations";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
 type OwnerTargetOptions = {
@@ -60,11 +61,7 @@ export async function loadGithubRepoCreationOwnerTargets(
       .select("github_username")
       .eq("id", userId)
       .maybeSingle(),
-    supabaseAdmin
-      .from("github_installations")
-      .select("installation_id, account_login, account_type, target_type")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false }),
+    loadUserGithubInstallations(userId),
     fetchGithubCurrentUserContext(token).catch((error) => {
       console.warn("[github-owners] GitHub user context unavailable", {
         userId,
