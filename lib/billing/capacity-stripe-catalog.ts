@@ -26,7 +26,9 @@ export type CapacityStripeProductSpec = {
 // items whose product has no tax code, so every catalog product carries one.
 // The classification is deliberately uniform: plans, add-ons, and prepaid
 // Inference credit all use it, as the earlier hand-made products did (owner
-// decision, 2026-08-04). The sync is authoritative for this field: change it
+// decision, 2026-08-04). The personal-use code (txcd_10103000) was weighed and
+// rejected for individual plans: one classification, no per-buyer split at
+// checkout. The sync is authoritative for this field: change it
 // here, not in the Stripe Dashboard, or the next sync overwrites it.
 export const CAPACITY_STRIPE_TAX_CODE = "txcd_10103001";
 
