@@ -223,7 +223,10 @@ describe("durable webhook forwarding", () => {
     expect(send).toHaveBeenCalledTimes(1);
     expect(onRateLimited).toHaveBeenCalledTimes(1);
     expect(cancel).toHaveBeenCalledTimes(1);
-    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(
+      "[native-webhook] slack rate limited, processing inline",
+      { requestTimestamp: null, reason: "rate_limited" }
+    );
     expect(error).not.toHaveBeenCalled();
   });
 
@@ -259,7 +262,11 @@ describe("durable webhook forwarding", () => {
         onRateLimited: () => Promise.reject(new Error("inline failed")),
       })
     ).rejects.toThrow("inline failed");
-    expect(error).not.toHaveBeenCalled();
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(error).toHaveBeenCalledWith(
+      "[native-webhook] github inline fallback failed",
+      { deliveryId: null, reason: "inline" }
+    );
   });
 
   it("returns 503 on a rate limit when no inline fallback is offered", async () => {

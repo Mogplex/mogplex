@@ -112,8 +112,17 @@ export async function forwardNativeWebhook(
   }
   console.warn(`[native-webhook] ${provider} rate limited, processing inline`, {
     ...receiptDiagnostics(provider, originalHeaders),
+    reason: "rate_limited",
   });
   // Called outside the receipt try so an inline dispatch failure is never
   // reported as a receipt failure.
-  return fallback();
+  try {
+    return await fallback();
+  } catch (error) {
+    console.error(`[native-webhook] ${provider} inline fallback failed`, {
+      ...receiptDiagnostics(provider, originalHeaders),
+      reason: "inline",
+    });
+    throw error;
+  }
 }
