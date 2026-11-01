@@ -17,6 +17,12 @@ const REFRESH_MARGIN_MS = 5 * 60 * 1000;
 /**
  * A GitHub App user authorization. Personal-account repositories can only be
  * created with a user token, so this grant is what creates them.
+ *
+ * Lifecycle: a new authorization overwrites it; a refresh or create that
+ * GitHub rejects deletes it (only while unchanged); deleting the profile
+ * cascades it. Mogplex has no GitHub disconnect that drops the `github`
+ * identity grant, so there is no disconnect path to mirror. Every read checks
+ * `login` against the requested owner, so a stale grant is never used.
  */
 export type GithubAppUserGrant = {
   login: string;

@@ -202,11 +202,21 @@ async function personalAccountCredential(
     };
   }
   if (token) return { ok: true, token, viaApp: true };
+  return githubAppUserAuthorizationRequired(target.login);
+}
+
+/**
+ * The refusal that asks the user to authorize the App for `login`, used
+ * before a create and after GitHub rejects a revoked user token.
+ */
+export function githubAppUserAuthorizationRequired(
+  login: string
+): GithubRepoCreateRefusal {
   return {
     ok: false,
     status: 403,
     code: "GITHUB_APP_USER_AUTHORIZATION_REQUIRED",
-    error: `Authorize Mogplex to create repositories in ${target.login}, then try again.`,
+    error: `Authorize Mogplex to create repositories in ${login}, then try again.`,
     authorizeUrl: GITHUB_APP_USER_AUTHORIZE_PATH,
   };
 }

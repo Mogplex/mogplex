@@ -8,7 +8,7 @@ import { NextResponse } from "next/server";
 import { forgetRejectedGithubAppUserToken } from "@/lib/github-app-user-auth";
 import type { GithubRepoOwnerTarget } from "@/lib/github-owners";
 import {
-  GITHUB_APP_USER_AUTHORIZE_PATH,
+  githubAppUserAuthorizationRequired,
   githubRepoCreateErrorResponse,
 } from "@/lib/github-repo-create-credential";
 import type { upsertGithubReposForUser } from "@/lib/github-sync";
@@ -118,13 +118,14 @@ export async function createAndImportGithubRepo(input: {
           error: forgetError,
         });
       });
+      const refusal = githubAppUserAuthorizationRequired(ownerTarget.login);
       return NextResponse.json(
         {
-          code: "GITHUB_APP_USER_AUTHORIZATION_REQUIRED",
-          error: `Authorize Mogplex to create repositories in ${ownerTarget.login}, then try again.`,
-          authorize_url: GITHUB_APP_USER_AUTHORIZE_PATH,
+          code: refusal.code,
+          error: refusal.error,
+          authorize_url: refusal.authorizeUrl,
         },
-        { status: 403 }
+        { status: refusal.status }
       );
     }
     if (error instanceof GithubRepoCreateError) {
