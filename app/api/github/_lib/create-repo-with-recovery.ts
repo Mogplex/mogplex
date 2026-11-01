@@ -4,7 +4,10 @@ import {
   GithubRepoCreateError,
   isRecoverableGithubRepoCreateConflict,
 } from "@/lib/github-create";
+import { NextResponse } from "next/server";
 import type { GithubRepoOwnerTarget } from "@/lib/github-owners";
+import { githubRepoCreateErrorResponse } from "@/lib/github-repo-create-credential";
+import type { upsertGithubReposForUser } from "@/lib/github-sync";
 
 /**
  * Create the repository, adopting it when GitHub reports a name conflict for
@@ -43,5 +46,72 @@ export async function createGithubRepoWithRecovery(
       throw error;
     }
     return existingRepo;
+  }
+}
+
+type ImportedRepoTarget = {
+  ownerTarget: GithubRepoOwnerTarget;
+  token: string;
+  viaApp: boolean;
+};
+
+/**
+ * The create pipeline both create routes share once the target is resolved:
+ * create (adopting a repo a previous attempt made), import, read it back, and
+ * map GitHub's refusals. Keeping it in one place keeps the two routes'
+ * contracts from drifting.
+ */
+export async function createAndImportGithubRepo(input: {
+  deps: Parameters<typeof createGithubRepoWithRecovery>[0] & {
+    upsertGithubReposForUser: typeof upsertGithubReposForUser;
+  };
+  userId: string;
+  target: ImportedRepoTarget;
+  repo: Omit<Parameters<typeof createGithubRepo>[1], "owner">;
+  importOptions: Omit<
+    NonNullable<Parameters<typeof upsertGithubReposForUser>[2]>,
+    "githubInstallationId"
+  >;
+  loadImported: (githubId: number) => Promise<unknown>;
+  logScope: string;
+}): Promise<NextResponse> {
+  const { ownerTarget, token, viaApp } = input.target;
+  try {
+    const createdRepo = await createGithubRepoWithRecovery(
+      input.deps,
+      token,
+      ownerTarget,
+      input.repo
+    );
+    await input.deps.upsertGithubReposForUser(input.userId, [createdRepo], {
+      ...input.importOptions,
+      githubInstallationId: ownerTarget.github_installation_id,
+    });
+    const repo = await input.loadImported(createdRepo.id);
+    if (!repo) {
+      return NextResponse.json(
+        { error: "Created repository was not imported" },
+        { status: 500 }
+      );
+    }
+    return NextResponse.json(repo);
+  } catch (error) {
+    if (error instanceof GithubRepoCreateError) {
+      const { status, body } = githubRepoCreateErrorResponse(error, {
+        ownerLogin: ownerTarget.login,
+        viaApp,
+      });
+      return NextResponse.json(body, { status });
+    }
+    console.error(`[${input.logScope}] unexpected failure`, {
+      userId: input.userId,
+      owner: ownerTarget.login,
+      name: input.repo.name,
+      error,
+    });
+    return NextResponse.json(
+      { error: "Failed to create repository" },
+      { status: 500 }
+    );
   }
 }

@@ -6,13 +6,8 @@ import {
 } from "@/lib/github-sync";
 import { getGithubOAuthRepositoryToken } from "@/lib/github-repository-auth";
 import { requireUserId } from "@/lib/auth";
-import {
-  createGithubRepo,
-  fetchGithubRepo,
-  GithubRepoCreateError,
-} from "@/lib/github-create";
-import { githubRepoCreateErrorResponse } from "@/lib/github-repo-create-credential";
-import { createGithubRepoWithRecovery } from "@/app/api/github/_lib/create-repo-with-recovery";
+import { createGithubRepo, fetchGithubRepo } from "@/lib/github-create";
+import { createAndImportGithubRepo } from "@/app/api/github/_lib/create-repo-with-recovery";
 import {
   defaultRepoCreateTargetDeps,
   resolveRepoCreateTarget,
@@ -165,48 +160,15 @@ export function createGithubRepoPostHandler(
 
     const target = await resolveRepoCreateTarget(userId, ownerLogin, deps);
     if (!target.ok) return target.response;
-    const { ownerTarget, viaApp } = target;
-
-    try {
-      const createdRepo = await createGithubRepoWithRecovery(
-        deps,
-        target.token,
-        ownerTarget,
-        { name: nameValidation.name, visibility: "private" }
-      );
-      await deps.upsertGithubReposForUser(userId, [createdRepo], {
-        githubInstallationId: ownerTarget.github_installation_id,
-        productTeamId: scope.productTeamId,
-      });
-
-      const repo = await deps.loadRepoByGithubId(scope, createdRepo.id);
-      if (!repo) {
-        return NextResponse.json(
-          { error: "Created repository was not imported" },
-          { status: 500 }
-        );
-      }
-      return NextResponse.json(repo);
-    } catch (error) {
-      if (error instanceof GithubRepoCreateError) {
-        const { status, body } = githubRepoCreateErrorResponse(error, {
-          ownerLogin: ownerTarget.login,
-          viaApp,
-        });
-        return NextResponse.json(body, { status });
-      }
-
-      console.error("[github-repo-create] unexpected failure", {
-        userId,
-        owner: ownerTarget.login,
-        name: nameValidation.name,
-        error,
-      });
-      return NextResponse.json(
-        { error: "Failed to create repository" },
-        { status: 500 }
-      );
-    }
+    return createAndImportGithubRepo({
+      deps,
+      userId,
+      target,
+      repo: { name: nameValidation.name, visibility: "private" },
+      importOptions: { productTeamId: scope.productTeamId },
+      loadImported: (githubId) => deps.loadRepoByGithubId(scope, githubId),
+      logScope: "github-repo-create",
+    });
   };
 }
 

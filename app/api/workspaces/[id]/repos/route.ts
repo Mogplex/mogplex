@@ -1,13 +1,8 @@
 import { parseJsonBody } from "@/lib/api/parse-json-body";
 import { NextResponse } from "next/server";
 import { requireUserId } from "@/lib/auth";
-import {
-  createGithubRepo,
-  fetchGithubRepo,
-  GithubRepoCreateError,
-} from "@/lib/github-create";
-import { githubRepoCreateErrorResponse } from "@/lib/github-repo-create-credential";
-import { createGithubRepoWithRecovery } from "@/app/api/github/_lib/create-repo-with-recovery";
+import { createGithubRepo, fetchGithubRepo } from "@/lib/github-create";
+import { createAndImportGithubRepo } from "@/app/api/github/_lib/create-repo-with-recovery";
 import {
   defaultRepoCreateTargetDeps,
   resolveRepoCreateTarget,
@@ -158,53 +153,19 @@ export function createWorkspaceRepoPostHandler(
     }
     const target = await resolveRepoCreateTarget(userId, ownerLogin, deps);
     if (!target.ok) return target.response;
-    const { ownerTarget, viaApp } = target;
-
-    try {
-      const createdRepo = await createGithubRepoWithRecovery(
-        deps,
-        target.token,
-        ownerTarget,
-        { name, description, visibility }
-      );
-
-      await deps.upsertGithubReposForUser(userId, [createdRepo], {
-        githubInstallationId: ownerTarget.github_installation_id,
+    return createAndImportGithubRepo({
+      deps,
+      userId,
+      target,
+      repo: { name, description, visibility },
+      importOptions: {
         workspaceId: workspace.id,
         productTeamId: scope.productTeamId,
-      });
-
-      const repo = await deps.loadWorkspaceRepoByGithubId(
-        scope,
-        workspace.id,
-        createdRepo.id
-      );
-      if (!repo) {
-        return NextResponse.json(
-          { error: "Created repository was not imported" },
-          { status: 500 }
-        );
-      }
-      return NextResponse.json(repo);
-    } catch (error) {
-      if (error instanceof GithubRepoCreateError) {
-        const { status, body } = githubRepoCreateErrorResponse(error, {
-          ownerLogin: ownerTarget.login,
-          viaApp,
-        });
-        return NextResponse.json(body, { status });
-      }
-
-      console.error("[workspace-repo-create] unexpected failure", {
-        userId,
-        workspaceId: workspace.id,
-        error,
-      });
-      return NextResponse.json(
-        { error: "Failed to create repository" },
-        { status: 500 }
-      );
-    }
+      },
+      loadImported: (githubId) =>
+        deps.loadWorkspaceRepoByGithubId(scope, workspace.id, githubId),
+      logScope: "workspace-repo-create",
+    });
   };
 }
 
