@@ -25,7 +25,9 @@ export type CapacityStripeProductSpec = {
 // Software as a service, business use. Managed Payments rejects Checkout line
 // items whose product has no tax code, so every catalog product carries one.
 // The classification is deliberately uniform: plans, add-ons, and prepaid
-// Inference credit all use it, as the earlier hand-made products did.
+// Inference credit all use it, as the earlier hand-made products did (owner
+// decision, 2026-08-04). The sync is authoritative for this field: change it
+// here, not in the Stripe Dashboard, or the next sync overwrites it.
 export const CAPACITY_STRIPE_TAX_CODE = "txcd_10103001";
 
 const PLAN_DESCRIPTIONS = {
@@ -157,20 +159,13 @@ function metadataMatches(
   );
 }
 
-function taxCodeId(product: ProductSummary): string | null {
-  if (!product.tax_code) return null;
-  return typeof product.tax_code === "string"
-    ? product.tax_code
-    : product.tax_code.id;
-}
-
 function productMatches(
   product: ProductSummary,
   spec: CapacityStripeProductSpec
 ): boolean {
   return (
     product.active &&
-    taxCodeId(product) === CAPACITY_STRIPE_TAX_CODE &&
+    product.tax_code === CAPACITY_STRIPE_TAX_CODE &&
     product.name === spec.name &&
     product.description === spec.description &&
     metadataMatches(product.metadata, spec.metadata)
