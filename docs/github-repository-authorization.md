@@ -37,10 +37,17 @@ that input without requesting a new authorization grant.
 OAuth remains available for identity and membership discovery. Reconnection
 for an App-based account requests `read:org`, `read:user`, and `user:email`,
 without the broad `repo` scope, and preserves App authorization mode. Existing
-OAuth grants are not revoked by this code change. Repository creation through
-the legacy OAuth credential is unavailable in an App deployment; adding App
-repository-creation support must use explicitly granted permissions rather
-than restoring the broad fallback.
+OAuth grants are not revoked by this code change.
+
+In an App deployment a repository is created with the installation token of
+the organization that owns it, which needs the App's Administration (write)
+permission. The user's identity grant only lists owners and confirms, at
+creation time, that the user may create repositories in that organization; it
+never writes. An organization without an installation attached to the user is
+refused. A personal account is refused until the App has user authorization,
+because GitHub creates personal repositories only with a user token. The new
+repository is imported alone, so creation never imports the rest of the
+installation.
 
 Self-hosted deployments configured only for OAuth retain their existing
 repository OAuth flow. An account already in App mode does not regain that

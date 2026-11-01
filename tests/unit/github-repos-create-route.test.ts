@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { NextResponse } from "next/server";
-import { withEnv } from "./helpers/agents-tools-fixtures";
+import type { GithubRepoOwnerTarget } from "../../lib/github-owners";
 
 async function loadRoute() {
   process.env.NEXT_PUBLIC_SUPABASE_URL ||= "https://example.supabase.co";
@@ -12,43 +12,101 @@ async function loadRoute() {
 
 const TEAM_ID = "00000000-0000-4000-8000-000000000123";
 
-test("POST /api/github/repos cannot use a stored legacy OAuth grant in an App deployment", async () => {
-  await withEnv(
-    {
-      GITHUB_APP_ID: "1",
-      GITHUB_APP_NAME: "fixture",
-      GITHUB_APP_PRIVATE_KEY: "configured",
+async function credentialFor(
+  appConfigured: boolean,
+  target: GithubRepoOwnerTarget,
+  token: string
+) {
+  const { resolveGithubRepoCreateCredential } =
+    await import("../../lib/github-repo-create-credential");
+  return resolveGithubRepoCreateCredential(target, token, {
+    appConfigured: () => appConfigured,
+    createInstallationToken: async (id) => ({ token: `installation-${id}` }),
+  });
+}
+const oauthOnlyCredential = (target: GithubRepoOwnerTarget, token: string) =>
+  credentialFor(false, target, token);
+const appCredential = (target: GithubRepoOwnerTarget, token: string) =>
+  credentialFor(true, target, token);
+
+function appModeHandler(
+  createGithubRepoPostHandler: Awaited<
+    ReturnType<typeof loadRoute>
+  >["createGithubRepoPostHandler"],
+  tokens: string[]
+) {
+  return createGithubRepoPostHandler({
+    requireUserId: async () => "user-123",
+    resolveActiveTeamCapabilities: async () => ({
+      ok: true,
+      teamId: TEAM_ID,
+      capabilities: new Set(["*"]),
+    }),
+    getGithubToken: async () => "identity-token",
+    resolveCreateCredential: appCredential,
+    loadOwnerTargets: async () => [
+      {
+        login: "alex",
+        kind: "personal",
+        github_installation_id: null,
+        scope_label: "Personal",
+        source: "oauth",
+      },
+      {
+        login: "acme",
+        kind: "org",
+        github_installation_id: 42,
+        scope_label: "Org",
+        source: "oauth+installation",
+      },
+    ],
+    createGithubRepo: async (token, input) => {
+      tokens.push(token);
+      return {
+        id: 123,
+        full_name: `${input.owner}/${input.name}`,
+        default_branch: "main",
+        owner: { login: input.owner ?? "alex" },
+        name: input.name,
+      };
     },
-    async () => {
-      const { createGithubRepoPostHandler } = await loadRoute();
-      const handler = createGithubRepoPostHandler({
-        requireUserId: async () => "user-123",
-        resolveActiveTeamCapabilities: async () => ({
-          ok: true,
-          teamId: TEAM_ID,
-          capabilities: new Set(["*"]),
-        }),
-        loadOwnerTargets: async () => {
-          throw new Error("must not use OAuth owner discovery");
-        },
-        createGithubRepo: async () => {
-          throw new Error("must not create a repository");
-        },
-      });
-      const response = await handler(
-        new Request("http://localhost/api/github/repos", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ owner_login: "new-org", name: "widgets" }),
-        })
-      );
-      assert.equal(response.status, 403);
-      assert.equal(
-        (await response.json()).code,
-        "GITHUB_APP_AUTHORIZATION_REQUIRED"
-      );
-    }
+    upsertGithubReposForUser: async () => {},
+    loadRepoByGithubId: async () => ({ id: "repo-123" }),
+  });
+}
+
+function createRequest(ownerLogin: string) {
+  return new Request("http://localhost/api/github/repos", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ owner_login: ownerLogin, name: "widgets" }),
+  });
+}
+
+test("POST /api/github/repos creates an org repo with the installation token in an App deployment", async () => {
+  const { createGithubRepoPostHandler } = await loadRoute();
+  const tokens: string[] = [];
+  const response = await appModeHandler(
+    createGithubRepoPostHandler,
+    tokens
+  )(createRequest("acme"));
+  assert.equal(response.status, 200);
+  assert.deepEqual(tokens, ["installation-42"]);
+});
+
+test("POST /api/github/repos refuses a personal repo in an App deployment", async () => {
+  const { createGithubRepoPostHandler } = await loadRoute();
+  const tokens: string[] = [];
+  const response = await appModeHandler(
+    createGithubRepoPostHandler,
+    tokens
+  )(createRequest("alex"));
+  assert.equal(response.status, 403);
+  assert.equal(
+    (await response.json()).code,
+    "GITHUB_APP_USER_AUTHORIZATION_REQUIRED"
   );
+  assert.deepEqual(tokens, []);
 });
 
 test("POST /api/github/repos preserves authentication failures", async () => {
@@ -106,6 +164,7 @@ test("POST /api/github/repos creates an org repo before returning its Mogplex ro
       capabilities: new Set(["*"]),
     }),
     getGithubToken: async () => "github-token",
+    resolveCreateCredential: oauthOnlyCredential,
     loadOwnerTargets: async () => [
       {
         login: "acme",
@@ -184,6 +243,7 @@ test("POST /api/github/repos rejects owners that cannot create repos", async () 
   const handler = createGithubRepoPostHandler({
     requireUserId: async () => "user-123",
     getGithubToken: async () => "github-token",
+    resolveCreateCredential: oauthOnlyCredential,
     loadOwnerTargets: async () => [],
     createGithubRepo: async () => {
       creates += 1;
@@ -211,6 +271,7 @@ test("POST /api/github/repos returns JSON when owner discovery fails", async () 
   const handler = createGithubRepoPostHandler({
     requireUserId: async () => "user-123",
     getGithubToken: async () => "github-token",
+    resolveCreateCredential: oauthOnlyCredential,
     loadOwnerTargets: async () => {
       throw new Error("GitHub unavailable");
     },
@@ -236,6 +297,7 @@ test("POST /api/github/repos maps GitHub name collisions to 409", async () => {
   const handler = createGithubRepoPostHandler({
     requireUserId: async () => "user-123",
     getGithubToken: async () => "github-token",
+    resolveCreateCredential: oauthOnlyCredential,
     loadOwnerTargets: async () => [
       {
         login: "alex",
@@ -278,6 +340,7 @@ test("POST /api/github/repos reconciles a repository left by a partial create", 
   const handler = createGithubRepoPostHandler({
     requireUserId: async () => "user-123",
     getGithubToken: async () => "github-token",
+    resolveCreateCredential: oauthOnlyCredential,
     loadOwnerTargets: async () => [
       {
         login: "acme",

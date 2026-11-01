@@ -6,14 +6,14 @@ import {
   extractGithubApiErrorMessage,
   GithubRepoCreateError,
 } from "@/lib/github-create";
+import type { GithubRepoOwnerTarget } from "@/lib/github-owners";
 import {
-  buildGithubRepoOwnerTargets,
-  fetchGithubCurrentUserLogin,
-  fetchGithubUserOrgs,
-} from "@/lib/github-owners";
+  getGithubRepoCreationUserToken,
+  resolveGithubRepoCreateCredential,
+} from "@/lib/github-repo-create-credential";
 import { upsertGithubReposForUser } from "@/lib/github-sync";
-import { getOAuthToken } from "@/lib/oauth-tokens";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { loadGithubRepoCreationOwnerTargets } from "@/app/api/github/_lib/repo-owner-targets";
 import {
   getWorkspaceForScope,
   normalizeWorkspaceDescription,
@@ -37,20 +37,12 @@ type WorkspaceRepoRouteDeps = {
     scope: ProductResourceScope,
     select: string
   ) => Promise<Record<string, unknown> | null>;
-  getGithubToken: typeof getOAuthToken;
-  loadGithubProfile: (
-    userId: string
-  ) => Promise<{ github_username: string | null }>;
-  loadGithubInstallations: (userId: string) => Promise<
-    Array<{
-      installation_id: number;
-      account_login: string | null;
-      account_type: string | null;
-      target_type: string | null;
-    }>
-  >;
-  fetchGithubCurrentUserLogin: typeof fetchGithubCurrentUserLogin;
-  fetchGithubUserOrgs: typeof fetchGithubUserOrgs;
+  getGithubToken: (userId: string) => Promise<string | null>;
+  loadOwnerTargets: (
+    userId: string,
+    token: string
+  ) => Promise<GithubRepoOwnerTarget[]>;
+  resolveCreateCredential: typeof resolveGithubRepoCreateCredential;
   createGithubRepo: typeof createGithubRepo;
   upsertGithubReposForUser: typeof upsertGithubReposForUser;
   loadWorkspaceRepoByGithubId: (
@@ -59,34 +51,6 @@ type WorkspaceRepoRouteDeps = {
     githubId: number
   ) => Promise<Record<string, unknown> | null>;
 };
-
-async function loadGithubProfile(userId: string) {
-  const { data, error } = await supabaseAdmin
-    .from("profiles")
-    .select("github_username")
-    .eq("id", userId)
-    .single();
-
-  if (error) {
-    throw new Error(`Failed to load GitHub profile: ${error.message}`);
-  }
-
-  return data;
-}
-
-async function loadGithubInstallations(userId: string) {
-  const { data, error } = await supabaseAdmin
-    .from("github_installations")
-    .select("installation_id, account_login, account_type, target_type")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false });
-
-  if (error) {
-    throw new Error(`Failed to load GitHub installations: ${error.message}`);
-  }
-
-  return data || [];
-}
 
 async function loadWorkspaceRepoByGithubId(
   scope: ProductResourceScope,
@@ -132,11 +96,10 @@ export function createWorkspaceRepoPostHandler(
     resolveActiveTeamCapabilities,
     getWorkspaceForScope: (workspaceId, scope, select) =>
       getWorkspaceForScope(workspaceId, scope, select),
-    getGithubToken: getOAuthToken,
-    loadGithubProfile,
-    loadGithubInstallations,
-    fetchGithubCurrentUserLogin,
-    fetchGithubUserOrgs,
+    getGithubToken: (userId) => getGithubRepoCreationUserToken(userId),
+    loadOwnerTargets: async (userId, token) =>
+      (await loadGithubRepoCreationOwnerTargets(userId, token)).targets,
+    resolveCreateCredential: resolveGithubRepoCreateCredential,
     createGithubRepo,
     upsertGithubReposForUser,
     loadWorkspaceRepoByGithubId,
@@ -191,9 +154,7 @@ export function createWorkspaceRepoPostHandler(
       );
     }
 
-    const githubToken = await deps
-      .getGithubToken(userId, "github")
-      .catch(() => null);
+    const githubToken = await deps.getGithubToken(userId).catch(() => null);
     if (!githubToken) {
       return NextResponse.json(
         { error: "Connect GitHub account first" },
@@ -201,40 +162,25 @@ export function createWorkspaceRepoPostHandler(
       );
     }
 
-    const [profile, installations] = await Promise.all([
-      deps.loadGithubProfile(userId),
-      deps.loadGithubInstallations(userId),
-    ]);
-
-    const githubUsername =
-      profile.github_username ||
-      (await deps.fetchGithubCurrentUserLogin(githubToken));
-    if (!githubUsername) {
+    // Revalidate live at the mutation boundary: an org is a target only
+    // while this user may create repositories in it.
+    let targets: GithubRepoOwnerTarget[];
+    try {
+      targets = await deps.loadOwnerTargets(userId, githubToken);
+    } catch (error) {
+      console.error("[workspace-repo-create] owner lookup failed", {
+        userId,
+        error,
+      });
       return NextResponse.json(
-        { error: "GitHub account details unavailable" },
-        { status: 400 }
+        { error: "GitHub accounts unavailable" },
+        { status: 502 }
       );
     }
-
-    const orgLogins = await deps
-      .fetchGithubUserOrgs(githubToken)
-      .catch((error) => {
-        console.error("[workspace-repo-create] failed to load GitHub orgs", {
-          userId,
-          error,
-        });
-        return [] as string[];
-      });
-    const targets = buildGithubRepoOwnerTargets({
-      githubUsername,
-      installations,
-      orgLogins,
-    });
-
-    const ownerTarget = targets.find(
-      (target) =>
-        target.login.toLowerCase() ===
-        (ownerLogin || githubUsername).toLowerCase()
+    const ownerTarget = targets.find((target) =>
+      ownerLogin
+        ? target.login.toLowerCase() === ownerLogin.toLowerCase()
+        : target.kind === "personal"
     );
     if (!ownerTarget) {
       return NextResponse.json(
@@ -244,7 +190,17 @@ export function createWorkspaceRepoPostHandler(
     }
 
     try {
-      const createdRepo = await deps.createGithubRepo(githubToken, {
+      const credential = await deps.resolveCreateCredential(
+        ownerTarget,
+        githubToken
+      );
+      if (!credential.ok) {
+        return NextResponse.json(
+          { error: credential.error, code: credential.code },
+          { status: credential.status }
+        );
+      }
+      const createdRepo = await deps.createGithubRepo(credential.token, {
         owner: ownerTarget.kind === "personal" ? null : ownerTarget.login,
         name,
         description,
