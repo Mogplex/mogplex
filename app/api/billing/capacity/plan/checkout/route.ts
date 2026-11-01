@@ -9,7 +9,10 @@ import {
 import { areCapacityBillingOperationsEnabled } from "@/lib/billing/stripe";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { resolveProductResourceScope } from "@/lib/team-resource-scope";
-import { reportBillingError } from "@/lib/billing/report-billing-error";
+import {
+  reportBillingError,
+  type BillingErrorContext,
+} from "@/lib/billing/report-billing-error";
 
 type IndividualPlanCheckoutRouteDeps = {
   requireUserId: typeof requireUserId;
@@ -47,19 +50,21 @@ async function requestBody(request: Request): Promise<unknown> {
   }
 }
 
-async function routeError(error: unknown) {
+async function routeError(error: unknown, context: BillingErrorContext) {
   if (error instanceof CapacityPlanCheckoutError) {
     // Typed refusals are expected; a typed 5xx is a provider anomaly.
-    if (error.status >= 500) await reportBillingError("plan_checkout", error);
+    if (error.status >= 500)
+      await reportBillingError("plan_checkout", error, context);
     return NextResponse.json(
       { error: error.message, code: error.code },
       { status: error.status }
     );
   }
   console.error("[capacity-billing] Individual plan checkout failed", {
+    ...context,
     error: error instanceof Error ? error.message : "Unknown error",
   });
-  await reportBillingError("plan_checkout", error);
+  await reportBillingError("plan_checkout", error, context);
   return NextResponse.json(
     { error: "Individual plan checkout is unavailable" },
     { status: 500 }
@@ -106,11 +111,13 @@ export function createIndividualPlanCheckoutPostHandler(
     if (!validation.ok) {
       return NextResponse.json({ error: validation.error }, { status: 400 });
     }
+    let accountId: string | undefined;
     try {
       const [account, actorEmail] = await Promise.all([
         deps.getOrCreateBillingAccount(resolution.scope),
         deps.getActorEmail(userId),
       ]);
+      accountId = account.id;
       const result = await deps.createIndividualPlanCheckout({
         account,
         actorEmail,
@@ -118,7 +125,10 @@ export function createIndividualPlanCheckoutPostHandler(
       });
       return NextResponse.json(result);
     } catch (error) {
-      return await routeError(error);
+      return await routeError(error, {
+        scope: resolution.scope.kind,
+        accountId,
+      });
     }
   };
 }

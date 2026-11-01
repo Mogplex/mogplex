@@ -76,6 +76,10 @@ test("a provider failure in plan checkout reaches Sentry, not just the log", asy
     assert.equal(response.status, 500);
     assert.equal(capture.events.length, 1);
     assert.equal(capture.events[0]?.tags?.billing_surface, "plan_checkout");
+    assert.deepEqual(capture.events[0]?.extra, {
+      scope: "personal",
+      accountId: account.id,
+    });
   } finally {
     console.error = originalError;
   }
@@ -96,6 +100,7 @@ test("a typed provider anomaly in plan checkout is reported", async () => {
   assert.equal(response.status, 503);
   assert.equal(capture.events.length, 1);
   assert.equal(capture.events[0]?.tags?.billing_surface, "plan_checkout");
+  assert.equal(capture.events[0]?.extra?.accountId, account.id);
 });
 
 test("an expected plan checkout refusal is not reported", async () => {
@@ -256,6 +261,9 @@ function routeReportsUnderItsSurface({
       assert.equal(response.status, 500);
       assert.equal(capture.events.length, 1);
       assert.equal(capture.events[0]?.tags?.billing_surface, surface);
+      if (surface !== "stripe_catalog_sync") {
+        assert.equal(capture.events[0]?.extra?.scope, "personal");
+      }
     } finally {
       console.error = originalError;
     }
