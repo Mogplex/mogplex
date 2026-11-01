@@ -96,7 +96,9 @@ export function createGithubAppUserCallbackHandler(
       ]);
       // Without a readable identity grant there is no account to match.
       if (!connectedLogin) return back("not_connected");
-      if (authorizedLogin?.toLowerCase() !== connectedLogin.toLowerCase()) {
+      // An unreadable login is a GitHub read failure, not a mismatch.
+      if (!authorizedLogin) return back("failed");
+      if (authorizedLogin.toLowerCase() !== connectedLogin.toLowerCase()) {
         return back("account_mismatch");
       }
       await deps.storeGrant(userId, { ...tokens, login: authorizedLogin });

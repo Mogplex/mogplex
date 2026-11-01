@@ -13,6 +13,8 @@ alter table public.oauth_tokens
 -- the same grant at once and the loser sees its token rejected. The loser may
 -- forget the grant only while it is still the one GitHub rejected: the row lock
 -- orders this against store_oauth_token, so a newer grant is never deleted.
+-- That relies on store_oauth_token upserting the same (user_id, provider) row
+-- (oauth_tokens_user_provider_key), which takes the same row lock.
 create or replace function public.delete_oauth_token_if_unchanged(
   p_user_id uuid,
   p_provider text,

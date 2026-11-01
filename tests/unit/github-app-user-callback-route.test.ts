@@ -188,3 +188,12 @@ test("refuses a callback without the PKCE verifier cookie", async () => {
   assert.equal(exchanged, false);
   assert.deepEqual(stored, []);
 });
+
+test("reports an unreadable authorizing login as failed, not as a mismatch", async () => {
+  const { handler, stored } = await handlerWith({
+    fetchLogin: async (token: string) => (token === "identity" ? "alex" : null),
+  });
+  const response = await handler(callbackRequest());
+  assert.equal(outcome(response).result, "failed");
+  assert.deepEqual(stored, []);
+});
