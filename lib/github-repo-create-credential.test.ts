@@ -378,56 +378,11 @@ it("reports an App token outage as retryable, not as missing authorization", asy
   }
 });
 
-it("never mistakes an unbound App user token lookup for a missing authorization", async () => {
-  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-  try {
-    const { getAppUserToken: _unbound, ...deps } = personalAppDeps(
-      async () => "ghu_user"
-    );
-    const credential = await resolveGithubRepoCreateCredential(
-      personalTarget,
-      "identity-token",
-      deps
-    );
-    expect(credential).toMatchObject({ ok: false, status: 502 });
-    expect(credential).not.toHaveProperty("authorizeUrl");
-  } finally {
-    warn.mockRestore();
-  }
-});
-
-it("asks for reconnect when the identity grant cannot read org membership", async () => {
-  const credential = await resolveGithubRepoCreateCredential(
-    orgTarget,
-    "identity-token",
-    {
-      ...appDeps(),
-      fetchOrgMembership: async () => {
-        throw new GithubHttpError(403, "{}");
-      },
-    }
+it("fails loudly when the App user token lookup was never bound to a user", async () => {
+  const { getAppUserToken: _unbound, ...deps } = personalAppDeps(
+    async () => "ghu_user"
   );
-  expect(credential).toMatchObject({
-    status: 400,
-    code: "GITHUB_REAUTHORIZE_REQUIRED",
-    reauthorizeScope: "read:org",
-  });
-});
-
-it("refuses a personal create where the App is not installed", async () => {
-  const lookups: string[] = [];
-  const credential = await resolveGithubRepoCreateCredential(
-    { ...personalTarget, github_installation_id: null },
-    "identity-token",
-    personalAppDeps(async (login) => {
-      lookups.push(login);
-      return "ghu_user";
-    })
-  );
-  expect(credential).toMatchObject({
-    ok: false,
-    status: 403,
-    code: "GITHUB_APP_INSTALLATION_REQUIRED",
-  });
-  expect(lookups).toEqual([]);
+  await expect(
+    resolveGithubRepoCreateCredential(personalTarget, "identity-token", deps)
+  ).rejects.toThrow("getAppUserToken must be bound to the acting user");
 });

@@ -35,7 +35,14 @@ export async function markPersonalAuthorization(
         return { ...target, installation_required: true };
       const authorized = await deps
         .hasGrant(userId, target.login)
-        .catch(() => false);
+        .catch((error) => {
+          console.warn("[github-owners] App user grant lookup failed", {
+            userId,
+            login: target.login,
+            error,
+          });
+          return false;
+        });
       return { ...target, authorization_required: !authorized };
     })
   );

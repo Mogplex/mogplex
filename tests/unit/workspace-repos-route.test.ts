@@ -293,7 +293,7 @@ async function appModeHandler(
     loadAppCreateTarget: async (_userId, _token, ownerLogin) => ({
       target:
         [alexTarget, acmeTarget].find(
-          (target) => target.login === (ownerLogin ?? "alex")
+          (target) => target.login === ownerLogin
         ) ?? null,
       oauthScopes: null,
     }),

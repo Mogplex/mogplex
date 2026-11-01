@@ -25,7 +25,7 @@ export type RepoCreateTargetDeps = {
   loadOwnerTargets: (
     userId: string,
     token: string,
-    options?: { onlyLogin?: string | null; personalOnly?: boolean }
+    options?: { onlyLogin?: string | null }
   ) => Promise<{
     targets: GithubRepoOwnerTarget[];
     oauthScopes: string[] | null;
@@ -65,20 +65,17 @@ function refuse(
 async function lookUpOwner(
   userId: string,
   token: string,
-  ownerLogin: string | null,
+  ownerLogin: string,
   deps: RepoCreateTargetDeps
 ): Promise<OwnerLookup> {
   if (deps.appConfigured())
     return deps.loadAppCreateTarget(userId, token, ownerLogin);
   const { targets, oauthScopes } = await deps.loadOwnerTargets(userId, token, {
     onlyLogin: ownerLogin,
-    personalOnly: ownerLogin === null,
   });
   const target =
-    targets.find((candidate) =>
-      ownerLogin === null
-        ? candidate.kind === "personal"
-        : candidate.login.toLowerCase() === ownerLogin.toLowerCase()
+    targets.find(
+      (candidate) => candidate.login.toLowerCase() === ownerLogin.toLowerCase()
     ) ?? null;
   return { target, oauthScopes };
 }
@@ -95,11 +92,12 @@ function needsOrgReadScope(lookup: OwnerLookup) {
  * Resolve where a new repository goes and which credential creates it.
  * Owners are revalidated live at the mutation boundary: reusing a
  * client-provided or cached target could create a repository after org
- * permissions changed. A null `ownerLogin` selects the personal account.
+ * permissions changed. Callers always name the owner; there is no personal
+ * fallback.
  */
 export async function resolveRepoCreateTarget(
   userId: string,
-  ownerLogin: string | null,
+  ownerLogin: string,
   deps: RepoCreateTargetDeps
 ): Promise<RepoCreateTarget> {
   let token: string | null;

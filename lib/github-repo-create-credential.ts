@@ -35,6 +35,17 @@ export type GithubRepoCreateCredential =
   /** `viaApp`: the token carries only the GitHub App's permissions. */
   { ok: true; token: string; viaApp: boolean } | GithubRepoCreateRefusal;
 
+/** Where a user authorizes the GitHub App; clients append `?next=`. */
+export const GITHUB_APP_USER_AUTHORIZE_PATH = "/api/auth/github/app-user";
+
+/** A programming error: the App user token lookup was not bound to a user. */
+export class AppUserTokenUnboundError extends Error {
+  constructor() {
+    super("getAppUserToken must be bound to the acting user");
+    this.name = "AppUserTokenUnboundError";
+  }
+}
+
 const defaultDeps = {
   appConfigured: () => hasGithubAppConfig(),
   getIdentityToken: getOAuthToken,
@@ -44,11 +55,12 @@ const defaultDeps = {
   appUserAuthConfigured: () => hasGithubAppUserAuthConfig(),
   /**
    * The App user token for a personal account, bound to the acting user.
-   * Callers must supply it; the default throws so a missing wiring surfaces
-   * as an error instead of a false "authorize" prompt.
+   * Callers must supply it; the default throws AppUserTokenUnboundError so a
+   * missing wiring fails loudly instead of reading as an outage or a false
+   * "authorize" prompt.
    */
   getAppUserToken: async (_login: string): Promise<string | null> => {
-    throw new Error("getAppUserToken must be bound to the acting user");
+    throw new AppUserTokenUnboundError();
   },
 };
 
@@ -174,6 +186,8 @@ async function personalAccountCredential(
   try {
     token = await deps.getAppUserToken(target.login);
   } catch (error) {
+    // Missing wiring is a bug, not a GitHub outage; let it fail loudly.
+    if (error instanceof AppUserTokenUnboundError) throw error;
     console.warn("[github-repo-create] App user token unavailable", {
       owner: target.login,
       error,
@@ -191,7 +205,7 @@ async function personalAccountCredential(
     status: 403,
     code: "GITHUB_APP_USER_AUTHORIZATION_REQUIRED",
     error: `Authorize Mogplex to create repositories in ${target.login}, then try again.`,
-    authorizeUrl: "/api/auth/github/app-user",
+    authorizeUrl: GITHUB_APP_USER_AUTHORIZE_PATH,
   };
 }
 

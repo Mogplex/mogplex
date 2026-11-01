@@ -122,6 +122,9 @@ export function useNewProjectTarget({
         }
         setOwnerTargets([]);
         setOwnerLogin("");
+        // Clear the callback's outcome even though there is nothing to show
+        // it against, so a reload does not replay it.
+        takeAuthorizeOutcome();
         setOwnersError("GitHub accounts unavailable.");
         setOwnersAction(null);
       })

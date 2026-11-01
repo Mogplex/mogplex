@@ -7,13 +7,12 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 /**
  * The single owner an App-deployment create names, without listing every org.
  * The credential resolver checks ownership live for that org, so a GitHub
- * failure here propagates instead of reading as a permission denial. A null
- * `ownerLogin` selects the user's personal account.
+ * failure here propagates instead of reading as a permission denial.
  */
 export async function loadGithubAppCreateTarget(
   userId: string,
   token: string,
-  ownerLogin: string | null
+  login: string
 ): Promise<{
   target: GithubRepoOwnerTarget | null;
   oauthScopes: string[] | null;
@@ -32,9 +31,6 @@ export async function loadGithubAppCreateTarget(
       `Failed to load GitHub installations: ${installations.error.message}`
     );
   }
-  const login = ownerLogin ?? currentUser.login;
-  if (!login) return { target: null, oauthScopes: currentUser.oauthScopes };
-
   const personal = currentUser.login?.toLowerCase() === login.toLowerCase();
   const installation = (installations.data ?? []).find(
     (row) =>

@@ -63,10 +63,10 @@ test("an App create target attaches the user's installation for the named org", 
   assert.deepEqual(orderings, ["created_at:desc"]);
 });
 
-test("an App create target without an owner is the user's personal account", async () => {
+test("an App create target naming the user's own login is the personal account", async () => {
   const load = await loadWith([], userResponse());
-  const { target } = await load("user-1", "identity", null);
-  assert.equal(target?.login, "Alex");
+  const { target } = await load("user-1", "identity", "alex");
+  assert.equal(target?.login, "alex");
   assert.equal(target?.kind, "personal");
   assert.equal(target?.github_installation_id, null);
 });

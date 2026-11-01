@@ -6,7 +6,10 @@ import {
 } from "@/lib/github-create";
 import { NextResponse } from "next/server";
 import type { GithubRepoOwnerTarget } from "@/lib/github-owners";
-import { githubRepoCreateErrorResponse } from "@/lib/github-repo-create-credential";
+import {
+  GITHUB_APP_USER_AUTHORIZE_PATH,
+  githubRepoCreateErrorResponse,
+} from "@/lib/github-repo-create-credential";
 import type { upsertGithubReposForUser } from "@/lib/github-sync";
 
 /**
@@ -96,6 +99,23 @@ export async function createAndImportGithubRepo(input: {
     }
     return NextResponse.json(repo);
   } catch (error) {
+    // GitHub rejects a revoked App user token with 401 even before it
+    // expires; ask for authorization again instead of a dead-end error.
+    if (
+      error instanceof GithubRepoCreateError &&
+      error.status === 401 &&
+      viaApp &&
+      ownerTarget.kind === "personal"
+    ) {
+      return NextResponse.json(
+        {
+          code: "GITHUB_APP_USER_AUTHORIZATION_REQUIRED",
+          error: `Authorize Mogplex to create repositories in ${ownerTarget.login}, then try again.`,
+          authorize_url: GITHUB_APP_USER_AUTHORIZE_PATH,
+        },
+        { status: 403 }
+      );
+    }
     if (error instanceof GithubRepoCreateError) {
       const { status, body } = githubRepoCreateErrorResponse(error, {
         ownerLogin: ownerTarget.login,

@@ -10,7 +10,6 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 type OwnerTargetOptions = {
   requireOwner?: boolean;
   onlyLogin?: string | null;
-  personalOnly?: boolean;
 };
 
 async function creatableOrgLoginsFor(
@@ -21,9 +20,8 @@ async function creatableOrgLoginsFor(
 ) {
   // A personal-account create needs no organization reads at all.
   if (
-    options.personalOnly ||
-    (options.onlyLogin &&
-      options.onlyLogin.toLowerCase() === personalLogin?.toLowerCase())
+    options.onlyLogin &&
+    options.onlyLogin.toLowerCase() === personalLogin?.toLowerCase()
   )
     return [];
   // A create names one owner: check that org directly, so a GitHub failure

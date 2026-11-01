@@ -391,5 +391,5 @@ test("POST /api/github/repos reads permissions for the requested org only in an 
   });
   const response = await handler(createRequest("acme"));
   assert.equal(response.status, 400);
-  assert.deepEqual(lookups, [{ onlyLogin: "acme", personalOnly: false }]);
+  assert.deepEqual(lookups, [{ onlyLogin: "acme" }]);
 });
