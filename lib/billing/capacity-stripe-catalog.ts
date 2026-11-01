@@ -22,6 +22,16 @@ export type CapacityStripeProductSpec = {
   prices: readonly CapacityStripePriceSpec[];
 };
 
+// Software as a service, business use. Managed Payments rejects Checkout line
+// items whose product has no tax code, so every catalog product carries one.
+// The classification is deliberately uniform: plans, add-ons, and prepaid
+// Inference credit all use it, as the earlier hand-made products did (owner
+// decision, 2026-08-04). The personal-use code (txcd_10103000) was weighed and
+// rejected for individual plans: one classification, no per-buyer split at
+// checkout. The sync is authoritative for this field: change it
+// here, not in the Stripe Dashboard, or the next sync overwrites it.
+export const CAPACITY_STRIPE_TAX_CODE = "txcd_10103001";
+
 const PLAN_DESCRIPTIONS = {
   pro: "Includes 5 parallel agent runs, 1 GB Storage, and $20 monthly Inference at dollar-for-dollar value.",
   plus: "Includes 25 parallel agent runs, 5 GB Storage, and $100 monthly Inference at dollar-for-dollar value.",
@@ -106,7 +116,7 @@ export const CAPACITY_STRIPE_PRODUCTS: readonly CapacityStripeProductSpec[] = [
 
 type ProductSummary = Pick<
   Stripe.Product,
-  "id" | "active" | "name" | "description" | "metadata"
+  "id" | "active" | "name" | "description" | "metadata" | "tax_code"
 >;
 type PriceSummary = Pick<
   Stripe.Price,
@@ -157,6 +167,7 @@ function productMatches(
 ): boolean {
   return (
     product.active &&
+    product.tax_code === CAPACITY_STRIPE_TAX_CODE &&
     product.name === spec.name &&
     product.description === spec.description &&
     metadataMatches(product.metadata, spec.metadata)
@@ -248,6 +259,7 @@ export async function syncCapacityStripeCatalog(input: {
           active: true,
           name: productSpec.name,
           description: productSpec.description,
+          tax_code: CAPACITY_STRIPE_TAX_CODE,
           metadata: {
             ...productSpec.metadata,
             mogplex_catalog_key: productSpec.catalogKey,
@@ -260,6 +272,7 @@ export async function syncCapacityStripeCatalog(input: {
         {
           name: productSpec.name,
           description: productSpec.description,
+          tax_code: CAPACITY_STRIPE_TAX_CODE,
           metadata: {
             ...productSpec.metadata,
             mogplex_catalog_key: productSpec.catalogKey,

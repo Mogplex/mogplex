@@ -3,6 +3,7 @@ import test from "node:test";
 import type Stripe from "stripe";
 import {
   CAPACITY_STRIPE_PRODUCTS,
+  CAPACITY_STRIPE_TAX_CODE,
   syncCapacityStripeCatalog,
   type CapacityStripeCatalogDeps,
 } from "../../lib/billing/capacity-stripe-catalog";
@@ -13,6 +14,7 @@ type Product = {
   name: string;
   description: string;
   metadata: Record<string, string>;
+  tax_code: string | null;
 };
 
 type Price = {
@@ -45,6 +47,7 @@ function catalogDeps(input: {
         active: true,
         name: params.name,
         description: params.description ?? "",
+        tax_code: typeof params.tax_code === "string" ? params.tax_code : null,
         metadata: Object.fromEntries(
           Object.entries(params.metadata ?? {}).map(([key, value]) => [
             key,
@@ -61,6 +64,9 @@ function catalogDeps(input: {
       product.active = params.active ?? product.active;
       product.name = params.name ?? product.name;
       product.description = params.description ?? product.description;
+      if (typeof params.tax_code === "string") {
+        product.tax_code = params.tax_code;
+      }
       product.metadata = Object.fromEntries(
         Object.entries(params.metadata ?? product.metadata).map(
           ([key, value]) => [key, String(value)]
@@ -105,6 +111,7 @@ function materializedCatalog(): { products: Product[]; prices: Price[] } {
       active: true,
       name: spec.name,
       description: spec.description,
+      tax_code: CAPACITY_STRIPE_TAX_CODE,
       metadata: {
         ...spec.metadata,
         mogplex_catalog_key: spec.catalogKey,
@@ -208,6 +215,10 @@ test("capacity Stripe catalog seed creates the missing test catalog", async () =
   });
   assert.equal(products.length, 10);
   assert.equal(prices.length, 19);
+  // Managed Payments rejects Checkout line items whose product has no tax code.
+  assert.ok(
+    products.every((product) => product.tax_code === CAPACITY_STRIPE_TAX_CODE)
+  );
 });
 
 test("capacity Stripe catalog seed is idempotent", async () => {
@@ -250,4 +261,32 @@ test("capacity Stripe catalog seed reconciles mutable product details", async ()
   );
   assert.equal(result.productsUpdated, 1);
   assert.equal(catalog.products[0]!.name, "Mogplex Pro");
+});
+
+test("capacity Stripe catalog seed backfills a missing product tax code", async () => {
+  const catalog = materializedCatalog();
+  for (const product of catalog.products) product.tax_code = null;
+  const result = await withTestMode(() =>
+    syncCapacityStripeCatalog({
+      deps: catalogDeps(catalog),
+    })
+  );
+  assert.equal(result.productsUpdated, 10);
+  assert.ok(
+    catalog.products.every(
+      (product) => product.tax_code === CAPACITY_STRIPE_TAX_CODE
+    )
+  );
+});
+
+test("capacity Stripe catalog seed corrects a different product tax code", async () => {
+  const catalog = materializedCatalog();
+  catalog.products[0]!.tax_code = "txcd_99999999";
+  const result = await withTestMode(() =>
+    syncCapacityStripeCatalog({
+      deps: catalogDeps(catalog),
+    })
+  );
+  assert.equal(result.productsUpdated, 1);
+  assert.equal(catalog.products[0]!.tax_code, CAPACITY_STRIPE_TAX_CODE);
 });
