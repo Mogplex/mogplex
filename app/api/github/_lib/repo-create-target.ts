@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { loadGithubAppCreateTarget } from "@/app/api/github/_lib/app-create-target";
 import { loadGithubRepoCreationOwnerTargets } from "@/app/api/github/_lib/repo-owner-targets";
-import { hasGithubAppConfig } from "@/lib/github-app";
+import { GithubHttpError, hasGithubAppConfig } from "@/lib/github-app";
+import { getGithubAppUserToken } from "@/lib/github-app-user-auth";
 import {
   GITHUB_ORG_READ_SCOPE,
   GITHUB_REAUTHORIZE_HEADER,
@@ -32,6 +33,7 @@ export type RepoCreateTargetDeps = {
   /** App deployments: only the named owner; ownership is checked live later. */
   loadAppCreateTarget: typeof loadGithubAppCreateTarget;
   resolveCreateCredential: typeof resolveGithubRepoCreateCredential;
+  getAppUserToken: (userId: string, login: string) => Promise<string | null>;
 };
 
 export const defaultRepoCreateTargetDeps: RepoCreateTargetDeps = {
@@ -40,6 +42,7 @@ export const defaultRepoCreateTargetDeps: RepoCreateTargetDeps = {
   loadOwnerTargets: loadGithubRepoCreationOwnerTargets,
   loadAppCreateTarget: loadGithubAppCreateTarget,
   resolveCreateCredential: resolveGithubRepoCreateCredential,
+  getAppUserToken: (userId, login) => getGithubAppUserToken(userId, login),
 };
 
 type RepoCreateTarget =
@@ -52,7 +55,7 @@ type RepoCreateTarget =
   | { ok: false; response: NextResponse };
 
 function refuse(
-  body: { error: string; code?: string },
+  body: { error: string; code?: string; authorize_url?: string },
   status: number,
   headers?: Record<string, string>
 ): RepoCreateTarget {
@@ -115,6 +118,17 @@ export async function resolveRepoCreateTarget(
   try {
     lookup = await lookUpOwner(userId, token, ownerLogin, deps);
   } catch (error) {
+    // A revoked or expired identity grant is the user's to fix by reconnecting.
+    if (error instanceof GithubHttpError && error.status === 401) {
+      return refuse(
+        {
+          error: "Reconnect GitHub to continue.",
+          code: "GITHUB_REAUTHORIZE_REQUIRED",
+        },
+        400,
+        { [GITHUB_REAUTHORIZE_HEADER]: GITHUB_ORG_READ_SCOPE }
+      );
+    }
     console.error("[github-repo-create] owner lookup failed", {
       userId,
       error,
@@ -137,10 +151,17 @@ export async function resolveRepoCreateTarget(
 
   const credential = await deps.resolveCreateCredential(ownerTarget, token, {
     appConfigured: deps.appConfigured,
+    getAppUserToken: (login) => deps.getAppUserToken(userId, login),
   });
   if (!credential.ok) {
     return refuse(
-      { error: credential.error, code: credential.code },
+      {
+        error: credential.error,
+        code: credential.code,
+        ...(credential.authorizeUrl
+          ? { authorize_url: credential.authorizeUrl }
+          : {}),
+      },
       credential.status,
       credential.reauthorizeScope
         ? { [GITHUB_REAUTHORIZE_HEADER]: credential.reauthorizeScope }

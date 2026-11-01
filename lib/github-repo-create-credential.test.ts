@@ -180,7 +180,7 @@ it("turns an installation GitHub will not mint a token for into an owner action"
       {
         ...appDeps(),
         createInstallationToken: async () => {
-          throw new GithubHttpError(403, '{"message":"suspended"}');
+          throw new GithubHttpError(403, '{"message":"github-body-marker"}');
         },
       }
     );
@@ -189,7 +189,7 @@ it("turns an installation GitHub will not mint a token for into an owner action"
       status: 409,
       code: "GITHUB_APP_INSTALLATION_UNAVAILABLE",
     });
-    expect(JSON.stringify(credential)).not.toContain("suspended");
+    expect(JSON.stringify(credential)).not.toContain("github-body-marker");
   } finally {
     warn.mockRestore();
   }
@@ -315,6 +315,65 @@ it("reports an unreadable membership as retryable, not as a refusal", async () =
       ok: false,
       status: 502,
       code: "GITHUB_MEMBERSHIP_UNAVAILABLE",
+    });
+  } finally {
+    warn.mockRestore();
+  }
+});
+
+const personalAppDeps = (
+  getAppUserToken: (login: string) => Promise<string | null>
+) => ({
+  ...appDeps(),
+  appUserAuthConfigured: () => true,
+  getAppUserToken,
+});
+
+it("creates a personal repository with the user's App authorization", async () => {
+  const logins: string[] = [];
+  const credential = await resolveGithubRepoCreateCredential(
+    personalTarget,
+    "identity-token",
+    personalAppDeps(async (login) => {
+      logins.push(login);
+      return "ghu_user";
+    })
+  );
+  expect(credential).toEqual({
+    ok: true,
+    token: "ghu_user",
+    viaInstallation: false,
+  });
+  expect(logins).toEqual(["alex"]);
+});
+
+it("asks the user to authorize when they have no App authorization", async () => {
+  const credential = await resolveGithubRepoCreateCredential(
+    personalTarget,
+    "identity-token",
+    personalAppDeps(async () => null)
+  );
+  expect(credential).toMatchObject({
+    ok: false,
+    status: 403,
+    code: "GITHUB_APP_USER_AUTHORIZATION_REQUIRED",
+    authorizeUrl: "/api/auth/github/app-user",
+  });
+});
+
+it("reports an App token outage as retryable, not as missing authorization", async () => {
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  try {
+    const credential = await resolveGithubRepoCreateCredential(
+      personalTarget,
+      "identity-token",
+      personalAppDeps(async () => {
+        throw new Error("fetch failed");
+      })
+    );
+    expect(credential).toMatchObject({
+      status: 502,
+      code: "GITHUB_APP_UNAVAILABLE",
     });
   } finally {
     warn.mockRestore();

@@ -401,3 +401,37 @@ test("new project preserves the selected owner while switching projects", async 
 
   await expect(ownerPicker).toContainText("acme");
 });
+
+test("new project asks to authorize the personal account before creating there", async ({
+  page,
+}) => {
+  await enableScopedE2EAuth(page);
+  await mockBaseChrome(page);
+  await page.route("**/api/connections", (route) =>
+    fulfillJson(route, { connections: [] })
+  );
+  await page.route("**/api/repos**", (route) => fulfillJson(route, []));
+  await page.route("**/api/control/sessions**", (route) =>
+    fulfillJson(route, [])
+  );
+  await page.route("**/api/github/owners", (route) =>
+    fulfillJson(route, [
+      {
+        login: "alex",
+        kind: "personal",
+        github_installation_id: null,
+        scope_label: "Personal",
+        source: "oauth",
+        authorization_required: true,
+      },
+    ])
+  );
+
+  await page.goto(scopedPath("control"));
+  await expect(
+    page.getByText("Authorize Mogplex to create repositories in alex.")
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Authorize GitHub" })
+  ).toHaveAttribute("href", /\/api\/auth\/github\/app-user\?next=/);
+});

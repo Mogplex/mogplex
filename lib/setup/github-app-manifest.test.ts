@@ -24,6 +24,7 @@ describe("buildGithubAppManifest", () => {
     );
     expect(manifest.callback_urls).toEqual([
       "https://mogplex.acme.dev/api/auth/github/callback",
+      "https://mogplex.acme.dev/api/auth/github/app-user/callback",
     ]);
     expect(manifest.setup_url).toBe(
       "https://mogplex.acme.dev/api/auth/github/callback"

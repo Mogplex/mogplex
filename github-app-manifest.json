@@ -7,7 +7,10 @@
     "active": true
   },
   "redirect_url": "https://mogplex.example.com/admin/setup/github/complete",
-  "callback_urls": ["https://mogplex.example.com/api/auth/github/callback"],
+  "callback_urls": [
+    "https://mogplex.example.com/api/auth/github/callback",
+    "https://mogplex.example.com/api/auth/github/app-user/callback"
+  ],
   "setup_url": "https://mogplex.example.com/api/auth/github/callback",
   "setup_on_update": true,
   "public": true,

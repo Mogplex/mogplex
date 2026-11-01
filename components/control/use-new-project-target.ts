@@ -151,13 +151,32 @@ export function useNewProjectTarget({
     };
   }, [enabled, nameValidation, ownerLogin]);
 
+  // A personal account in an App deployment needs the user's App
+  // authorization before Mogplex can create a repository there.
+  const selectedTarget = ownerTargets.find(
+    (target) => target.login.toLowerCase() === ownerLogin.toLowerCase()
+  );
+  const authorizeAction: NewProjectAction =
+    selectedTarget?.authorization_required
+      ? {
+          href: `/api/auth/github/app-user?next=${encodeURIComponent(
+            `${window.location.pathname}${window.location.search}`
+          )}`,
+          label: "Authorize GitHub",
+        }
+      : null;
+
   return {
     ownerTargets,
     ownerLogin,
     setOwnerLogin,
     ownersLoading,
-    ownersError,
-    ownersAction,
+    ownersError:
+      ownersError ??
+      (authorizeAction && selectedTarget
+        ? `Authorize Mogplex to create repositories in ${selectedTarget.login}.`
+        : null),
+    ownersAction: ownersAction ?? authorizeAction,
     availability,
     nameValidation,
   };

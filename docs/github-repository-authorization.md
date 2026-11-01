@@ -51,10 +51,19 @@ org policy, so the user must be an active owner of the organization, read live
 with their identity grant at creation time, and the installation must be
 attached to them. The identity grant never writes. An organization without an
 installation attached to the user is refused, and so is a member who is not
-an owner. A personal account is refused until the App has user authorization,
-because GitHub creates personal repositories only with a user token. The new
-repository is imported alone, so creation never imports the rest of the
-installation.
+an owner.
+
+GitHub creates a personal repository only with a user token, so a personal
+create uses the user's own GitHub App authorization (`GITHUB_APP_CLIENT_ID`
+and `GITHUB_APP_CLIENT_SECRET`). The user grants it once at
+`/api/auth/github/app-user`; the callback keeps the grant only when it belongs
+to the GitHub account already connected to Mogplex, and stores it encrypted
+as the `github_app` OAuth token. The access token is refreshed before it
+expires, and a refresh token GitHub rejects clears the grant so the user is
+asked again. Without the client credentials, personal creation stays refused.
+
+The new repository is imported alone, so creation never imports the rest of
+the installation.
 
 Self-hosted deployments configured only for OAuth retain their existing
 repository OAuth flow. An account already in App mode does not regain that

@@ -11,6 +11,7 @@ import {
   fetchGithubOrgMembership,
   type GithubRepoOwnerTarget,
 } from "@/lib/github-owners";
+import { hasGithubAppUserAuthConfig } from "@/lib/github-app-user-auth";
 import { GITHUB_ORG_READ_SCOPE } from "@/lib/github-oauth";
 import { getGithubOAuthRepositoryToken } from "@/lib/github-repository-auth";
 import { getOAuthToken } from "@/lib/oauth-tokens";
@@ -22,6 +23,8 @@ export type GithubRepoCreateRefusal = {
   error: string;
   /** OAuth scope a reconnect must grant, sent as the reauthorize header. */
   reauthorizeScope?: string;
+  /** Where the user grants what is missing, when Mogplex can ask for it. */
+  authorizeUrl?: string;
 };
 
 export type GithubRepoCreateCredential =
@@ -34,6 +37,9 @@ const defaultDeps = {
   getRepositoryToken: getGithubOAuthRepositoryToken,
   createInstallationToken: createGithubInstallationAccessToken,
   fetchOrgMembership: fetchGithubOrgMembership,
+  appUserAuthConfigured: () => hasGithubAppUserAuthConfig(),
+  /** The App user token for a personal account, bound to the acting user. */
+  getAppUserToken: async (_login: string): Promise<string | null> => null,
 };
 
 /**
@@ -64,15 +70,8 @@ export async function resolveGithubRepoCreateCredential(
   const deps = { ...defaultDeps, ...overrides };
   if (!deps.appConfigured())
     return { ok: true, token: userToken, viaInstallation: false };
-  if (target.kind === "personal") {
-    return {
-      ok: false,
-      status: 403,
-      code: "GITHUB_APP_USER_AUTHORIZATION_REQUIRED",
-      error:
-        "Creating a repository in a personal GitHub account is not available yet. Choose an organization where the Mogplex GitHub App is installed.",
-    };
-  }
+  if (target.kind === "personal")
+    return personalAccountCredential(target, deps);
   if (target.github_installation_id == null) {
     return {
       ok: false,
@@ -129,9 +128,51 @@ export async function resolveGithubRepoCreateCredential(
       ok: false,
       status: 409,
       code: "GITHUB_APP_INSTALLATION_UNAVAILABLE",
-      error: `The Mogplex GitHub App on ${target.login} is unavailable. Ask an owner of ${target.login} to reconnect it.`,
+      error: `The Mogplex GitHub App on ${target.login} is suspended or was removed. Reinstall it from ${target.login}'s GitHub settings, then connect it in Mogplex.`,
     };
   }
+}
+
+/**
+ * GitHub creates a personal repository only with a user token, so an App
+ * deployment uses the user's own App authorization for their account.
+ */
+async function personalAccountCredential(
+  target: GithubRepoOwnerTarget,
+  deps: typeof defaultDeps
+): Promise<GithubRepoCreateCredential> {
+  if (!deps.appUserAuthConfigured()) {
+    return {
+      ok: false,
+      status: 403,
+      code: "GITHUB_APP_USER_AUTHORIZATION_REQUIRED",
+      error:
+        "Creating a repository in a personal GitHub account is not available on this deployment. Choose an organization where the Mogplex GitHub App is installed.",
+    };
+  }
+  let token: string | null;
+  try {
+    token = await deps.getAppUserToken(target.login);
+  } catch (error) {
+    console.warn("[github-repo-create] App user token unavailable", {
+      owner: target.login,
+      error,
+    });
+    return {
+      ok: false,
+      status: 502,
+      code: "GITHUB_APP_UNAVAILABLE",
+      error: "GitHub is not responding to Mogplex right now. Try again.",
+    };
+  }
+  if (token) return { ok: true, token, viaInstallation: false };
+  return {
+    ok: false,
+    status: 403,
+    code: "GITHUB_APP_USER_AUTHORIZATION_REQUIRED",
+    error: `Authorize Mogplex to create repositories in ${target.login}, then try again.`,
+    authorizeUrl: "/api/auth/github/app-user",
+  };
 }
 
 /**
@@ -219,7 +260,7 @@ export function githubRepoCreateErrorResponse(
       body: {
         ...(detail ? { detail } : {}),
         code: "GITHUB_APP_PERMISSION_REQUIRED",
-        error: `The Mogplex GitHub App on ${context.ownerLogin} cannot create repositories yet. Ask an owner of ${context.ownerLogin} to accept the App's updated permissions on GitHub.`,
+        error: `The Mogplex GitHub App on ${context.ownerLogin} cannot create repositories yet. Accept the App's updated permissions in ${context.ownerLogin}'s GitHub settings under GitHub Apps.`,
       },
     };
   }

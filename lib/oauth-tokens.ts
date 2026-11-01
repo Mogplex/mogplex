@@ -1,13 +1,13 @@
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
-export type OAuthProvider = "github" | "vercel";
+export type OAuthProvider = "github" | "vercel" | "github_app";
 
 type RpcResult = {
   data: unknown;
   error: { message: string } | null;
 };
 
-type LegacyOAuthTokens = Record<OAuthProvider, string | null>;
+type LegacyOAuthTokens = Partial<Record<OAuthProvider, string | null>>;
 
 type OAuthTokenStoreDeps = {
   rpc: (fn: string, args: Record<string, unknown>) => Promise<RpcResult>;
@@ -16,9 +16,9 @@ type OAuthTokenStoreDeps = {
   logger?: Pick<typeof console, "error">;
 };
 
-const LEGACY_COLUMN_BY_PROVIDER: Record<
-  OAuthProvider,
-  "github_token" | "vercel_token"
+/** Providers that predate the vault; `github_app` grants never had a column. */
+const LEGACY_COLUMN_BY_PROVIDER: Partial<
+  Record<OAuthProvider, "github_token" | "vercel_token">
 > = {
   github: "github_token",
   vercel: "vercel_token",
@@ -49,6 +49,7 @@ async function loadLegacyTokens(userId: string): Promise<LegacyOAuthTokens> {
 
 async function clearLegacyToken(userId: string, provider: OAuthProvider) {
   const legacyColumn = LEGACY_COLUMN_BY_PROVIDER[provider];
+  if (!legacyColumn) return;
   const { error } = await supabaseAdmin
     .from("profiles")
     .update({ [legacyColumn]: null })

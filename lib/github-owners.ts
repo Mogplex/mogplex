@@ -27,6 +27,8 @@ export type GithubRepoOwnerTarget = {
   github_installation_id: number | null;
   scope_label: string;
   source: "oauth" | "installation" | "oauth+installation";
+  /** The personal account needs the user's GitHub App authorization first. */
+  authorization_required?: boolean;
 };
 
 function getInstallationScopeLabel(installation: {
@@ -72,8 +74,11 @@ export async function fetchGithubCurrentUserContext(token: string) {
     cache: "no-store",
   });
   if (!response.ok) {
-    throw new Error(
-      `GitHub owner lookup failed (${response.status}): ${await response.text()}`
+    const body = await response.text();
+    throw new GithubHttpError(
+      response.status,
+      body,
+      `GitHub owner lookup failed (${response.status}): ${body}`
     );
   }
   const user = (await response.json()) as { login?: string };
@@ -135,6 +140,35 @@ export function canCreatePrivateGithubOrgRepo(
  * deployments, which create through an installation token that ignores org
  * policy) only active owners qualify, so org settings are not read.
  */
+/**
+ * Whether the user may create a repository in `login`. Throws when GitHub
+ * cannot answer, so a caller can tell an outage from a refusal; GitHub
+ * answers 404 for an org the user does not belong to.
+ */
+export async function canCreateInGithubOrg(
+  token: string,
+  login: string,
+  options: { requireOwner?: boolean } = {}
+) {
+  try {
+    if (options.requireOwner) {
+      const membership = await fetchGithubOrgMembership(token, login);
+      return membership.state === "active" && membership.role === "admin";
+    }
+    const [settings, membership] = await Promise.all([
+      githubOAuthFetch<GithubOrgCreationSettings>(
+        token,
+        `https://api.github.com/orgs/${encodeURIComponent(login)}`
+      ),
+      fetchGithubOrgMembership(token, login),
+    ]);
+    return canCreatePrivateGithubOrgRepo(settings, membership);
+  } catch (error) {
+    if (error instanceof GithubHttpError && error.status === 404) return false;
+    throw error;
+  }
+}
+
 export async function filterCreatableGithubOrgLogins(
   token: string,
   orgLogins: string[],
@@ -147,21 +181,7 @@ export async function filterCreatableGithubOrgLogins(
     const batch = await Promise.all(
       orgLogins.slice(index, index + concurrency).map(async (login) => {
         try {
-          if (options.requireOwner) {
-            const membership = await fetchGithubOrgMembership(token, login);
-            return membership.state === "active" && membership.role === "admin"
-              ? login
-              : null;
-          }
-          const encodedLogin = encodeURIComponent(login);
-          const [settings, membership] = await Promise.all([
-            githubOAuthFetch<GithubOrgCreationSettings>(
-              token,
-              `https://api.github.com/orgs/${encodedLogin}`
-            ),
-            fetchGithubOrgMembership(token, login),
-          ]);
-          return canCreatePrivateGithubOrgRepo(settings, membership)
+          return (await canCreateInGithubOrg(token, login, options))
             ? login
             : null;
         } catch (error) {

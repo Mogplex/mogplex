@@ -1,10 +1,44 @@
 import {
   buildGithubRepoOwnerTargets,
+  canCreateInGithubOrg,
   fetchGithubCurrentUserContext,
   fetchGithubUserOrgs,
   filterCreatableGithubOrgLogins,
 } from "@/lib/github-owners";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+
+type OwnerTargetOptions = {
+  requireOwner?: boolean;
+  onlyLogin?: string | null;
+  personalOnly?: boolean;
+};
+
+async function creatableOrgLoginsFor(
+  userId: string,
+  token: string,
+  options: OwnerTargetOptions
+) {
+  // A personal-account create needs no organization reads at all.
+  if (options.personalOnly) return [];
+  // A create names one owner: check that org directly, so a GitHub failure
+  // surfaces as one instead of reading as a refusal.
+  if (options.onlyLogin) {
+    const creatable = await canCreateInGithubOrg(token, options.onlyLogin, {
+      requireOwner: options.requireOwner,
+    });
+    return creatable ? [options.onlyLogin] : [];
+  }
+  const orgLogins = await fetchGithubUserOrgs(token).catch((error) => {
+    console.warn("[github-owners] organization membership unavailable", {
+      userId,
+      error,
+    });
+    return [] as string[];
+  });
+  return filterCreatableGithubOrgLogins(token, orgLogins, {
+    requireOwner: options.requireOwner,
+  });
+}
 
 /**
  * Owners the user may create a repository under, for the owner picker.
@@ -14,11 +48,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 export async function loadGithubRepoCreationOwnerTargets(
   userId: string,
   token: string,
-  options: {
-    requireOwner?: boolean;
-    onlyLogin?: string | null;
-    personalOnly?: boolean;
-  } = {}
+  options: OwnerTargetOptions = {}
 ) {
   const [profileResult, installationsResult, currentUser] = await Promise.all([
     supabaseAdmin
@@ -51,25 +81,10 @@ export async function loadGithubRepoCreationOwnerTargets(
     );
   }
 
-  // A personal-account create needs no organization reads at all.
-  const orgLogins = options.personalOnly
-    ? []
-    : await fetchGithubUserOrgs(token).catch((error) => {
-        console.warn("[github-owners] organization membership unavailable", {
-          userId,
-          error,
-        });
-        return [] as string[];
-      });
-  // A create names one owner; only that org's permissions need reading.
-  const onlyLogin = options.onlyLogin?.toLowerCase();
-  const candidateOrgLogins = onlyLogin
-    ? orgLogins.filter((login) => login.toLowerCase() === onlyLogin)
-    : orgLogins;
-  const creatableOrgLogins = await filterCreatableGithubOrgLogins(
+  const creatableOrgLogins = await creatableOrgLoginsFor(
+    userId,
     token,
-    candidateOrgLogins,
-    { requireOwner: options.requireOwner }
+    options
   );
   const creatableOrgSet = new Set(
     creatableOrgLogins.map((login) => login.toLowerCase())

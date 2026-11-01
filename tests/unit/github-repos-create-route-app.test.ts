@@ -195,3 +195,26 @@ test("POST /api/github/repos sends the reconnect header when the identity grant 
   );
   assert.deepEqual(tokens, []);
 });
+
+test("POST /api/github/repos asks to reconnect when GitHub rejects the identity grant", async () => {
+  const { createGithubRepoPostHandler } = await loadRoute();
+  const { GithubHttpError } = await import("../../lib/github-app");
+  const tokens: string[] = [];
+  const response = await appModeHandler(
+    createGithubRepoPostHandler,
+    tokens,
+    false,
+    {
+      loadAppCreateTarget: async () => {
+        throw new GithubHttpError(401, '{"message":"Bad credentials"}');
+      },
+    }
+  )(createRequest("acme"));
+  assert.equal(response.status, 400);
+  assert.equal((await response.json()).code, "GITHUB_REAUTHORIZE_REQUIRED");
+  assert.equal(
+    response.headers.get("x-mogplex-github-reauthorize"),
+    "read:org"
+  );
+  assert.deepEqual(tokens, []);
+});
