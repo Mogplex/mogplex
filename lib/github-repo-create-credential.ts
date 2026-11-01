@@ -158,7 +158,7 @@ function ownerRequired(login: string): GithubRepoCreateRefusal {
 
 /**
  * Map GitHub's refusal of a create to the route response. An installation
- * refused with 403 has not accepted the App's Administration permission, so
+ * refused with 403 has not accepted the App's Repository creation permission, so
  * say that instead of GitHub's message.
  */
 export function githubRepoCreateErrorResponse(

@@ -40,9 +40,11 @@ without the broad `repo` scope, and preserves App authorization mode. Existing
 OAuth grants are not revoked by this code change.
 
 In an App deployment a repository is created with the installation token of
-the organization that owns it, which needs the App's Administration (write)
-permission, and each installation's owner must accept that permission before
-creation works there. The installation token does not carry the user's own
+the organization that owns it, which needs the App's Repository creation
+(write) permission. That permission creates repositories without the rest of
+Administration, and GitHub gives the App access to each repository it
+creates. Each installation's owner must accept it before creation works
+there. The installation token does not carry the user's own
 org policy, so the user must be an active owner of the organization, read live
 with their identity grant at creation time, and the installation must be
 attached to them. The identity grant never writes. An organization without an

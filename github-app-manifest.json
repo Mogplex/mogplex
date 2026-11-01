@@ -14,13 +14,13 @@
   "request_oauth_on_install": false,
   "default_permissions": {
     "actions": "read",
-    "administration": "write",
     "checks": "write",
     "contents": "write",
     "issues": "write",
     "members": "read",
     "metadata": "read",
     "pull_requests": "write",
+    "repository_creation": "write",
     "statuses": "write",
     "vulnerability_alerts": "read"
   },

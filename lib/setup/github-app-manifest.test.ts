@@ -35,7 +35,7 @@ describe("buildGithubAppManifest", () => {
     const manifest = buildGithubAppManifest("http://localhost:3000");
 
     expect(manifest.default_permissions).toMatchObject({
-      administration: "write",
+      repository_creation: "write",
       contents: "write",
       pull_requests: "write",
       checks: "write",
