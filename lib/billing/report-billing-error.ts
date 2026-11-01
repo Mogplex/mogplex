@@ -32,6 +32,8 @@ export async function reportBillingError(
   error: unknown,
   extra: Record<string, unknown> = {}
 ): Promise<void> {
+  // Self-hosted installs without a DSN have no client; nothing to deliver.
+  if (!Sentry.getClient()) return;
   if (
     surface === "stripe_webhook" &&
     error instanceof CapacityBillingDisabledError
@@ -43,8 +45,16 @@ export async function reportBillingError(
       tags: { billing_surface: surface },
       extra,
     });
-    await Sentry.flush(2_000);
-  } catch {
-    console.error("[billing] Could not deliver error report");
+    // flush resolves false on timeout rather than rejecting.
+    if (!(await Sentry.flush(2_000))) {
+      console.error("[billing] Error report did not flush in time");
+    }
+  } catch (deliveryError) {
+    console.error("[billing] Could not deliver error report", {
+      error:
+        deliveryError instanceof Error
+          ? deliveryError.message
+          : "Unknown error",
+    });
   }
 }

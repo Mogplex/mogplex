@@ -53,7 +53,10 @@ it("never lets a telemetry failure escape the failure path", async () => {
       reportBillingError("plan_checkout", new Error("boom"))
     ).resolves.toBeUndefined();
     expect(log).toHaveBeenCalledWith(
-      "[billing] Could not deliver error report"
+      "[billing] Could not deliver error report",
+      {
+        error: "transport flush unavailable",
+      }
     );
   } finally {
     capture.failFlush = false;

@@ -49,6 +49,8 @@ async function requestBody(request: Request): Promise<unknown> {
 
 async function routeError(error: unknown) {
   if (error instanceof CapacityPlanCheckoutError) {
+    // Typed refusals are expected; a typed 5xx is a provider anomaly.
+    if (error.status >= 500) await reportBillingError("plan_checkout", error);
     return NextResponse.json(
       { error: error.message, code: error.code },
       { status: error.status }

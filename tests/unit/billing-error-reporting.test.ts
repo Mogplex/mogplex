@@ -81,6 +81,23 @@ test("a provider failure in plan checkout reaches Sentry, not just the log", asy
   }
 });
 
+test("a typed provider anomaly in plan checkout is reported", async () => {
+  const { CapacityPlanCheckoutError } =
+    await import("../../lib/billing/capacity-plan-checkout");
+  const POST = await planCheckoutHandler(async () => {
+    throw new CapacityPlanCheckoutError(
+      "This Checkout session can no longer be used.",
+      503,
+      "checkout_session_unavailable"
+    );
+  });
+  const response = await POST(checkoutRequest());
+  await Sentry.flush();
+  assert.equal(response.status, 503);
+  assert.equal(capture.events.length, 1);
+  assert.equal(capture.events[0]?.tags?.billing_surface, "plan_checkout");
+});
+
 test("an expected plan checkout refusal is not reported", async () => {
   const { CapacityPlanCheckoutError } =
     await import("../../lib/billing/capacity-plan-checkout");
