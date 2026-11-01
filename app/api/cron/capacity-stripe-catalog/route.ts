@@ -5,6 +5,7 @@ import {
 } from "@/lib/billing/capacity-stripe-catalog";
 import { capacityBillingStripeMode, getStripe } from "@/lib/billing/stripe";
 import { requireMachineApiAuth } from "@/lib/internal-api-auth";
+import { reportBillingError } from "@/lib/billing/report-billing-error";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -57,6 +58,7 @@ export function createCapacityStripeCatalogPostHandler(
       console.error("[capacity-stripe-catalog] sync failed", {
         error: error instanceof Error ? error.message : "Unknown error",
       });
+      await reportBillingError("stripe_catalog_sync", error);
       return NextResponse.json(
         { ok: false, error: "Capacity Stripe catalog sync failed" },
         { status: 500 }

@@ -12,6 +12,7 @@ import {
 import { loadStripeBillingDetails } from "@/lib/billing/stripe-billing-details";
 import { hasCapability } from "@/lib/team-capabilities";
 import { resolveProductResourceScope } from "@/lib/team-resource-scope";
+import { reportBillingError } from "@/lib/billing/report-billing-error";
 
 type CapacityBillingSummaryDeps = {
   requireUserId: typeof requireUserId;
@@ -93,6 +94,9 @@ export function createCapacityBillingSummaryGetHandler(
             account.stripe_customer_id
           );
         } catch (error) {
+          // Deliberate degradation: the summary still serves without the
+          // Stripe details panel, so this is a warning, not a billing failure,
+          // and it is intentionally not reported to avoid alert noise.
           console.warn("[capacity-billing] Stripe details unavailable", {
             accountId: account.id,
             error: error instanceof Error ? error.message : "Unknown error",
@@ -104,6 +108,9 @@ export function createCapacityBillingSummaryGetHandler(
       console.error("[capacity-billing] summary failed", {
         scope: resolution.scope.kind,
         error: error instanceof Error ? error.message : "Unknown error",
+      });
+      await reportBillingError("capacity_summary", error, {
+        scope: resolution.scope.kind,
       });
       return NextResponse.json(
         { error: "Billing summary is unavailable" },

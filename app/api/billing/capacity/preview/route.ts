@@ -11,6 +11,7 @@ import {
 } from "@/lib/billing/capacity-stripe-changes";
 import { areCapacityBillingOperationsEnabled } from "@/lib/billing/stripe";
 import { resolveProductResourceScope } from "@/lib/team-resource-scope";
+import { reportBillingError } from "@/lib/billing/report-billing-error";
 
 type PreviewRouteDeps = {
   requireUserId: typeof requireUserId;
@@ -38,8 +39,11 @@ async function requestBody(request: Request): Promise<unknown> {
   }
 }
 
-function routeError(error: unknown) {
+async function routeError(error: unknown) {
   if (error instanceof CapacityChangeError) {
+    // Typed refusals are expected; a typed 5xx is a provider anomaly.
+    if (error.status >= 500)
+      await reportBillingError("capacity_preview", error);
     return NextResponse.json(
       { error: error.message, code: error.code },
       { status: error.status }
@@ -48,6 +52,7 @@ function routeError(error: unknown) {
   console.error("[capacity-billing] preview failed", {
     error: error instanceof Error ? error.message : "Unknown error",
   });
+  await reportBillingError("capacity_preview", error);
   return NextResponse.json(
     { error: "Capacity pricing is unavailable" },
     { status: 500 }
@@ -93,7 +98,7 @@ export function createCapacityPreviewPostHandler(
       });
       return NextResponse.json(preview);
     } catch (error) {
-      return routeError(error);
+      return await routeError(error);
     }
   };
 }
