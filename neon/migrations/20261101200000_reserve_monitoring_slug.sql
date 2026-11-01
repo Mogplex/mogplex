@@ -1,0 +1,72 @@
+-- Reserve the Sentry tunnel route. The proxy treats /monitoring as public and
+-- never resolves a scope under it, so a workspace with this slug could not load.
+-- Existing identifiers are preserved; this only guards future claims.
+create or replace function public.is_reserved_slug(p_slug text)
+returns boolean
+language sql
+immutable
+set search_path = public
+as $$
+  select lower(p_slug) = any (array[
+    'api',
+    'auth',
+    'cli-auth',
+    'checkout',
+    'company',
+    'conduct',
+    'faq',
+    'forgot-password',
+    'how-it-works',
+    'install',
+    'install.sh',
+    'install.ps1',
+    'login',
+    'oauth',
+    'pricing',
+    'privacy',
+    'request-access',
+    'reset-password',
+    'signup',
+    'slack',
+    'storage',
+    'terms',
+    'unsubscribe',
+    'workflows',
+    'new',
+    'invite',
+    'account',
+    'admin',
+    'support',
+    'status',
+    '.well-known',
+    'favicon.ico',
+    'robots.txt',
+    'sitemap.xml',
+    'llms.txt',
+    'monitoring',
+    'opengraph-image',
+    'apple-icon',
+    'icon',
+    'manifest.webmanifest',
+    'global-error',
+    'not-found',
+    'error',
+    'agents',
+    'assignments',
+    'automations',
+    'connections',
+    'control',
+    'delivery',
+    'flows',
+    'library',
+    'models',
+    'observability',
+    'observe',
+    'primitives',
+    'projects',
+    'runs',
+    'sandboxes',
+    'settings',
+    'triggers'
+  ]);
+$$;

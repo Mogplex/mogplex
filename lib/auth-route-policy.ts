@@ -3,6 +3,14 @@ type RoutePolicyEntry =
   | { path: string; match: "subtree" }
   | { path: string; match: "prefix" };
 
+/**
+ * Sentry's `tunnelRoute` in next.config.mjs. withSentryConfig rewrites only
+ * `/monitoring?o=<org>&p=<project>` to the ingest host; anything else under
+ * this public path would fall through to the /[scope] catch-all with no scope
+ * headers and fail the render.
+ */
+export const SENTRY_TUNNEL_ROUTE = "/monitoring";
+
 const PUBLIC_ROUTE_PATHS: readonly RoutePolicyEntry[] = [
   { path: "/", match: "exact" },
   { path: "/login", match: "subtree" },
@@ -50,7 +58,7 @@ const PUBLIC_ROUTE_PATHS: readonly RoutePolicyEntry[] = [
   { path: "/robots.txt", match: "exact" },
   { path: "/sitemap.xml", match: "exact" },
   { path: "/manifest.webmanifest", match: "exact" },
-  { path: "/monitoring", match: "subtree" },
+  { path: SENTRY_TUNNEL_ROUTE, match: "subtree" },
   { path: "/llms.txt", match: "exact" },
   { path: "/api/cli/latest", match: "subtree" },
   // Retired PAT-handoff route: now a static "update your CLI" notice for
@@ -131,6 +139,45 @@ function matchesDeclaredPaths(
   entries: readonly RoutePolicyEntry[]
 ) {
   return entries.some((entry) => matchesDeclaredPath(pathname, entry));
+}
+
+const SENTRY_TUNNEL_ID_RE = /^\d*$/;
+
+/** True for a request under the tunnel path that the Sentry rewrite won't match. */
+export function isStraySentryTunnelRequest(url: URL): boolean {
+  if (
+    !matchesDeclaredPath(url.pathname, {
+      path: SENTRY_TUNNEL_ROUTE,
+      match: "subtree",
+    })
+  ) {
+    return false;
+  }
+  const orgId = url.searchParams.get("o");
+  const projectId = url.searchParams.get("p");
+  const isTunnelPath =
+    url.pathname === SENTRY_TUNNEL_ROUTE ||
+    url.pathname === `${SENTRY_TUNNEL_ROUTE}/`;
+  return !(
+    isTunnelPath &&
+    orgId !== null &&
+    projectId !== null &&
+    SENTRY_TUNNEL_ID_RE.test(orgId) &&
+    SENTRY_TUNNEL_ID_RE.test(projectId)
+  );
+}
+
+/**
+ * First path segment of every public and unscoped-authed route. Each one must
+ * be a reserved slug: the proxy never resolves a scope under these paths, so a
+ * workspace claiming one would only ever render without scope headers.
+ */
+export function unscopedRouteTopLevelSegments(): ReadonlySet<string> {
+  return new Set(
+    [...PUBLIC_ROUTE_PATHS, ...UNSCOPED_AUTHED_ROUTE_PATHS]
+      .map((entry) => entry.path.split("/")[1])
+      .filter((segment) => segment !== "")
+  );
 }
 
 export function isPublicRoutePath(pathname: string) {

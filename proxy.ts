@@ -4,6 +4,7 @@ import { lookupApiKeyAccess } from "@/lib/auth/api-key";
 import {
   allowsDelegatedInternalApiPath,
   isPublicRoutePath,
+  isStraySentryTunnelRequest,
   isUnscopedAuthedRoutePath,
 } from "@/lib/auth-route-policy";
 import {
@@ -141,6 +142,10 @@ async function handleProxy(request: NextRequest, deps: ProxyDeps) {
       const response = NextResponse.next();
       response.cookies.set("oidc_login_prompt", "", { maxAge: 0, path: "/" });
       return response;
+    }
+    // Bodyless: a rendered 404 would reach the /[scope] catch-all instead.
+    if (isStraySentryTunnelRequest(request.nextUrl)) {
+      return new NextResponse(null, { status: 404 });
     }
     return NextResponse.next();
   }

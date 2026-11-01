@@ -5,7 +5,7 @@ import { DASHBOARD_SCOPED_FIRST_SEGMENTS } from "@/lib/dashboard-rescue";
 // for future use).
 //
 // Keep in sync with public.is_reserved_slug() in Neon migration
-// 20261002021000_reserve_current_routes.sql. Frozen Supabase history is unchanged.
+// 20261101200000_reserve_monitoring_slug.sql. Frozen Supabase history is unchanged.
 const RESERVED = new Set<string>([
   // existing top-level routes
   "api",
@@ -45,6 +45,8 @@ const RESERVED = new Set<string>([
   "robots.txt",
   "sitemap.xml",
   "llms.txt",
+  // Sentry tunnel route (next.config.mjs), public in lib/auth-route-policy.ts.
+  "monitoring",
   "opengraph-image",
   "apple-icon",
   "icon",

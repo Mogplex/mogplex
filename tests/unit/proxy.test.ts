@@ -237,6 +237,19 @@ test("proxy lets CLI OAuth requests reach hosted inference routes", async () => 
   assert.equal(response.headers.get("www-authenticate"), null);
 });
 
+test("proxy 404s stray Sentry tunnel requests before they reach /[scope]", async () => {
+  const stray = await proxy(new NextRequest("https://mogplex.com/monitoring"));
+  assert.equal(stray.status, 404);
+  assert.equal(stray.headers.get("x-middleware-next"), null);
+
+  const tunnel = await proxy(
+    new NextRequest("https://mogplex.com/monitoring?o=4507&p=4508", {
+      method: "POST",
+    })
+  );
+  assert.equal(tunnel.headers.get("x-middleware-next"), "1");
+});
+
 test("proxy lets unauthenticated MCP initialization reach the OAuth challenge", async () => {
   const request = new NextRequest("https://mogplex.com/api/v1/mogplex/mcp", {
     method: "POST",

@@ -194,6 +194,7 @@ export default shouldWrapWithSentry
       automaticVercelMonitors: false,
       ...(process.env.NODE_ENV === "development"
         ? {}
-        : { tunnelRoute: "/monitoring" }),
+        : // SENTRY_TUNNEL_ROUTE in lib/auth-route-policy.ts; keep aligned.
+          { tunnelRoute: "/monitoring" }),
     })
   : nextConfig;

@@ -1,9 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFile } from "node:fs/promises";
 import {
+  SENTRY_TUNNEL_ROUTE,
   isPublicRoutePath,
+  isStraySentryTunnelRequest,
   isUnscopedAuthedRoutePath,
+  unscopedRouteTopLevelSegments,
 } from "../../lib/auth-route-policy";
+import { isReservedSlug } from "../../lib/reserved-slugs";
 
 test("checkout is authenticated but never interpreted as a workspace slug", () => {
   assert.equal(isPublicRoutePath("/checkout"), false);
@@ -85,6 +90,42 @@ test("isPublicRoutePath preserves legacy bare-entry behavior at path boundaries"
       isPublicRoutePath(input),
       expected,
       `${kind} "${input}" should be ${expected}`
+    );
+  }
+});
+
+test("every unscoped top-level route segment is a reserved slug", () => {
+  const unreserved = [...unscopedRouteTopLevelSegments()].filter(
+    (segment) => !isReservedSlug(segment)
+  );
+  assert.deepEqual(unreserved, []);
+});
+
+test("the Sentry tunnel route matches next.config.mjs", async () => {
+  const nextConfig = await readFile(
+    new URL("../../next.config.mjs", import.meta.url),
+    "utf8"
+  );
+  assert.match(nextConfig, new RegExp(`tunnelRoute: "${SENTRY_TUNNEL_ROUTE}"`));
+});
+
+test("isStraySentryTunnelRequest passes only requests the Sentry rewrite matches", () => {
+  const cases: Array<[string, boolean]> = [
+    ["/monitoring?o=4507&p=4508", false],
+    ["/monitoring/?o=4507&p=4508", false],
+    ["/monitoring?o=&p=", false],
+    ["/monitoring", true],
+    ["/monitoring?o=4507", true],
+    ["/monitoring?o=abc&p=4508", true],
+    ["/monitoring/extra?o=4507&p=4508", true],
+    ["/monitoring-dashboard", false],
+    ["/agents", false],
+  ];
+  for (const [path, stray] of cases) {
+    assert.equal(
+      isStraySentryTunnelRequest(new URL(path, "https://mogplex.com")),
+      stray,
+      path
     );
   }
 });

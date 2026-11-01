@@ -17,7 +17,7 @@ beforeAll(async () => {
   await db.exec(
     await readFile(
       new URL(
-        "../../neon/migrations/20261002021000_reserve_current_routes.sql",
+        "../../neon/migrations/20261101200000_reserve_monitoring_slug.sql",
         import.meta.url
       ),
       "utf8"
