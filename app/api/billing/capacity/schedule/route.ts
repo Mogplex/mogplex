@@ -34,7 +34,7 @@ async function requestBody(request: Request): Promise<unknown> {
   }
 }
 
-function routeError(error: unknown) {
+async function routeError(error: unknown) {
   if (error instanceof CapacityChangeError) {
     return NextResponse.json(
       { error: error.message, code: error.code },
@@ -44,7 +44,7 @@ function routeError(error: unknown) {
   console.error("[capacity-billing] schedule failed", {
     error: error instanceof Error ? error.message : "Unknown error",
   });
-  reportBillingError("capacity_schedule", error);
+  await reportBillingError("capacity_schedule", error);
   return NextResponse.json(
     { error: "The capacity change could not be scheduled" },
     { status: 500 }
@@ -91,7 +91,7 @@ export function createCapacitySchedulePostHandler(
       });
       return NextResponse.json(result);
     } catch (error) {
-      return routeError(error);
+      return await routeError(error);
     }
   };
 }

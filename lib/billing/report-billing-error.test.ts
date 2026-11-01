@@ -1,10 +1,10 @@
 import * as Sentry from "@sentry/nextjs";
-import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, expect, it, vi } from "vitest";
 import { installInMemorySentry } from "../../tests/support/sentry-capture";
 import { reportBillingError } from "./report-billing-error";
 import { CapacityBillingDisabledError } from "./capacity-billing-errors";
 
-let capture: { events: Sentry.Event[] };
+let capture: ReturnType<typeof installInMemorySentry>;
 beforeAll(() => {
   capture = installInMemorySentry();
 });
@@ -16,10 +16,9 @@ afterAll(async () => {
 });
 
 it("reports a caught billing failure with its surface and context", async () => {
-  reportBillingError("plan_checkout", new Error("tax code is missing"), {
+  await reportBillingError("plan_checkout", new Error("tax code is missing"), {
     accountId: "account-1",
   });
-  await Sentry.flush();
   expect(capture.events).toHaveLength(1);
   const [event] = capture.events;
   expect(event?.tags).toMatchObject({ billing_surface: "plan_checkout" });
@@ -27,10 +26,37 @@ it("reports a caught billing failure with its surface and context", async () => 
   expect(event?.exception?.values?.[0]?.value).toBe("tax code is missing");
 });
 
-it("does not report an intentionally closed capacity operations gate", async () => {
-  reportBillingError("stripe_webhook", new CapacityBillingDisabledError(), {
-    eventId: "evt_1",
-  });
-  await Sentry.flush();
+it("does not report a closed gate the Stripe webhook keeps for replay", async () => {
+  await reportBillingError(
+    "stripe_webhook",
+    new CapacityBillingDisabledError(),
+    {
+      eventId: "evt_1",
+    }
+  );
   expect(capture.events).toHaveLength(0);
+});
+
+it("reports a closed gate on any surface other than the Stripe webhook", async () => {
+  await reportBillingError(
+    "hosted_usage_checkout",
+    new CapacityBillingDisabledError()
+  );
+  expect(capture.events).toHaveLength(1);
+});
+
+it("never lets a telemetry failure escape the failure path", async () => {
+  capture.failFlush = true;
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    await expect(
+      reportBillingError("plan_checkout", new Error("boom"))
+    ).resolves.toBeUndefined();
+    expect(log).toHaveBeenCalledWith(
+      "[billing] Could not deliver error report"
+    );
+  } finally {
+    capture.failFlush = false;
+    log.mockRestore();
+  }
 });

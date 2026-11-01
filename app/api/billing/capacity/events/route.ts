@@ -177,7 +177,7 @@ export function createBillingAccountEventsGetHandler(
         scope: resolution.scope.kind,
         error: error instanceof Error ? error.message : "Unknown error",
       });
-      reportBillingError("capacity_events_account", error, {
+      await reportBillingError("capacity_events_account", error, {
         scope: resolution.scope.kind,
       });
       return NextResponse.json(
@@ -224,7 +224,9 @@ export function createBillingAccountEventsGetHandler(
             accountId,
             error: error instanceof Error ? error.message : "Unknown error",
           });
-          reportBillingError("capacity_events_stream", error, { accountId });
+          await reportBillingError("capacity_events_stream", error, {
+            accountId,
+          });
           await cleanup();
           try {
             controller.close();

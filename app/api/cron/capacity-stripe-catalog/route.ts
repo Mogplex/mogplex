@@ -58,7 +58,7 @@ export function createCapacityStripeCatalogPostHandler(
       console.error("[capacity-stripe-catalog] sync failed", {
         error: error instanceof Error ? error.message : "Unknown error",
       });
-      reportBillingError("stripe_catalog_sync", error);
+      await reportBillingError("stripe_catalog_sync", error);
       return NextResponse.json(
         { ok: false, error: "Capacity Stripe catalog sync failed" },
         { status: 500 }

@@ -47,7 +47,7 @@ async function requestBody(request: Request): Promise<unknown> {
   }
 }
 
-function routeError(error: unknown) {
+async function routeError(error: unknown) {
   if (error instanceof HostedUsagePurchaseError) {
     return NextResponse.json(
       { error: error.message, code: error.code },
@@ -57,7 +57,7 @@ function routeError(error: unknown) {
   console.error("[capacity-billing] hosted-usage checkout failed", {
     error: error instanceof Error ? error.message : "Unknown error",
   });
-  reportBillingError("hosted_usage_checkout", error);
+  await reportBillingError("hosted_usage_checkout", error);
   return NextResponse.json(
     { error: "Hosted-usage checkout is unavailable" },
     { status: 500 }
@@ -106,7 +106,7 @@ export function createHostedUsageCheckoutPostHandler(
       });
       return NextResponse.json(result);
     } catch (error) {
-      return routeError(error);
+      return await routeError(error);
     }
   };
 }

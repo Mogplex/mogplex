@@ -18,18 +18,33 @@ export type BillingSurface =
  * Report a billing failure that a route catches and answers itself. Caught
  * errors never reach Next's `onRequestError` hook, so without this a broken
  * checkout, webhook, or catalog sync only ever shows up as a log line.
- * A schedule projection refused by a closed capacity operations gate is
- * intentional (the Stripe webhook keeps it for replay, and Stripe retries it
- * for days), so `CapacityBillingDisabledError` is never reported.
+ * The Stripe webhook keeps a schedule projection refused by a closed capacity
+ * operations gate for replay, and Stripe retries it for days, so that one
+ * `CapacityBillingDisabledError` is not reported; on any other surface it is.
+ *
+ * Route handlers are not wrapped by the SDK under Turbopack, so nothing flushes
+ * at handler return; await delivery here, on the failure path only, before a
+ * serverless function can freeze. A telemetry outage never replaces the
+ * original response.
  */
-export function reportBillingError(
+export async function reportBillingError(
   surface: BillingSurface,
   error: unknown,
   extra: Record<string, unknown> = {}
-): void {
-  if (error instanceof CapacityBillingDisabledError) return;
-  Sentry.captureException(error, {
-    tags: { billing_surface: surface },
-    extra,
-  });
+): Promise<void> {
+  if (
+    surface === "stripe_webhook" &&
+    error instanceof CapacityBillingDisabledError
+  ) {
+    return;
+  }
+  try {
+    Sentry.captureException(error, {
+      tags: { billing_surface: surface },
+      extra,
+    });
+    await Sentry.flush(2_000);
+  } catch {
+    console.error("[billing] Could not deliver error report");
+  }
 }

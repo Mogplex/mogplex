@@ -467,7 +467,7 @@ export async function POST(request: Request) {
       `[stripe-webhook] ${event.type} ${event.id} failed:`,
       error instanceof Error ? error.message : error
     );
-    reportBillingError("stripe_webhook", error, {
+    await reportBillingError("stripe_webhook", error, {
       eventType: event.type,
       eventId: event.id,
     });

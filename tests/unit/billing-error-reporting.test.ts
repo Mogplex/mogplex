@@ -4,7 +4,7 @@ import * as Sentry from "@sentry/nextjs";
 import type { BillingAccount } from "../../lib/billing/accounts";
 import { installInMemorySentry } from "../support/sentry-capture";
 
-let capture: { events: Sentry.Event[] };
+let capture: ReturnType<typeof installInMemorySentry>;
 
 before(() => {
   capture = installInMemorySentry();
@@ -196,6 +196,16 @@ const routeCases: Array<{
           attemptId: ATTEMPT_ID,
           returnPath: "/personal/settings?tab=billing",
         })
+      );
+    },
+  },
+  {
+    surface: "capacity_events_account",
+    run: async () => {
+      const { createBillingAccountEventsGetHandler } =
+        await import("../../app/api/billing/capacity/events/route");
+      return createBillingAccountEventsGetHandler(signedIn)(
+        new Request("https://example.com/api/billing/capacity/events")
       );
     },
   },

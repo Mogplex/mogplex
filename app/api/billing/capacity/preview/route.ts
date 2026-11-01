@@ -39,7 +39,7 @@ async function requestBody(request: Request): Promise<unknown> {
   }
 }
 
-function routeError(error: unknown) {
+async function routeError(error: unknown) {
   if (error instanceof CapacityChangeError) {
     return NextResponse.json(
       { error: error.message, code: error.code },
@@ -49,7 +49,7 @@ function routeError(error: unknown) {
   console.error("[capacity-billing] preview failed", {
     error: error instanceof Error ? error.message : "Unknown error",
   });
-  reportBillingError("capacity_preview", error);
+  await reportBillingError("capacity_preview", error);
   return NextResponse.json(
     { error: "Capacity pricing is unavailable" },
     { status: 500 }
@@ -95,7 +95,7 @@ export function createCapacityPreviewPostHandler(
       });
       return NextResponse.json(preview);
     } catch (error) {
-      return routeError(error);
+      return await routeError(error);
     }
   };
 }

@@ -95,7 +95,8 @@ export function createCapacityBillingSummaryGetHandler(
           );
         } catch (error) {
           // Deliberate degradation: the summary still serves without the
-          // Stripe details panel, so this is a warning, not a billing failure.
+          // Stripe details panel, so this is a warning, not a billing failure,
+          // and it is intentionally not reported to avoid alert noise.
           console.warn("[capacity-billing] Stripe details unavailable", {
             accountId: account.id,
             error: error instanceof Error ? error.message : "Unknown error",
@@ -108,7 +109,7 @@ export function createCapacityBillingSummaryGetHandler(
         scope: resolution.scope.kind,
         error: error instanceof Error ? error.message : "Unknown error",
       });
-      reportBillingError("capacity_summary", error, {
+      await reportBillingError("capacity_summary", error, {
         scope: resolution.scope.kind,
       });
       return NextResponse.json(
