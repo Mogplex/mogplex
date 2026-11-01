@@ -35,7 +35,8 @@ export type PrReviewContractSource =
   | "structured"
   | "dropped_findings"
   | "legacy_post_comment"
-  | "legacy_text";
+  | "legacy_text"
+  | "not_started";
 
 export type PrReviewHarnessResult = {
   source: PrReviewContractSource;

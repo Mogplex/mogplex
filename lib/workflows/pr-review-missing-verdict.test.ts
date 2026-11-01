@@ -10,13 +10,18 @@ import type { JobContext } from "./automation-job-types";
 import {
   extractPrReviewHarnessResult,
   isPrReviewVerdictMissing,
+  PR_REVIEW_NOT_STARTED_MESSAGE,
 } from "./pr-review-harness-extraction";
 import {
   buildPrReviewCheckTitle,
   buildPrReviewContractNote,
   buildPrReviewStatusHeading,
 } from "./pr-review-harness-formatting";
-import { buildPrReviewTimelineCommentBody } from "./pr-review-harness";
+import {
+  buildPrReviewCheckSummary,
+  buildPrReviewCheckText,
+  buildPrReviewTimelineCommentBody,
+} from "./pr-review-harness";
 import type { PrReviewConclusion } from "./pr-review-harness-types";
 
 /** The reviewer read the PR, wrote a closing message, and never reported. */
@@ -122,6 +127,42 @@ describe("what a review without a verdict publishes", () => {
 
     expect(note).toMatch(/no verdict/);
     expect(note).toMatch(/Rerun the review/);
+  });
+});
+
+/**
+ * The reviewer's first turn emitted its tool call as text the provider could
+ * not parse (seen on a production review), so no tool ever ran.
+ */
+const neverStarted = {
+  text: 'I\'ll start by fetching the PR metadata.\n\n<｜DSML｜ parameter name="recipient_name">getPullRequest</invoke>',
+  steps: [{ toolCalls: [], toolResults: [] }],
+};
+
+describe("what a review that never started publishes", () => {
+  const harnessResult = extractPrReviewHarnessResult(neverStarted);
+  const published = { harnessResult, fallbackText: neverStarted.text };
+
+  it("should be an incomplete review, not a clean one", () => {
+    expect(harnessResult.source).toBe("not_started");
+    expect(isPrReviewVerdictMissing(harnessResult)).toBe(true);
+    expect(
+      buildPrReviewCheckTitle({ harnessResult, conclusion: "neutral" })
+    ).toBe("Review incomplete");
+  });
+
+  it("should publish the authored message and none of the model's text", () => {
+    const surfaces = [
+      buildPrReviewCheckSummary({ ...published, conclusion: "neutral" }),
+      buildPrReviewCheckText({ ...published, conclusion: "neutral" }),
+      buildPrReviewTimelineCommentBody({ ...published, conclusion: "neutral" }),
+    ];
+
+    for (const surface of surfaces) {
+      expect(surface).toContain(PR_REVIEW_NOT_STARTED_MESSAGE);
+      expect(surface).not.toContain("DSML");
+      expect(surface).not.toContain("fetching the PR metadata");
+    }
   });
 });
 
