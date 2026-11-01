@@ -100,6 +100,12 @@ async function resolveAuthCandidates(input: {
   userId?: string | null;
   owner?: string | null;
 }) {
+  if (hasGithubAppConfig() && !input.owner)
+    return {
+      error:
+        "Specify the GitHub organization or user owner for App-scoped PR search.",
+      ownerRequired: true,
+    };
   const auths: GithubPrSearchAuth[] = [];
   const warnings: string[] = [];
   if (input.owner) {
@@ -401,7 +407,7 @@ const prSearchParams = z
 export function createGithubPrSearch(options: GithubPrSearchOptions = {}) {
   return defineTool({
     description:
-      "Search GitHub pull requests visible to the connected GitHub account, including private repositories covered by the user's OAuth token or the Mogplex GitHub App installation for the requested owner. Read-only. Use this for org-wide, user-wide, repo-wide, or 'my PRs' questions. Do not use public web search for GitHub PR inventory when this tool is available.",
+      "Search pull requests within the approved GitHub App installation for the requested organization or user owner. Supply an owner, including for 'my PRs' questions in App deployments. OAuth-only deployments use their explicit repository grant. Read-only. Do not use public web search for GitHub PR inventory when this tool is available.",
     inputSchema: prSearchParams,
     execute: async ({
       owner,

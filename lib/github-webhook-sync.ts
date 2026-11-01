@@ -110,10 +110,7 @@ export function planGithubWebhookSync(
   return { type: "none" };
 }
 
-async function resolveWebhookUserIds(
-  installationId: number,
-  senderLogin: string | null
-) {
+async function resolveWebhookUserIds(installationId: number) {
   const { supabaseAdmin } = await import("@/lib/supabase/admin");
   const { data: known, error: knownError } = await supabaseAdmin
     .from("github_installations")
@@ -126,28 +123,12 @@ async function resolveWebhookUserIds(
     );
   }
 
-  const knownUserIds = [
+  // Signed events refresh existing grants; sender metadata cannot attach a
+  // new user's account to an installation's full repository scope.
+  return [
     ...new Set(
       (known || []).map((row) => row.user_id as string).filter(Boolean)
     ),
-  ];
-  if (knownUserIds.length > 0) {
-    return knownUserIds;
-  }
-
-  if (!senderLogin) return [];
-
-  const { data: profiles, error: profileError } = await supabaseAdmin
-    .from("profiles")
-    .select("id")
-    .eq("github_username", senderLogin);
-
-  if (profileError) {
-    throw new Error(`Failed to load sender profile: ${profileError.message}`);
-  }
-
-  return [
-    ...new Set((profiles || []).map((row) => row.id as string).filter(Boolean)),
   ];
 }
 
@@ -244,10 +225,7 @@ export async function syncGithubWebhookState(
     return { handled: false, matchedUsers: 0 };
   }
 
-  const userIds = await resolveWebhookUserIds(
-    plan.installationId,
-    plan.senderLogin
-  );
+  const userIds = await resolveWebhookUserIds(plan.installationId);
   if (userIds.length === 0) {
     return {
       handled: true,

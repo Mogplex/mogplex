@@ -12,6 +12,8 @@ import { listUserGithubInstallations } from "@/lib/github-user-installations";
 import { isGithubOAuthRepositoryAccessAllowed } from "@/lib/github-repository-auth";
 import { getGithubAccessTokenForRepo } from "@/lib/github-access";
 import { syncGithubReposForUser } from "@/lib/github-sync";
+import { reconcileGithubInstallationsForUser } from "@/lib/github-installations";
+import { syncGithubWebhookState } from "@/lib/github-webhook-sync";
 
 let db: PGlite;
 const previousFrom = Object.getOwnPropertyDescriptor(supabaseAdmin, "from");
@@ -41,6 +43,79 @@ afterAll(async () => {
   if (previousFrom) Object.defineProperty(supabaseAdmin, "from", previousFrom);
   else Reflect.deleteProperty(supabaseAdmin, "from");
   await db?.close();
+});
+
+it("does not attach an App-wide installation to a user through organization membership discovery", async () => {
+  const member = "00000000-0000-4000-8000-0000000000a1";
+  await db.query(
+    "insert into profiles(id,github_username) values ($1,'member-only')",
+    [member]
+  );
+  vi.stubEnv("GITHUB_APP_ID", "1");
+  vi.stubEnv("GITHUB_APP_NAME", "fixture");
+  vi.stubEnv(
+    "GITHUB_APP_PRIVATE_KEY",
+    generateKeyPairSync("rsa", { modulusLength: 2048 })
+      .privateKey.export({ type: "pkcs8", format: "pem" })
+      .toString()
+  );
+  const requests: string[] = [];
+  vi.stubGlobal("fetch", async (url: string) => {
+    const path = new URL(url).pathname;
+    requests.push(path);
+    if (path === "/user/orgs") return Response.json([{ login: "approved-a" }]);
+    if (path === "/orgs/approved-a/installation")
+      return Response.json({
+        id: 6001,
+        account: { login: "approved-a", type: "Organization" },
+      });
+    if (path.endsWith("/access_tokens"))
+      return Response.json({ token: "ghs-fixture" });
+    if (path === "/installation/repositories")
+      return Response.json({ repositories: [] });
+    return new Response(null, { status: 404 });
+  });
+  expect(
+    await reconcileGithubInstallationsForUser(
+      member,
+      "member-only",
+      "older-oauth-fixture"
+    )
+  ).toEqual({ discovered: 0 });
+  expect(
+    (
+      await db.query(
+        "select count(*)::int as count from github_installations where user_id=$1",
+        [member]
+      )
+    ).rows
+  ).toEqual([{ count: 0 }]);
+  expect(requests).toEqual([]);
+});
+
+it("does not attach a previously unowned installation from a webhook sender's login alone", async () => {
+  const member = "00000000-0000-4000-8000-0000000000a2";
+  await db.query(
+    "insert into profiles(id,github_username) values ($1,'sender-only')",
+    [member]
+  );
+  const outcome = await syncGithubWebhookState("installation", {
+    action: "created",
+    sender: { login: "sender-only" },
+    installation: {
+      id: 7001,
+      account: { login: "unapproved-org", type: "Organization" },
+    },
+  });
+  expect(outcome.matchedUsers).toBe(0);
+  expect(
+    (
+      await db.query(
+        "select count(*)::int as count from github_installations where user_id=$1",
+        [member]
+      )
+    ).rows
+  ).toEqual([{ count: 0 }]);
 });
 it("keeps every attached grant user-scoped and never treats an App profile as OAuth repository authorization", async () => {
   const owner = "00000000-0000-4000-8000-000000000071";
@@ -81,6 +156,14 @@ it("keeps every attached grant user-scoped and never treats an App profile as OA
   vi.stubEnv("GITHUB_APP_NAME", "mogplex-test");
   vi.stubEnv("GITHUB_APP_PRIVATE_KEY", "configured");
   expect(await isGithubOAuthRepositoryAccessAllowed(other)).toBe(false);
+  expect(await reconcileGithubInstallationsForUser(owner)).toEqual({
+    discovered: 7,
+  });
+  expect(
+    await reconcileGithubInstallationsForUser(
+      "00000000-0000-4000-8000-000000000073"
+    )
+  ).toEqual({ discovered: 0 });
 });
 
 it("uses the current App repository grant and retains disconnected stored work without exposing it as authorized", async () => {
@@ -138,6 +221,20 @@ it("uses the current App repository grant and retains disconnected stored work w
     await syncGithubReposForUser(withoutGrant, "older-oauth-fixture")
   ).toEqual([]);
   expect(paths).not.toContain("/user/repos");
+  expect(
+    (
+      await syncGithubWebhookState("installation_repositories", {
+        action: "added",
+        installation: {
+          id: 5001,
+          account: { login: "approved", type: "Organization" },
+        },
+        sender: { login: "another-sender" },
+        repositories_added: [],
+        repositories_removed: [],
+      })
+    ).matchedUsers
+  ).toBe(1);
   expect(
     (
       await db.query(

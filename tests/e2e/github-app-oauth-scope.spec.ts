@@ -91,6 +91,25 @@ test("GitHub App reconnection requests identity scopes without broad repository 
     expect(authorization?.searchParams.get("redirect_uri")).toBe(
       `${base}/api/auth/github/callback`
     );
+    let callback: URL | undefined;
+    await page.route(
+      `${base}/api/auth/github/callback?installation_id=98765`,
+      async (route) => {
+        const response = await route.fetch({ maxRedirects: 0 });
+        callback = new URL(response.headers().location);
+        return route.fulfill({
+          contentType: "text/html",
+          body: "<p>Installation callback captured</p>",
+        });
+      }
+    );
+    await page.goto(`${base}/api/auth/github/callback?installation_id=98765`);
+    await expect(
+      page.getByText("Installation callback captured")
+    ).toBeVisible();
+    expect(callback?.searchParams.get("error")).toBe(
+      "github_installation_state"
+    );
   } finally {
     if (child.exitCode === null && child.signalCode === null) {
       child.kill("SIGTERM");

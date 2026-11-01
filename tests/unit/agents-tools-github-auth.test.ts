@@ -12,6 +12,29 @@ import {
   type GithubInstallationsQueryCall,
 } from "./helpers/agents-tools-fixtures";
 
+test("App PR search asks for an owner instead of requesting another authorization grant", async () => {
+  await withEnv(
+    {
+      GITHUB_APP_ID: "1",
+      GITHUB_APP_NAME: "fixture",
+      GITHUB_APP_PRIVATE_KEY: "configured",
+    },
+    async () => {
+      const { createGithubPrSearch } = await loadToolsModule();
+      const result = await (
+        createGithubPrSearch({
+          userId: "user-1",
+          oauthToken: "older-oauth",
+        }) as unknown as {
+          execute: (input: unknown) => Promise<Record<string, unknown>>;
+        }
+      ).execute({ author: "example" });
+      assert.equal(result.ownerRequired, true);
+      assert.equal(result.authorizationRequired, undefined);
+    }
+  );
+});
+
 test("github_pr_search prefers requested owner GitHub App installation auth", async () => {
   const calls: Array<{ path: string; authorization?: string }> = [];
   const installationQueryCalls: GithubInstallationsQueryCall[] = [];

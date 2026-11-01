@@ -12,6 +12,13 @@ monorepo detection. Installation IDs are checked against the owner's attached
 records before minting a repository credential. Missing account metadata is
 resolved using the same attached installation ID, without discovering and
 attaching another account's installation.
+New attachments require a session-bound installation callback and a verified
+GitHub identity that owns the personal account or is an active organization
+owner. Begin this connection in Mogplex. Accounts without an identity credential
+complete identity authorization before selecting the App installation. Other
+members use repositories explicitly shared through their Mogplex team. Cached
+repository names, org membership discovery, and webhook sender names never
+attach new installation grants. Existing stored grants are retained.
 
 The synchronized inventory uses the current App repository IDs. A repository
 transferred outside an installation or left over from OAuth synchronization
@@ -21,6 +28,11 @@ Team inventory verifies each shared row against its originating owner's
 attached installation and current repository grant. Team members can use
 already-shared repositories without attaching a duplicate personal installation;
 this does not import teammates' personal repositories into the team.
+Inventories fetched during the current sync request are reused. A revoked
+installation contributes no rows; other verified team grants remain available.
+Provider outages remain verification errors. PR search in an App deployment
+requires an explicit organization or user owner; an omitted owner prompts for
+that input without requesting a new authorization grant.
 
 OAuth remains available for identity and membership discovery. Reconnection
 for an App-based account requests `read:org`, `read:user`, and `user:email`,

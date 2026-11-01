@@ -4,6 +4,7 @@ import { buildAppUrl, normalizeAppRedirectPath } from "@/lib/app-url";
 import {
   getGithubOAuthGrantConfiguration,
   GITHUB_RETURN_TO_COOKIE,
+  GITHUB_INSTALL_STATE_COOKIE,
 } from "@/lib/github-oauth";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { getGithubInstallation, hasGithubAppConfig } from "@/lib/github-app";
@@ -11,7 +12,8 @@ import {
   syncGithubInstallationReposForUser,
   syncGithubReposForUser,
 } from "@/lib/github-sync";
-import { storeOAuthToken } from "@/lib/oauth-tokens";
+import { getOAuthToken, storeOAuthToken } from "@/lib/oauth-tokens";
+import { verifyGithubInstallationOwner } from "@/lib/github-installation-owner";
 import { getUserId } from "@/lib/auth";
 import { isGithubOAuthRepositoryAccessAllowed } from "@/lib/github-repository-auth";
 
@@ -56,14 +58,25 @@ export async function GET(request: Request) {
     if (!userId) {
       return redirect("/login");
     }
+    const installState = cookieStore.get(GITHUB_INSTALL_STATE_COOKIE)?.value;
+    if (!state || !installState || state !== installState)
+      return redirect("/?error=github_installation_state");
+    cookieStore.delete(GITHUB_INSTALL_STATE_COOKIE);
 
     const installationId = Number(installationIdParam);
-    if (!Number.isFinite(installationId)) {
+    if (!Number.isSafeInteger(installationId) || installationId <= 0) {
       return redirect("/?error=github_installation_invalid");
     }
 
     try {
       const installation = await getGithubInstallation(installationId);
+      const identityToken = await getOAuthToken(userId, "github");
+      if (
+        !identityToken ||
+        !(await verifyGithubInstallationOwner(installation, identityToken))
+      ) {
+        return redirect("/?error=github_installation_owner_required");
+      }
 
       const { error: installationError } = await supabaseAdmin
         .from("github_installations")

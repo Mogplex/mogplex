@@ -78,7 +78,36 @@ it("does not manufacture team access when App configuration is missing", async (
   expect(await filterAuthorizedTeamGithubRepos(rows)).toEqual([]);
   expect(fetch).not.toHaveBeenCalled();
 });
-it("fails closed when GitHub cannot verify a shared installation", async () => {
-  vi.stubGlobal("fetch", async () => new Response(null, { status: 403 }));
+it("fails closed when GitHub cannot verify a shared installation during an outage", async () => {
+  vi.stubGlobal("fetch", async () => new Response(null, { status: 503 }));
   await expect(filterAuthorizedTeamGithubRepos(rows)).rejects.toThrow();
+});
+
+it("omits a revoked owner's rows without hiding other authorized team repositories", async () => {
+  vi.stubGlobal("fetch", async (url: string) => {
+    const path = new URL(url).pathname;
+    if (path === "/app/installations/11/access_tokens")
+      return new Response(null, { status: 403 });
+    if (path === "/app/installations/12/access_tokens")
+      return Response.json({ token: "ghs-12" });
+    return Response.json({ repositories: [{ id: 2 }] });
+  });
+  expect(await filterAuthorizedTeamGithubRepos(rows)).toEqual([rows[1]]);
+});
+
+it("reuses verified installation inventories from the current sync request", async () => {
+  const request = vi.fn(async () => {
+    throw new Error("must not refetch verified inventories");
+  });
+  vi.stubGlobal("fetch", request);
+  expect(
+    await filterAuthorizedTeamGithubRepos(
+      rows,
+      new Map([
+        [11, new Set([1])],
+        [12, new Set([2])],
+      ])
+    )
+  ).toEqual(rows.slice(0, 2));
+  expect(request).not.toHaveBeenCalled();
 });

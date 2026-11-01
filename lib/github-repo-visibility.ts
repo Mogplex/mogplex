@@ -14,7 +14,8 @@ export function filterVisibleGithubRepos<
   if (!options.preferInstallationCoverage) return repos;
   return repos.filter(
     (repo) =>
-      Number.isFinite(repo.github_installation_id) &&
+      Number.isSafeInteger(Number(repo.github_installation_id)) &&
+      Number(repo.github_installation_id) > 0 &&
       (!options.authorizedGithubRepoIds ||
         options.authorizedGithubRepoIds.has(Number(repo.github_id)))
   );

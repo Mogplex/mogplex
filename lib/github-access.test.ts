@@ -20,6 +20,11 @@ beforeEach(() => {
           account_login: "approved",
           account_type: "Organization",
         },
+        {
+          installation_id: 13,
+          account_login: "another-approved",
+          account_type: "Organization",
+        },
       ],
       error: null,
     }),
@@ -65,4 +70,23 @@ it("preserves an approved installation's scoped repository access", async () => 
       github_installation_id: 12,
     })
   ).toBe("ghs-fixture");
+});
+
+it("returns no credential for a revoked installation and preserves genuine provider errors", async () => {
+  for (const status of [401, 403, 404]) {
+    vi.stubGlobal("fetch", async () => new Response(null, { status }));
+    expect(
+      await getGithubAccessTokenForRepo({
+        user_id: "owner",
+        github_installation_id: 12,
+      })
+    ).toBeNull();
+  }
+  vi.stubGlobal("fetch", async () => new Response(null, { status: 503 }));
+  await expect(
+    getGithubAccessTokenForRepo({
+      user_id: "owner",
+      github_installation_id: 12,
+    })
+  ).rejects.toThrow();
 });

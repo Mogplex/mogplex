@@ -2,6 +2,8 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { isGithubOAuthRepositoryAccessAllowed } from "@/lib/github-repository-auth";
 import { filterVisibleGithubRepos } from "@/lib/github-repo-visibility";
 import { filterAuthorizedTeamGithubRepos } from "@/lib/github-team-repo-visibility";
+import { ignoreRevokedGithubInstallation } from "@/lib/github-installation-result";
+import type { GithubRepoPayload } from "@/lib/github-repo-payload";
 import {
   fetchGithubInstallationRepos,
   hasGithubAppConfig,
@@ -15,17 +17,7 @@ import {
 
 export { filterVisibleGithubRepos } from "@/lib/github-repo-visibility";
 
-export type GithubRepoPayload = {
-  id: number;
-  full_name: string;
-  default_branch?: string;
-  created_at?: string;
-  size?: number;
-  owner?: {
-    login?: string;
-  };
-  name?: string;
-};
+export type { GithubRepoPayload } from "@/lib/github-repo-payload";
 
 type RebindAutomationInstallationsDeps = {
   loadCurrentInstallations: (
@@ -453,18 +445,28 @@ export async function syncGithubReposForUser(
     Boolean(installations?.length) && hasGithubAppConfig();
   const allowOAuth = await isGithubOAuthRepositoryAccessAllowed(userId);
   const authorizedGithubRepoIds = new Set<number>();
+  const verifiedInstallations = new Map<number, ReadonlySet<number>>();
 
   if (installationScopedSync) {
     const current = await Promise.all(
       installations.map((inst) =>
-        syncGithubInstallationReposForUser(
-          userId,
-          Number(inst.installation_id),
-          { productTeamId: options.productTeamId }
+        ignoreRevokedGithubInstallation(
+          syncGithubInstallationReposForUser(
+            userId,
+            Number(inst.installation_id),
+            { productTeamId: options.productTeamId }
+          )
         )
       )
     );
-    for (const repo of current.flat()) authorizedGithubRepoIds.add(repo.id);
+    for (const [index, repos] of current.entries()) {
+      const ids = new Set((repos ?? []).map((repo) => repo.id));
+      verifiedInstallations.set(
+        Number(installations[index].installation_id),
+        ids
+      );
+      for (const id of ids) authorizedGithubRepoIds.add(id);
+    }
   } else if (oauthToken && allowOAuth) {
     const githubRepos = await fetchAllGithubRepos(oauthToken);
     await upsertGithubReposForUser(userId, githubRepos, {
@@ -486,7 +488,7 @@ export async function syncGithubReposForUser(
   }
 
   if (scope.kind === "team" && !allowOAuth)
-    return filterAuthorizedTeamGithubRepos(data || []);
+    return filterAuthorizedTeamGithubRepos(data || [], verifiedInstallations);
   return filterVisibleGithubRepos(data || [], {
     preferInstallationCoverage: !allowOAuth || installationScopedSync,
     authorizedGithubRepoIds,
