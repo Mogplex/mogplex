@@ -28,26 +28,15 @@ export async function findInstallationToken(input: {
 }) {
   const { userId, owner } = input;
   if (!userId || !owner) return null;
-  const [{ hasGithubAppConfig, createGithubInstallationAccessToken }, db] =
-    await Promise.all([
-      import("@/lib/github-app"),
-      import("@/lib/supabase/admin"),
-    ]);
+  const [
+    { hasGithubAppConfig, createGithubInstallationAccessToken },
+    { listUserGithubInstallations },
+  ] = await Promise.all([
+    import("@/lib/github-app"),
+    import("@/lib/github-user-installations"),
+  ]);
   if (!hasGithubAppConfig()) return null;
-  const { data, error } = await db.supabaseAdmin
-    .from("github_installations")
-    .select("installation_id, account_login")
-    .eq("user_id", userId)
-    .ilike("account_login", owner)
-    .limit(1);
-  if (error)
-    throw new Error(`Failed to load GitHub installations: ${error.message}`);
-  const installation = (
-    (data ?? []) as Array<{
-      installation_id?: number | null;
-      account_login?: string | null;
-    }>
-  ).find(
+  const installation = (await listUserGithubInstallations(userId)).find(
     (row) =>
       row.installation_id &&
       row.account_login?.toLowerCase() === owner.toLowerCase()

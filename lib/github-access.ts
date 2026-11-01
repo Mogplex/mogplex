@@ -2,7 +2,8 @@ import {
   createGithubInstallationAccessToken,
   hasGithubAppConfig,
 } from "@/lib/github-app";
-import { getOAuthToken } from "@/lib/oauth-tokens";
+import { getGithubOAuthRepositoryToken } from "@/lib/github-repository-auth";
+import { listUserGithubInstallations } from "@/lib/github-user-installations";
 import { getOwnedRepo, getRepoForScope } from "@/lib/repos";
 import type { ProductResourceScope } from "@/lib/team-resource-scope";
 
@@ -30,13 +31,21 @@ export async function getGithubAccessTokenForRepo(
   actorUserId = repo.user_id
 ) {
   if (repo.github_installation_id && hasGithubAppConfig()) {
+    const owned = await listUserGithubInstallations(repo.user_id);
+    if (
+      !owned.some(
+        (installation) =>
+          installation.installation_id === repo.github_installation_id
+      )
+    )
+      return null;
     const { token } = await createGithubInstallationAccessToken(
       repo.github_installation_id
     );
     return token;
   }
 
-  return getOAuthToken(actorUserId, "github");
+  return getGithubOAuthRepositoryToken(actorUserId);
 }
 
 export async function getOwnedRepoWithGithubAccessToken<

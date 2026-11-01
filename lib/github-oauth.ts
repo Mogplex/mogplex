@@ -1,11 +1,22 @@
-export const GITHUB_OAUTH_SCOPES = [
-  "repo",
+export const GITHUB_IDENTITY_OAUTH_SCOPES = [
   "read:org",
   "read:user",
   "user:email",
 ] as const;
+export const GITHUB_OAUTH_SCOPES = [
+  "repo",
+  ...GITHUB_IDENTITY_OAUTH_SCOPES,
+] as const;
 
 export const GITHUB_OAUTH_SCOPE = GITHUB_OAUTH_SCOPES.join(" ");
+export function getGithubOAuthGrantConfiguration(appConfigured: boolean) {
+  return {
+    scope: appConfigured
+      ? GITHUB_IDENTITY_OAUTH_SCOPES.join(" ")
+      : GITHUB_OAUTH_SCOPE,
+    repositoryAuthMode: appConfigured ? ("app" as const) : ("oauth" as const),
+  };
+}
 export const GITHUB_ORG_READ_SCOPE = "read:org";
 export const GITHUB_REAUTHORIZE_HEADER = "x-mogplex-github-reauthorize";
 

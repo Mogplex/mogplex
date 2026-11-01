@@ -121,10 +121,8 @@ test("github_pr_search prefers requested owner GitHub App installation auth", as
   );
 
   assert.deepEqual(installationQueryCalls, [
-    { method: "select", value: "installation_id, account_login" },
+    { method: "select", value: "installation_id, account_login, account_type" },
     { method: "eq", column: "user_id", value: "user-1" },
-    { method: "ilike", column: "account_login", value: "webrenew" },
-    { method: "limit", value: 1 },
   ]);
   assert.deepEqual(
     calls.map((call) => call.path),
@@ -132,7 +130,7 @@ test("github_pr_search prefers requested owner GitHub App installation auth", as
   );
 });
 
-test("github_pr_search retries the next credential after an auth failure", async () => {
+test("github_pr_search does not replace a denied App grant with a broader OAuth credential", async () => {
   const calls: Array<{ path: string; authorization?: string }> = [];
 
   await withEnv(
@@ -210,9 +208,9 @@ test("github_pr_search retries the next credential after an auth failure", async
                 warnings?: string[];
               };
 
-              assert.equal(result.ok, true);
-              assert.equal(result.auth.source, "oauth");
-              assert.match(result.warnings?.[0] ?? "", /retried/);
+              assert.equal(result.ok, false);
+              assert.equal(result.auth.source, "github_app_installation");
+              assert.doesNotMatch(result.warnings?.join(" ") ?? "", /retried/);
             }
           );
         }
@@ -224,11 +222,11 @@ test("github_pr_search retries the next credential after an auth failure", async
   assert.match(calls[0]?.authorization ?? "", /^Bearer /);
   assert.deepEqual(
     calls.slice(1).map((call) => call.authorization),
-    ["Bearer ghs-installation", "Bearer gho-test"]
+    ["Bearer ghs-installation"]
   );
 });
 
-test("github_pr_search retries OAuth after GraphQL auth errors with HTTP 200", async () => {
+test("github_pr_search fails closed on GraphQL authorization errors even with HTTP 200", async () => {
   const calls: Array<{ path: string; authorization?: string }> = [];
 
   await withEnv(
@@ -310,10 +308,9 @@ test("github_pr_search retries OAuth after GraphQL auth errors with HTTP 200", a
                 warnings?: string[];
               };
 
-              assert.equal(result.ok, true);
-              assert.equal(result.auth.source, "oauth");
-              assert.match(result.warnings?.[0] ?? "", /GraphQL error/);
-              assert.match(result.warnings?.[0] ?? "", /retried/);
+              assert.equal(result.ok, false);
+              assert.equal(result.auth.source, "github_app_installation");
+              assert.doesNotMatch(result.warnings?.join(" ") ?? "", /retried/);
               assert.doesNotMatch(
                 result.warnings?.[0] ?? "",
                 /private repositories|requested owner/
@@ -327,7 +324,7 @@ test("github_pr_search retries OAuth after GraphQL auth errors with HTTP 200", a
 
   assert.deepEqual(
     calls.slice(1).map((call) => call.authorization),
-    ["Bearer ghs-installation", "Bearer gho-test"]
+    ["Bearer ghs-installation"]
   );
 });
 

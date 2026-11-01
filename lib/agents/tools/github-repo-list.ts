@@ -1,9 +1,9 @@
 import { z } from "zod";
 import { defineTool } from "./shared";
 import { normalizeLogin, findInstallationToken } from "./github-shared";
+import { hasGithubAppConfig } from "@/lib/github-app";
 
 const GITHUB_API_ORIGIN = "https://api.github.com";
-const MAX_INSTALLATION_AUTHS = 5;
 
 export type GithubRepoListOptions = {
   oauthToken?: string | null;
@@ -35,10 +35,13 @@ function githubHeaders(token: string) {
   };
 }
 
-function unavailableError(warnings: string[] = []) {
+function unavailableError(warnings: string[] = [], owner?: string | null) {
   return {
-    error:
-      "Authenticated GitHub repo listing is unavailable. Connect GitHub OAuth or install the Mogplex GitHub App for the requested owner.",
+    error: hasGithubAppConfig()
+      ? "Authenticated GitHub repo listing is unavailable. Authorize the Mogplex GitHub App for the requested owner."
+      : "Authenticated GitHub repo listing is unavailable. Connect GitHub OAuth or install the Mogplex GitHub App for the requested owner.",
+    authorizationRequired: true,
+    ...(owner ? { requestedOwner: owner } : {}),
     ...(warnings.length > 0 ? { warnings } : {}),
   };
 }
@@ -109,9 +112,9 @@ function matchesFilters(
 
 /**
  * Auth candidates: a GitHub App installation token per accessible
- * installation (just the requested owner's when scoped), plus the user's
- * OAuth token as fallback. Installation tokens cover private repos the app
- * can access; OAuth covers everything the user can see.
+ * installation (just the requested owner's when scoped). OAuth-only
+ * deployments retain their legacy flow; an App deployment never widens its
+ * installation grants with a stored OAuth identity credential.
  */
 async function resolveAuths(input: {
   oauthToken?: string | null;
@@ -135,17 +138,12 @@ async function resolveAuths(input: {
     }
   } else if (input.userId) {
     try {
-      const { supabaseAdmin } = await import("@/lib/supabase/admin");
+      const { listUserGithubInstallations } =
+        await import("@/lib/github-user-installations");
       const { hasGithubAppConfig, createGithubInstallationAccessToken } =
         await import("@/lib/github-app");
       if (hasGithubAppConfig()) {
-        const { data, error } = await supabaseAdmin
-          .from("github_installations")
-          .select("installation_id, account_login")
-          .eq("user_id", input.userId)
-          .limit(MAX_INSTALLATION_AUTHS);
-        if (error) throw new Error(error.message);
-        for (const row of data ?? []) {
+        for (const row of await listUserGithubInstallations(input.userId)) {
           if (!row.installation_id) continue;
           const { token } = await createGithubInstallationAccessToken(
             row.installation_id
@@ -160,7 +158,7 @@ async function resolveAuths(input: {
     }
   }
 
-  const oauthToken = input.oauthToken?.trim();
+  const oauthToken = hasGithubAppConfig() ? null : input.oauthToken?.trim();
   if (oauthToken) auths.push({ token: oauthToken, source: "oauth" });
   return { auths, warnings };
 }
@@ -215,7 +213,7 @@ export function createGithubRepoList(options: GithubRepoListOptions = {}) {
         userId: options.userId,
         owner: filters.owner,
       });
-      if (auths.length === 0) return unavailableError(warnings);
+      if (auths.length === 0) return unavailableError(warnings, filters.owner);
 
       const byFullName = new Map<string, GithubRepo>();
       for (const auth of auths) {

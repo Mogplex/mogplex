@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { requireUserId } from "@/lib/auth";
 import { detectMonorepoStructure } from "@/lib/monorepo-detection";
-import { getOAuthToken } from "@/lib/oauth-tokens";
+import { getGithubAccessTokenForRepo } from "@/lib/github-access";
 
 type PersistenceResult = { error: { message: string } | null };
 
@@ -36,7 +36,9 @@ export async function GET(
 
   const { data: repo, error } = await supabaseAdmin
     .from("repos")
-    .select("id, full_name, default_branch, github_id")
+    .select(
+      "id, user_id, full_name, default_branch, github_id, github_installation_id"
+    )
     .eq("id", id)
     .eq("user_id", userId)
     .maybeSingle();
@@ -51,7 +53,7 @@ export async function GET(
     return NextResponse.json({ error: "Repo not found" }, { status: 404 });
   }
 
-  const githubToken = await getOAuthToken(userId, "github");
+  const githubToken = await getGithubAccessTokenForRepo(repo, userId);
 
   if (!githubToken) {
     return NextResponse.json(

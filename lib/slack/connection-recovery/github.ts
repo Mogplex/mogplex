@@ -4,7 +4,8 @@ import {
   syncGithubInstallationReposForUser,
   syncGithubReposForUser,
 } from "@/lib/github-sync";
-import { getOAuthToken } from "@/lib/oauth-tokens";
+import { getGithubOAuthRepositoryToken } from "@/lib/github-repository-auth";
+import { listUserGithubInstallations } from "@/lib/github-user-installations";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import type { ConnectionRecoveryTarget } from "./presentation";
 import { findRecoveryRepository } from "./repository";
@@ -18,7 +19,7 @@ type Installation = {
 
 const defaultDeps = {
   db: supabaseAdmin,
-  getOAuthToken,
+  getOAuthToken: getGithubOAuthRepositoryToken,
   getRepoToken: getGithubAccessTokenForRepo,
   getInstallation: getGithubInstallation,
   hasAppConfig: hasGithubAppConfig,
@@ -26,7 +27,13 @@ const defaultDeps = {
   syncOAuth: syncGithubReposForUser,
 };
 
-async function ownedInstallations(userId: string, db = supabaseAdmin) {
+async function ownedInstallations(userId: string, deps: typeof defaultDeps) {
+  if (deps.hasAppConfig())
+    return listUserGithubInstallations(userId, {
+      db: deps.db,
+      getInstallation: deps.getInstallation,
+    });
+  const db = deps.db;
   const { data, error } = await db
     .from("github_installations")
     .select("installation_id, account_login, account_type")
@@ -43,7 +50,7 @@ export async function githubRecoveryAuthorizePath(
 ) {
   const deps = { ...defaultDeps, ...overrides };
   const owner = target.repository?.split("/")[0].toLowerCase();
-  const installation = (await ownedInstallations(userId, deps.db)).find(
+  const installation = (await ownedInstallations(userId, deps)).find(
     (item) => item.account_login?.toLowerCase() === owner
   );
   if (installation) {
@@ -68,7 +75,7 @@ export async function checkGithubRecoveryAccess(
 ) {
   const deps = { ...defaultDeps, ...overrides };
   const owner = target.repository?.split("/")[0].toLowerCase();
-  const installations = (await ownedInstallations(userId, deps.db)).filter(
+  const installations = (await ownedInstallations(userId, deps)).filter(
     (item) => !owner || item.account_login?.toLowerCase() === owner
   );
   // Refresh only installations already attached to this user. An App-wide

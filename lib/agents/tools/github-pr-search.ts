@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { defineTool } from "./shared";
+import { hasGithubAppConfig } from "@/lib/github-app";
 import {
   normalizeLogin,
   normalizeRepoName,
@@ -83,10 +84,13 @@ query MogplexPullRequestSearch($query: String!, $first: Int!) {
   rateLimit { limit remaining resetAt }
 }`.trim();
 
-function unavailableError(warnings: string[] = []) {
+function unavailableError(warnings: string[] = [], owner?: string | null) {
   return {
-    error:
-      "Authenticated GitHub PR search is unavailable. Connect GitHub OAuth or install the Mogplex GitHub App for the requested owner.",
+    error: hasGithubAppConfig()
+      ? "Authenticated GitHub PR search is unavailable. Authorize the Mogplex GitHub App for the requested owner."
+      : "Authenticated GitHub PR search is unavailable. Connect GitHub OAuth or install the Mogplex GitHub App for the requested owner.",
+    authorizationRequired: true,
+    ...(owner ? { requestedOwner: owner } : {}),
     ...(warnings.length > 0 ? { warnings } : {}),
   };
 }
@@ -113,10 +117,10 @@ async function resolveAuthCandidates(input: {
       );
     }
   }
-  const oauthToken = input.oauthToken?.trim();
+  const oauthToken = hasGithubAppConfig() ? null : input.oauthToken?.trim();
   if (oauthToken)
     auths.push({ token: oauthToken, source: "oauth", coverage: "oauth" });
-  if (auths.length === 0) return unavailableError(warnings);
+  if (auths.length === 0) return unavailableError(warnings, input.owner);
   return { auths, warnings };
 }
 

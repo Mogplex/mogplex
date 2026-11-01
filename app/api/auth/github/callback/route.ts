@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { buildAppUrl, normalizeAppRedirectPath } from "@/lib/app-url";
-import { GITHUB_RETURN_TO_COOKIE } from "@/lib/github-oauth";
+import {
+  getGithubOAuthGrantConfiguration,
+  GITHUB_RETURN_TO_COOKIE,
+} from "@/lib/github-oauth";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { getGithubInstallation, hasGithubAppConfig } from "@/lib/github-app";
 import {
@@ -10,6 +13,7 @@ import {
 } from "@/lib/github-sync";
 import { storeOAuthToken } from "@/lib/oauth-tokens";
 import { getUserId } from "@/lib/auth";
+import { isGithubOAuthRepositoryAccessAllowed } from "@/lib/github-repository-auth";
 
 function requireEnv(name: "GITHUB_CLIENT_ID" | "GITHUB_CLIENT_SECRET") {
   const value = process.env[name]?.trim();
@@ -162,7 +166,9 @@ export async function GET(request: Request) {
     .update({
       github_username: ghUser.login,
       github_user_id: typeof ghUser.id === "number" ? ghUser.id : null,
-      github_auth_mode: "oauth",
+      github_auth_mode: getGithubOAuthGrantConfiguration(
+        !(await isGithubOAuthRepositoryAccessAllowed(userId))
+      ).repositoryAuthMode,
     })
     .eq("id", userId);
 

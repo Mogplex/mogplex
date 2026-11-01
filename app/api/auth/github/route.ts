@@ -3,8 +3,9 @@ import { cookies } from "next/headers";
 import { buildAppUrl, normalizeAppRedirectPath } from "@/lib/app-url";
 import { getGithubAppInstallUrl, hasGithubAppConfig } from "@/lib/github-app";
 import { getUserId } from "@/lib/auth";
+import { isGithubOAuthRepositoryAccessAllowed } from "@/lib/github-repository-auth";
 import {
-  GITHUB_OAUTH_SCOPE,
+  getGithubOAuthGrantConfiguration,
   GITHUB_RETURN_TO_COOKIE,
 } from "@/lib/github-oauth";
 
@@ -73,7 +74,9 @@ export async function GET(request: Request) {
   const params = new URLSearchParams({
     client_id: requireEnv("GITHUB_CLIENT_ID"),
     redirect_uri: buildAppUrl("/api/auth/github/callback", request).toString(),
-    scope: GITHUB_OAUTH_SCOPE,
+    scope: getGithubOAuthGrantConfiguration(
+      !(await isGithubOAuthRepositoryAccessAllowed(userId))
+    ).scope,
     state,
   });
 

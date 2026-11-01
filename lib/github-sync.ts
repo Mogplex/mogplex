@@ -1,4 +1,6 @@
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { isGithubOAuthRepositoryAccessAllowed } from "@/lib/github-repository-auth";
+import { filterVisibleGithubRepos } from "@/lib/github-repo-visibility";
 import {
   fetchGithubInstallationRepos,
   hasGithubAppConfig,
@@ -9,6 +11,8 @@ import {
   buildResourceOwnershipInsert,
   type ProductResourceScope,
 } from "@/lib/team-resource-scope";
+
+export { filterVisibleGithubRepos } from "@/lib/github-repo-visibility";
 
 export type GithubRepoPayload = {
   id: number;
@@ -157,23 +161,6 @@ type UpsertGithubReposOptions = {
   workspaceId?: string | null;
   productTeamId?: string | null;
 };
-
-export function filterVisibleGithubRepos<
-  T extends { github_installation_id?: number | null },
->(repos: T[], options: { preferInstallationCoverage: boolean }) {
-  if (!options.preferInstallationCoverage) {
-    return repos;
-  }
-
-  const coveredRepos = repos.filter((repo) =>
-    Number.isFinite(repo.github_installation_id)
-  );
-
-  // When installation-backed sync is active, covered repos are the current
-  // source of truth. Older OAuth-only rows can linger in the table after a
-  // user moves to the GitHub App and should not crowd the active Projects list.
-  return coveredRepos.length > 0 ? coveredRepos : repos;
-}
 
 export async function upsertGithubReposForUser(
   userId: string,
@@ -439,6 +426,7 @@ export async function syncGithubInstallationReposForUser(
       });
     }
   }
+  return githubRepos;
 }
 
 export async function syncGithubReposForUser(
@@ -462,9 +450,11 @@ export async function syncGithubReposForUser(
 
   const installationScopedSync =
     Boolean(installations?.length) && hasGithubAppConfig();
+  const allowOAuth = await isGithubOAuthRepositoryAccessAllowed(userId);
+  const authorizedGithubRepoIds = new Set<number>();
 
   if (installationScopedSync) {
-    await Promise.all(
+    const current = await Promise.all(
       installations.map((inst) =>
         syncGithubInstallationReposForUser(
           userId,
@@ -473,7 +463,8 @@ export async function syncGithubReposForUser(
         )
       )
     );
-  } else if (oauthToken) {
+    for (const repo of current.flat()) authorizedGithubRepoIds.add(repo.id);
+  } else if (oauthToken && allowOAuth) {
     const githubRepos = await fetchAllGithubRepos(oauthToken);
     await upsertGithubReposForUser(userId, githubRepos, {
       productTeamId: options.productTeamId,
@@ -483,7 +474,7 @@ export async function syncGithubReposForUser(
   let query = supabaseAdmin
     .from("repos")
     .select("*")
-    .or("is_hidden.is.null,is_hidden.eq.false")
+    .or("is_hidden.is.null,is_hidden.is.false")
     .order("is_favorite", { ascending: false })
     .order("full_name", { ascending: true });
   query = applyResourceOwnerScope(query, scope);
@@ -494,6 +485,7 @@ export async function syncGithubReposForUser(
   }
 
   return filterVisibleGithubRepos(data || [], {
-    preferInstallationCoverage: installationScopedSync,
+    preferInstallationCoverage: !allowOAuth || installationScopedSync,
+    authorizedGithubRepoIds,
   });
 }

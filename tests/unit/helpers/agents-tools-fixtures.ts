@@ -160,7 +160,9 @@ export async function withPatchedGithubInstallations<T>(
   const { supabaseAdmin } = await import("../../../lib/supabase/admin");
   const originalFrom = supabaseAdmin.from.bind(supabaseAdmin);
 
+  const resolved = Promise.resolve(result);
   const query = {
+    then: resolved.then.bind(resolved),
     select(columns: string) {
       calls.push({ method: "select", value: columns });
       return query;

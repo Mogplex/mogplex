@@ -78,12 +78,19 @@ it("loads workspace and GitHub evidence only through the run owner's records", a
   vi.stubEnv("MOGPLEX_DATA_BACKEND", "supabase");
   vi.stubEnv("SUPABASE_URL", "https://database.example.test");
   vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "fixture-key");
+  vi.stubEnv("GITHUB_APP_ID", "");
+  vi.stubEnv("GITHUB_APP_NAME", "");
+  vi.stubEnv("GITHUB_APP_PRIVATE_KEY", "");
   const queries: URL[] = [];
   vi.stubGlobal(
     "fetch",
     async (url: string | URL | Request, init?: RequestInit) => {
       const parsed = new URL(String(url));
       if (parsed.hostname === "database.example.test") queries.push(parsed);
+      if (parsed.pathname.endsWith("/profiles")) {
+        expect(parsed.searchParams.get("id")).toBe("eq.owner-1");
+        return Response.json({ github_auth_mode: "oauth" });
+      }
       if (parsed.pathname.endsWith("/repos"))
         return Response.json({
           full_name: input.repoFullName,
@@ -129,7 +136,8 @@ it("loads workspace and GitHub evidence only through the run owner's records", a
   });
   expect(evidence.github.pullRequests[0].number).toBe(42);
   const recordQueries = queries.filter(
-    (url) => !url.pathname.includes("/rpc/")
+    (url) =>
+      url.pathname.endsWith("/repos") || url.pathname.endsWith("/sandboxes")
   );
   expect(recordQueries).toHaveLength(2);
   expect(

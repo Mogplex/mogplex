@@ -218,7 +218,7 @@ export function buildStaticTools(
   ) as typeof all;
 }
 
-/** GitHub OAuth token for the PR-search tool, which uses the user's own auth. */
+/** Legacy OAuth repository access, only when GitHub App auth is unavailable. */
 async function resolveGithubPrSearchToken(
   userId: string | undefined,
   capabilities: ReadonlySet<Capability>
@@ -226,8 +226,9 @@ async function resolveGithubPrSearchToken(
   if (!userId || !hasCapability(capabilities, "tools.github_api")) return null;
 
   try {
-    const { getOAuthToken } = await import("@/lib/oauth-tokens");
-    return await getOAuthToken(userId, "github");
+    const { getGithubOAuthRepositoryToken } =
+      await import("@/lib/github-repository-auth");
+    return await getGithubOAuthRepositoryToken(userId);
   } catch (err) {
     console.warn(
       "Failed to resolve GitHub OAuth token for PR search:",

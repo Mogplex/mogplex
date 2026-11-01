@@ -114,7 +114,7 @@ test("github_list_repos lists private repos via the owner's installation token",
   );
 });
 
-test("github_list_repos aggregates installations and OAuth, deduped, when owner is omitted", async () => {
+test("github_list_repos excludes OAuth-only repositories when GitHub App auth is configured", async () => {
   await withEnv(
     {
       GITHUB_APP_ID: "12345",
@@ -167,7 +167,7 @@ test("github_list_repos aggregates installations and OAuth, deduped, when owner 
               assert.equal(result.error, undefined);
               assert.deepEqual(
                 result.items?.map((item) => item.fullName).sort(),
-                ["charlesrhoward/notes", "mogplex/mogplex"]
+                ["mogplex/mogplex"]
               );
             }
           );
@@ -216,4 +216,52 @@ test("github_list_repos rejects a malformed owner", async () => {
 
   const result = await tool.execute({ owner: "-bad-" });
   assert.match(result.error ?? "", /valid GitHub login/);
+});
+
+test("GitHub App mode does not use an older OAuth token to list an unapproved org", async () => {
+  await withEnv(
+    {
+      GITHUB_APP_ID: "12345",
+      GITHUB_APP_NAME: "mogplex-test",
+      GITHUB_APP_PRIVATE_KEY: createTestGithubAppPrivateKey(),
+    },
+    async () => {
+      await withPatchedGithubInstallations(
+        { data: [], error: null },
+        async () => {
+          const calls: string[] = [];
+          await withPatchedFetch(
+            async (url) => {
+              const path = new URL(String(url)).pathname;
+              calls.push(path);
+              if (path === "/user/repos")
+                return Response.json([
+                  {
+                    ...REPO_FIXTURES[0],
+                    full_name: "new-org/app",
+                    owner: { login: "new-org" },
+                  },
+                ]);
+              return Response.json({}, { status: 404 });
+            },
+            async () => {
+              const { createGithubRepoList } = await loadToolsModule();
+              const tool = createGithubRepoList({
+                oauthToken: "gho-test",
+                userId: "user-1",
+              }) as unknown as ExecutedRepoList;
+              const result = await tool.execute({ owner: "new-org" });
+              assert.match(result.error ?? "", /install|connect|authoriz/i);
+              assert.equal(
+                result.items?.some((item) => item.fullName === "new-org/app") ??
+                  false,
+                false
+              );
+              assert.deepEqual(calls, []);
+            }
+          );
+        }
+      );
+    }
+  );
 });
