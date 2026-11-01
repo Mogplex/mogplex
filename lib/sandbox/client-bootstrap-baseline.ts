@@ -16,6 +16,7 @@ import type {
 import { withTimeout, BOOTSTRAP_STEP_TIMEOUT_MS } from "./client-validation";
 import { buildShellCommand, buildWithBunOnPathCommand } from "./client-shell";
 import { resolveBootstrapContext } from "./client-bootstrap-context";
+import { snapshotNoDevServerMessage } from "./client-readiness";
 import {
   launchDetachedDevCommand,
   streamRuntimePrerequisitePhase,
@@ -152,7 +153,7 @@ async function* runBaselineDevPhase(
     yield {
       type: "log",
       phase: "dev",
-      data: "Snapshot restored — no dev script found. Ready for terminal and file access.\n",
+      data: snapshotNoDevServerMessage(context.emptyNodeProject),
     };
     yield { type: "preview_url", url: context.previewUrl };
     yield { type: "status", status: "running" };

@@ -18,6 +18,13 @@ export const NO_DEV_SCRIPT_MESSAGE =
 export const EMPTY_NODE_PROJECT_MESSAGE =
   "No package.json found — skipped install and dev server. Sandbox ready for terminal and file access.";
 
+/** Log line for a snapshot restore that starts no dev server. */
+export function snapshotNoDevServerMessage(emptyNodeProject: boolean) {
+  return emptyNodeProject
+    ? "Snapshot restored — no package.json found. Ready for terminal and file access.\n"
+    : "Snapshot restored — no dev script found. Ready for terminal and file access.\n";
+}
+
 const PREVIEW_READY_PATTERNS = [
   /\blocal:\s*https?:\/\//i,
   /\blocalhost:\d+/i,

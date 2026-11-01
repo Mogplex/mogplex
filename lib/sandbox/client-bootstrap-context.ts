@@ -80,7 +80,13 @@ export async function readPackageDevScriptInfo(
       hasDevScript: Boolean(packageDevScript),
       hasPackageJson: true,
     };
-  } catch {
+  } catch (error) {
+    // Unreadable or malformed package.json: keep the npm path so the dev
+    // server's own error surfaces, but say why the empty-repo skip didn't apply.
+    console.warn(
+      "[sandbox/bootstrap] could not read package.json dev script:",
+      error instanceof Error ? error.message : error
+    );
     return {
       packageDevScript: null,
       hasDevScript: true,
@@ -174,13 +180,14 @@ export async function resolveBootstrapContext(
   const { packageDevScript } = packageInfo;
   // A README-only Node repo has nothing to install or start; running
   // `npm install` there writes a stray lockfile and `npm run dev` exits,
-  // failing the whole boot before the agent can scaffold anything.
+  // failing the whole boot before the agent can scaffold anything. A
+  // configured install command still runs; only a dev override starts dev.
+  const nodeWithoutPackageJson =
+    !packageInfo.hasPackageJson && !effectiveRuntime.startsWith("python");
   const emptyNodeProject =
-    !packageInfo.hasPackageJson &&
-    effectiveRuntime !== "python3.13" &&
-    !opts.devCommand &&
-    !opts.installCommand;
-  const hasDevScript = packageInfo.hasDevScript && !emptyNodeProject;
+    nodeWithoutPackageJson && !opts.devCommand && !opts.installCommand;
+  const hasDevScript =
+    packageInfo.hasDevScript && !(nodeWithoutPackageJson && !opts.devCommand);
   const workspaceBuildCommand = await resolveWorkspaceBuildCommand(
     sandbox,
     normalizedRoot,

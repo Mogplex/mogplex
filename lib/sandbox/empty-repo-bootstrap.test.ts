@@ -69,6 +69,7 @@ describe("bootstrap for a repository without package.json", () => {
 
     expect(ranProjectSetup(commands)).toBe(false);
     expect(result).toMatchObject({
+      installCommand: "(none)",
       devCommand: "(none)",
       healthStatus: "running",
       devLog: expect.stringContaining("No package.json found"),
@@ -84,6 +85,24 @@ describe("bootstrap for a repository without package.json", () => {
 
     expect(ranProjectSetup(commands)).toBe(false);
     expect(events.at(-1)).toEqual({ type: "status", status: "running" });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "log",
+        data: expect.stringContaining("no package.json found"),
+      })
+    );
+  });
+
+  it("should run a configured install command but start no dev server for a README-only repo", async () => {
+    const { sandbox, commands } = fakeSandbox({ "README.md": "# test" });
+
+    const result = await bootstrapSandbox(sandbox, {
+      installCommand: "npm install --global serve",
+    });
+
+    expect(commands.some((command) => command.includes("serve"))).toBe(true);
+    expect(commands.some((command) => /\brun dev\b/.test(command))).toBe(false);
+    expect(result).toMatchObject({ devCommand: "(none)" });
   });
 
   it("should still install a Python repo that has no package.json", async () => {

@@ -10,6 +10,7 @@ import {
 import {
   EMPTY_NODE_PROJECT_MESSAGE,
   NO_DEV_SCRIPT_MESSAGE,
+  snapshotNoDevServerMessage,
   waitForPreviewSignal,
 } from "./client-readiness";
 import { resolveBootstrapContext } from "./client-bootstrap-context";
@@ -59,7 +60,7 @@ export async function* bootstrapFromSnapshotStreaming(
     yield {
       type: "log",
       phase: "dev",
-      data: "Snapshot restored — no dev script found. Ready for terminal and file access.\n",
+      data: snapshotNoDevServerMessage(context.emptyNodeProject),
     };
     yield { type: "preview_url", url: context.previewUrl };
     yield { type: "status", status: "running" };
@@ -116,7 +117,7 @@ export async function bootstrapSandbox(
 
   if (context.emptyNodeProject) {
     return buildNoDevScriptBootstrapResult(
-      context,
+      { ...context, installCommand: "(none)" },
       "",
       EMPTY_NODE_PROJECT_MESSAGE
     );
