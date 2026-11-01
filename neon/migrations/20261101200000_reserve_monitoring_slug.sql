@@ -1,6 +1,7 @@
 -- Reserve the Sentry tunnel route. The proxy treats /monitoring as public and
 -- never resolves a scope under it, so a workspace with this slug could not load.
--- Existing identifiers are preserved; this only guards future claims.
+-- New claims are refused, and a profile or team that already holds the slug is
+-- renamed below with the standard numeric suffix (its old URL never loaded).
 create or replace function public.is_reserved_slug(p_slug text)
 returns boolean
 language sql
@@ -91,12 +92,15 @@ begin
     v_n := 1;
     loop
       v_n := v_n + 1;
+      -- 39 is the slug length cap (SLUG_MAX_LEN in lib/profile-slug.ts, lib/team-slug.ts).
       v_candidate := left(r.slug, 39 - length('-' || v_n::text)) || '-' || v_n::text;
       exit when
         not exists (select 1 from public.profiles where slug = v_candidate)
         and not exists (select 1 from public.teams where slug = v_candidate)
         and not public.is_reserved_slug(v_candidate);
     end loop;
+
+    raise notice 'reserved slug %: % % renamed to %', r.slug, r.kind, r.id, v_candidate;
 
     if r.kind = 'profile' then
       update public.profiles set slug = v_candidate where id = r.id;

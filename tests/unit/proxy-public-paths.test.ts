@@ -116,6 +116,7 @@ test("isStraySentryTunnelRequest passes only requests the Sentry rewrite matches
     ["/monitoring?o=4507&p=4508", false],
     ["/monitoring/?o=4507&p=4508", false],
     ["/monitoring?o=&p=", false],
+    ["/monitoring?o=4507&p=4508&r=us", false],
     ["/monitoring", true],
     ["/monitoring?o=4507", true],
     ["/monitoring?o=abc&p=4508", true],
@@ -130,6 +131,19 @@ test("isStraySentryTunnelRequest passes only requests the Sentry rewrite matches
       path
     );
   }
+});
+
+test("the Sentry SDK still builds tunnel URLs with numeric o and p", async () => {
+  // The stray check mirrors this format; an SDK upgrade that changes it must
+  // fail here rather than silently 404 every browser error envelope.
+  const sdkSource = await readFile(
+    new URL(
+      "../../node_modules/@sentry/nextjs/build/cjs/client/tunnelRoute.js",
+      import.meta.url
+    ),
+    "utf8"
+  );
+  assert.match(sdkSource, /\?o=\$\{orgId\}&p=\$\{dsnComponents\.projectId\}/);
 });
 
 test("isStraySentryTunnelRequest treats the whole path as stray without a tunnel", () => {
