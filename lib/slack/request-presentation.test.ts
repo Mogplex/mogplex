@@ -1,8 +1,5 @@
 import { expect, it } from "vitest";
-import {
-  buildSlackRequestStatus,
-  SLACK_STOP_REQUEST_ACTION,
-} from "./request-presentation";
+import { buildSlackRequestStatus } from "./request-presentation";
 
 it("shows a short status and Stop only while a runtime is active", () => {
   const active = buildSlackRequestStatus(
@@ -14,7 +11,17 @@ it("shows a short status and Stop only while a runtime is active", () => {
     type: "context",
     elements: [{ type: "mrkdwn", text: "Checking repositories…" }],
   });
-  expect(JSON.stringify(active)).toContain(SLACK_STOP_REQUEST_ACTION);
+  expect(active[1]).toEqual({
+    type: "actions",
+    elements: [
+      {
+        type: "button",
+        action_id: "mogplex_stop_request",
+        value: "run_fixture",
+        text: { type: "plain_text", text: "Stop request" },
+      },
+    ],
+  });
   expect(JSON.stringify(active)).not.toContain("task_update");
   const done = buildSlackRequestStatus("Finished.");
   expect(done).toHaveLength(1);
