@@ -23,7 +23,9 @@ export async function loadGithubAppCreateTarget(
     supabaseAdmin
       .from("github_installations")
       .select("installation_id, account_login")
-      .eq("user_id", userId),
+      .eq("user_id", userId)
+      // After a reinstall the newest row holds the live installation id.
+      .order("created_at", { ascending: false }),
   ]);
   if (installations.error) {
     throw new Error(

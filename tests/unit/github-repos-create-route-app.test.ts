@@ -157,17 +157,16 @@ test("POST /api/github/repos reports a GitHub outage during owner lookup as retr
   }
 });
 
-test("POST /api/github/repos treats a blank owner_login as the personal account", async () => {
+test("POST /api/github/repos refuses a blank owner_login instead of choosing the personal account", async () => {
   const { createGithubRepoPostHandler } = await loadRoute();
   const tokens: string[] = [];
   const response = await appModeHandler(
     createGithubRepoPostHandler,
     tokens
   )(createRequest("  "));
-  assert.equal(response.status, 403);
-  assert.equal(
-    (await response.json()).code,
-    "GITHUB_APP_USER_AUTHORIZATION_REQUIRED"
-  );
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), {
+    error: "Choose a GitHub account for the repository",
+  });
   assert.deepEqual(tokens, []);
 });

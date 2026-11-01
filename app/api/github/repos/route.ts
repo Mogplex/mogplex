@@ -10,9 +10,9 @@ import {
   createGithubRepo,
   fetchGithubRepo,
   GithubRepoCreateError,
-  isRecoverableGithubRepoCreateConflict,
 } from "@/lib/github-create";
 import { githubRepoCreateErrorResponse } from "@/lib/github-repo-create-credential";
+import { createGithubRepoWithRecovery } from "@/app/api/github/_lib/create-repo-with-recovery";
 import {
   defaultRepoCreateTargetDeps,
   resolveRepoCreateTarget,
@@ -152,47 +152,28 @@ export function createGithubRepoPostHandler(
         { status: 400 }
       );
     }
-    // An omitted owner selects the personal account, as in the workspace route.
+    // This route always names the owner: a client that lost its selection
+    // must not fall through to the personal account.
     const ownerLogin =
-      typeof body.owner_login === "string"
-        ? body.owner_login.trim() || null
-        : null;
+      typeof body.owner_login === "string" ? body.owner_login.trim() : "";
+    if (!ownerLogin) {
+      return NextResponse.json(
+        { error: "Choose a GitHub account for the repository" },
+        { status: 400 }
+      );
+    }
 
     const target = await resolveRepoCreateTarget(userId, ownerLogin, deps);
     if (!target.ok) return target.response;
     const { ownerTarget, viaInstallation } = target;
 
     try {
-      let createdRepo: Awaited<ReturnType<typeof createGithubRepo>>;
-      try {
-        createdRepo = await deps.createGithubRepo(target.token, {
-          owner: ownerTarget.kind === "personal" ? null : ownerTarget.login,
-          name: nameValidation.name,
-          visibility: "private",
-        });
-      } catch (error) {
-        if (!(error instanceof GithubRepoCreateError) || error.status !== 422) {
-          throw error;
-        }
-        const existingRepo = await deps
-          .fetchGithubRepo(target.token, ownerTarget.login, nameValidation.name)
-          .catch((lookupError) => {
-            console.warn("[github-repo-create] conflict lookup failed", {
-              userId,
-              owner: ownerTarget.login,
-              name: nameValidation.name,
-              error: lookupError,
-            });
-            return null;
-          });
-        if (
-          !existingRepo ||
-          !isRecoverableGithubRepoCreateConflict(existingRepo)
-        ) {
-          throw error;
-        }
-        createdRepo = existingRepo;
-      }
+      const createdRepo = await createGithubRepoWithRecovery(
+        deps,
+        target.token,
+        ownerTarget,
+        { name: nameValidation.name, visibility: "private" }
+      );
       await deps.upsertGithubReposForUser(userId, [createdRepo], {
         githubInstallationId: ownerTarget.github_installation_id,
         productTeamId: scope.productTeamId,

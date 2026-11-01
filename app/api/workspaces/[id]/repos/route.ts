@@ -1,8 +1,13 @@
 import { parseJsonBody } from "@/lib/api/parse-json-body";
 import { NextResponse } from "next/server";
 import { requireUserId } from "@/lib/auth";
-import { createGithubRepo, GithubRepoCreateError } from "@/lib/github-create";
+import {
+  createGithubRepo,
+  fetchGithubRepo,
+  GithubRepoCreateError,
+} from "@/lib/github-create";
 import { githubRepoCreateErrorResponse } from "@/lib/github-repo-create-credential";
+import { createGithubRepoWithRecovery } from "@/app/api/github/_lib/create-repo-with-recovery";
 import {
   defaultRepoCreateTargetDeps,
   resolveRepoCreateTarget,
@@ -34,6 +39,7 @@ type WorkspaceRepoRouteDeps = RepoCreateTargetDeps & {
     select: string
   ) => Promise<Record<string, unknown> | null>;
   createGithubRepo: typeof createGithubRepo;
+  fetchGithubRepo: typeof fetchGithubRepo;
   upsertGithubReposForUser: typeof upsertGithubReposForUser;
   loadWorkspaceRepoByGithubId: (
     scope: ProductResourceScope,
@@ -88,6 +94,7 @@ export function createWorkspaceRepoPostHandler(
       getWorkspaceForScope(workspaceId, scope, select),
     ...defaultRepoCreateTargetDeps,
     createGithubRepo,
+    fetchGithubRepo,
     upsertGithubReposForUser,
     loadWorkspaceRepoByGithubId,
     ...overrides,
@@ -149,12 +156,12 @@ export function createWorkspaceRepoPostHandler(
     const { ownerTarget, viaInstallation } = target;
 
     try {
-      const createdRepo = await deps.createGithubRepo(target.token, {
-        owner: ownerTarget.kind === "personal" ? null : ownerTarget.login,
-        name,
-        description,
-        visibility,
-      });
+      const createdRepo = await createGithubRepoWithRecovery(
+        deps,
+        target.token,
+        ownerTarget,
+        { name, description, visibility }
+      );
 
       await deps.upsertGithubReposForUser(userId, [createdRepo], {
         githubInstallationId: ownerTarget.github_installation_id,

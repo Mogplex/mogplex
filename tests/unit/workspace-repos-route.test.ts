@@ -326,3 +326,44 @@ test("POST /api/workspaces/[id]/repos refuses an org the user cannot create in",
   assert.equal(response.status, 400);
   assert.deepEqual(created, []);
 });
+
+test("POST /api/workspaces/[id]/repos adopts a repository a previous attempt already created", async () => {
+  const { createWorkspaceRepoPostHandler } = await loadWorkspaceRepoRoute();
+  const { GithubRepoCreateError } = await import("../../lib/github-create");
+  const existing = {
+    id: 777,
+    full_name: "acme/demo-app",
+    default_branch: "main",
+    owner: { login: "acme" },
+    name: "demo-app",
+    created_at: new Date().toISOString(),
+    size: 0,
+  };
+  let imported: unknown = null;
+  const handler = createWorkspaceRepoPostHandler({
+    requireUserId: async () => "user-123",
+    getWorkspaceForScope: async () => ({ id: "ws-1", name: "Product Alpha" }),
+    getGithubToken: async () => "github-token",
+    appConfigured: () => false,
+    loadOwnerTargets: async () => owners([alexTarget, acmeTarget]),
+    resolveCreateCredential: await oauthOnlyCredential(),
+    createGithubRepo: async () => {
+      throw new GithubRepoCreateError(422, '{"message":"name already exists"}');
+    },
+    fetchGithubRepo: async () => existing,
+    upsertGithubReposForUser: async (_userId, repos) => {
+      imported = repos;
+    },
+    loadWorkspaceRepoByGithubId: async () => ({ id: "repo-777" }),
+  });
+  const response = await handler(
+    new Request("http://localhost/api/workspaces/ws-1/repos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "demo-app", owner_login: "acme" }),
+    }),
+    { params: Promise.resolve({ id: "ws-1" }) }
+  );
+  assert.equal(response.status, 200);
+  assert.deepEqual(imported, [existing]);
+});

@@ -14,7 +14,11 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 export async function loadGithubRepoCreationOwnerTargets(
   userId: string,
   token: string,
-  options: { requireOwner?: boolean; onlyLogin?: string | null } = {}
+  options: {
+    requireOwner?: boolean;
+    onlyLogin?: string | null;
+    personalOnly?: boolean;
+  } = {}
 ) {
   const [profileResult, installationsResult, currentUser] = await Promise.all([
     supabaseAdmin
@@ -27,10 +31,13 @@ export async function loadGithubRepoCreationOwnerTargets(
       .select("installation_id, account_login, account_type, target_type")
       .eq("user_id", userId)
       .order("created_at", { ascending: false }),
-    fetchGithubCurrentUserContext(token).catch(() => ({
-      login: null,
-      oauthScopes: null,
-    })),
+    fetchGithubCurrentUserContext(token).catch((error) => {
+      console.warn("[github-owners] GitHub user context unavailable", {
+        userId,
+        error,
+      });
+      return { login: null, oauthScopes: null };
+    }),
   ]);
 
   if (profileResult.error) {
@@ -44,13 +51,16 @@ export async function loadGithubRepoCreationOwnerTargets(
     );
   }
 
-  const orgLogins = await fetchGithubUserOrgs(token).catch((error) => {
-    console.warn("[github-owners] organization membership unavailable", {
-      userId,
-      error,
-    });
-    return [] as string[];
-  });
+  // A personal-account create needs no organization reads at all.
+  const orgLogins = options.personalOnly
+    ? []
+    : await fetchGithubUserOrgs(token).catch((error) => {
+        console.warn("[github-owners] organization membership unavailable", {
+          userId,
+          error,
+        });
+        return [] as string[];
+      });
   // A create names one owner; only that org's permissions need reading.
   const onlyLogin = options.onlyLogin?.toLowerCase();
   const candidateOrgLogins = onlyLogin

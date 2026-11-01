@@ -6,6 +6,7 @@ process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||= "test-anon-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ||= "test-service-role-key";
 
 const originalFetch = globalThis.fetch;
+const orderings: string[] = [];
 afterEach(() => {
   globalThis.fetch = originalFetch;
 });
@@ -17,7 +18,11 @@ async function loadWith(
   const { supabaseAdmin } = await import("../../lib/supabase/admin");
   const query = {
     select: () => query,
-    eq: async () => ({ data: rows, error: null }),
+    eq: () => query,
+    order: async (column: string, options: { ascending: boolean }) => {
+      orderings.push(`${column}:${options.ascending ? "asc" : "desc"}`);
+      return { data: rows, error: null };
+    },
   };
   Object.defineProperty(supabaseAdmin, "from", {
     configurable: true,
@@ -45,6 +50,8 @@ test("an App create target attaches the user's installation for the named org", 
   assert.equal(target?.kind, "org");
   assert.equal(target?.github_installation_id, 42);
   assert.deepEqual(oauthScopes, ["read:org", "read:user"]);
+  // After a reinstall the newest installation row must win.
+  assert.deepEqual(orderings.at(-1), "created_at:desc");
 });
 
 test("an App create target without an owner is the user's personal account", async () => {
