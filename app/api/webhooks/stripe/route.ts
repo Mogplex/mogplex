@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import {
   areCapacityBillingOperationsEnabled,
+  CapacityBillingDisabledError,
   capacityBillingStripeMode,
   getStripe,
   isBillingEnabled,
@@ -259,7 +260,7 @@ async function syncCapacitySchedule(
     // Do not acknowledge a marked capacity event that we did not project.
     // The durable event claim stays unprocessed so an operator can replay it
     // after the test-mode operations gate is restored.
-    throw new Error("Capacity billing operations are disabled");
+    throw new CapacityBillingDisabledError();
   }
   const customerId = customerIdOf(schedule.customer);
   if (!customerId) throw new TypeError("capacity schedule has no customer");

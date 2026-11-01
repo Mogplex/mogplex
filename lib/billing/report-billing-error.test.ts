@@ -1,33 +1,15 @@
 import * as Sentry from "@sentry/nextjs";
 import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
+import { installInMemorySentry } from "../../tests/support/sentry-capture";
 import { reportBillingError } from "./report-billing-error";
+import { CapacityBillingDisabledError } from "./stripe";
 
-let events: Sentry.Event[];
-beforeEach(() => {
-  events = [];
-});
+let capture: { events: Sentry.Event[] };
 beforeAll(() => {
-  Sentry.init({
-    dsn: "https://public@sentry.test/1",
-    defaultIntegrations: false,
-    transport: () => ({
-      send: async (
-        envelope: Parameters<
-          NonNullable<
-            ReturnType<
-              NonNullable<ReturnType<typeof Sentry.getClient>>["getTransport"]
-            >
-          >["send"]
-        >[0]
-      ) => {
-        for (const [header, payload] of envelope[1]) {
-          if (header.type === "event") events.push(payload as Sentry.Event);
-        }
-        return { statusCode: 200 };
-      },
-      flush: async () => true,
-    }),
-  });
+  capture = installInMemorySentry();
+});
+beforeEach(() => {
+  capture.events.length = 0;
 });
 afterAll(async () => {
   await Sentry.close();
@@ -38,8 +20,17 @@ it("reports a caught billing failure with its surface and context", async () => 
     accountId: "account-1",
   });
   await Sentry.flush();
-  expect(events).toHaveLength(1);
-  expect(events[0]?.tags).toMatchObject({ billing_surface: "plan_checkout" });
-  expect(events[0]?.extra).toMatchObject({ accountId: "account-1" });
-  expect(events[0]?.exception?.values?.[0]?.value).toBe("tax code is missing");
+  expect(capture.events).toHaveLength(1);
+  const [event] = capture.events;
+  expect(event?.tags).toMatchObject({ billing_surface: "plan_checkout" });
+  expect(event?.extra).toMatchObject({ accountId: "account-1" });
+  expect(event?.exception?.values?.[0]?.value).toBe("tax code is missing");
+});
+
+it("does not report an intentionally closed capacity operations gate", async () => {
+  reportBillingError("stripe_webhook", new CapacityBillingDisabledError(), {
+    eventId: "evt_1",
+  });
+  await Sentry.flush();
+  expect(capture.events).toHaveLength(0);
 });

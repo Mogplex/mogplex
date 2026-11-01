@@ -2,37 +2,18 @@ import assert from "node:assert/strict";
 import test, { after, before, beforeEach } from "node:test";
 import * as Sentry from "@sentry/nextjs";
 import type { BillingAccount } from "../../lib/billing/accounts";
+import { installInMemorySentry } from "../support/sentry-capture";
 
-let events: Sentry.Event[] = [];
+let capture: { events: Sentry.Event[] };
 
 before(() => {
-  Sentry.init({
-    dsn: "https://public@sentry.test/1",
-    defaultIntegrations: false,
-    transport: () => ({
-      send: async (
-        envelope: Parameters<
-          NonNullable<
-            ReturnType<
-              NonNullable<ReturnType<typeof Sentry.getClient>>["getTransport"]
-            >
-          >["send"]
-        >[0]
-      ) => {
-        for (const [header, payload] of envelope[1]) {
-          if (header.type === "event") events.push(payload as Sentry.Event);
-        }
-        return { statusCode: 200 };
-      },
-      flush: async () => true,
-    }),
-  });
+  capture = installInMemorySentry();
 });
 after(async () => {
   await Sentry.close();
 });
 beforeEach(() => {
-  events = [];
+  capture.events.length = 0;
 });
 
 const account: BillingAccount = {
@@ -93,8 +74,8 @@ test("a provider failure in plan checkout reaches Sentry, not just the log", asy
     const response = await POST(checkoutRequest());
     await Sentry.flush();
     assert.equal(response.status, 500);
-    assert.equal(events.length, 1);
-    assert.equal(events[0]?.tags?.billing_surface, "plan_checkout");
+    assert.equal(capture.events.length, 1);
+    assert.equal(capture.events[0]?.tags?.billing_surface, "plan_checkout");
   } finally {
     console.error = originalError;
   }
@@ -113,5 +94,5 @@ test("an expected plan checkout refusal is not reported", async () => {
   const response = await POST(checkoutRequest());
   await Sentry.flush();
   assert.equal(response.status, 409);
-  assert.equal(events.length, 0);
+  assert.equal(capture.events.length, 0);
 });
