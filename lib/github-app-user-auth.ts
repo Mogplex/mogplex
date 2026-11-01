@@ -1,0 +1,312 @@
+import {
+  deleteOAuthTokenIfUnchanged,
+  getOAuthToken,
+  storeOAuthToken,
+} from "@/lib/oauth-tokens";
+
+/** Path GitHub returns to after a user authorizes the Mogplex App. */
+export const GITHUB_APP_USER_CALLBACK_PATH =
+  "/api/auth/github/app-user/callback";
+export const GITHUB_APP_USER_STATE_COOKIE = "github_app_user_state";
+export const GITHUB_APP_USER_RETURN_COOKIE = "github_app_user_return_to";
+export const GITHUB_APP_USER_VERIFIER_COOKIE = "github_app_user_verifier";
+
+/** Refresh this long before GitHub's expiry so a create never races it. */
+const REFRESH_MARGIN_MS = 5 * 60 * 1000;
+
+/**
+ * A GitHub App user authorization. Personal-account repositories can only be
+ * created with a user token, so this grant is what creates them.
+ *
+ * Lifecycle: a new authorization overwrites it; a refresh or create that
+ * GitHub rejects deletes it (only while unchanged); deleting the profile
+ * cascades it. Mogplex has no GitHub disconnect that drops the `github`
+ * identity grant, so there is no disconnect path to mirror. Every read checks
+ * `login` against the requested owner, so a stale grant is never used.
+ */
+export type GithubAppUserGrant = {
+  login: string;
+  accessToken: string;
+  accessTokenExpiresAt: number | null;
+  refreshToken: string | null;
+  refreshTokenExpiresAt: number | null;
+};
+
+type TokenResponse = {
+  access_token?: string;
+  expires_in?: number;
+  refresh_token?: string;
+  refresh_token_expires_in?: number;
+  error?: string;
+};
+
+const defaultDeps = {
+  env: process.env as Env,
+  fetch: (input: string, init?: RequestInit) => fetch(input, init),
+  now: () => Date.now(),
+  getToken: (userId: string) => getOAuthToken(userId, "github_app"),
+  storeToken: (userId: string, value: string) =>
+    storeOAuthToken(userId, "github_app", value),
+  deleteTokenIfUnchanged: (userId: string, expected: string) =>
+    deleteOAuthTokenIfUnchanged(userId, "github_app", expected),
+};
+type Deps = typeof defaultDeps;
+
+export class GithubAppUserAuthError extends Error {
+  code: string;
+
+  constructor(code: string) {
+    super(`GitHub App user authorization failed: ${code}`);
+    this.name = "GithubAppUserAuthError";
+    this.code = code;
+  }
+}
+
+type Env = Record<string, string | undefined>;
+
+function clientCredentials(env: Env) {
+  const clientId = env.GITHUB_APP_CLIENT_ID?.trim();
+  const clientSecret = env.GITHUB_APP_CLIENT_SECRET?.trim();
+  return clientId && clientSecret ? { clientId, clientSecret } : null;
+}
+
+/** Whether this deployment can ask users to authorize the GitHub App. */
+export function hasGithubAppUserAuthConfig(env: Env = process.env) {
+  return clientCredentials(env) !== null;
+}
+
+export function buildGithubAppUserAuthorizeUrl(input: {
+  state: string;
+  redirectUri: string;
+  /** PKCE S256 challenge; the callback must send the matching verifier. */
+  codeChallenge: string;
+  login?: string | null;
+  env?: Env;
+}) {
+  const credentials = clientCredentials(input.env ?? process.env);
+  if (!credentials) throw new GithubAppUserAuthError("not_configured");
+  const params = new URLSearchParams({
+    client_id: credentials.clientId,
+    redirect_uri: input.redirectUri,
+    state: input.state,
+    // Asks GitHub for a refresh token with the expiring access token, so one
+    // authorization keeps working until the refresh token expires.
+    scope: "offline_access",
+    code_challenge: input.codeChallenge,
+    code_challenge_method: "S256",
+  });
+  // Suggests the account already connected; GitHub still lets the user choose.
+  if (input.login) params.set("login", input.login);
+  return `https://github.com/login/oauth/authorize?${params}`;
+}
+
+async function requestToken(
+  params: Record<string, string>,
+  deps: Deps
+): Promise<Omit<GithubAppUserGrant, "login">> {
+  const credentials = clientCredentials(deps.env);
+  if (!credentials) throw new GithubAppUserAuthError("not_configured");
+  const response = await deps.fetch(
+    "https://github.com/login/oauth/access_token",
+    {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        client_id: credentials.clientId,
+        client_secret: credentials.clientSecret,
+        ...params,
+      }),
+      cache: "no-store",
+    }
+  );
+  if (!response.ok)
+    throw new Error(`GitHub token request failed (${response.status})`);
+  const body = (await response.json()) as TokenResponse;
+  if (body.error || typeof body.access_token !== "string") {
+    throw new GithubAppUserAuthError(body.error ?? "missing_access_token");
+  }
+  const issuedAt = deps.now();
+  const expiry = (seconds: number | undefined) =>
+    typeof seconds === "number" && seconds > 0
+      ? issuedAt + seconds * 1000
+      : null;
+  return {
+    accessToken: body.access_token,
+    accessTokenExpiresAt: expiry(body.expires_in),
+    refreshToken:
+      typeof body.refresh_token === "string" ? body.refresh_token : null,
+    refreshTokenExpiresAt: expiry(body.refresh_token_expires_in),
+  };
+}
+
+/** Exchange the callback's code for the user's App authorization. */
+export function exchangeGithubAppUserCode(
+  code: string,
+  redirectUri: string,
+  codeVerifier: string,
+  overrides: Partial<Deps> = {}
+) {
+  return requestToken(
+    { code, redirect_uri: redirectUri, code_verifier: codeVerifier },
+    { ...defaultDeps, ...overrides }
+  );
+}
+
+export async function storeGithubAppUserGrant(
+  userId: string,
+  grant: GithubAppUserGrant,
+  overrides: Partial<Deps> = {}
+) {
+  const deps = { ...defaultDeps, ...overrides };
+  await deps.storeToken(userId, JSON.stringify(grant));
+}
+
+function parseGrant(raw: string | null): GithubAppUserGrant | null {
+  if (!raw) return null;
+  try {
+    const value = JSON.parse(raw) as Partial<GithubAppUserGrant>;
+    if (
+      typeof value.login !== "string" ||
+      typeof value.accessToken !== "string"
+    ) {
+      return null;
+    }
+    return {
+      login: value.login,
+      accessToken: value.accessToken,
+      accessTokenExpiresAt: value.accessTokenExpiresAt ?? null,
+      refreshToken: value.refreshToken ?? null,
+      refreshTokenExpiresAt: value.refreshTokenExpiresAt ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The user's App user token for `login`, refreshed when it is about to
+ * expire. Returns null when the user must authorize (again): no grant, a
+ * grant for another GitHub account, or a refresh token GitHub no longer
+ * accepts. A GitHub outage during refresh throws, so it is not mistaken for
+ * a missing authorization.
+ */
+export async function getGithubAppUserToken(
+  userId: string,
+  login: string,
+  overrides: Partial<Deps> = {}
+): Promise<string | null> {
+  const deps = { ...defaultDeps, ...overrides };
+  const stored = await deps.getToken(userId);
+  const grant = parseGrant(stored);
+  if (!stored || grant?.login.toLowerCase() !== login.toLowerCase())
+    return null;
+
+  const now = deps.now();
+  if (accessTokenFresh(grant, now)) return grant.accessToken;
+  if (!refreshTokenUsable(grant, now)) return null;
+  try {
+    const refreshed = await requestToken(
+      { grant_type: "refresh_token", refresh_token: grant.refreshToken },
+      deps
+    );
+    // GitHub rotates the refresh token; if a response ever omits it, keep
+    // the old one rather than leaving the grant unrecoverable.
+    const next: GithubAppUserGrant = refreshed.refreshToken
+      ? { ...refreshed, login: grant.login }
+      : {
+          ...refreshed,
+          login: grant.login,
+          refreshToken: grant.refreshToken,
+          refreshTokenExpiresAt: grant.refreshTokenExpiresAt,
+        };
+    await deps.storeToken(userId, JSON.stringify(next));
+    return refreshed.accessToken;
+  } catch (error) {
+    if (
+      !(error instanceof GithubAppUserAuthError) ||
+      !GRANT_REJECTION_CODES.has(error.code)
+    ) {
+      throw error;
+    }
+    return recoverRejectedRefresh(userId, login, stored, deps);
+  }
+}
+
+/**
+ * GitHub rotates the refresh token on use, so a concurrent request may
+ * already have stored a new grant. Forget the grant only while it is still
+ * the one GitHub rejected (checked atomically in the database); otherwise use
+ * the newer grant.
+ */
+async function recoverRejectedRefresh(
+  userId: string,
+  login: string,
+  rejected: string,
+  deps: Deps
+) {
+  if (await deps.deleteTokenIfUnchanged(userId, rejected)) return null;
+  const current = parseGrant(await deps.getToken(userId));
+  return current?.login.toLowerCase() === login.toLowerCase()
+    ? current.accessToken
+    : null;
+}
+
+/**
+ * Forget the stored grant after GitHub rejected its access token (the user
+ * revoked Mogplex), so the picker asks for authorization again. Only the grant
+ * that still holds that token is deleted; a newer grant survives.
+ */
+export async function forgetRejectedGithubAppUserToken(
+  userId: string,
+  accessToken: string,
+  overrides: Partial<Deps> = {}
+) {
+  const deps = { ...defaultDeps, ...overrides };
+  const stored = await deps.getToken(userId);
+  if (!stored || parseGrant(stored)?.accessToken !== accessToken) return;
+  await deps.deleteTokenIfUnchanged(userId, stored);
+}
+
+/**
+ * Refresh errors that mean the grant itself is dead (revoked or already
+ * used). Anything else, such as rejected client credentials, is a deployment
+ * problem and must not erase users' grants.
+ */
+const GRANT_REJECTION_CODES = new Set(["bad_refresh_token", "invalid_grant"]);
+
+function accessTokenFresh(grant: GithubAppUserGrant, now: number) {
+  return (
+    grant.accessTokenExpiresAt === null ||
+    grant.accessTokenExpiresAt - now > REFRESH_MARGIN_MS
+  );
+}
+
+function refreshTokenUsable(
+  grant: GithubAppUserGrant,
+  now: number
+): grant is GithubAppUserGrant & { refreshToken: string } {
+  return (
+    grant.refreshToken !== null &&
+    (grant.refreshTokenExpiresAt === null || grant.refreshTokenExpiresAt > now)
+  );
+}
+
+/**
+ * Whether the user has authorized the App for `login`, without refreshing.
+ * Agrees with `getGithubAppUserToken`: a fresh access token or a usable
+ * refresh token counts.
+ */
+export async function hasGithubAppUserGrant(
+  userId: string,
+  login: string,
+  overrides: Partial<Deps> = {}
+) {
+  const deps = { ...defaultDeps, ...overrides };
+  const grant = parseGrant(await deps.getToken(userId));
+  if (grant?.login.toLowerCase() !== login.toLowerCase()) return false;
+  const now = deps.now();
+  return accessTokenFresh(grant, now) || refreshTokenUsable(grant, now);
+}

@@ -1,18 +1,14 @@
 import { parseJsonBody } from "@/lib/api/parse-json-body";
 import { NextResponse } from "next/server";
 import { requireUserId } from "@/lib/auth";
+import { createGithubRepo, fetchGithubRepo } from "@/lib/github-create";
+import { createAndImportGithubRepo } from "@/app/api/github/_lib/create-repo-with-recovery";
 import {
-  createGithubRepo,
-  extractGithubApiErrorMessage,
-  GithubRepoCreateError,
-} from "@/lib/github-create";
-import {
-  buildGithubRepoOwnerTargets,
-  fetchGithubCurrentUserLogin,
-  fetchGithubUserOrgs,
-} from "@/lib/github-owners";
+  defaultRepoCreateTargetDeps,
+  resolveRepoCreateTarget,
+  type RepoCreateTargetDeps,
+} from "@/app/api/github/_lib/repo-create-target";
 import { upsertGithubReposForUser } from "@/lib/github-sync";
-import { getOAuthToken } from "@/lib/oauth-tokens";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import {
   getWorkspaceForScope,
@@ -29,7 +25,7 @@ import {
   type ProductResourceScope,
 } from "@/lib/team-resource-scope";
 
-type WorkspaceRepoRouteDeps = {
+type WorkspaceRepoRouteDeps = RepoCreateTargetDeps & {
   requireUserId: typeof requireUserId;
   resolveActiveTeamCapabilities: typeof resolveActiveTeamCapabilities;
   getWorkspaceForScope: (
@@ -37,21 +33,8 @@ type WorkspaceRepoRouteDeps = {
     scope: ProductResourceScope,
     select: string
   ) => Promise<Record<string, unknown> | null>;
-  getGithubToken: typeof getOAuthToken;
-  loadGithubProfile: (
-    userId: string
-  ) => Promise<{ github_username: string | null }>;
-  loadGithubInstallations: (userId: string) => Promise<
-    Array<{
-      installation_id: number;
-      account_login: string | null;
-      account_type: string | null;
-      target_type: string | null;
-    }>
-  >;
-  fetchGithubCurrentUserLogin: typeof fetchGithubCurrentUserLogin;
-  fetchGithubUserOrgs: typeof fetchGithubUserOrgs;
   createGithubRepo: typeof createGithubRepo;
+  fetchGithubRepo: typeof fetchGithubRepo;
   upsertGithubReposForUser: typeof upsertGithubReposForUser;
   loadWorkspaceRepoByGithubId: (
     scope: ProductResourceScope,
@@ -59,34 +42,6 @@ type WorkspaceRepoRouteDeps = {
     githubId: number
   ) => Promise<Record<string, unknown> | null>;
 };
-
-async function loadGithubProfile(userId: string) {
-  const { data, error } = await supabaseAdmin
-    .from("profiles")
-    .select("github_username")
-    .eq("id", userId)
-    .single();
-
-  if (error) {
-    throw new Error(`Failed to load GitHub profile: ${error.message}`);
-  }
-
-  return data;
-}
-
-async function loadGithubInstallations(userId: string) {
-  const { data, error } = await supabaseAdmin
-    .from("github_installations")
-    .select("installation_id, account_login, account_type, target_type")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false });
-
-  if (error) {
-    throw new Error(`Failed to load GitHub installations: ${error.message}`);
-  }
-
-  return data || [];
-}
 
 async function loadWorkspaceRepoByGithubId(
   scope: ProductResourceScope,
@@ -132,12 +87,9 @@ export function createWorkspaceRepoPostHandler(
     resolveActiveTeamCapabilities,
     getWorkspaceForScope: (workspaceId, scope, select) =>
       getWorkspaceForScope(workspaceId, scope, select),
-    getGithubToken: getOAuthToken,
-    loadGithubProfile,
-    loadGithubInstallations,
-    fetchGithubCurrentUserLogin,
-    fetchGithubUserOrgs,
+    ...defaultRepoCreateTargetDeps,
     createGithubRepo,
+    fetchGithubRepo,
     upsertGithubReposForUser,
     loadWorkspaceRepoByGithubId,
     ...overrides,
@@ -191,102 +143,29 @@ export function createWorkspaceRepoPostHandler(
       );
     }
 
-    const githubToken = await deps
-      .getGithubToken(userId, "github")
-      .catch(() => null);
-    if (!githubToken) {
+    // Like POST /api/github/repos, the owner is always named: a client that
+    // lost its selection must not fall through to the personal account.
+    if (!ownerLogin) {
       return NextResponse.json(
-        { error: "Connect GitHub account first" },
+        { error: "Choose a GitHub account for the repository" },
         { status: 400 }
       );
     }
-
-    const [profile, installations] = await Promise.all([
-      deps.loadGithubProfile(userId),
-      deps.loadGithubInstallations(userId),
-    ]);
-
-    const githubUsername =
-      profile.github_username ||
-      (await deps.fetchGithubCurrentUserLogin(githubToken));
-    if (!githubUsername) {
-      return NextResponse.json(
-        { error: "GitHub account details unavailable" },
-        { status: 400 }
-      );
-    }
-
-    const orgLogins = await deps
-      .fetchGithubUserOrgs(githubToken)
-      .catch((error) => {
-        console.error("[workspace-repo-create] failed to load GitHub orgs", {
-          userId,
-          error,
-        });
-        return [] as string[];
-      });
-    const targets = buildGithubRepoOwnerTargets({
-      githubUsername,
-      installations,
-      orgLogins,
-    });
-
-    const ownerTarget = targets.find(
-      (target) =>
-        target.login.toLowerCase() ===
-        (ownerLogin || githubUsername).toLowerCase()
-    );
-    if (!ownerTarget) {
-      return NextResponse.json(
-        { error: "Selected GitHub account is unavailable" },
-        { status: 400 }
-      );
-    }
-
-    try {
-      const createdRepo = await deps.createGithubRepo(githubToken, {
-        owner: ownerTarget.kind === "personal" ? null : ownerTarget.login,
-        name,
-        description,
-        visibility,
-      });
-
-      await deps.upsertGithubReposForUser(userId, [createdRepo], {
-        githubInstallationId: ownerTarget.github_installation_id,
+    const target = await resolveRepoCreateTarget(userId, ownerLogin, deps);
+    if (!target.ok) return target.response;
+    return createAndImportGithubRepo({
+      deps,
+      userId,
+      target,
+      repo: { name, description, visibility },
+      importOptions: {
         workspaceId: workspace.id,
         productTeamId: scope.productTeamId,
-      });
-
-      const repo = await deps.loadWorkspaceRepoByGithubId(
-        scope,
-        workspace.id,
-        createdRepo.id
-      );
-      return NextResponse.json(repo);
-    } catch (error) {
-      if (error instanceof GithubRepoCreateError) {
-        const message =
-          extractGithubApiErrorMessage(error.body) ||
-          "GitHub repo creation failed";
-        const status =
-          error.status === 422
-            ? 409
-            : error.status === 401 || error.status === 403
-              ? 403
-              : 502;
-        return NextResponse.json({ error: message }, { status });
-      }
-
-      console.error("[workspace-repo-create] unexpected failure", {
-        userId,
-        workspaceId: workspace.id,
-        error,
-      });
-      return NextResponse.json(
-        { error: (error as Error).message || "Failed to create repository" },
-        { status: 500 }
-      );
-    }
+      },
+      loadImported: (githubId) =>
+        deps.loadWorkspaceRepoByGithubId(scope, workspace.id, githubId),
+      logScope: "workspace-repo-create",
+    });
   };
 }
 

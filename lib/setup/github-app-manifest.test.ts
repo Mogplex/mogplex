@@ -24,6 +24,7 @@ describe("buildGithubAppManifest", () => {
     );
     expect(manifest.callback_urls).toEqual([
       "https://mogplex.acme.dev/api/auth/github/callback",
+      "https://mogplex.acme.dev/api/auth/github/app-user/callback",
     ]);
     expect(manifest.setup_url).toBe(
       "https://mogplex.acme.dev/api/auth/github/callback"
@@ -35,6 +36,7 @@ describe("buildGithubAppManifest", () => {
     const manifest = buildGithubAppManifest("http://localhost:3000");
 
     expect(manifest.default_permissions).toMatchObject({
+      repository_creation: "write",
       contents: "write",
       pull_requests: "write",
       checks: "write",

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   buildGithubRepoOwnerTargets,
+  canCreateInGithubOrg,
   canCreatePrivateGithubOrgRepo,
   fetchGithubCurrentUserContext,
   fetchGithubCurrentUserLogin,
@@ -146,6 +147,50 @@ describe("GitHub repository owners", () => {
     ).resolves.toEqual(orgs);
     expect(maxActiveRequests).toBeLessThanOrEqual(8);
     expect(fetch).toHaveBeenCalledTimes(18);
+  });
+
+  it("lists only active owners without reading org settings when owners are required", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      expect(url).toContain("/user/memberships/orgs/");
+      if (url.endsWith("/owned")) {
+        return Response.json({ state: "active", role: "admin" });
+      }
+      if (url.endsWith("/invited")) {
+        return Response.json({ state: "pending", role: "admin" });
+      }
+      return Response.json({ state: "active", role: "member" });
+    });
+
+    await expect(
+      filterCreatableGithubOrgLogins("token", ["owned", "invited", "member"], {
+        requireOwner: true,
+      })
+    ).resolves.toEqual(["owned"]);
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it("checks one org directly, treating 404 as no access and an outage as an error", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("/stranger")) {
+        return new Response("not found", { status: 404 });
+      }
+      if (url.includes("/flaky")) {
+        return new Response("unavailable", { status: 503 });
+      }
+      return Response.json({ state: "active", role: "admin" });
+    });
+
+    await expect(
+      canCreateInGithubOrg("token", "owned", { requireOwner: true })
+    ).resolves.toBe(true);
+    await expect(
+      canCreateInGithubOrg("token", "stranger", { requireOwner: true })
+    ).resolves.toBe(false);
+    await expect(
+      canCreateInGithubOrg("token", "flaky", { requireOwner: true })
+    ).rejects.toThrow("503");
   });
 
   it("loads the current login and granted OAuth scopes together", async () => {

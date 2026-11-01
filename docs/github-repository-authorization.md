@@ -37,10 +37,33 @@ that input without requesting a new authorization grant.
 OAuth remains available for identity and membership discovery. Reconnection
 for an App-based account requests `read:org`, `read:user`, and `user:email`,
 without the broad `repo` scope, and preserves App authorization mode. Existing
-OAuth grants are not revoked by this code change. Repository creation through
-the legacy OAuth credential is unavailable in an App deployment; adding App
-repository-creation support must use explicitly granted permissions rather
-than restoring the broad fallback.
+OAuth grants are not revoked by this code change.
+
+In an App deployment a repository is created with the installation token of
+the organization that owns it, which needs the App's Repository creation
+(write) permission. That permission creates repositories without the rest of
+Administration, and GitHub gives the App access to each repository it
+creates. An App registered before this change must first enable the
+permission in its GitHub App settings; the manifest only applies when an App
+is created. Each installation's owner must then accept it, and until both
+steps are done a create answers 403 `GITHUB_APP_PERMISSION_REQUIRED`. The installation token does not carry the user's own
+org policy, so the user must be an active owner of the organization, read live
+with their identity grant at creation time, and the installation must be
+attached to them. The identity grant never writes. An organization without an
+installation attached to the user is refused, and so is a member who is not
+an owner.
+
+GitHub creates a personal repository only with a user token, so a personal
+create uses the user's own GitHub App authorization (`GITHUB_APP_CLIENT_ID`
+and `GITHUB_APP_CLIENT_SECRET`). The user grants it once at
+`/api/auth/github/app-user`; the callback keeps the grant only when it belongs
+to the GitHub account already connected to Mogplex, and stores it encrypted
+as the `github_app` OAuth token. The access token is refreshed before it
+expires, and a refresh token GitHub rejects clears the grant so the user is
+asked again. Without the client credentials, personal creation stays refused.
+
+The new repository is imported alone, so creation never imports the rest of
+the installation.
 
 Self-hosted deployments configured only for OAuth retain their existing
 repository OAuth flow. An account already in App mode does not regain that

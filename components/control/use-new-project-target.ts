@@ -1,8 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  GITHUB_APP_USER_AUTHORIZE_PATH,
+  GITHUB_APP_USER_OUTCOME_PARAM,
   GITHUB_ORG_READ_SCOPE,
+  GITHUB_PERSONAL_UNAVAILABLE_HEADER,
   GITHUB_REAUTHORIZE_HEADER,
 } from "@/lib/github-oauth";
 import type { GithubRepoOwnerTarget } from "@/lib/github-owners";
@@ -15,6 +18,40 @@ export const LAST_GITHUB_OWNER_KEY = "mogplex:last-github-repo-owner";
 const AVAILABILITY_DEBOUNCE_MS = 350;
 
 export type NewProjectAction = { href: string; label: string } | null;
+
+/** What to say when the App user authorization round trip did not succeed. */
+const AUTHORIZE_OUTCOME_MESSAGES: Record<string, string> = {
+  account_mismatch:
+    "GitHub authorized a different account. Authorize again with the GitHub account connected to Mogplex.",
+  not_connected: "Reconnect GitHub to Mogplex, then authorize again.",
+  denied:
+    "GitHub authorization was cancelled. Authorize to create repositories here.",
+  failed: "GitHub authorization did not finish. Try again.",
+  state_mismatch: "GitHub authorization did not finish. Try again.",
+  unavailable:
+    "Creating repositories in personal accounts is not available on this deployment.",
+};
+
+/** Explains a personal account missing from the owner list. */
+const PERSONAL_UNAVAILABLE_NOTICE =
+  "Creating repositories in your personal account is not available on this deployment.";
+
+/** Confirms a completed authorization, which otherwise leaves no trace. */
+const AUTHORIZED_NOTICE =
+  "GitHub authorized. Mogplex can now create repositories in your personal account.";
+
+/**
+ * Reads and clears the authorization callback's outcome from the URL, so a
+ * reload does not repeat it. Returns the raw outcome, if any.
+ */
+function takeAuthorizeOutcome() {
+  const url = new URL(window.location.href);
+  const outcome = url.searchParams.get(GITHUB_APP_USER_OUTCOME_PARAM);
+  if (!outcome) return null;
+  url.searchParams.delete(GITHUB_APP_USER_OUTCOME_PARAM);
+  window.history.replaceState(window.history.state, "", url);
+  return outcome;
+}
 
 /**
  * Loads the GitHub accounts a new project can be created under, and checks the
@@ -36,6 +73,11 @@ export function useNewProjectTarget({
   const [ownersError, setOwnersError] = useState<string | null>(null);
   const [ownersAction, setOwnersAction] = useState<NewProjectAction>(null);
   const [availability, setAvailability] = useState<AvailabilityState>("idle");
+  // Where an authorize or connect round trip returns; read in an effect so
+  // render never touches `window`.
+  const [returnPath, setReturnPath] = useState("/");
+  const [authorizeNotice, setAuthorizeNotice] = useState<string | null>(null);
+  const [ownersNotice, setOwnersNotice] = useState<string | null>(null);
 
   const nameValidation = useMemo(() => validateGithubRepoName(name), [name]);
 
@@ -55,10 +97,24 @@ export function useNewProjectTarget({
         return {
           targets: Array.isArray(data) ? (data as GithubRepoOwnerTarget[]) : [],
           reauthorizeScope: response.headers.get(GITHUB_REAUTHORIZE_HEADER),
+          personalUnavailable: response.headers.has(
+            GITHUB_PERSONAL_UNAVAILABLE_HEADER
+          ),
         };
       })
-      .then(({ targets, reauthorizeScope }) => {
+      .then(({ targets, reauthorizeScope, personalUnavailable }) => {
         setOwnerTargets(targets);
+        const outcome = takeAuthorizeOutcome();
+        setAuthorizeNotice(
+          outcome ? (AUTHORIZE_OUTCOME_MESSAGES[outcome] ?? null) : null
+        );
+        setOwnersNotice(
+          outcome === "authorized"
+            ? AUTHORIZED_NOTICE
+            : personalUnavailable
+              ? PERSONAL_UNAVAILABLE_NOTICE
+              : null
+        );
         const saved = window.localStorage.getItem(LAST_GITHUB_OWNER_KEY);
         const preferred = targets.find(
           (target) => target.login.toLowerCase() === saved?.toLowerCase()
@@ -76,8 +132,13 @@ export function useNewProjectTarget({
         // `reauthorize=1` forces the OAuth grant even where the GitHub App is
         // configured, since only that grant can add the missing read:org scope.
         const next = `${window.location.pathname}${window.location.search}`;
+        setReturnPath(next);
         const connectHref = `/api/auth/github?next=${encodeURIComponent(next)}`;
-        if (targets.length === 0) {
+        if (targets.length === 0 && personalUnavailable) {
+          setOwnersError(
+            "Creating repositories in your personal account is not available on this deployment. Install the Mogplex GitHub App on an organization you own."
+          );
+        } else if (targets.length === 0) {
           setOwnersError("GitHub must be connected to create a project.");
           setOwnersAction({ href: connectHref, label: "Connect GitHub" });
         } else if (reauthorizeScope === GITHUB_ORG_READ_SCOPE) {
@@ -94,6 +155,9 @@ export function useNewProjectTarget({
         }
         setOwnerTargets([]);
         setOwnerLogin("");
+        // Clear the callback's outcome even though there is nothing to show
+        // it against, so a reload does not replay it.
+        takeAuthorizeOutcome();
         setOwnersError("GitHub accounts unavailable.");
         setOwnersAction(null);
       })
@@ -151,13 +215,50 @@ export function useNewProjectTarget({
     };
   }, [enabled, nameValidation, ownerLogin]);
 
+  // A personal account in an App deployment needs the App installed there,
+  // then the user's App authorization, before Mogplex can create there.
+  const selectedTarget = ownerTargets.find(
+    (target) => target.login.toLowerCase() === ownerLogin.toLowerCase()
+  );
+  const next = encodeURIComponent(returnPath);
+  const authorizeAction: NewProjectAction =
+    selectedTarget?.installation_required
+      ? { href: `/api/auth/github?next=${next}`, label: "Install GitHub App" }
+      : selectedTarget?.authorization_required
+        ? {
+            href: `${GITHUB_APP_USER_AUTHORIZE_PATH}?next=${next}`,
+            label: "Authorize GitHub",
+          }
+        : null;
+  const authorizeMessage = selectedTarget?.installation_required
+    ? `Install the Mogplex GitHub App on ${selectedTarget.login} to create repositories there.`
+    : selectedTarget
+      ? (authorizeNotice ??
+        `Authorize Mogplex to create repositories in ${selectedTarget.login}.`)
+      : null;
+
+  /** Show the authorize action after a create finds the grant missing. */
+  const requireAuthorization = useCallback((login: string) => {
+    setOwnerTargets((targets) =>
+      targets.map((target) =>
+        // Only personal accounts use the App user authorization.
+        target.kind === "personal" &&
+        target.login.toLowerCase() === login.toLowerCase()
+          ? { ...target, authorization_required: true }
+          : target
+      )
+    );
+  }, []);
+
   return {
+    requireAuthorization,
     ownerTargets,
     ownerLogin,
     setOwnerLogin,
     ownersLoading,
-    ownersError,
-    ownersAction,
+    ownersError: ownersError ?? (authorizeAction ? authorizeMessage : null),
+    ownersAction: ownersAction ?? authorizeAction,
+    ownersNotice,
     availability,
     nameValidation,
   };

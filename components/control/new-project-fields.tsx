@@ -90,12 +90,15 @@ export function NewProjectStatus({
   ownerLogin,
   ownersError,
   ownersAction,
+  ownersNotice = null,
   nameValidation,
   availability,
 }: {
   ownerLogin: string;
   ownersError: string | null;
   ownersAction: { href: string; label: string } | null;
+  /** A confirmation, such as a completed GitHub authorization. */
+  ownersNotice?: string | null;
   nameValidation: GithubRepoNameValidation;
   availability: AvailabilityState;
 }) {
@@ -117,6 +120,9 @@ export function NewProjectStatus({
           <span className="text-accent-red">{nameValidation.message}</span>
         ) : (
           <>
+            {ownersNotice ? (
+              <span className="text-muted-foreground mr-2">{ownersNotice}</span>
+            ) : null}
             {nameValidation.normalized ? (
               <span className="text-muted-foreground mr-2">
                 Will create as {nameValidation.name}.

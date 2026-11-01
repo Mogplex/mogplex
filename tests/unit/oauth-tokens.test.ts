@@ -138,3 +138,41 @@ test("deleteOAuthToken removes vault-backed storage and clears any legacy profil
   ]);
   assert.deepEqual(cleared, [{ userId: "user-123", provider: "github" }]);
 });
+
+test("deleteOAuthTokenIfUnchanged deletes only through the conditional RPC and reports the outcome", async () => {
+  const { createOAuthTokenStore } = await loadOAuthTokenStore();
+  const rpcCalls: Array<{ fn: string; args: Record<string, unknown> }> = [];
+  let matches = true;
+
+  const store = createOAuthTokenStore({
+    rpc: async (fn, args) => {
+      rpcCalls.push({ fn, args });
+      if (fn === "delete_oauth_token_if_unchanged") {
+        return { data: matches, error: null };
+      }
+      throw new Error(`Unexpected rpc ${fn}`);
+    },
+    loadLegacyTokens: async () => ({}),
+    clearLegacyToken: async () => {
+      throw new Error("clearLegacyToken should not be called");
+    },
+  });
+
+  assert.equal(
+    await store.deleteOAuthTokenIfUnchanged("user-123", "github_app", "grant"),
+    true
+  );
+  matches = false;
+  assert.equal(
+    await store.deleteOAuthTokenIfUnchanged("user-123", "github_app", "grant"),
+    false
+  );
+  assert.deepEqual(rpcCalls[0], {
+    fn: "delete_oauth_token_if_unchanged",
+    args: {
+      p_user_id: "user-123",
+      p_provider: "github_app",
+      p_expected: "grant",
+    },
+  });
+});

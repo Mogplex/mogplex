@@ -1,13 +1,13 @@
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
-export type OAuthProvider = "github" | "vercel";
+export type OAuthProvider = "github" | "vercel" | "github_app";
 
 type RpcResult = {
   data: unknown;
   error: { message: string } | null;
 };
 
-type LegacyOAuthTokens = Record<OAuthProvider, string | null>;
+type LegacyOAuthTokens = Partial<Record<OAuthProvider, string | null>>;
 
 type OAuthTokenStoreDeps = {
   rpc: (fn: string, args: Record<string, unknown>) => Promise<RpcResult>;
@@ -16,9 +16,9 @@ type OAuthTokenStoreDeps = {
   logger?: Pick<typeof console, "error">;
 };
 
-const LEGACY_COLUMN_BY_PROVIDER: Record<
-  OAuthProvider,
-  "github_token" | "vercel_token"
+/** Providers that predate the vault; `github_app` grants never had a column. */
+const LEGACY_COLUMN_BY_PROVIDER: Partial<
+  Record<OAuthProvider, "github_token" | "vercel_token">
 > = {
   github: "github_token",
   vercel: "vercel_token",
@@ -49,6 +49,7 @@ async function loadLegacyTokens(userId: string): Promise<LegacyOAuthTokens> {
 
 async function clearLegacyToken(userId: string, provider: OAuthProvider) {
   const legacyColumn = LEGACY_COLUMN_BY_PROVIDER[provider];
+  if (!legacyColumn) return;
   const { error } = await supabaseAdmin
     .from("profiles")
     .update({ [legacyColumn]: null })
@@ -176,8 +177,31 @@ export function createOAuthTokenStore(deps: OAuthTokenStoreDeps) {
     }
   }
 
+  /**
+   * Delete the token only while it still equals `expected`, so a caller
+   * holding a stale copy cannot remove a newer one. Returns whether it did.
+   */
+  async function deleteOAuthTokenIfUnchanged(
+    userId: string,
+    provider: OAuthProvider,
+    expected: string
+  ) {
+    const { data, error } = await deps.rpc("delete_oauth_token_if_unchanged", {
+      p_user_id: userId,
+      p_provider: provider,
+      p_expected: expected,
+    });
+    if (error) {
+      throw new Error(
+        `Failed to delete ${provider} OAuth token: ${error.message}`
+      );
+    }
+    return data === true;
+  }
+
   return {
     deleteOAuthToken,
+    deleteOAuthTokenIfUnchanged,
     getOAuthToken,
     hasOAuthToken,
     migrateLegacyOAuthToken,
@@ -193,6 +217,7 @@ const defaultOAuthTokenStore = createOAuthTokenStore({
 });
 
 export const { deleteOAuthToken } = defaultOAuthTokenStore;
+export const { deleteOAuthTokenIfUnchanged } = defaultOAuthTokenStore;
 export const { getOAuthToken } = defaultOAuthTokenStore;
 export const { hasOAuthToken } = defaultOAuthTokenStore;
 export const { migrateLegacyOAuthToken } = defaultOAuthTokenStore;
