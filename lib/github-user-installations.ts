@@ -1,4 +1,5 @@
-import { getGithubInstallation, GithubHttpError } from "@/lib/github-app";
+import { getGithubInstallation } from "@/lib/github-app";
+import { ignoreRevokedGithubInstallation } from "@/lib/github-installation-result";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { mapGithubRequests } from "@/lib/github-request-concurrency";
 
@@ -43,22 +44,15 @@ export async function listUserGithubInstallations(
       // Historical rows can have an installation id but no account metadata.
       // Verify that same attached id; never discover an org-wide App grant and
       // attach it to an arbitrary user as a fallback for missing authorization.
-      try {
-        const current = await deps.getInstallation(row.installation_id);
-        if (current.account?.login)
-          return {
-            ...row,
-            account_login: current.account.login,
-            account_type: current.account.type ?? null,
-          };
-      } catch (error) {
-        if (
-          error instanceof GithubHttpError &&
-          [401, 403, 404].includes(error.status)
-        )
-          return null;
-        throw error;
-      }
+      const current = await ignoreRevokedGithubInstallation(
+        deps.getInstallation(row.installation_id)
+      );
+      if (current?.account?.login)
+        return {
+          ...row,
+          account_login: current.account.login,
+          account_type: current.account.type ?? null,
+        };
       return null;
     }
   );

@@ -3,6 +3,7 @@ import { defineTool } from "./shared";
 import { normalizeLogin, findInstallationToken } from "./github-shared";
 import { hasGithubAppConfig } from "@/lib/github-app";
 import { mapGithubRequests } from "@/lib/github-request-concurrency";
+import { ignoreRevokedGithubInstallation } from "@/lib/github-installation-result";
 
 const GITHUB_API_ORIGIN = "https://api.github.com";
 
@@ -144,17 +145,21 @@ async function resolveAuths(input: {
       const { hasGithubAppConfig, createGithubInstallationAccessToken } =
         await import("@/lib/github-app");
       if (hasGithubAppConfig()) {
-        auths.push(
-          ...(await mapGithubRequests(
-            await listUserGithubInstallations(input.userId),
-            async (row) => {
-              const { token } = await createGithubInstallationAccessToken(
-                row.installation_id
-              );
-              return { token, source: "github_app_installation" as const };
-            }
-          ))
+        const resolved = await mapGithubRequests(
+          await listUserGithubInstallations(input.userId),
+          async (row) => {
+            const grant = await ignoreRevokedGithubInstallation(
+              createGithubInstallationAccessToken(row.installation_id)
+            );
+            return grant
+              ? {
+                  token: grant.token,
+                  source: "github_app_installation" as const,
+                }
+              : null;
+          }
         );
+        auths.push(...resolved.filter((auth) => auth !== null));
       }
     } catch (error) {
       warnings.push(
@@ -197,7 +202,7 @@ const repoListParams = z
 export function createGithubRepoList(options: GithubRepoListOptions = {}) {
   return defineTool({
     description:
-      "List GitHub repositories covered by approved Mogplex GitHub App installations. OAuth-only deployments use their explicit repository grant. Read-only. Use this for 'what repos do I have access to', org repo inventory, or finding a repo by name. Never use unauthenticated web_fetch against api.github.com for repo inventory — it only returns public data.",
+      "List GitHub repositories covered by approved Mogplex GitHub App installations. OAuth-only deployments use their explicit repository grant. Returns one page of up to 100 repositories per credential, so name searches and filtered results may be partial. Read-only. Never use unauthenticated web_fetch against api.github.com for private repo inventory.",
     inputSchema: repoListParams,
     execute: async ({
       owner,

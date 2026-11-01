@@ -1,3 +1,5 @@
+import { ignoreRevokedGithubInstallation } from "@/lib/github-installation-result";
+
 const GITHUB_LOGIN_RE = /^[A-Za-z\d](?:[A-Za-z\d-]{0,37}[A-Za-z\d])?$/;
 const GITHUB_REPO_NAME_RE = /^[A-Za-z\d._-]+$/;
 
@@ -42,8 +44,8 @@ export async function findInstallationToken(input: {
       row.account_login?.toLowerCase() === owner.toLowerCase()
   );
   if (!installation?.installation_id) return null;
-  const { token } = await createGithubInstallationAccessToken(
-    installation.installation_id
+  const grant = await ignoreRevokedGithubInstallation(
+    createGithubInstallationAccessToken(installation.installation_id)
   );
-  return token;
+  return grant?.token ?? null;
 }

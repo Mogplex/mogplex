@@ -97,3 +97,14 @@ it("normalizes an installation identifier serialized as a database bigint string
     })
   ).toEqual([known]);
 });
+
+it("preserves a rate-limit verification error while resolving missing owner metadata", async () => {
+  await expect(
+    listUserGithubInstallations("user", {
+      db: database([unknown]),
+      getInstallation: async () => {
+        throw new GithubHttpError(403, "API rate limit exceeded");
+      },
+    })
+  ).rejects.toThrow(/rate limit/i);
+});

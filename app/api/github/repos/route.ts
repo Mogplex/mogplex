@@ -44,9 +44,8 @@ export async function GET(request: Request) {
     );
   }
 
-  const githubToken = await getGithubOAuthRepositoryToken(userId);
-
   try {
+    const githubToken = await getGithubOAuthRepositoryToken(userId);
     const repos = await syncGithubReposForUser(userId, githubToken, {
       productTeamId: scopeResolution.scope.productTeamId,
     });

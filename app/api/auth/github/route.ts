@@ -92,6 +92,14 @@ export async function GET(request: Request) {
     );
   }
 
+  let identityOnlyGrant: boolean;
+  try {
+    identityOnlyGrant = !(await isGithubOAuthRepositoryAccessAllowed(userId));
+  } catch {
+    return NextResponse.redirect(
+      buildAppUrl("/?error=github_repository_authorization", request)
+    );
+  }
   const state = crypto.randomUUID();
   cookieStore.set("github_oauth_state", state, {
     httpOnly: true,
@@ -103,9 +111,7 @@ export async function GET(request: Request) {
   const params = new URLSearchParams({
     client_id: requireEnv("GITHUB_CLIENT_ID"),
     redirect_uri: buildAppUrl("/api/auth/github/callback", request).toString(),
-    scope: getGithubOAuthGrantConfiguration(
-      !(await isGithubOAuthRepositoryAccessAllowed(userId))
-    ).scope,
+    scope: getGithubOAuthGrantConfiguration(identityOnlyGrant).scope,
     state,
   });
 

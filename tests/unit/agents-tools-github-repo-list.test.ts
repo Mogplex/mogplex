@@ -265,3 +265,55 @@ test("GitHub App mode does not use an older OAuth token to list an unapproved or
     }
   );
 });
+
+test("an unavailable App installation does not hide healthy grants or select a broader OAuth credential", async () => {
+  const calls: string[] = [];
+  await withEnv(
+    {
+      GITHUB_APP_ID: "1",
+      GITHUB_APP_NAME: "fixture",
+      GITHUB_APP_PRIVATE_KEY: createTestGithubAppPrivateKey(),
+    },
+    async () => {
+      await withPatchedGithubInstallations(
+        {
+          data: [
+            { installation_id: 321, account_login: "revoked" },
+            { installation_id: 322, account_login: "approved" },
+          ],
+          error: null,
+        },
+        async () => {
+          await withPatchedFetch(
+            async (url, init) => {
+              const path = new URL(String(url)).pathname;
+              calls.push(path);
+              if (path === "/app/installations/321/access_tokens")
+                return new Response(null, { status: 403 });
+              if (path === "/app/installations/322/access_tokens")
+                return Response.json({ token: "ghs-healthy" });
+              assert.equal(path, "/installation/repositories");
+              assert.equal(readAuthorizationHeader(init), "Bearer ghs-healthy");
+              return Response.json({ repositories: [REPO_FIXTURES[0]] });
+            },
+            async () => {
+              const { createGithubRepoList } = await loadToolsModule();
+              const result = await (
+                createGithubRepoList({
+                  userId: "user-1",
+                  oauthToken: "older-oauth",
+                }) as unknown as ExecutedRepoList
+              ).execute({});
+              assert.equal(result.error, undefined);
+              assert.equal(calls.includes("/user/repos"), false);
+              assert.deepEqual(
+                result.items?.map((item) => item.fullName),
+                ["mogplex/mogplex"]
+              );
+            }
+          );
+        }
+      );
+    }
+  );
+});

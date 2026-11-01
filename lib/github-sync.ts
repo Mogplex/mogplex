@@ -3,6 +3,7 @@ import { isGithubOAuthRepositoryAccessAllowed } from "@/lib/github-repository-au
 import { filterVisibleGithubRepos } from "@/lib/github-repo-visibility";
 import { filterAuthorizedTeamGithubRepos } from "@/lib/github-team-repo-visibility";
 import { ignoreRevokedGithubInstallation } from "@/lib/github-installation-result";
+import { mapGithubRequests } from "@/lib/github-request-concurrency";
 import type { GithubRepoPayload } from "@/lib/github-repo-payload";
 import {
   fetchGithubInstallationRepos,
@@ -448,14 +449,12 @@ export async function syncGithubReposForUser(
   const verifiedInstallations = new Map<number, ReadonlySet<number>>();
 
   if (installationScopedSync) {
-    const current = await Promise.all(
-      installations.map((inst) =>
-        ignoreRevokedGithubInstallation(
-          syncGithubInstallationReposForUser(
-            userId,
-            Number(inst.installation_id),
-            { productTeamId: options.productTeamId }
-          )
+    const current = await mapGithubRequests(installations, (inst) =>
+      ignoreRevokedGithubInstallation(
+        syncGithubInstallationReposForUser(
+          userId,
+          Number(inst.installation_id),
+          { productTeamId: options.productTeamId }
         )
       )
     );
