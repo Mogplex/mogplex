@@ -1,3 +1,5 @@
+import { metadata } from "@trigger.dev/sdk/v3";
+import { SLACK_REQUEST_OWNER_KEY } from "@/lib/slack/request-presentation";
 import type {
   SlackChannelLinkRow,
   SlackInstallationRow,
@@ -175,6 +177,8 @@ export async function runConversationalMode(input: {
     userText,
     repoName: null,
   };
+  if (deps.runtimeRunId)
+    await metadata.set(SLACK_REQUEST_OWNER_KEY, mogplexUserId).flush();
   const reply = await openSlackConversationalReply({
     deps,
     botToken,
@@ -285,9 +289,13 @@ export async function runConversationalMode(input: {
       ]
         .filter(Boolean)
         .join("\n\n"),
-      abortSignal: AbortSignal.timeout(SLACK_CONVERSATIONAL_AGENT_TIMEOUT_MS),
+      abortSignal: AbortSignal.any([
+        AbortSignal.timeout(SLACK_CONVERSATIONAL_AGENT_TIMEOUT_MS),
+        ...(deps.runtimeSignal ? [deps.runtimeSignal] : []),
+      ]),
       onProgress: reply.onProgress,
     });
+    deps.runtimeSignal?.throwIfAborted();
     completed = {
       agentResult,
       launchedRunId: repoAgentRun.getLaunchedRunId(),
@@ -296,6 +304,15 @@ export async function runConversationalMode(input: {
       repoName: agentInput.repoContext?.repoName ?? null,
     };
   } catch (error) {
+    if (deps.runtimeSignal?.aborted) {
+      if (await reply.fail("_Request stopped._"))
+        await saveSlackTerminalState("delivered");
+      return {
+        outcome: "request_cancelled",
+        conversationId: conversation.id,
+        mogplexUserId,
+      };
+    }
     console.error("[slack-event] conversational agent failed", {
       teamId: payload.teamId,
       eventId: payload.eventId,

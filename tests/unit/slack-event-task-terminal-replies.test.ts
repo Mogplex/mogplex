@@ -13,7 +13,7 @@ after(() => {
   restoreFetch();
 });
 
-test("shortens oversized agent replies before updating the Slack placeholder", async () => {
+test("shortens oversized agent replies before posting the final answer", async () => {
   const { runSlackEventTask } = await loadSlackEventTask();
   const updates: string[] = [];
   const oversizedReply = "a".repeat(4_001);
@@ -35,15 +35,15 @@ test("shortens oversized agent replies before updating the Slack placeholder", a
       agentAbortSignal = input.abortSignal;
       return agentSuccess({ finalText: oversizedReply });
     },
-    postMessage: async (_token, input) => ({
-      channel: input.channel,
-      ts: "1700000000.000999",
-    }),
+    postMessage: async (_token, input) => {
+      if (input.text !== "_Preparing your request..._")
+        updates.push(input.text);
+      return { channel: input.channel, ts: "1700000000.000999" };
+    },
     updateMessage: async (_token, input) => {
       if (input.text.length > 4_000) {
         throw new Error("Slack chat.update failed: msg_too_long");
       }
-      updates.push(input.text);
       return { channel: input.channel, ts: input.ts };
     },
   });

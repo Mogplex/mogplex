@@ -6,6 +6,7 @@ import {
   saveConnectionRecoveryRequest,
   loadConnectionRecoveryRequest,
   markConnectionRecoveryDispatched,
+  cancelConnectionRecoveryRequest,
 } from "@/lib/slack/connection-recovery/store";
 import {
   findRecoveryRepository,
@@ -38,6 +39,12 @@ beforeAll(async () => {
       "utf8"
     )
   );
+  await db.exec(
+    await readFile(
+      "neon/migrations/20261101190000_slack_connection_request_cancellation.sql",
+      "utf8"
+    )
+  );
   await db.exec(`
     insert into profiles values ('00000000-0000-4000-8000-000000000001');
     insert into slack_installations values ('00000000-0000-4000-8000-000000000002');
@@ -57,13 +64,24 @@ describe("Slack connection request storage", () => {
       ...input
     } = original;
     const saved = await saveConnectionRecoveryRequest(input, client);
+    expect(
+      (
+        await saveConnectionRecoveryRequest(
+          { ...input, resume_text: "Same task reworded" },
+          client
+        )
+      ).id
+    ).toBe(saved.id);
     expect((await saveConnectionRecoveryRequest(input, client)).id).toBe(
       saved.id
     );
     expect(
       (
         await saveConnectionRecoveryRequest(
-          { ...input, resume_text: "Another task" },
+          {
+            ...input,
+            payload: { ...input.payload, eventId: "Ev-another-task" },
+          },
           client
         )
       ).id
@@ -93,6 +111,65 @@ describe("Slack connection request storage", () => {
       (await loadConnectionRecoveryRequest(saved.id, original.user_id, client))
         ?.dispatched_at
     ).toEqual(dispatched);
+  });
+  it("cancels a pending request only for its owner and prevents later continuation", async () => {
+    const original = recoveryRequest();
+    const {
+      id: _id,
+      request_key: _key,
+      dispatched_at: _sent,
+      ...input
+    } = original;
+    const saved = await saveConnectionRecoveryRequest(
+      { ...input, payload: { ...input.payload, eventId: "Ev-cancel" } },
+      client
+    );
+    expect(
+      await cancelConnectionRecoveryRequest(
+        saved.id,
+        "00000000-0000-4000-8000-000000000099",
+        client
+      )
+    ).toBe(false);
+    expect(
+      await loadConnectionRecoveryRequest(saved.id, input.user_id, client)
+    ).not.toBeNull();
+    expect(
+      await cancelConnectionRecoveryRequest(saved.id, input.user_id, client)
+    ).toBe(true);
+    expect(
+      (await loadConnectionRecoveryRequest(saved.id, input.user_id, client))
+        ?.cancelled_at
+    ).toBeTruthy();
+    expect(
+      (
+        await saveConnectionRecoveryRequest(
+          { ...input, payload: { ...input.payload, eventId: "Ev-cancel" } },
+          client
+        )
+      ).cancelled_at
+    ).toBeTruthy();
+    await markConnectionRecoveryDispatched(saved.id, input.user_id, client);
+    expect(
+      (await loadConnectionRecoveryRequest(saved.id, input.user_id, client))
+        ?.cancelled_at
+    ).toBeTruthy();
+    const dispatched = await saveConnectionRecoveryRequest(
+      { ...input, payload: { ...input.payload, eventId: "Ev-dispatched" } },
+      client
+    );
+    await markConnectionRecoveryDispatched(
+      dispatched.id,
+      input.user_id,
+      client
+    );
+    expect(
+      await cancelConnectionRecoveryRequest(
+        dispatched.id,
+        input.user_id,
+        client
+      )
+    ).toBe(false);
   });
   it("restores only the requester's repository in the saved product scope", async () => {
     const request = recoveryRequest();

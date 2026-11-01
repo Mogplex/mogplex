@@ -241,3 +241,51 @@ describe("runChatAgent", () => {
     });
   });
 });
+
+it("records user cancellation and waits for its usage record before returning", async () => {
+  const abort = new AbortController();
+  const records: RunChatAiCallRecord[] = [];
+  const model = new MockLanguageModelV4({
+    doStream: async () =>
+      streamOf([
+        { type: "stream-start", warnings: [] },
+        { type: "text-start", id: "t1" },
+        { type: "text-delta", id: "t1", delta: "Checking " },
+        { type: "text-end", id: "t1" },
+        {
+          type: "finish",
+          finishReason: { unified: "stop", raw: "stop" },
+          usage,
+        },
+      ]),
+  });
+  await expect(
+    runChatAgent({
+      userId: "user-1",
+      model: "test/model",
+      messages: [{ role: "user", content: "Check status" }],
+      latestUserText: "Check status",
+      abortSignal: abort.signal,
+      onProgress: async (event) => {
+        if (event.type === "text_delta") abort.abort();
+      },
+      deps: {
+        stream: {
+          resolveModel: (async () => ({ model, providerOptions: {} })) as never,
+          buildTools: (async () => ({
+            tools: {},
+            connections: [],
+            cleanup: async () => {},
+          })) as never,
+          resolveSkills: async () => NO_CONVERSATION_SKILLS,
+        },
+        recordAiCall: async (record) => {
+          await new Promise((resolve) => setImmediate(resolve));
+          records.push(record);
+        },
+      },
+    })
+  ).rejects.toThrow();
+  expect(records).toHaveLength(1);
+  expect(records[0].status).toBe("cancelled");
+});

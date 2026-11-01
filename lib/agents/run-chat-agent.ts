@@ -73,7 +73,7 @@ export type RunChatAgentInput = ChatAgentContext & {
   /** Seams for tests: the model stream's dependencies and the ai_calls writer. */
   deps?: {
     stream?: Partial<ChatModelStreamDeps>;
-    recordAiCall?: (record: RunChatAiCallRecord) => void;
+    recordAiCall?: (record: RunChatAiCallRecord) => void | Promise<void>;
   };
 };
 
@@ -207,7 +207,7 @@ export type RunChatAiCallRecord = {
   model: string;
   startedAt: string;
   startedAtMs: number;
-  status: "success" | "failed";
+  status: "success" | "failed" | "cancelled";
   usage: CapturedUsage;
   finishReason?: string | null;
   error?: string | null;
@@ -253,7 +253,7 @@ export function buildRunChatAiCallRow(input: RunChatAiCallRecord) {
 }
 
 function recordRunChatAiCall(input: RunChatAiCallRecord) {
-  void supabaseAdmin
+  return supabaseAdmin
     .from("ai_calls")
     .insert(buildRunChatAiCallRow(input))
     .select("id")
@@ -357,15 +357,20 @@ export async function runChatAgent(
 
   try {
     await consumeStreamWithCallback(result, progressReporter);
+    input.abortSignal?.throwIfAborted();
   } catch (error) {
     await finalization.cleanupAfterInterruption();
     const message = error instanceof Error ? error.message : "Stream error";
-    recordAiCall({
+    await recordAiCall({
       context: input,
       model: resolvedModel,
       startedAt,
       startedAtMs,
-      status: "failed",
+      status:
+        input.abortSignal?.aborted &&
+        input.abortSignal.reason?.name !== "TimeoutError"
+          ? "cancelled"
+          : "failed",
       usage: readObservedUsage(),
       error: message,
       compactionEvent: compaction.event,
@@ -405,7 +410,7 @@ export async function runChatAgent(
     },
     observedUsage
   );
-  recordAiCall({
+  await recordAiCall({
     context: input,
     model: resolvedModel,
     startedAt,

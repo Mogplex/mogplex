@@ -56,6 +56,7 @@ export type SlackEventTaskResult = {
     | "repo_agent_user_not_allowed"
     | "repo_agent_monthly_limit_reached"
     | "conversational_reply"
+    | "request_cancelled"
     | "repo_agent_run_started"
     | "connection_authorization_requested"
     | "connection_request_unavailable"
@@ -160,6 +161,8 @@ export type StartRepoAgentRunResult = {
 };
 
 export type SlackEventTaskDeps = {
+  runtimeRunId?: string;
+  runtimeSignal?: AbortSignal;
   validateConnectionContinuation?: typeof import("@/lib/slack/connection-recovery/continuation").validateConnectionContinuation;
   loadRepoContextById?: (
     userId: string,
@@ -258,10 +261,6 @@ export type SlackEventTaskDeps = {
   postMessage: typeof postSlackMessage;
   postEphemeral: typeof postSlackEphemeral;
   updateMessage: typeof updateSlackMessage;
-  /** Streamed replies; when absent, replies edit a placeholder instead. */
-  startStream?: typeof import("@/lib/slack/client").startSlackStream;
-  appendStream?: typeof import("@/lib/slack/client").appendSlackStream;
-  stopStream?: typeof import("@/lib/slack/client").stopSlackStream;
   createUserLinkToken: (input: {
     installationId: string;
     teamId: string;

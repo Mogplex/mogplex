@@ -79,7 +79,7 @@ test("falls back to conversational mode when the channel isn't linked", async ()
   );
   assert.match(systemSuffix ?? "", /authenticated GitHub issue creation/);
   assert.match(systemSuffix ?? "", /Never claim GitHub is read-only/);
-  assert.match(systemSuffix ?? "", /Use Slack mrkdwn/);
+  assert.match(systemSuffix ?? "", /final answer in standard Markdown/);
   assert.match(systemSuffix ?? "", /Do not narrate hidden reasoning/);
 });
 

@@ -1,3 +1,4 @@
+import { postOrReuseSlackMessage } from "@/trigger/slack-event-lib/messaging";
 import { buildAppUrl } from "@/lib/app-url";
 import { postSlackMessage } from "@/lib/slack/client";
 import type { SlackEventTaskPayload } from "@/trigger/slack-event-lib/types";
@@ -56,6 +57,12 @@ export async function requestSlackConnectionRecovery(
     product_team_id: input.productTeamId ?? null,
     repo_id: input.repoId ?? null,
   });
+  if (request.cancelled_at)
+    return {
+      ok: false as const,
+      error:
+        "This connection request was cancelled. Send a new message if you want to start again.",
+    };
   const descriptor = await deps.describe(request);
   if (target.provider === "connection" && !descriptor.name)
     return {
@@ -68,11 +75,15 @@ export async function requestSlackConnectionRecovery(
     appUrl: deps.appUrl(),
     ...descriptor,
   });
-  await deps.postMessage(input.botToken, {
-    channel: input.payload.channelId,
-    thread_ts: input.payload.threadTs || input.payload.messageTs,
+  await postOrReuseSlackMessage({
+    deps,
+    botToken: input.botToken,
+    channelId: input.payload.channelId,
+    threadTs: input.payload.threadTs,
+    postThreadTs: input.payload.threadTs || input.payload.messageTs,
+    eventId: input.payload.eventId,
+    metadataKey: `slackConnection:${request.id}`,
     ...card,
-    unfurl_links: false,
   });
   return {
     ok: true as const,

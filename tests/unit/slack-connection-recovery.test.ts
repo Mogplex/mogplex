@@ -281,3 +281,77 @@ test("a linked channel with a revoked GitHub grant offers recovery instead of st
   assert.equal(cards[0].payload.threadTs, basePayload.threadTs);
   assert.match(cards[0].resumeText, /fix the crash/);
 });
+
+test("repeated connector requests in one turn post only one card", async () => {
+  let count = 0;
+  const tools = createSlackConnectionTools({
+    userId: "user",
+    installationId: "installation",
+    botToken: "bot",
+    payload: basePayload,
+    deps: {
+      requestConnectionRecovery: async () => {
+        count++;
+        return { ok: true, requestId: "request", message: "Saved" };
+      },
+    },
+  });
+  const execute = tools.request_connection.execute!;
+  await execute(
+    {
+      target: {
+        provider: "github",
+        repository: "acme/widgets",
+        access: "read",
+      },
+      resumeText: "List widgets",
+    },
+    { toolCallId: "1", messages: [], context: {} }
+  );
+  await execute(
+    {
+      target: {
+        provider: "github",
+        repository: "ACME/widgets",
+        access: "read",
+      },
+      resumeText: "Same task, rephrased",
+    },
+    { toolCallId: "2", messages: [], context: {} }
+  );
+  assert.equal(count, 1);
+});
+test("a failed Vercel lookup reports missing access without unsolicited connection cards", async () => {
+  const { SlackVercelAccessError } =
+    await import("../../lib/slack/connection-recovery/vercel");
+  let cards = 0;
+  const tools = createSlackConnectionTools(
+    {
+      userId: "user",
+      installationId: "installation",
+      botToken: "bot",
+      payload: basePayload,
+      deps: {
+        requestConnectionRecovery: async () => {
+          cards++;
+          return { ok: true, requestId: "request", message: "Saved" };
+        },
+      },
+    },
+    {
+      canRecover: async () => true,
+      loadProjects: async () => {
+        throw new SlackVercelAccessError(true);
+      },
+    }
+  );
+  const result = await tools.find_vercel_projects.execute!(
+    { team: "acme" },
+    { toolCallId: "1", messages: [], context: {} }
+  );
+  assert.equal(
+    (result as { authorizationRequired: boolean }).authorizationRequired,
+    true
+  );
+  assert.equal(cards, 0);
+});

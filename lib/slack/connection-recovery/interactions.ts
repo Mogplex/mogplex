@@ -7,6 +7,7 @@ import {
 import { resolveSlackCommandUserId } from "@/lib/slack/command-identity";
 import {
   getSlackBotToken,
+  updateSlackMessage,
   openSlackView,
   updateSlackView,
   postSlackEphemeral,
@@ -22,9 +23,11 @@ import {
 import {
   loadConnectionRecoveryRequest,
   markConnectionRecoveryDispatched,
+  cancelConnectionRecoveryRequest,
 } from "./store";
 import {
   CONNECTION_OPEN_ACTION,
+  CONNECTION_CANCEL_ACTION,
   CONNECTION_CONTINUE_ACTION,
   CONNECTION_AUTHORIZE_ACTION,
   CONNECTION_RESTORE_ACTION,
@@ -53,6 +56,8 @@ const defaultDeps = {
   getUserMapping: getSlackUserMapping,
   getBotToken: getSlackBotToken,
   loadRequest: loadConnectionRecoveryRequest,
+  cancelRequest: cancelConnectionRecoveryRequest,
+  updateMessage: updateSlackMessage,
   markDispatched: markConnectionRecoveryDispatched,
   checkAccess: checkConnectionRecoveryAccess,
   describe: describeRecoveryConnector,
@@ -70,6 +75,7 @@ export function isConnectionRecoveryAction(payload: SlackBlockActionsPayload) {
     payload.actions?.some((action) =>
       [
         CONNECTION_OPEN_ACTION,
+        CONNECTION_CANCEL_ACTION,
         CONNECTION_CONTINUE_ACTION,
         CONNECTION_AUTHORIZE_ACTION,
         CONNECTION_RESTORE_ACTION,
@@ -87,6 +93,7 @@ export async function handleConnectionRecoveryAction(
   const action = payload.actions?.find((item) =>
     [
       CONNECTION_OPEN_ACTION,
+      CONNECTION_CANCEL_ACTION,
       CONNECTION_CONTINUE_ACTION,
       CONNECTION_AUTHORIZE_ACTION,
       CONNECTION_RESTORE_ACTION,
@@ -122,6 +129,39 @@ export async function handleConnectionRecoveryAction(
   )
     return "not_owner";
   if (!channelId && !payload.view) return "invalid";
+  if (action?.action_id === CONNECTION_CANCEL_ACTION) {
+    const cancelled =
+      Boolean(request.cancelled_at) ||
+      (await deps.cancelRequest(request.id, userId));
+    const text = cancelled
+      ? "Connection request cancelled. No access was changed."
+      : "This request has already continued. Use Stop request on its active reply.";
+    if (payload.view?.id)
+      await deps.updateView(botToken, {
+        view_id: payload.view.id,
+        view: buildConnectionRecoveryModal({
+          id: request.id,
+          target: request.target,
+          appUrl: deps.appUrl(),
+          completed: true,
+          status: text,
+        }),
+      });
+    else if (payload.message?.ts ?? payload.container?.message_ts)
+      await deps.updateMessage(botToken, {
+        channel: request.payload.channelId,
+        ts: (payload.message?.ts ?? payload.container?.message_ts)!,
+        text,
+        blocks: [{ type: "context", elements: [{ type: "plain_text", text }] }],
+      });
+    else
+      await deps.postEphemeral(botToken, {
+        channel: request.payload.channelId,
+        user: slackUserId,
+        text,
+      });
+    return cancelled ? "cancelled" : "already_dispatched";
+  }
   const baseModalInput = {
     id: request.id,
     target: request.target,
@@ -145,13 +185,18 @@ export async function handleConnectionRecoveryAction(
         view: buildConnectionRecoveryModal({
           ...baseModalInput,
           ...(await deps.describe(request)),
-          completed: Boolean(request.dispatched_at),
-          ...(request.dispatched_at
+          completed: Boolean(request.dispatched_at || request.cancelled_at),
+          ...(request.cancelled_at
             ? {
                 status:
-                  "This request has already been continued. Follow its progress in the original thread.",
+                  "This connection request was cancelled. Send a new message to start again.",
               }
-            : {}),
+            : request.dispatched_at
+              ? {
+                  status:
+                    "This request has already been continued. Follow its progress in the original thread.",
+                }
+              : {}),
         }),
       });
     return "opened";
@@ -161,7 +206,11 @@ export async function handleConnectionRecoveryAction(
   let status =
     "This request has already been continued. Follow its progress in the original thread.";
   let outcome = "already_dispatched";
-  if (!request.dispatched_at) {
+  if (request.cancelled_at) {
+    status =
+      "This connection request was cancelled. Send a new message to start again.";
+    outcome = "cancelled";
+  } else if (!request.dispatched_at) {
     try {
       if (action?.action_id === CONNECTION_RESTORE_ACTION) {
         await deps.restoreRepository(request);
@@ -211,7 +260,9 @@ export async function handleConnectionRecoveryAction(
           ...modalInput,
           status,
           completed:
-            outcome === "dispatched" || outcome === "already_dispatched",
+            outcome === "dispatched" ||
+            outcome === "already_dispatched" ||
+            outcome === "cancelled",
         }),
       })
     : deps.postEphemeral(botToken, {

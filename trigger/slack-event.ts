@@ -1,3 +1,4 @@
+import { recoverSlackConversationalCancellation } from "./slack-event-lib/reply-stream";
 import { loadSlackThreadRunContext } from "@/lib/slack/thread-run-context";
 import { parseSlackThreadCancel } from "@/lib/slack/thread-cancel";
 import {
@@ -18,9 +19,6 @@ import {
   postSlackMessage,
   stripSlackMention,
   updateSlackMessage,
-  startSlackStream,
-  appendSlackStream,
-  stopSlackStream,
 } from "@/lib/slack/client";
 import { runChatAgent } from "@/lib/agents/run-chat-agent";
 import { buildAppUrl } from "@/lib/app-url";
@@ -171,9 +169,6 @@ const defaultDeps: SlackEventTaskDeps = {
   postMessage: postSlackMessage,
   postEphemeral: postSlackEphemeral,
   updateMessage: updateSlackMessage,
-  startStream: startSlackStream,
-  appendStream: appendSlackStream,
-  stopStream: stopSlackStream,
   createUserLinkToken: createSlackUserLinkToken,
   buildSlackLinkUrl: (token) =>
     buildAppUrl(`/slack/link?token=${encodeURIComponent(token)}`).toString(),
@@ -221,6 +216,7 @@ export async function recoverSlackEventTerminalFailure(
         channel: placeholder.channel,
         ts: placeholder.ts,
         text: SLACK_TERMINAL_FAILURE_TEXT,
+        blocks: [],
       },
       "terminal failure placeholder recovery"
     ))
@@ -414,7 +410,23 @@ export const handleSlackEventTask = task({
   onFailure: async ({ payload }) => {
     await recoverSlackEventTerminalFailure(payload);
   },
-  run: async (payload: SlackEventTaskPayload) => {
+  onCancel: async ({
+    payload,
+    runPromise,
+  }: {
+    payload: SlackEventTaskPayload;
+    runPromise: Promise<unknown>;
+  }) => {
+    await runPromise.catch(() => undefined);
+    await recoverSlackConversationalCancellation(payload);
+  },
+  run: async (payload: SlackEventTaskPayload, { ctx, signal }) => {
+    const executeEvent = (overrides: Partial<SlackEventTaskDeps>) =>
+      runSlackEventTask(payload, {
+        runtimeRunId: ctx.run.id,
+        runtimeSignal: signal,
+        ...overrides,
+      });
     metadata.set("teamId", payload.teamId);
     metadata.set("eventId", payload.eventId);
     metadata.set("eventType", payload.eventType);
@@ -427,7 +439,7 @@ export const handleSlackEventTask = task({
       !Array.isArray(allowedSlackUsers) ||
       allowedSlackUsers.includes(payload.slackUserId);
     if (parseSlackThreadCancel(payload) !== null) {
-      return runSlackEventTask(payload, {
+      return executeEvent({
         getInstallation: async () => workflowInstallation,
       });
     }
@@ -438,7 +450,7 @@ export const handleSlackEventTask = task({
         defaultDeps
       );
       if (guidance)
-        return runSlackEventTask(payload, {
+        return executeEvent({
           getInstallation: async () => workflowInstallation,
           getBotToken: async () => guidance.botToken,
           resolveSlackAttribution: async () => guidance.attribution,
@@ -479,7 +491,7 @@ export const handleSlackEventTask = task({
         };
       }
     }
-    return runSlackEventTask(payload, {
+    return executeEvent({
       getInstallation: async () => workflowInstallation,
     });
   },

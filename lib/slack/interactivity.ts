@@ -45,7 +45,7 @@ export type SlackBlockActionsPayload = {
   team?: { id?: string };
   user?: { id?: string };
   channel?: { id?: string };
-  container?: { channel_id?: string };
+  container?: { channel_id?: string; message_ts?: string };
   response_url?: string;
   trigger_id?: string;
   view?: { id?: string; private_metadata?: string };
@@ -55,10 +55,11 @@ export type SlackBlockActionsPayload = {
    * `block_actions`. It is a potentially stale snapshot, never the source for
    * rewriting a run card; the delivery worker loads authoritative run state.
    */
-  message?: { text?: string; blocks?: SlackBlock[] };
+  message?: { ts?: string; text?: string; blocks?: SlackBlock[] };
 };
 
 export type SlackInteractivityResult =
+  | { outcome: "request_control"; result: string }
   | { outcome: "connection_recovery"; result: string }
   | { outcome: "run_changes"; result: string }
   | { outcome: "checkpoint"; result: string }
@@ -420,6 +421,18 @@ export async function handleSlackBlockActions(
         outcome: "connection_recovery",
         result: await handleConnectionRecoveryAction(payload),
       };
+  }
+
+  if (
+    payload.actions?.some(
+      (action) => action.action_id === "mogplex_stop_request"
+    )
+  ) {
+    const { handleSlackRequestStop } = await import("./request-interactions");
+    return {
+      outcome: "request_control",
+      result: await handleSlackRequestStop(payload),
+    };
   }
 
   const runCard = await routeRunCardAction(payload);
