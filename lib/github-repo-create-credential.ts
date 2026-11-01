@@ -12,7 +12,10 @@ import {
   type GithubRepoOwnerTarget,
 } from "@/lib/github-owners";
 import { hasGithubAppUserAuthConfig } from "@/lib/github-app-user-auth";
-import { GITHUB_ORG_READ_SCOPE } from "@/lib/github-oauth";
+import {
+  GITHUB_APP_USER_AUTHORIZE_PATH,
+  GITHUB_ORG_READ_SCOPE,
+} from "@/lib/github-oauth";
 import { getGithubOAuthRepositoryToken } from "@/lib/github-repository-auth";
 import { getOAuthToken } from "@/lib/oauth-tokens";
 
@@ -34,9 +37,6 @@ export type GithubRepoCreateRefusal = {
 export type GithubRepoCreateCredential =
   /** `viaApp`: the token carries only the GitHub App's permissions. */
   { ok: true; token: string; viaApp: boolean } | GithubRepoCreateRefusal;
-
-/** Where a user authorizes the GitHub App; clients append `?next=`. */
-export const GITHUB_APP_USER_AUTHORIZE_PATH = "/api/auth/github/app-user";
 
 /** A programming error: the App user token lookup was not bound to a user. */
 export class AppUserTokenUnboundError extends Error {
@@ -193,11 +193,12 @@ async function personalAccountCredential(
       owner: target.login,
       error,
     });
+    // Covers both GitHub refreshing the token and Mogplex storing it.
     return {
       ok: false,
       status: 502,
       code: "GITHUB_APP_UNAVAILABLE",
-      error: "GitHub is not responding to Mogplex right now. Try again.",
+      error: `Could not load your GitHub authorization for ${target.login}. Try again.`,
     };
   }
   if (token) return { ok: true, token, viaApp: true };
@@ -315,3 +316,5 @@ export function githubRepoCreateErrorResponse(
     },
   };
 }
+
+export { GITHUB_APP_USER_AUTHORIZE_PATH } from "@/lib/github-oauth";

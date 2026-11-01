@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  GITHUB_APP_USER_AUTHORIZE_PATH,
   GITHUB_APP_USER_OUTCOME_PARAM,
   GITHUB_ORG_READ_SCOPE,
   GITHUB_REAUTHORIZE_HEADER,
@@ -21,6 +22,7 @@ export type NewProjectAction = { href: string; label: string } | null;
 const AUTHORIZE_OUTCOME_MESSAGES: Record<string, string> = {
   account_mismatch:
     "GitHub authorized a different account. Authorize again with the GitHub account connected to Mogplex.",
+  not_connected: "Reconnect GitHub to Mogplex, then authorize again.",
   denied:
     "GitHub authorization was cancelled. Authorize to create repositories here.",
   failed: "GitHub authorization did not finish. Try again.",
@@ -197,7 +199,7 @@ export function useNewProjectTarget({
       ? { href: `/api/auth/github?next=${next}`, label: "Install GitHub App" }
       : selectedTarget?.authorization_required
         ? {
-            href: `/api/auth/github/app-user?next=${next}`,
+            href: `${GITHUB_APP_USER_AUTHORIZE_PATH}?next=${next}`,
             label: "Authorize GitHub",
           }
         : null;

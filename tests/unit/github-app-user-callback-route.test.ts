@@ -136,3 +136,12 @@ test("reports a cancelled authorization as denied, not as a state failure", asyn
   assert.equal(exchanged, false);
   assert.deepEqual(stored, []);
 });
+
+test("asks to reconnect GitHub when no identity grant can be read", async () => {
+  const { handler, stored } = await handlerWith({
+    getIdentityToken: async () => null,
+  });
+  const response = await handler(callbackRequest());
+  assert.equal(outcome(response).result, "not_connected");
+  assert.deepEqual(stored, []);
+});

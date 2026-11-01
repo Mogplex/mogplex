@@ -83,10 +83,9 @@ export function createGithubAppUserCallbackHandler(
         deps.fetchLogin(tokens.accessToken),
         identityToken ? deps.fetchLogin(identityToken) : null,
       ]);
-      if (
-        !authorizedLogin ||
-        authorizedLogin.toLowerCase() !== connectedLogin?.toLowerCase()
-      ) {
+      // Without a readable identity grant there is no account to match.
+      if (!connectedLogin) return back("not_connected");
+      if (authorizedLogin?.toLowerCase() !== connectedLogin.toLowerCase()) {
         return back("account_mismatch");
       }
       await deps.storeGrant(userId, { ...tokens, login: authorizedLogin });
