@@ -72,3 +72,16 @@ test("should ask to install the App before authorizing a personal account", asyn
   );
   assert.equal(personal?.installation_required, true);
 });
+
+test("should ask to install the App on an org that has no installation", async () => {
+  const { markPersonalAuthorization } = await load();
+  const [org] = await markPersonalAuthorization(
+    "user-1",
+    [{ ...targets[1], github_installation_id: null }],
+    {
+      appConfigured: () => true,
+      appUserAuthConfigured: () => false,
+    }
+  );
+  assert.equal(org?.installation_required, true);
+});
