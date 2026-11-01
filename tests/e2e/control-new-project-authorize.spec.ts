@@ -165,3 +165,46 @@ test("new project asks to install the App on a personal account first", async ({
     page.getByRole("link", { name: "Install GitHub App" })
   ).toHaveAttribute("href", /^\/api\/auth\/github\?next=/);
 });
+
+test("new project confirms a completed GitHub authorization", async ({
+  page,
+}) => {
+  await enableScopedE2EAuth(page);
+  await mockBaseChrome(page);
+  await page.route("**/api/connections", (route) =>
+    fulfillJson(route, { connections: [] })
+  );
+  await page.route("**/api/repos**", (route) => fulfillJson(route, []));
+  await page.route("**/api/control/sessions**", (route) =>
+    fulfillJson(route, [])
+  );
+  await page.route("**/api/github/owners", (route) =>
+    fulfillJson(route, [
+      {
+        login: "alex",
+        kind: "personal",
+        github_installation_id: 3,
+        scope_label: "Personal",
+        source: "oauth+installation",
+        authorization_required: false,
+      },
+    ])
+  );
+  await page.route("**/api/github/repos/availability**", (route) =>
+    fulfillJson(route, { availability: "available" })
+  );
+
+  await page.goto(`${scopedPath("control")}?github_app_user=authorized`);
+  await page
+    .getByPlaceholder("Ask anything or run a command...")
+    .fill("Ship account settings");
+  await expect(
+    page.getByText("GitHub authorized. Mogplex can now create repositories", {
+      exact: false,
+    })
+  ).toBeVisible();
+  await expect(page).not.toHaveURL(/github_app_user=/);
+  await expect(
+    page.getByRole("link", { name: "Authorize GitHub" })
+  ).toHaveCount(0);
+});

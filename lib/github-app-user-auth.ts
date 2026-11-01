@@ -9,6 +9,7 @@ export const GITHUB_APP_USER_CALLBACK_PATH =
   "/api/auth/github/app-user/callback";
 export const GITHUB_APP_USER_STATE_COOKIE = "github_app_user_state";
 export const GITHUB_APP_USER_RETURN_COOKIE = "github_app_user_return_to";
+export const GITHUB_APP_USER_VERIFIER_COOKIE = "github_app_user_verifier";
 
 /** Refresh this long before GitHub's expiry so a create never races it. */
 const REFRESH_MARGIN_MS = 5 * 60 * 1000;
@@ -71,6 +72,8 @@ export function hasGithubAppUserAuthConfig(env: Env = process.env) {
 export function buildGithubAppUserAuthorizeUrl(input: {
   state: string;
   redirectUri: string;
+  /** PKCE S256 challenge; the callback must send the matching verifier. */
+  codeChallenge: string;
   login?: string | null;
   env?: Env;
 }) {
@@ -83,6 +86,8 @@ export function buildGithubAppUserAuthorizeUrl(input: {
     // Asks GitHub for a refresh token with the expiring access token, so one
     // authorization keeps working until the refresh token expires.
     scope: "offline_access",
+    code_challenge: input.codeChallenge,
+    code_challenge_method: "S256",
   });
   // Suggests the account already connected; GitHub still lets the user choose.
   if (input.login) params.set("login", input.login);
@@ -135,10 +140,11 @@ async function requestToken(
 export function exchangeGithubAppUserCode(
   code: string,
   redirectUri: string,
+  codeVerifier: string,
   overrides: Partial<Deps> = {}
 ) {
   return requestToken(
-    { code, redirect_uri: redirectUri },
+    { code, redirect_uri: redirectUri, code_verifier: codeVerifier },
     { ...defaultDeps, ...overrides }
   );
 }

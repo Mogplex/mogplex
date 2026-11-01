@@ -31,9 +31,13 @@ const AUTHORIZE_OUTCOME_MESSAGES: Record<string, string> = {
     "Creating repositories in personal accounts is not available on this deployment.",
 };
 
+/** Confirms a completed authorization, which otherwise leaves no trace. */
+const AUTHORIZED_NOTICE =
+  "GitHub authorized. Mogplex can now create repositories in your personal account.";
+
 /**
  * Reads and clears the authorization callback's outcome from the URL, so a
- * reload does not repeat it. Returns the message to show, if any.
+ * reload does not repeat it. Returns the raw outcome, if any.
  */
 function takeAuthorizeOutcome() {
   const url = new URL(window.location.href);
@@ -41,7 +45,7 @@ function takeAuthorizeOutcome() {
   if (!outcome) return null;
   url.searchParams.delete(GITHUB_APP_USER_OUTCOME_PARAM);
   window.history.replaceState(window.history.state, "", url);
-  return AUTHORIZE_OUTCOME_MESSAGES[outcome] ?? null;
+  return outcome;
 }
 
 /**
@@ -68,6 +72,7 @@ export function useNewProjectTarget({
   // render never touches `window`.
   const [returnPath, setReturnPath] = useState("/");
   const [authorizeNotice, setAuthorizeNotice] = useState<string | null>(null);
+  const [ownersNotice, setOwnersNotice] = useState<string | null>(null);
 
   const nameValidation = useMemo(() => validateGithubRepoName(name), [name]);
 
@@ -91,7 +96,11 @@ export function useNewProjectTarget({
       })
       .then(({ targets, reauthorizeScope }) => {
         setOwnerTargets(targets);
-        setAuthorizeNotice(takeAuthorizeOutcome());
+        const outcome = takeAuthorizeOutcome();
+        setAuthorizeNotice(
+          outcome ? (AUTHORIZE_OUTCOME_MESSAGES[outcome] ?? null) : null
+        );
+        setOwnersNotice(outcome === "authorized" ? AUTHORIZED_NOTICE : null);
         const saved = window.localStorage.getItem(LAST_GITHUB_OWNER_KEY);
         const preferred = targets.find(
           (target) => target.login.toLowerCase() === saved?.toLowerCase()
@@ -229,6 +238,7 @@ export function useNewProjectTarget({
     ownersLoading,
     ownersError: ownersError ?? (authorizeAction ? authorizeMessage : null),
     ownersAction: ownersAction ?? authorizeAction,
+    ownersNotice,
     availability,
     nameValidation,
   };

@@ -7,9 +7,14 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ||= "test-service-role-key";
 
 const STATE = "state-123";
 
-function cookieStore(state: string | null, returnTo = "/personal/control") {
+function cookieStore(
+  state: string | null,
+  returnTo = "/personal/control",
+  verifier: string | null = "verifier-1"
+) {
   const values = new Map<string, string>();
   if (state) values.set("github_app_user_state", state);
+  if (verifier) values.set("github_app_user_verifier", verifier);
   values.set("github_app_user_return_to", returnTo);
   const deleted: string[] = [];
   return {
@@ -33,11 +38,12 @@ const tokens = {
 
 async function handlerWith(
   overrides: Record<string, unknown>,
-  cookieState: string | null = STATE
+  cookieState: string | null = STATE,
+  verifier: string | null = "verifier-1"
 ) {
   const { createGithubAppUserCallbackHandler } =
     await import("../../app/api/auth/github/app-user/callback/route");
-  const cookies = cookieStore(cookieState);
+  const cookies = cookieStore(cookieState, undefined, verifier);
   const stored: unknown[] = [];
   const handler = createGithubAppUserCallbackHandler({
     getCookieStore: async () => cookies.store,
@@ -79,6 +85,7 @@ test("stores the App grant for the connected GitHub account and returns the user
   assert.deepEqual(cookies.deleted.sort(), [
     "github_app_user_return_to",
     "github_app_user_state",
+    "github_app_user_verifier",
   ]);
 });
 
@@ -143,5 +150,41 @@ test("asks to reconnect GitHub when no identity grant can be read", async () => 
   });
   const response = await handler(callbackRequest());
   assert.equal(outcome(response).result, "not_connected");
+  assert.deepEqual(stored, []);
+});
+
+test("sends the PKCE verifier with the code exchange", async () => {
+  const exchanges: unknown[][] = [];
+  const { handler } = await handlerWith({
+    exchangeCode: async (...args: unknown[]) => {
+      exchanges.push(args);
+      return tokens;
+    },
+  });
+  await handler(callbackRequest());
+  assert.equal(exchanges[0]?.[2], "verifier-1");
+});
+
+test("refuses a callback without the PKCE verifier cookie", async () => {
+  let exchanged = false;
+  const { handler, stored } = await handlerWith(
+    {
+      exchangeCode: async () => {
+        exchanged = true;
+        return tokens;
+      },
+    },
+    STATE,
+    null
+  );
+  const warn = console.warn;
+  console.warn = () => {};
+  try {
+    const response = await handler(callbackRequest());
+    assert.equal(outcome(response).result, "state_mismatch");
+  } finally {
+    console.warn = warn;
+  }
+  assert.equal(exchanged, false);
   assert.deepEqual(stored, []);
 });

@@ -101,6 +101,7 @@ export function NewMissionComposer({
     ownersLoading,
     ownersError,
     ownersAction,
+    ownersNotice,
     availability,
     nameValidation,
     requireAuthorization,
@@ -282,6 +283,7 @@ export function NewMissionComposer({
               ownerLogin={ownerLogin}
               ownersError={ownersError}
               ownersAction={ownersAction}
+              ownersNotice={ownersNotice}
               nameValidation={nameValidation}
               availability={availability}
             />

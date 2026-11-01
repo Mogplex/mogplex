@@ -7,6 +7,7 @@ import {
   GITHUB_APP_USER_CALLBACK_PATH,
   GITHUB_APP_USER_RETURN_COOKIE,
   GITHUB_APP_USER_STATE_COOKIE,
+  GITHUB_APP_USER_VERIFIER_COOKIE,
   storeGithubAppUserGrant,
 } from "@/lib/github-app-user-auth";
 import { GITHUB_APP_USER_OUTCOME_PARAM } from "@/lib/github-oauth";
@@ -40,11 +41,15 @@ export function createGithubAppUserCallbackHandler(
     const url = new URL(request.url);
     const cookieStore = await deps.getCookieStore();
     const storedState = cookieStore.get(GITHUB_APP_USER_STATE_COOKIE)?.value;
+    const codeVerifier = cookieStore.get(
+      GITHUB_APP_USER_VERIFIER_COOKIE
+    )?.value;
     const returnTo = normalizeAppRedirectPath(
       cookieStore.get(GITHUB_APP_USER_RETURN_COOKIE)?.value
     );
     cookieStore.delete(GITHUB_APP_USER_STATE_COOKIE);
     cookieStore.delete(GITHUB_APP_USER_RETURN_COOKIE);
+    cookieStore.delete(GITHUB_APP_USER_VERIFIER_COOKIE);
 
     const back = (outcome: string) => {
       const target = buildAppUrl(returnTo, request);
@@ -67,7 +72,13 @@ export function createGithubAppUserCallbackHandler(
     }
     const code = url.searchParams.get("code");
     const state = url.searchParams.get("state");
-    if (!code || !state || !storedState || state !== storedState) {
+    if (
+      !code ||
+      !state ||
+      !storedState ||
+      state !== storedState ||
+      !codeVerifier
+    ) {
       console.warn("[github-app-user] state mismatch", { userId });
       return back("state_mismatch");
     }
@@ -77,7 +88,7 @@ export function createGithubAppUserCallbackHandler(
         GITHUB_APP_USER_CALLBACK_PATH,
         request
       ).toString();
-      const tokens = await deps.exchangeCode(code, redirectUri);
+      const tokens = await deps.exchangeCode(code, redirectUri, codeVerifier);
       const identityToken = await deps.getIdentityToken(userId);
       const [authorizedLogin, connectedLogin] = await Promise.all([
         deps.fetchLogin(tokens.accessToken),

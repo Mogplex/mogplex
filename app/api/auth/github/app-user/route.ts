@@ -7,8 +7,13 @@ import {
   GITHUB_APP_USER_CALLBACK_PATH,
   GITHUB_APP_USER_RETURN_COOKIE,
   GITHUB_APP_USER_STATE_COOKIE,
+  GITHUB_APP_USER_VERIFIER_COOKIE,
   hasGithubAppUserAuthConfig,
 } from "@/lib/github-app-user-auth";
+import {
+  generatePkceChallenge,
+  generatePkceVerifier,
+} from "@/lib/connections/oauth-discovery";
 import { GITHUB_APP_USER_OUTCOME_PARAM } from "@/lib/github-oauth";
 import { findProfileGithubLogin } from "@/lib/github-profile-login";
 
@@ -42,12 +47,19 @@ export async function GET(request: Request) {
     // The callback accepts only the connected account, so suggest it.
     findProfileGithubLogin(userId, "github-app-user"),
   ]);
+  const codeVerifier = generatePkceVerifier();
   cookieStore.set(GITHUB_APP_USER_STATE_COOKIE, state, COOKIE_OPTIONS);
   cookieStore.set(GITHUB_APP_USER_RETURN_COOKIE, next, COOKIE_OPTIONS);
+  cookieStore.set(
+    GITHUB_APP_USER_VERIFIER_COOKIE,
+    codeVerifier,
+    COOKIE_OPTIONS
+  );
   return NextResponse.redirect(
     buildGithubAppUserAuthorizeUrl({
       state,
       login,
+      codeChallenge: generatePkceChallenge(codeVerifier),
       redirectUri: buildAppUrl(
         GITHUB_APP_USER_CALLBACK_PATH,
         request

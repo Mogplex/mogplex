@@ -70,6 +70,7 @@ it("builds the App authorize URL with state and redirect", () => {
     buildGithubAppUserAuthorizeUrl({
       state: "s1",
       redirectUri: "https://mogplex.com/api/auth/github/app-user/callback",
+      codeChallenge: "challenge-1",
       env,
     })
   );
@@ -79,13 +80,16 @@ it("builds the App authorize URL with state and redirect", () => {
   expect(url.searchParams.get("client_id")).toBe("Iv23client");
   expect(url.searchParams.get("state")).toBe("s1");
   expect(url.searchParams.get("scope")).toBe("offline_access");
+  expect(url.searchParams.get("code_challenge")).toBe("challenge-1");
+  expect(url.searchParams.get("code_challenge_method")).toBe("S256");
 });
 
 it("exchanges a code and records when each token expires", async () => {
-  const { deps } = store(null);
+  const { state, deps } = store(null);
   const tokens = await exchangeGithubAppUserCode(
     "code-1",
     "https://mogplex.com/cb",
+    "verifier-1",
     deps({
       access_token: "ghu_new",
       expires_in: 28_800,
@@ -99,6 +103,7 @@ it("exchanges a code and records when each token expires", async () => {
     refreshToken: "ghr_new",
     refreshTokenExpiresAt: NOW + 15_897_600_000,
   });
+  expect(state.requests[0]?.get("code_verifier")).toBe("verifier-1");
 });
 
 it("rejects an exchange GitHub answers with an error", async () => {
@@ -107,6 +112,7 @@ it("rejects an exchange GitHub answers with an error", async () => {
     exchangeGithubAppUserCode(
       "code-1",
       "https://mogplex.com/cb",
+      "verifier-1",
       deps({ error: "bad_verification_code" })
     )
   ).rejects.toThrow("bad_verification_code");
