@@ -1,5 +1,5 @@
 import {
-  deleteOAuthToken,
+  deleteOAuthTokenIfUnchanged,
   getOAuthToken,
   storeOAuthToken,
 } from "@/lib/oauth-tokens";
@@ -40,7 +40,8 @@ const defaultDeps = {
   getToken: (userId: string) => getOAuthToken(userId, "github_app"),
   storeToken: (userId: string, value: string) =>
     storeOAuthToken(userId, "github_app", value),
-  deleteToken: (userId: string) => deleteOAuthToken(userId, "github_app"),
+  deleteTokenIfUnchanged: (userId: string, expected: string) =>
+    deleteOAuthTokenIfUnchanged(userId, "github_app", expected),
 };
 type Deps = typeof defaultDeps;
 
@@ -186,8 +187,10 @@ export async function getGithubAppUserToken(
   overrides: Partial<Deps> = {}
 ): Promise<string | null> {
   const deps = { ...defaultDeps, ...overrides };
-  const grant = parseGrant(await deps.getToken(userId));
-  if (grant?.login.toLowerCase() !== login.toLowerCase()) return null;
+  const stored = await deps.getToken(userId);
+  const grant = parseGrant(stored);
+  if (!stored || grant?.login.toLowerCase() !== login.toLowerCase())
+    return null;
 
   const now = deps.now();
   if (accessTokenFresh(grant, now)) return grant.accessToken;
@@ -209,29 +212,27 @@ export async function getGithubAppUserToken(
     ) {
       throw error;
     }
-    return recoverRejectedRefresh(userId, login, grant, deps);
+    return recoverRejectedRefresh(userId, login, stored, deps);
   }
 }
 
 /**
  * GitHub rotates the refresh token on use, so a concurrent request may
- * already have stored a new grant. Use that one, and forget the grant only
- * while it is still the one GitHub rejected.
+ * already have stored a new grant. Forget the grant only while it is still
+ * the one GitHub rejected (checked atomically in the database); otherwise use
+ * the newer grant.
  */
 async function recoverRejectedRefresh(
   userId: string,
   login: string,
-  rejected: GithubAppUserGrant,
+  rejected: string,
   deps: Deps
 ) {
+  if (await deps.deleteTokenIfUnchanged(userId, rejected)) return null;
   const current = parseGrant(await deps.getToken(userId));
-  if (current && current.refreshToken !== rejected.refreshToken) {
-    return current.login.toLowerCase() === login.toLowerCase()
-      ? current.accessToken
-      : null;
-  }
-  await deps.deleteToken(userId);
-  return null;
+  return current?.login.toLowerCase() === login.toLowerCase()
+    ? current.accessToken
+    : null;
 }
 
 /**

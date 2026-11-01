@@ -42,9 +42,11 @@ function store(initial: GithubAppUserGrant | null) {
       storeToken: async (_userId: string, value: string) => {
         state.raw = value;
       },
-      deleteToken: async () => {
+      deleteTokenIfUnchanged: async (_userId: string, expected: string) => {
+        if (state.raw !== expected) return false;
         state.deleted += 1;
         state.raw = null;
+        return true;
       },
       fetch: async (_url: string, init?: RequestInit) => {
         state.requests.push(new URLSearchParams(String(init?.body)));

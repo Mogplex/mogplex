@@ -177,8 +177,31 @@ export function createOAuthTokenStore(deps: OAuthTokenStoreDeps) {
     }
   }
 
+  /**
+   * Delete the token only while it still equals `expected`, so a caller
+   * holding a stale copy cannot remove a newer one. Returns whether it did.
+   */
+  async function deleteOAuthTokenIfUnchanged(
+    userId: string,
+    provider: OAuthProvider,
+    expected: string
+  ) {
+    const { data, error } = await deps.rpc("delete_oauth_token_if_unchanged", {
+      p_user_id: userId,
+      p_provider: provider,
+      p_expected: expected,
+    });
+    if (error) {
+      throw new Error(
+        `Failed to delete ${provider} OAuth token: ${error.message}`
+      );
+    }
+    return data === true;
+  }
+
   return {
     deleteOAuthToken,
+    deleteOAuthTokenIfUnchanged,
     getOAuthToken,
     hasOAuthToken,
     migrateLegacyOAuthToken,
@@ -194,6 +217,7 @@ const defaultOAuthTokenStore = createOAuthTokenStore({
 });
 
 export const { deleteOAuthToken } = defaultOAuthTokenStore;
+export const { deleteOAuthTokenIfUnchanged } = defaultOAuthTokenStore;
 export const { getOAuthToken } = defaultOAuthTokenStore;
 export const { hasOAuthToken } = defaultOAuthTokenStore;
 export const { migrateLegacyOAuthToken } = defaultOAuthTokenStore;
