@@ -115,7 +115,8 @@ test("isStraySentryTunnelRequest passes only requests the Sentry rewrite matches
   const cases: Array<[string, boolean]> = [
     ["/monitoring?o=4507&p=4508", false],
     ["/monitoring/?o=4507&p=4508", false],
-    ["/monitoring?o=&p=", false],
+    ["/monitoring?o=&p=", true],
+    ["/monitoring?o=4507&p=", true],
     ["/monitoring?o=4507&p=4508&r=us", false],
     ["/monitoring", true],
     ["/monitoring?o=4507", true],

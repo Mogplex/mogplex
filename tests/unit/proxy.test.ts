@@ -238,9 +238,13 @@ test("proxy lets CLI OAuth requests reach hosted inference routes", async () => 
 });
 
 test("proxy 404s stray Sentry tunnel requests before they reach /[scope]", async () => {
-  const stray = await proxy(new NextRequest("https://mogplex.com/monitoring"));
-  assert.equal(stray.status, 404);
-  assert.equal(stray.headers.get("x-middleware-next"), null);
+  await withEnv({ MOGPLEX_SENTRY_TUNNEL_ROUTE: "/monitoring" }, async () => {
+    const stray = await proxy(
+      new NextRequest("https://mogplex.com/monitoring")
+    );
+    assert.equal(stray.status, 404);
+    assert.equal(stray.headers.get("x-middleware-next"), null);
+  });
 
   const tunnelRequest = () =>
     new NextRequest("https://mogplex.com/monitoring?o=4507&p=4508", {
@@ -251,8 +255,20 @@ test("proxy 404s stray Sentry tunnel requests before they reach /[scope]", async
     assert.equal(tunnel.headers.get("x-middleware-next"), "1");
   });
   await withEnv({ MOGPLEX_SENTRY_TUNNEL_ROUTE: "" }, async () => {
-    const untunneled = await proxy(tunnelRequest());
-    assert.equal(untunneled.status, 404);
+    const warnings: unknown[] = [];
+    const originalWarn = console.warn;
+    console.warn = (...args: unknown[]) => warnings.push(args[0]);
+    try {
+      const untunneled = await proxy(tunnelRequest());
+      await proxy(tunnelRequest());
+      assert.equal(untunneled.status, 404);
+    } finally {
+      console.warn = originalWarn;
+    }
+    // Once per instance: dropped envelopes are visible without flooding logs.
+    assert.deepEqual(warnings, [
+      "[proxy] Sentry tunnel request refused: this build installed no tunnel route",
+    ]);
   });
 });
 

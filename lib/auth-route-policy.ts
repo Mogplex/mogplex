@@ -141,9 +141,23 @@ function matchesDeclaredPaths(
   return entries.some((entry) => matchesDeclaredPath(pathname, entry));
 }
 
-// `*`, not `+`: withSentryConfig's rewrite matches `o`/`p` with `\d*`, so an
-// empty value is still a tunnel request it serves.
-const SENTRY_TUNNEL_ID_RE = /^\d*$/;
+// `+`, not `*`: the rewrite's `has` value `\d*` only applies to a non-empty
+// query value, so Next never serves `?o=&p=` through the tunnel.
+const SENTRY_TUNNEL_ID_RE = /^\d+$/;
+
+/** True for the URL shape the Sentry SDK sends envelopes to: `?o=<org>&p=<project>`. */
+export function isSentryTunnelEnvelopeUrl(url: URL): boolean {
+  const orgId = url.searchParams.get("o");
+  const projectId = url.searchParams.get("p");
+  return (
+    (url.pathname === SENTRY_TUNNEL_ROUTE ||
+      url.pathname === `${SENTRY_TUNNEL_ROUTE}/`) &&
+    orgId !== null &&
+    projectId !== null &&
+    SENTRY_TUNNEL_ID_RE.test(orgId) &&
+    SENTRY_TUNNEL_ID_RE.test(projectId)
+  );
+}
 
 /**
  * True for a request under the tunnel path that no Sentry rewrite will serve.
@@ -163,19 +177,7 @@ export function isStraySentryTunnelRequest(
   ) {
     return false;
   }
-  if (!tunnelInstalled) return true;
-  const orgId = url.searchParams.get("o");
-  const projectId = url.searchParams.get("p");
-  const isTunnelPath =
-    url.pathname === SENTRY_TUNNEL_ROUTE ||
-    url.pathname === `${SENTRY_TUNNEL_ROUTE}/`;
-  return !(
-    isTunnelPath &&
-    orgId !== null &&
-    projectId !== null &&
-    SENTRY_TUNNEL_ID_RE.test(orgId) &&
-    SENTRY_TUNNEL_ID_RE.test(projectId)
-  );
+  return !(tunnelInstalled && isSentryTunnelEnvelopeUrl(url));
 }
 
 /**

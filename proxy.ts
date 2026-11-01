@@ -4,6 +4,7 @@ import { lookupApiKeyAccess } from "@/lib/auth/api-key";
 import {
   allowsDelegatedInternalApiPath,
   isPublicRoutePath,
+  isSentryTunnelEnvelopeUrl,
   isStraySentryTunnelRequest,
   isUnscopedAuthedRoutePath,
 } from "@/lib/auth-route-policy";
@@ -52,6 +53,20 @@ function makeScopeDb(): ScopeLookup {
       return Boolean(data);
     },
   };
+}
+
+let warnedTunnelMissing = false;
+
+/**
+ * A well-formed envelope refused here means the SDK is tunnelling but this
+ * build installed no tunnel, so browser error reports are being dropped.
+ */
+function warnOnceIfTunnelMissing(url: URL) {
+  if (warnedTunnelMissing || !isSentryTunnelEnvelopeUrl(url)) return;
+  warnedTunnelMissing = true;
+  console.warn(
+    "[proxy] Sentry tunnel request refused: this build installed no tunnel route"
+  );
 }
 
 function notFoundResponse(request: NextRequest) {
@@ -145,6 +160,7 @@ async function handleProxy(request: NextRequest, deps: ProxyDeps) {
     }
     // Bodyless: a rendered 404 would reach the /[scope] catch-all instead.
     if (isStraySentryTunnelRequest(request.nextUrl)) {
+      warnOnceIfTunnelMissing(request.nextUrl);
       return new NextResponse(null, { status: 404 });
     }
     return NextResponse.next();
