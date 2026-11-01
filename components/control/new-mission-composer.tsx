@@ -103,6 +103,7 @@ export function NewMissionComposer({
     ownersAction,
     availability,
     nameValidation,
+    requireAuthorization,
   } = useNewProjectTarget({
     enabled: selectedRepoId === NEW_PROJECT,
     name: effectiveNewProjectName,
@@ -148,7 +149,15 @@ export function NewMissionComposer({
             name: nameValidation.name,
           }),
         });
-        const data = (await response.json()) as Repo & { error?: string };
+        const data = (await response.json()) as Repo & {
+          error?: string;
+          authorize_url?: string;
+        };
+        if (!response.ok && data.authorize_url) {
+          // The grant lapsed after the picker loaded; offer authorization.
+          requireAuthorization(ownerLogin);
+          return;
+        }
         if (!response.ok) {
           throw new Error(data.error || "Failed to create repository");
         }
@@ -189,6 +198,7 @@ export function NewMissionComposer({
     ownerLogin,
     permissionsIdx,
     repos,
+    requireAuthorization,
     selectedRepoId,
     submitDisabled,
     text,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   GITHUB_ORG_READ_SCOPE,
   GITHUB_REAUTHORIZE_HEADER,
@@ -166,7 +166,19 @@ export function useNewProjectTarget({
         }
       : null;
 
+  /** Show the authorize action after a create finds the grant missing. */
+  const requireAuthorization = useCallback((login: string) => {
+    setOwnerTargets((targets) =>
+      targets.map((target) =>
+        target.login.toLowerCase() === login.toLowerCase()
+          ? { ...target, authorization_required: true }
+          : target
+      )
+    );
+  }, []);
+
   return {
+    requireAuthorization,
     ownerTargets,
     ownerLogin,
     setOwnerLogin,

@@ -9,6 +9,7 @@ import {
   GITHUB_APP_USER_STATE_COOKIE,
   hasGithubAppUserAuthConfig,
 } from "@/lib/github-app-user-auth";
+import { findProfileGithubLogin } from "@/lib/github-profile-login";
 
 const COOKIE_OPTIONS = {
   httpOnly: true,
@@ -35,12 +36,17 @@ export async function GET(request: Request) {
   }
 
   const state = crypto.randomUUID();
-  const cookieStore = await cookies();
+  const [cookieStore, login] = await Promise.all([
+    cookies(),
+    // The callback accepts only the connected account, so suggest it.
+    findProfileGithubLogin(userId, "github-app-user"),
+  ]);
   cookieStore.set(GITHUB_APP_USER_STATE_COOKIE, state, COOKIE_OPTIONS);
   cookieStore.set(GITHUB_APP_USER_RETURN_COOKIE, next, COOKIE_OPTIONS);
   return NextResponse.redirect(
     buildGithubAppUserAuthorizeUrl({
       state,
+      login,
       redirectUri: buildAppUrl(
         GITHUB_APP_USER_CALLBACK_PATH,
         request

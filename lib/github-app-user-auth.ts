@@ -212,15 +212,41 @@ export async function getGithubAppUserToken(
   } catch (error) {
     if (
       !(error instanceof GithubAppUserAuthError) ||
-      error.code === "not_configured"
+      !GRANT_REJECTION_CODES.has(error.code)
     ) {
       throw error;
     }
-    // GitHub rejected the refresh token: the user revoked it or it was used.
-    await deps.deleteToken(userId);
-    return null;
+    return recoverRejectedRefresh(userId, login, grant, deps);
   }
 }
+
+/**
+ * GitHub rotates the refresh token on use, so a concurrent request may
+ * already have stored a new grant. Use that one, and forget the grant only
+ * while it is still the one GitHub rejected.
+ */
+async function recoverRejectedRefresh(
+  userId: string,
+  login: string,
+  rejected: GithubAppUserGrant,
+  deps: Deps
+) {
+  const current = parseGrant(await deps.getToken(userId));
+  if (current && current.refreshToken !== rejected.refreshToken) {
+    return current.login.toLowerCase() === login.toLowerCase()
+      ? current.accessToken
+      : null;
+  }
+  await deps.deleteToken(userId);
+  return null;
+}
+
+/**
+ * Refresh errors that mean the grant itself is dead (revoked or already
+ * used). Anything else, such as rejected client credentials, is a deployment
+ * problem and must not erase users' grants.
+ */
+const GRANT_REJECTION_CODES = new Set(["bad_refresh_token", "invalid_grant"]);
 
 /** Whether the user has authorized the App for `login`, without refreshing. */
 export async function hasGithubAppUserGrant(

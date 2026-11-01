@@ -159,6 +159,37 @@ it("forgets a grant whose refresh token GitHub rejects", async () => {
   expect(state.deleted).toBe(1);
 });
 
+it("uses the grant a concurrent refresh stored instead of deleting it", async () => {
+  const { state, deps } = store(grant({ accessTokenExpiresAt: NOW }));
+  const rotated = JSON.stringify(
+    grant({ accessToken: "ghu_winner", refreshToken: "ghr_winner" })
+  );
+  const base = deps({ error: "bad_refresh_token" });
+  const token = await getGithubAppUserToken("user-1", "alex", {
+    ...base,
+    fetch: async (url: string, init?: RequestInit) => {
+      // The other request rotated the grant while this one was in flight.
+      state.raw = rotated;
+      return base.fetch(url, init);
+    },
+  });
+  expect(token).toBe("ghu_winner");
+  expect(state.deleted).toBe(0);
+  expect(state.raw).toBe(rotated);
+});
+
+it("keeps every grant when GitHub rejects the client credentials", async () => {
+  const { state, deps } = store(grant({ accessTokenExpiresAt: NOW }));
+  await expect(
+    getGithubAppUserToken(
+      "user-1",
+      "alex",
+      deps({ error: "incorrect_client_credentials" })
+    )
+  ).rejects.toThrow("incorrect_client_credentials");
+  expect(state.deleted).toBe(0);
+});
+
 it("keeps the grant and throws when GitHub is unreachable during refresh", async () => {
   const { state, deps } = store(grant({ accessTokenExpiresAt: NOW }));
   await expect(
