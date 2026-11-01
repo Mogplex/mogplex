@@ -67,6 +67,7 @@ export async function readPackageDevScriptInfo(
       return {
         packageDevScript: null,
         hasDevScript: true,
+        hasPackageJson: false,
       };
     }
 
@@ -77,11 +78,13 @@ export async function readPackageDevScriptInfo(
     return {
       packageDevScript,
       hasDevScript: Boolean(packageDevScript),
+      hasPackageJson: true,
     };
   } catch {
     return {
       packageDevScript: null,
       hasDevScript: true,
+      hasPackageJson: true,
     };
   }
 }
@@ -167,10 +170,17 @@ export async function resolveBootstrapContext(
   const { effectiveRuntime, strategy, effectiveDetection } =
     await resolveBootstrapDetection(sandbox, normalizedRoot, opts.runtime);
   const { packageManager, framework, frameworkEntry } = effectiveDetection;
-  const { packageDevScript, hasDevScript } = await readPackageDevScriptInfo(
-    sandbox,
-    normalizedRoot
-  );
+  const packageInfo = await readPackageDevScriptInfo(sandbox, normalizedRoot);
+  const { packageDevScript } = packageInfo;
+  // A README-only Node repo has nothing to install or start; running
+  // `npm install` there writes a stray lockfile and `npm run dev` exits,
+  // failing the whole boot before the agent can scaffold anything.
+  const emptyNodeProject =
+    !packageInfo.hasPackageJson &&
+    effectiveRuntime !== "python3.13" &&
+    !opts.devCommand &&
+    !opts.installCommand;
+  const hasDevScript = packageInfo.hasDevScript && !emptyNodeProject;
   const workspaceBuildCommand = await resolveWorkspaceBuildCommand(
     sandbox,
     normalizedRoot,
@@ -239,6 +249,7 @@ export async function resolveBootstrapContext(
     frameworkEntry,
     packageDevScript,
     hasDevScript,
+    emptyNodeProject,
     readiness,
     previewUrl,
     runtimeEnv,

@@ -8,6 +8,7 @@ import {
   buildWithBunOnPathCommand,
 } from "./client-shell";
 import {
+  EMPTY_NODE_PROJECT_MESSAGE,
   NO_DEV_SCRIPT_MESSAGE,
   waitForPreviewSignal,
 } from "./client-readiness";
@@ -113,6 +114,14 @@ export async function bootstrapSandbox(
     context
   );
 
+  if (context.emptyNodeProject) {
+    return buildNoDevScriptBootstrapResult(
+      context,
+      "",
+      EMPTY_NODE_PROJECT_MESSAGE
+    );
+  }
+
   const installLog = await runInstallPhase(
     sandbox,
     context.requiresBun
@@ -207,6 +216,17 @@ export async function* bootstrapSandboxStreaming(
     context.previewUrl,
     context
   );
+
+  if (context.emptyNodeProject) {
+    yield {
+      type: "log",
+      phase: "dev",
+      data: `${EMPTY_NODE_PROJECT_MESSAGE}\n`,
+    };
+    yield { type: "preview_url", url: context.previewUrl };
+    yield { type: "status", status: "running" };
+    return;
+  }
 
   // --- Install phase ---
   yield { type: "status", status: "installing" };

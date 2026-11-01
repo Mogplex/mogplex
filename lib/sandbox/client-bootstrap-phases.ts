@@ -339,7 +339,8 @@ export function buildNoDevScriptBootstrapResult(
     | "framework"
     | "installCommand"
   >,
-  installLog: string
+  installLog: string,
+  devLog: string = NO_DEV_SCRIPT_MESSAGE
 ) {
   return {
     previewUrl: context.previewUrl,
@@ -349,7 +350,7 @@ export function buildNoDevScriptBootstrapResult(
     installCommand: context.installCommand,
     devCommand: "(none)",
     installLog,
-    devLog: NO_DEV_SCRIPT_MESSAGE,
+    devLog,
     healthStatus: "running" as const,
     readiness: { ready: true as const },
   };

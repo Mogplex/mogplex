@@ -15,6 +15,9 @@ export const DEV_SERVER_SIGNAL_TIMEOUT_MS = 90_000;
 export const NO_DEV_SCRIPT_MESSAGE =
   "No dev script found in package.json — sandbox ready for terminal and file access.";
 
+export const EMPTY_NODE_PROJECT_MESSAGE =
+  "No package.json found — skipped install and dev server. Sandbox ready for terminal and file access.";
+
 const PREVIEW_READY_PATTERNS = [
   /\blocal:\s*https?:\/\//i,
   /\blocalhost:\d+/i,

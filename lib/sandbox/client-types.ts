@@ -98,6 +98,9 @@ export type ResolvedBootstrapContext = {
   frameworkEntry: BootstrapDetection["frameworkEntry"];
   packageDevScript: string | null;
   hasDevScript: boolean;
+  /** Node runtime, no package.json, no install/dev override: skip install
+   * and dev so a fresh repo boots ready for the agent to scaffold into. */
+  emptyNodeProject: boolean;
   readiness: PreviewReadinessOptions;
   previewUrl: string;
   runtimeEnv: ReturnType<typeof buildRuntimeSandboxEnv>;
