@@ -2,13 +2,24 @@ import {
   createGithubInstallationAccessToken,
   hasGithubAppConfig,
 } from "@/lib/github-app";
+import {
+  extractGithubApiErrorMessage,
+  type GithubRepoCreateError,
+} from "@/lib/github-create";
 import type { GithubRepoOwnerTarget } from "@/lib/github-owners";
 import { getGithubOAuthRepositoryToken } from "@/lib/github-repository-auth";
 import { getOAuthToken } from "@/lib/oauth-tokens";
 
+export type GithubRepoCreateRefusal = {
+  ok: false;
+  status: 403 | 409;
+  code: string;
+  error: string;
+};
+
 export type GithubRepoCreateCredential =
-  | { ok: true; token: string }
-  | { ok: false; status: 403; code: string; error: string };
+  | { ok: true; token: string; viaInstallation: boolean }
+  | GithubRepoCreateRefusal;
 
 const defaultDeps = {
   appConfigured: () => hasGithubAppConfig(),
@@ -43,7 +54,8 @@ export async function resolveGithubRepoCreateCredential(
   overrides: Partial<typeof defaultDeps> = {}
 ): Promise<GithubRepoCreateCredential> {
   const deps = { ...defaultDeps, ...overrides };
-  if (!deps.appConfigured()) return { ok: true, token: userToken };
+  if (!deps.appConfigured())
+    return { ok: true, token: userToken, viaInstallation: false };
   if (target.kind === "personal") {
     return {
       ok: false,
@@ -58,11 +70,61 @@ export async function resolveGithubRepoCreateCredential(
       ok: false,
       status: 403,
       code: "GITHUB_APP_INSTALLATION_REQUIRED",
-      error: `Install the Mogplex GitHub App on ${target.login} to create repositories there.`,
+      error: `Ask an owner of ${target.login} to install the Mogplex GitHub App and connect it in Mogplex.`,
     };
   }
-  const { token } = await deps.createInstallationToken(
-    target.github_installation_id
-  );
-  return { ok: true, token };
+  try {
+    const { token } = await deps.createInstallationToken(
+      target.github_installation_id
+    );
+    return { ok: true, token, viaInstallation: true };
+  } catch (error) {
+    // A suspended or removed installation is the owner's to fix, not a
+    // server fault; GitHub's response stays in the log.
+    console.warn("[github-repo-create] installation token unavailable", {
+      owner: target.login,
+      installationId: target.github_installation_id,
+      error,
+    });
+    return {
+      ok: false,
+      status: 409,
+      code: "GITHUB_APP_INSTALLATION_UNAVAILABLE",
+      error: `The Mogplex GitHub App on ${target.login} is unavailable. Ask an owner of ${target.login} to reconnect it.`,
+    };
+  }
+}
+
+/**
+ * Map GitHub's refusal of a create to the route response. An installation
+ * refused with 403 has not accepted the App's Administration permission, so
+ * say that instead of GitHub's message.
+ */
+export function githubRepoCreateErrorResponse(
+  error: GithubRepoCreateError,
+  context: { ownerLogin: string; viaInstallation: boolean }
+): { status: number; body: { error: string; code?: string } } {
+  if (error.status === 403 && context.viaInstallation) {
+    return {
+      status: 403,
+      body: {
+        code: "GITHUB_APP_PERMISSION_REQUIRED",
+        error: `The Mogplex GitHub App on ${context.ownerLogin} cannot create repositories yet. Ask an owner of ${context.ownerLogin} to accept the App's updated permissions on GitHub.`,
+      },
+    };
+  }
+  const status =
+    error.status === 422
+      ? 409
+      : error.status === 401 || error.status === 403
+        ? 403
+        : 502;
+  return {
+    status,
+    body: {
+      error:
+        extractGithubApiErrorMessage(error.body) ||
+        "GitHub repo creation failed",
+    },
+  };
 }

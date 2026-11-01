@@ -1,7 +1,10 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import type { GithubRepoOwnerTarget } from "./github-owners";
+import { GithubHttpError } from "./github-app";
+import { GithubRepoCreateError } from "./github-create";
 import {
   getGithubRepoCreationUserToken,
+  githubRepoCreateErrorResponse,
   resolveGithubRepoCreateCredential,
 } from "./github-repo-create-credential";
 
@@ -37,7 +40,11 @@ it("creates through the org installation, never the user's grant, in an App depl
     "identity-token",
     appDeps(minted)
   );
-  expect(credential).toEqual({ ok: true, token: "installation-42" });
+  expect(credential).toEqual({
+    ok: true,
+    token: "installation-42",
+    viaInstallation: true,
+  });
   expect(minted).toEqual([42]);
 });
 
@@ -82,7 +89,11 @@ it("keeps the user's repository grant in an OAuth-only deployment", async () => 
       },
     }
   );
-  expect(credential).toEqual({ ok: true, token: "repo-token" });
+  expect(credential).toEqual({
+    ok: true,
+    token: "repo-token",
+    viaInstallation: false,
+  });
 });
 
 it("reads the identity grant in an App deployment and the repo grant otherwise", async () => {
@@ -102,4 +113,61 @@ it("reads the identity grant in an App deployment and the repo grant otherwise",
       appConfigured: () => false,
     })
   ).toBe("repo-token");
+});
+
+it("turns an installation GitHub will not mint a token for into an owner action", async () => {
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  try {
+    const credential = await resolveGithubRepoCreateCredential(
+      orgTarget,
+      "identity-token",
+      {
+        appConfigured: () => true,
+        createInstallationToken: async () => {
+          throw new GithubHttpError(403, '{"message":"suspended"}');
+        },
+      }
+    );
+    expect(credential).toMatchObject({
+      ok: false,
+      status: 409,
+      code: "GITHUB_APP_INSTALLATION_UNAVAILABLE",
+    });
+    expect(JSON.stringify(credential)).not.toContain("suspended");
+  } finally {
+    warn.mockRestore();
+  }
+});
+
+it("names the missing App permission instead of GitHub's refusal", () => {
+  const refusal = new GithubRepoCreateError(
+    403,
+    '{"message":"Resource not accessible by integration"}'
+  );
+  const viaInstallation = githubRepoCreateErrorResponse(refusal, {
+    ownerLogin: "acme",
+    viaInstallation: true,
+  });
+  expect(viaInstallation.status).toBe(403);
+  expect(viaInstallation.body.code).toBe("GITHUB_APP_PERMISSION_REQUIRED");
+  expect(
+    githubRepoCreateErrorResponse(refusal, {
+      ownerLogin: "acme",
+      viaInstallation: false,
+    })
+  ).toEqual({
+    status: 403,
+    body: { error: "Resource not accessible by integration" },
+  });
+});
+
+it("maps a name collision to 409 and other GitHub failures to 502", () => {
+  const context = { ownerLogin: "acme", viaInstallation: true };
+  expect(
+    githubRepoCreateErrorResponse(new GithubRepoCreateError(422, "{}"), context)
+      .status
+  ).toBe(409);
+  expect(
+    githubRepoCreateErrorResponse(new GithubRepoCreateError(500, "{}"), context)
+  ).toEqual({ status: 502, body: { error: "GitHub repo creation failed" } });
 });

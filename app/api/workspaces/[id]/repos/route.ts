@@ -1,14 +1,11 @@
 import { parseJsonBody } from "@/lib/api/parse-json-body";
 import { NextResponse } from "next/server";
 import { requireUserId } from "@/lib/auth";
-import {
-  createGithubRepo,
-  extractGithubApiErrorMessage,
-  GithubRepoCreateError,
-} from "@/lib/github-create";
+import { createGithubRepo, GithubRepoCreateError } from "@/lib/github-create";
 import type { GithubRepoOwnerTarget } from "@/lib/github-owners";
 import {
   getGithubRepoCreationUserToken,
+  githubRepoCreateErrorResponse,
   resolveGithubRepoCreateCredential,
 } from "@/lib/github-repo-create-credential";
 import { upsertGithubReposForUser } from "@/lib/github-sync";
@@ -189,6 +186,7 @@ export function createWorkspaceRepoPostHandler(
       );
     }
 
+    let viaInstallation = false;
     try {
       const credential = await deps.resolveCreateCredential(
         ownerTarget,
@@ -200,6 +198,7 @@ export function createWorkspaceRepoPostHandler(
           { status: credential.status }
         );
       }
+      viaInstallation = credential.viaInstallation;
       const createdRepo = await deps.createGithubRepo(credential.token, {
         owner: ownerTarget.kind === "personal" ? null : ownerTarget.login,
         name,
@@ -221,16 +220,11 @@ export function createWorkspaceRepoPostHandler(
       return NextResponse.json(repo);
     } catch (error) {
       if (error instanceof GithubRepoCreateError) {
-        const message =
-          extractGithubApiErrorMessage(error.body) ||
-          "GitHub repo creation failed";
-        const status =
-          error.status === 422
-            ? 409
-            : error.status === 401 || error.status === 403
-              ? 403
-              : 502;
-        return NextResponse.json({ error: message }, { status });
+        const { status, body } = githubRepoCreateErrorResponse(error, {
+          ownerLogin: ownerTarget.login,
+          viaInstallation,
+        });
+        return NextResponse.json(body, { status });
       }
 
       console.error("[workspace-repo-create] unexpected failure", {
@@ -239,7 +233,7 @@ export function createWorkspaceRepoPostHandler(
         error,
       });
       return NextResponse.json(
-        { error: (error as Error).message || "Failed to create repository" },
+        { error: "Failed to create repository" },
         { status: 500 }
       );
     }

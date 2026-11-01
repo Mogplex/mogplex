@@ -8,7 +8,6 @@ import { getGithubOAuthRepositoryToken } from "@/lib/github-repository-auth";
 import { requireUserId } from "@/lib/auth";
 import {
   createGithubRepo,
-  extractGithubApiErrorMessage,
   fetchGithubRepo,
   GithubRepoCreateError,
   isRecoverableGithubRepoCreateConflict,
@@ -16,6 +15,7 @@ import {
 import { loadGithubRepoCreationOwnerTargets } from "@/app/api/github/_lib/repo-owner-targets";
 import {
   getGithubRepoCreationUserToken,
+  githubRepoCreateErrorResponse,
   resolveGithubRepoCreateCredential,
 } from "@/lib/github-repo-create-credential";
 import type { GithubRepoOwnerTarget } from "@/lib/github-owners";
@@ -198,6 +198,7 @@ export function createGithubRepoPostHandler(
       );
     }
 
+    let viaInstallation = false;
     try {
       const credential = await deps.resolveCreateCredential(ownerTarget, token);
       if (!credential.ok) {
@@ -206,6 +207,7 @@ export function createGithubRepoPostHandler(
           { status: credential.status }
         );
       }
+      viaInstallation = credential.viaInstallation;
       let createdRepo: Awaited<ReturnType<typeof createGithubRepo>>;
       try {
         createdRepo = await deps.createGithubRepo(credential.token, {
@@ -255,16 +257,11 @@ export function createGithubRepoPostHandler(
       return NextResponse.json(repo);
     } catch (error) {
       if (error instanceof GithubRepoCreateError) {
-        const message =
-          extractGithubApiErrorMessage(error.body) ||
-          "GitHub repo creation failed";
-        const status =
-          error.status === 422
-            ? 409
-            : error.status === 401 || error.status === 403
-              ? 403
-              : 502;
-        return NextResponse.json({ error: message }, { status });
+        const { status, body } = githubRepoCreateErrorResponse(error, {
+          ownerLogin: ownerTarget.login,
+          viaInstallation,
+        });
+        return NextResponse.json(body, { status });
       }
 
       console.error("[github-repo-create] unexpected failure", {

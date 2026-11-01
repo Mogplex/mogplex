@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { NextResponse } from "next/server";
 import type { GithubRepoOwnerTarget } from "../../lib/github-owners";
+import { GithubRepoCreateError } from "../../lib/github-create";
 
 async function loadRoute() {
   process.env.NEXT_PUBLIC_SUPABASE_URL ||= "https://example.supabase.co";
@@ -33,7 +34,8 @@ function appModeHandler(
   createGithubRepoPostHandler: Awaited<
     ReturnType<typeof loadRoute>
   >["createGithubRepoPostHandler"],
-  tokens: string[]
+  tokens: string[],
+  refuseCreate = false
 ) {
   return createGithubRepoPostHandler({
     requireUserId: async () => "user-123",
@@ -62,6 +64,12 @@ function appModeHandler(
     ],
     createGithubRepo: async (token, input) => {
       tokens.push(token);
+      if (refuseCreate) {
+        throw new GithubRepoCreateError(
+          403,
+          '{"message":"Resource not accessible by integration"}'
+        );
+      }
       return {
         id: 123,
         full_name: `${input.owner}/${input.name}`,
@@ -91,6 +99,21 @@ test("POST /api/github/repos creates an org repo with the installation token in 
     tokens
   )(createRequest("acme"));
   assert.equal(response.status, 200);
+  assert.deepEqual(tokens, ["installation-42"]);
+});
+
+test("POST /api/github/repos explains an installation that lacks the Administration permission", async () => {
+  const { createGithubRepoPostHandler } = await loadRoute();
+  const tokens: string[] = [];
+  const response = await appModeHandler(
+    createGithubRepoPostHandler,
+    tokens,
+    true
+  )(createRequest("acme"));
+  assert.equal(response.status, 403);
+  const body = await response.json();
+  assert.equal(body.code, "GITHUB_APP_PERMISSION_REQUIRED");
+  assert.doesNotMatch(body.error, /Resource not accessible/);
   assert.deepEqual(tokens, ["installation-42"]);
 });
 
