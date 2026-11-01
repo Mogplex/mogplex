@@ -119,6 +119,34 @@ it("reads the identity grant in an App deployment and the repo grant otherwise",
   ).toBe("repo-token");
 });
 
+it("reports a token failure that no org owner can fix as retryable", async () => {
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  try {
+    for (const failure of [
+      new GithubHttpError(401, "{}"),
+      new GithubHttpError(503, "{}"),
+      new Error("fetch failed"),
+    ]) {
+      const credential = await resolveGithubRepoCreateCredential(
+        orgTarget,
+        "identity-token",
+        {
+          ...appDeps(),
+          createInstallationToken: async () => {
+            throw failure;
+          },
+        }
+      );
+      expect(credential).toMatchObject({
+        status: 502,
+        code: "GITHUB_APP_UNAVAILABLE",
+      });
+    }
+  } finally {
+    warn.mockRestore();
+  }
+});
+
 it("turns an installation GitHub will not mint a token for into an owner action", async () => {
   const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
   try {

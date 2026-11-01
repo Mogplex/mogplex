@@ -43,8 +43,10 @@ In an App deployment a repository is created with the installation token of
 the organization that owns it, which needs the App's Repository creation
 (write) permission. That permission creates repositories without the rest of
 Administration, and GitHub gives the App access to each repository it
-creates. Each installation's owner must accept it before creation works
-there. The installation token does not carry the user's own
+creates. An App registered before this change must first enable the
+permission in its GitHub App settings; the manifest only applies when an App
+is created. Each installation's owner must then accept it, and until both
+steps are done a create answers 403 `GITHUB_APP_PERMISSION_REQUIRED`. The installation token does not carry the user's own
 org policy, so the user must be an active owner of the organization, read live
 with their identity grant at creation time, and the installation must be
 attached to them. The identity grant never writes. An organization without an

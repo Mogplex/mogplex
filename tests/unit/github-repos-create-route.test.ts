@@ -376,3 +376,20 @@ test("POST /api/github/repos reports a failed connection lookup instead of askin
     console.error = originalError;
   }
 });
+
+test("POST /api/github/repos reads permissions for the requested org only in an OAuth deployment", async () => {
+  const { createGithubRepoPostHandler } = await loadRoute();
+  const lookups: Array<{ onlyLogin?: string | null } | undefined> = [];
+  const handler = createGithubRepoPostHandler({
+    appConfigured: () => false,
+    requireUserId: async () => "user-123",
+    getGithubToken: async () => "repo-token",
+    loadOwnerTargets: async (_userId, _token, options) => {
+      lookups.push(options);
+      return owners([]);
+    },
+  });
+  const response = await handler(createRequest("acme"));
+  assert.equal(response.status, 400);
+  assert.deepEqual(lookups, [{ onlyLogin: "acme" }]);
+});

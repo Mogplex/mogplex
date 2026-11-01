@@ -14,7 +14,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 export async function loadGithubRepoCreationOwnerTargets(
   userId: string,
   token: string,
-  options: { requireOwner?: boolean } = {}
+  options: { requireOwner?: boolean; onlyLogin?: string | null } = {}
 ) {
   const [profileResult, installationsResult, currentUser] = await Promise.all([
     supabaseAdmin
@@ -51,9 +51,14 @@ export async function loadGithubRepoCreationOwnerTargets(
     });
     return [] as string[];
   });
+  // A create names one owner; only that org's permissions need reading.
+  const onlyLogin = options.onlyLogin?.toLowerCase();
+  const candidateOrgLogins = onlyLogin
+    ? orgLogins.filter((login) => login.toLowerCase() === onlyLogin)
+    : orgLogins;
   const creatableOrgLogins = await filterCreatableGithubOrgLogins(
     token,
-    orgLogins,
+    candidateOrgLogins,
     { requireOwner: options.requireOwner }
   );
   const creatableOrgSet = new Set(

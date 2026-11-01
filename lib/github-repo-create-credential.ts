@@ -90,13 +90,24 @@ export async function resolveGithubRepoCreateCredential(
     );
     return { ok: true, token, viaInstallation: true };
   } catch (error) {
-    // A suspended or removed installation is the owner's to fix, not a
-    // server fault; GitHub's response stays in the log.
     console.warn("[github-repo-create] installation token unavailable", {
       owner: target.login,
       installationId: target.github_installation_id,
       error,
     });
+    // A suspended (403) or removed (404) installation is the owner's to fix.
+    // Anything else (App key, rate limit, outage) is ours, and retryable.
+    if (
+      !(error instanceof GithubHttpError) ||
+      (error.status !== 403 && error.status !== 404)
+    ) {
+      return {
+        ok: false,
+        status: 502,
+        code: "GITHUB_APP_UNAVAILABLE",
+        error: "GitHub is not responding to Mogplex right now. Try again.",
+      };
+    }
     return {
       ok: false,
       status: 409,

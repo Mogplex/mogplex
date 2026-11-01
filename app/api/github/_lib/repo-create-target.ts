@@ -23,7 +23,8 @@ export type RepoCreateTargetDeps = {
   /** OAuth deployments: the owner list, filtered by the user's org policy. */
   loadOwnerTargets: (
     userId: string,
-    token: string
+    token: string,
+    options?: { onlyLogin?: string | null }
   ) => Promise<{
     targets: GithubRepoOwnerTarget[];
     oauthScopes: string[] | null;
@@ -66,7 +67,9 @@ async function lookUpOwner(
 ): Promise<OwnerLookup> {
   if (deps.appConfigured())
     return deps.loadAppCreateTarget(userId, token, ownerLogin);
-  const { targets, oauthScopes } = await deps.loadOwnerTargets(userId, token);
+  const { targets, oauthScopes } = await deps.loadOwnerTargets(userId, token, {
+    onlyLogin: ownerLogin,
+  });
   const target =
     targets.find((candidate) =>
       ownerLogin === null
