@@ -202,6 +202,64 @@ describe("durable webhook forwarding", () => {
     expect(await response.text()).not.toContain("private timeout");
   });
 
+  it("processes inline when Trigger rate-limits without storing the event", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const send = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(null, { status: 429 }));
+    const onRateLimited = vi
+      .fn<() => Promise<Response>>()
+      .mockResolvedValue(new Response("inline", { status: 202 }));
+    const response = await forwardNativeWebhook("slack", "{}", headers, {
+      env,
+      fetch: send,
+      onRateLimited,
+    });
+    expect(response.status).toBe(202);
+    expect(await response.text()).toBe("inline");
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(onRateLimited).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(error).not.toHaveBeenCalled();
+  });
+
+  it("returns 503 on a rate limit when no inline fallback is offered", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const send = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(null, { status: 429 }));
+    const response = await forwardNativeWebhook("slack", "{}", headers, {
+      env,
+      fetch: send,
+    });
+    expect(response.status).toBe(503);
+  });
+
+  it.each([
+    [
+      "another rejection",
+      () => Promise.resolve(new Response(null, { status: 500 })),
+    ],
+    [
+      "an ambiguous timeout",
+      () => Promise.reject(new DOMException("t", "TimeoutError")),
+    ],
+  ] as const)(
+    "keeps failing closed without inline processing on %s",
+    async (_label, outcome) => {
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      const onRateLimited = vi.fn<() => Promise<Response>>();
+      const response = await forwardNativeWebhook("slack", "{}", headers, {
+        env,
+        fetch: vi.fn<typeof fetch>().mockImplementation(outcome),
+        onRateLimited,
+      });
+      expect(response.status).toBe(503);
+      expect(onRateLimited).not.toHaveBeenCalled();
+    }
+  );
+
   it.each([
     "https://wrong.example/webhook",
     "https://api.trigger.dev/webhook?secret=bad",
