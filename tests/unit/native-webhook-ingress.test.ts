@@ -319,6 +319,44 @@ test("activated GitHub verifies original bytes before forwarding and skips all l
   });
 });
 
+test("activated GitHub processes a delivery inline when Trigger rate-limits it", async () => {
+  await withNativeEnv(async () => {
+    const { POST } = await loadGithubWebhookRoute();
+    const raw = JSON.stringify({ zen: "rate limited" });
+    let forwarded = 0;
+    globalThis.fetch = async (input) => {
+      if (String(input) === NATIVE_URL) {
+        forwarded++;
+        return new Response(null, { status: 429 });
+      }
+      return Response.json([]);
+    };
+    const signature = `sha256=${createHmac("sha256", SIGNING_SECRET).update(raw).digest("hex")}`;
+    const response = await POST(
+      new Request("https://app.test/api/webhooks/github", {
+        method: "POST",
+        body: raw,
+        headers: {
+          "x-github-event": "ping",
+          "x-github-delivery": "D2",
+          "x-hub-signature-256": signature,
+        },
+      })
+    );
+    assert.equal(forwarded, 1);
+    // GitHub never redelivers a failed delivery, so a 503 here loses it.
+    assert.equal(response.status, 200);
+    // Hosted acceptance answers with an empty body; only inline dispatch
+    // reports what it did with the event.
+    assert.deepEqual(await response.json(), {
+      ok: true,
+      skipped: true,
+      flow_waits: null,
+      sync: { handled: false, matchedUsers: 0 },
+    });
+  });
+});
+
 test("native opt-in keeps GitHub per-repository-secret fallback on the authenticated legacy path", async () => {
   await withNativeEnv(async () => {
     delete process.env.GITHUB_WEBHOOK_SECRET;

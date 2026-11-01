@@ -107,15 +107,7 @@ function validateWebhookSignature(
     : buildInvalidSignatureResponse();
 }
 
-export async function POST(request: Request) {
-  const rawContext = await parseWebhookRequest(request);
-  const globalSignatureResponse = validateGlobalWebhookSignature(rawContext);
-  if (globalSignatureResponse) return globalSignatureResponse;
-
-  if (rawContext.globalSecret && process.env.TRIGGER_GITHUB_WEBHOOK_URL) {
-    return forwardNativeWebhook("github", rawContext.payload, request.headers);
-  }
-
+async function dispatchInline(rawContext: RawWebhookRequestContext) {
   const context = parseWebhookRequestBody(rawContext);
   const repoRows = await loadWebhookRepoRows(
     context.repoGithubId,
@@ -126,4 +118,18 @@ export async function POST(request: Request) {
   if (signatureResponse) return signatureResponse;
 
   return dispatchVerifiedGithubWebhook(context, repoRows);
+}
+
+export async function POST(request: Request) {
+  const rawContext = await parseWebhookRequest(request);
+  const globalSignatureResponse = validateGlobalWebhookSignature(rawContext);
+  if (globalSignatureResponse) return globalSignatureResponse;
+
+  if (rawContext.globalSecret && process.env.TRIGGER_GITHUB_WEBHOOK_URL) {
+    return forwardNativeWebhook("github", rawContext.payload, request.headers, {
+      onRateLimited: () => dispatchInline(rawContext),
+    });
+  }
+
+  return dispatchInline(rawContext);
 }

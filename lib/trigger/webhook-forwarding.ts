@@ -24,6 +24,9 @@ function receiptDiagnostics(provider: Provider, headers: Headers) {
 
 /** Forward the exact signed bytes. A timeout is ambiguous: never fall back to
  * inline processing, since Trigger may already have durably accepted the event.
+ * A 429 is not ambiguous: Trigger refused the event without storing it, so
+ * `onRateLimited` may process it inline. GitHub never redelivers a failed
+ * delivery, so without that fallback a rate-limited event is lost.
  */
 export async function forwardNativeWebhook(
   provider: Provider,
@@ -32,11 +35,13 @@ export async function forwardNativeWebhook(
   options: {
     env?: Partial<NodeJS.ProcessEnv>;
     fetch?: typeof fetch;
+    onRateLimited?: () => Promise<Response>;
   } = {}
 ): Promise<Response> {
   const env = options.env ?? process.env;
   let reason: "config" | "transport" | "timeout" | "http" = "config";
   let status: number | undefined;
+  let fallback: () => Promise<Response>;
   try {
     const endpoint = new URL(
       env[`TRIGGER_${provider.toUpperCase()}_WEBHOOK_URL`] ?? ""
@@ -77,12 +82,17 @@ export async function forwardNativeWebhook(
       // Leave room for the edge's response within each provider's ACK window.
       signal: AbortSignal.timeout(provider === "slack" ? 2_000 : 8_000),
     });
-    if (!response.ok) {
+    if (response.ok) return new Response(null, { status: 200 });
+    if (response.status !== 429 || !options.onRateLimited) {
       reason = "http";
       status = response.status;
       throw new Error("Webhook was not accepted");
     }
-    return new Response(null, { status: 200 });
+    fallback = options.onRateLimited;
+    // Release the unread refusal so bursts do not pin pooled connections.
+    // Best effort: a body that errors mid-stream must not turn the refusal
+    // into a 503, which GitHub would never redeliver.
+    await response.body?.cancel().catch(() => {});
   } catch (error) {
     if (
       error instanceof Error &&
@@ -99,5 +109,20 @@ export async function forwardNativeWebhook(
       { error: "Webhook temporarily unavailable" },
       { status: 503 }
     );
+  }
+  console.warn(`[native-webhook] ${provider} rate limited, processing inline`, {
+    ...receiptDiagnostics(provider, originalHeaders),
+    reason: "rate_limited",
+  });
+  // Called outside the receipt try so an inline dispatch failure is never
+  // reported as a receipt failure.
+  try {
+    return await fallback();
+  } catch (error) {
+    console.error(`[native-webhook] ${provider} inline fallback failed`, {
+      ...receiptDiagnostics(provider, originalHeaders),
+      reason: "inline",
+    });
+    throw error;
   }
 }

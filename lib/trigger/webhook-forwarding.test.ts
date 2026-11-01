@@ -202,6 +202,109 @@ describe("durable webhook forwarding", () => {
     expect(await response.text()).not.toContain("private timeout");
   });
 
+  it("processes inline when Trigger rate-limits without storing the event", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const cancel = vi.fn();
+    const refusal = new ReadableStream({ cancel });
+    const send = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(refusal, { status: 429 }));
+    const onRateLimited = vi
+      .fn<() => Promise<Response>>()
+      .mockResolvedValue(new Response("inline", { status: 202 }));
+    const response = await forwardNativeWebhook("slack", "{}", headers, {
+      env,
+      fetch: send,
+      onRateLimited,
+    });
+    expect(response.status).toBe(202);
+    expect(await response.text()).toBe("inline");
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(onRateLimited).toHaveBeenCalledTimes(1);
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(
+      "[native-webhook] slack rate limited, processing inline",
+      { requestTimestamp: null, reason: "rate_limited" }
+    );
+    expect(error).not.toHaveBeenCalled();
+  });
+
+  it("still processes inline when the refused body fails to cancel", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const broken = new ReadableStream({
+      cancel() {
+        throw new Error("socket reset");
+      },
+    });
+    const response = await forwardNativeWebhook("slack", "{}", headers, {
+      env,
+      fetch: vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(new Response(broken, { status: 429 })),
+      onRateLimited: () => Promise.resolve(new Response(null, { status: 202 })),
+    });
+    expect(response.status).toBe(202);
+    expect(error).not.toHaveBeenCalled();
+  });
+
+  it("does not report a failing inline fallback as a receipt failure", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const send = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(null, { status: 429 }));
+    await expect(
+      forwardNativeWebhook("github", "{}", headers, {
+        env: { TRIGGER_GITHUB_WEBHOOK_URL: env.TRIGGER_SLACK_WEBHOOK_URL },
+        fetch: send,
+        onRateLimited: () => Promise.reject(new Error("inline failed")),
+      })
+    ).rejects.toThrow("inline failed");
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(error).toHaveBeenCalledWith(
+      "[native-webhook] github inline fallback failed",
+      { deliveryId: null, reason: "inline" }
+    );
+  });
+
+  it("returns 503 on a rate limit when no inline fallback is offered", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const send = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(null, { status: 429 }));
+    const response = await forwardNativeWebhook("slack", "{}", headers, {
+      env,
+      fetch: send,
+    });
+    expect(response.status).toBe(503);
+  });
+
+  it.each([
+    [
+      "another rejection",
+      () => Promise.resolve(new Response(null, { status: 500 })),
+    ],
+    [
+      "an ambiguous timeout",
+      () => Promise.reject(new DOMException("t", "TimeoutError")),
+    ],
+  ] as const)(
+    "keeps failing closed without inline processing on %s",
+    async (_label, outcome) => {
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      const onRateLimited = vi.fn<() => Promise<Response>>();
+      const response = await forwardNativeWebhook("slack", "{}", headers, {
+        env,
+        fetch: vi.fn<typeof fetch>().mockImplementation(outcome),
+        onRateLimited,
+      });
+      expect(response.status).toBe(503);
+      expect(onRateLimited).not.toHaveBeenCalled();
+    }
+  );
+
   it.each([
     "https://wrong.example/webhook",
     "https://api.trigger.dev/webhook?secret=bad",
