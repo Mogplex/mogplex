@@ -152,8 +152,9 @@ export function createGithubRepoPostHandler(
         { status: 400 }
       );
     }
+    // An omitted owner selects the personal account, as in the workspace route.
     const ownerLogin =
-      typeof body.owner_login === "string" ? body.owner_login.trim() : "";
+      typeof body.owner_login === "string" ? body.owner_login.trim() : null;
 
     const target = await resolveRepoCreateTarget(userId, ownerLogin, deps);
     if (!target.ok) return target.response;

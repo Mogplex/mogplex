@@ -203,6 +203,32 @@ it("refuses a member who is not an active owner before minting a token", async (
   expect(minted).toEqual([]);
 });
 
+it("treats a non-member as not an owner and a revoked grant as reconnect", async () => {
+  const membershipError = (status: number) => ({
+    ...appDeps(),
+    fetchOrgMembership: async () => {
+      throw new GithubHttpError(status, "{}");
+    },
+  });
+  await expect(
+    resolveGithubRepoCreateCredential(
+      orgTarget,
+      "identity-token",
+      membershipError(404)
+    )
+  ).resolves.toMatchObject({ status: 403, code: "GITHUB_ORG_OWNER_REQUIRED" });
+  await expect(
+    resolveGithubRepoCreateCredential(
+      orgTarget,
+      "identity-token",
+      membershipError(401)
+    )
+  ).resolves.toMatchObject({
+    status: 400,
+    code: "GITHUB_REAUTHORIZE_REQUIRED",
+  });
+});
+
 it("reports an unreadable membership as retryable, not as a refusal", async () => {
   const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
   try {

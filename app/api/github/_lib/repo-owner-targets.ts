@@ -4,6 +4,7 @@ import {
   fetchGithubUserOrgs,
   filterCreatableGithubOrgLogins,
 } from "@/lib/github-owners";
+import { hasGithubAppConfig } from "@/lib/github-app";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
 export async function loadGithubRepoCreationOwnerTargets(
@@ -47,7 +48,8 @@ export async function loadGithubRepoCreationOwnerTargets(
   });
   const creatableOrgLogins = await filterCreatableGithubOrgLogins(
     token,
-    orgLogins
+    orgLogins,
+    { requireOwner: hasGithubAppConfig() }
   );
   const creatableOrgSet = new Set(
     creatableOrgLogins.map((login) => login.toLowerCase())

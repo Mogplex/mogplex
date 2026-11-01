@@ -1,5 +1,6 @@
 import {
   createGithubInstallationAccessToken,
+  GithubHttpError,
   hasGithubAppConfig,
 } from "@/lib/github-app";
 import {
@@ -15,7 +16,7 @@ import { getOAuthToken } from "@/lib/oauth-tokens";
 
 export type GithubRepoCreateRefusal = {
   ok: false;
-  status: 403 | 409 | 502;
+  status: 400 | 403 | 409 | 502;
   code: string;
   error: string;
 };
@@ -120,6 +121,18 @@ async function requireActiveOrgOwner(
     if (membership.state === "active" && membership.role === "admin")
       return null;
   } catch (error) {
+    // GitHub answers 404 for a non-member and 401 for a revoked grant;
+    // neither improves on retry.
+    if (error instanceof GithubHttpError && error.status === 404)
+      return ownerRequired(login);
+    if (error instanceof GithubHttpError && error.status === 401) {
+      return {
+        ok: false,
+        status: 400,
+        code: "GITHUB_REAUTHORIZE_REQUIRED",
+        error: "Reconnect GitHub to continue.",
+      };
+    }
     console.warn("[github-repo-create] org membership unavailable", {
       owner: login,
       error,
@@ -131,6 +144,10 @@ async function requireActiveOrgOwner(
       error: `Could not confirm your membership in ${login}. Try again.`,
     };
   }
+  return ownerRequired(login);
+}
+
+function ownerRequired(login: string): GithubRepoCreateRefusal {
   return {
     ok: false,
     status: 403,

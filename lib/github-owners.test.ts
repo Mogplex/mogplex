@@ -148,6 +148,27 @@ describe("GitHub repository owners", () => {
     expect(fetch).toHaveBeenCalledTimes(18);
   });
 
+  it("lists only active owners without reading org settings when owners are required", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      expect(url).toContain("/user/memberships/orgs/");
+      if (url.endsWith("/owned")) {
+        return Response.json({ state: "active", role: "admin" });
+      }
+      if (url.endsWith("/invited")) {
+        return Response.json({ state: "pending", role: "admin" });
+      }
+      return Response.json({ state: "active", role: "member" });
+    });
+
+    await expect(
+      filterCreatableGithubOrgLogins("token", ["owned", "invited", "member"], {
+        requireOwner: true,
+      })
+    ).resolves.toEqual(["owned"]);
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
   it("loads the current login and granted OAuth scopes together", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
       Response.json(

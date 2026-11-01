@@ -1,3 +1,5 @@
+import { GithubHttpError } from "@/lib/github-app";
+
 type GithubOrgPayload = {
   login?: string;
 };
@@ -50,7 +52,11 @@ async function githubOAuthFetch<T>(token: string, url: string) {
 
   if (!response.ok) {
     const body = await response.text();
-    throw new Error(`GitHub owner lookup failed (${response.status}): ${body}`);
+    throw new GithubHttpError(
+      response.status,
+      body,
+      `GitHub owner lookup failed (${response.status}): ${body}`
+    );
   }
 
   return response.json() as Promise<T>;
@@ -117,16 +123,22 @@ export function canCreatePrivateGithubOrgRepo(
   if (membership.role === "admin") return true;
   // GitHub can omit repository-creation policy fields when the token cannot
   // read org settings. Treat unknown as potentially allowed so valid private
-  // memberships stay visible. With a user's repo grant, the create API
-  // enforces org policy. An installation token does not, so an App
-  // deployment requires an active owner membership before it creates.
+  // memberships stay visible; with a user's repo grant the create API
+  // enforces org policy. An installation token does not, so App deployments
+  // list owners only (see filterCreatableGithubOrgLogins).
   if (settings.members_can_create_repositories === false) return false;
   return settings.members_can_create_private_repositories !== false;
 }
 
+/**
+ * Orgs the user may create a repository in. With `requireOwner` (App
+ * deployments, which create through an installation token that ignores org
+ * policy) only active owners qualify, so org settings are not read.
+ */
 export async function filterCreatableGithubOrgLogins(
   token: string,
-  orgLogins: string[]
+  orgLogins: string[],
+  options: { requireOwner?: boolean } = {}
 ) {
   const results: Array<string | null> = [];
   const concurrency = 4;
@@ -135,6 +147,12 @@ export async function filterCreatableGithubOrgLogins(
     const batch = await Promise.all(
       orgLogins.slice(index, index + concurrency).map(async (login) => {
         try {
+          if (options.requireOwner) {
+            const membership = await fetchGithubOrgMembership(token, login);
+            return membership.state === "active" && membership.role === "admin"
+              ? login
+              : null;
+          }
           const encodedLogin = encodeURIComponent(login);
           const [settings, membership] = await Promise.all([
             githubOAuthFetch<GithubOrgCreationSettings>(
