@@ -28,14 +28,6 @@ export function areCapacityBillingOperationsEnabled(): boolean {
   return capacityBillingStripeMode() !== null;
 }
 
-/** The operations gate is off on purpose: an expected state, not a fault. */
-export class CapacityBillingDisabledError extends Error {
-  constructor() {
-    super("Capacity billing operations are disabled");
-    this.name = "CapacityBillingDisabledError";
-  }
-}
-
 let cached: Stripe | null = null;
 
 export function getStripe(): Stripe {

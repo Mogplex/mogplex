@@ -7,6 +7,7 @@ import {
   loadWebhookRoute,
   makeDeps,
 } from "./helpers/stripe-webhook-fixtures";
+import { CapacityBillingDisabledError } from "../../lib/billing/capacity-billing-errors";
 
 /* eslint-disable max-lines -- capacity webhook lifecycle cases share one fixture suite */
 
@@ -475,7 +476,7 @@ test("capacity schedule webhooks ignore unmarked schedules and fail closed when 
       } as unknown as Stripe.Event,
       disabled.deps
     ),
-    /Capacity billing operations are disabled/
+    CapacityBillingDisabledError
   );
   assert.equal(disabled.recorded.capacityScheduleProjections.length, 0);
 });

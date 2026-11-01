@@ -94,6 +94,8 @@ export function createCapacityBillingSummaryGetHandler(
             account.stripe_customer_id
           );
         } catch (error) {
+          // Deliberate degradation: the summary still serves without the
+          // Stripe details panel, so this is a warning, not a billing failure.
           console.warn("[capacity-billing] Stripe details unavailable", {
             accountId: account.id,
             error: error instanceof Error ? error.message : "Unknown error",

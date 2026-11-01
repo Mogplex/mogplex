@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import {
   areCapacityBillingOperationsEnabled,
-  CapacityBillingDisabledError,
   capacityBillingStripeMode,
   getStripe,
   isBillingEnabled,
@@ -45,6 +44,7 @@ import {
   type BillingPeriodGrant,
   type LedgerEntry,
 } from "@/lib/billing/ledger";
+import { CapacityBillingDisabledError } from "@/lib/billing/capacity-billing-errors";
 import { reportBillingError } from "@/lib/billing/report-billing-error";
 
 // Single Stripe webhook endpoint (pricing-plan 02 §4): verify signature,

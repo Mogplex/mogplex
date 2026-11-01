@@ -2,7 +2,7 @@ import * as Sentry from "@sentry/nextjs";
 import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
 import { installInMemorySentry } from "../../tests/support/sentry-capture";
 import { reportBillingError } from "./report-billing-error";
-import { CapacityBillingDisabledError } from "./stripe";
+import { CapacityBillingDisabledError } from "./capacity-billing-errors";
 
 let capture: { events: Sentry.Event[] };
 beforeAll(() => {

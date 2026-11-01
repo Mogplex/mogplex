@@ -1,5 +1,4 @@
 import type Stripe from "stripe";
-import { CapacityBillingDisabledError } from "@/lib/billing/stripe";
 import type { BillingAccount } from "@/lib/billing/accounts";
 import {
   capacityAnnualGrantScheduleInput,
@@ -65,7 +64,7 @@ function stripeObjectId(value: string | { id: string } | null): string | null {
 
 function requireCapacityOperations(deps: CapacityStripeWebhookDeps) {
   if (!deps.capacityBillingOperationsEnabled()) {
-    throw new CapacityBillingDisabledError();
+    throw new Error("Capacity billing operations are disabled");
   }
 }
 

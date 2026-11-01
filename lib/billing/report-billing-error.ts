@@ -1,5 +1,5 @@
 import * as Sentry from "@sentry/nextjs";
-import { CapacityBillingDisabledError } from "@/lib/billing/stripe";
+import { CapacityBillingDisabledError } from "@/lib/billing/capacity-billing-errors";
 
 /** The `billing_surface` tag value. Alert rules key on it, so it is a closed set. */
 export type BillingSurface =
@@ -18,9 +18,9 @@ export type BillingSurface =
  * Report a billing failure that a route catches and answers itself. Caught
  * errors never reach Next's `onRequestError` hook, so without this a broken
  * checkout, webhook, or catalog sync only ever shows up as a log line.
- * A closed capacity operations gate is intentional (the Stripe webhook keeps
- * those events for replay, and Stripe retries them for days), so it is never
- * reported.
+ * A schedule projection refused by a closed capacity operations gate is
+ * intentional (the Stripe webhook keeps it for replay, and Stripe retries it
+ * for days), so `CapacityBillingDisabledError` is never reported.
  */
 export function reportBillingError(
   surface: BillingSurface,

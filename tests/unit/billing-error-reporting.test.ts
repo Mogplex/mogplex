@@ -96,3 +96,143 @@ test("an expected plan checkout refusal is not reported", async () => {
   assert.equal(response.status, 409);
   assert.equal(capture.events.length, 0);
 });
+
+const ATTEMPT_ID = "0198f3e8-9c41-4d40-8cb9-4afdfac76f01";
+const personalScope = {
+  ok: true as const,
+  scope: { kind: "personal" as const, userId: "user-1", productTeamId: null },
+};
+const accountFailure = async (): Promise<never> => {
+  throw new Error("database unavailable");
+};
+const signedIn = {
+  requireUserId: async () => "user-1",
+  resolveProductResourceScope: async () => personalScope,
+  getOrCreateBillingAccount: accountFailure,
+};
+
+function post(path: string, body: unknown) {
+  return new Request(`https://example.com${path}`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+const routeCases: Array<{
+  surface: string;
+  run: () => Promise<Response>;
+}> = [
+  {
+    surface: "capacity_summary",
+    run: async () => {
+      const { createCapacityBillingSummaryGetHandler } =
+        await import("../../app/api/billing/capacity/route");
+      return createCapacityBillingSummaryGetHandler(signedIn)(
+        new Request("https://example.com/api/billing/capacity")
+      );
+    },
+  },
+  {
+    surface: "capacity_preview",
+    run: async () => {
+      const { createCapacityPreviewPostHandler } =
+        await import("../../app/api/billing/capacity/preview/route");
+      return createCapacityPreviewPostHandler({
+        ...signedIn,
+        capacityBillingOperationsEnabled: () => true,
+      })(
+        post("/api/billing/capacity/preview", {
+          lookupKey: "capacity_v2_concurrency_10_monthly",
+          quantity: 1,
+          effectiveAction: "increase",
+        })
+      );
+    },
+  },
+  {
+    surface: "capacity_checkout",
+    run: async () => {
+      const { createCapacityCheckoutPostHandler } =
+        await import("../../app/api/billing/capacity/checkout/route");
+      return createCapacityCheckoutPostHandler({
+        ...signedIn,
+        capacityBillingOperationsEnabled: () => true,
+      })(
+        post("/api/billing/capacity/checkout", {
+          previewToken: "signed-preview",
+          attemptId: ATTEMPT_ID,
+        })
+      );
+    },
+  },
+  {
+    surface: "capacity_schedule",
+    run: async () => {
+      const { createCapacitySchedulePostHandler } =
+        await import("../../app/api/billing/capacity/schedule/route");
+      return createCapacitySchedulePostHandler({
+        ...signedIn,
+        capacityBillingOperationsEnabled: () => true,
+      })(
+        post("/api/billing/capacity/schedule", {
+          previewToken: "signed-preview",
+          attemptId: ATTEMPT_ID,
+        })
+      );
+    },
+  },
+  {
+    surface: "hosted_usage_checkout",
+    run: async () => {
+      const { createHostedUsageCheckoutPostHandler } =
+        await import("../../app/api/billing/hosted-usage/checkout/route");
+      return createHostedUsageCheckoutPostHandler({
+        ...signedIn,
+        capacityBillingOperationsEnabled: () => true,
+        getActorEmail: async () => null,
+      })(
+        post("/api/billing/hosted-usage/checkout", {
+          preset: "capacity_v2_hosted_usage_credit_25",
+          attemptId: ATTEMPT_ID,
+          returnPath: "/personal/settings?tab=billing",
+        })
+      );
+    },
+  },
+  {
+    surface: "stripe_catalog_sync",
+    run: async () => {
+      const { createCapacityStripeCatalogPostHandler } =
+        await import("../../app/api/cron/capacity-stripe-catalog/route");
+      return createCapacityStripeCatalogPostHandler({
+        requireMachineApiAuth: () => null,
+        capacityBillingStripeMode: () => "live",
+        syncCatalog: accountFailure,
+      })(post("/api/cron/capacity-stripe-catalog", {}));
+    },
+  },
+];
+
+function routeReportsUnderItsSurface({
+  surface,
+  run,
+}: (typeof routeCases)[number]) {
+  test(`a caught failure in ${surface} is reported under its own surface`, async () => {
+    process.env.NEXT_PUBLIC_SUPABASE_URL ||= "https://example.supabase.co";
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||= "test-anon-key";
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||= "test-service-role-key";
+    const originalError = console.error;
+    console.error = () => {};
+    try {
+      const response = await run();
+      await Sentry.flush();
+      assert.equal(response.status, 500);
+      assert.equal(capture.events.length, 1);
+      assert.equal(capture.events[0]?.tags?.billing_surface, surface);
+    } finally {
+      console.error = originalError;
+    }
+  });
+}
+
+for (const routeCase of routeCases) routeReportsUnderItsSurface(routeCase);
