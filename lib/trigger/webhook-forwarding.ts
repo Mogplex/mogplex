@@ -88,9 +88,11 @@ export async function forwardNativeWebhook(
       status = response.status;
       throw new Error("Webhook was not accepted");
     }
-    // Release the unread refusal so bursts do not pin pooled connections.
-    await response.body?.cancel();
     fallback = options.onRateLimited;
+    // Release the unread refusal so bursts do not pin pooled connections.
+    // Best effort: a body that errors mid-stream must not turn the refusal
+    // into a 503, which GitHub would never redeliver.
+    await response.body?.cancel().catch(() => {});
   } catch (error) {
     if (
       error instanceof Error &&
@@ -111,5 +113,7 @@ export async function forwardNativeWebhook(
   console.warn(`[native-webhook] ${provider} rate limited, processing inline`, {
     ...receiptDiagnostics(provider, originalHeaders),
   });
+  // Called outside the receipt try so an inline dispatch failure is never
+  // reported as a receipt failure.
   return fallback();
 }

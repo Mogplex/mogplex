@@ -261,3 +261,74 @@ test("signed Dependabot HTTP requests preserve authentication and the enqueue de
     else process.env.MOGPLEX_DATA_BACKEND = oldBackend;
   }
 });
+
+test("a delivery Trigger rate-limits is still enqueued through inline dispatch", async () => {
+  const keys = [
+    "GITHUB_WEBHOOK_SECRET",
+    "MOGPLEX_DATA_BACKEND",
+    "TRIGGER_GITHUB_WEBHOOK_URL",
+  ] as const;
+  const old = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  const nativeUrl = "https://api.trigger.dev/webhooks/synthetic-test";
+  process.env.MOGPLEX_DATA_BACKEND = "supabase";
+  process.env.GITHUB_WEBHOOK_SECRET = "dependabot-test-secret";
+  process.env.TRIGGER_GITHUB_WEBHOOK_URL = nativeUrl;
+  const original = globalThis.fetch;
+  let forwarded = 0;
+  const enqueues: Array<Record<string, unknown>> = [];
+  globalThis.fetch = async (input, init) => {
+    if (String(input) === nativeUrl) {
+      forwarded++;
+      return new Response(null, { status: 429 });
+    }
+    const url = new URL(String(input));
+    if (url.pathname.endsWith("/repos")) return Response.json(REPO_FIXTURE);
+    if (url.pathname.endsWith("/flows")) return Response.json([flow()]);
+    if (url.pathname.endsWith("/agents"))
+      return Response.json([{ id: "agent-1", slug: "remediator" }]);
+    if (url.pathname.endsWith("/rpc/enqueue_automation_job_run")) {
+      enqueues.push(JSON.parse(String(init?.body)));
+      return Response.json([
+        {
+          job_run_id: "job-1",
+          outcome: "suppressed",
+          reason: "IDEMPOTENT_DUPLICATE",
+        },
+      ]);
+    }
+    throw new Error(`Unexpected request: ${url.pathname}`);
+  };
+  try {
+    const { POST } = await loadGithubWebhookRoute();
+    const payload = JSON.stringify({
+      ...ALERT_PAYLOAD,
+      installation: { id: 117860437, target_type: "Organization" },
+      repository: { id: 42, full_name: "acme/web" },
+    });
+    const signature = `sha256=${createHmac("sha256", process.env.GITHUB_WEBHOOK_SECRET).update(payload).digest("hex")}`;
+    const response = await POST(
+      new Request("http://localhost/api/webhooks/github", {
+        method: "POST",
+        body: payload,
+        headers: {
+          "x-github-event": "dependabot_alert",
+          "x-github-delivery": "delivery-rate-limited",
+          "x-hub-signature-256": signature,
+        },
+      })
+    );
+    assert.equal(forwarded, 1);
+    assert.equal(response.status, 200);
+    // The enqueue RPC only runs on inline dispatch; hosted acceptance would
+    // have answered without touching the database.
+    assert.equal((await response.json()).suppressed, 1);
+    assert.equal(enqueues.length, 1);
+    assert.equal(enqueues[0].p_source_type, "dependabot_alert");
+  } finally {
+    globalThis.fetch = original;
+    for (const key of keys) {
+      if (old[key] === undefined) delete process.env[key];
+      else process.env[key] = old[key];
+    }
+  }
+});

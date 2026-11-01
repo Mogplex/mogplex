@@ -227,6 +227,25 @@ describe("durable webhook forwarding", () => {
     expect(error).not.toHaveBeenCalled();
   });
 
+  it("still processes inline when the refused body fails to cancel", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const broken = new ReadableStream({
+      cancel() {
+        throw new Error("socket reset");
+      },
+    });
+    const response = await forwardNativeWebhook("slack", "{}", headers, {
+      env,
+      fetch: vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(new Response(broken, { status: 429 })),
+      onRateLimited: () => Promise.resolve(new Response(null, { status: 202 })),
+    });
+    expect(response.status).toBe(202);
+    expect(error).not.toHaveBeenCalled();
+  });
+
   it("does not report a failing inline fallback as a receipt failure", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
