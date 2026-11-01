@@ -21,6 +21,8 @@ export function getGithubOAuthGrantConfiguration(identityOnlyGrant: boolean) {
 }
 export const GITHUB_ORG_READ_SCOPE = "read:org";
 export const GITHUB_REAUTHORIZE_HEADER = "x-mogplex-github-reauthorize";
+/** Query param the App user authorization callback reports its outcome in. */
+export const GITHUB_APP_USER_OUTCOME_PARAM = "github_app_user";
 
 /**
  * Carries the in-app path to return to across the GitHub round trip. GitHub

@@ -377,3 +377,21 @@ it("reports an App token outage as retryable, not as missing authorization", asy
     warn.mockRestore();
   }
 });
+
+it("never mistakes an unbound App user token lookup for a missing authorization", async () => {
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  try {
+    const { getAppUserToken: _unbound, ...deps } = personalAppDeps(
+      async () => "ghu_user"
+    );
+    const credential = await resolveGithubRepoCreateCredential(
+      personalTarget,
+      "identity-token",
+      deps
+    );
+    expect(credential).toMatchObject({ ok: false, status: 502 });
+    expect(credential).not.toHaveProperty("authorizeUrl");
+  } finally {
+    warn.mockRestore();
+  }
+});

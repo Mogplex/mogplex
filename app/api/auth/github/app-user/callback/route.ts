@@ -9,6 +9,7 @@ import {
   GITHUB_APP_USER_STATE_COOKIE,
   storeGithubAppUserGrant,
 } from "@/lib/github-app-user-auth";
+import { GITHUB_APP_USER_OUTCOME_PARAM } from "@/lib/github-oauth";
 import { fetchGithubCurrentUserLogin } from "@/lib/github-owners";
 import { getOAuthToken } from "@/lib/oauth-tokens";
 
@@ -47,7 +48,7 @@ export function createGithubAppUserCallbackHandler(
 
     const back = (outcome: string) => {
       const target = buildAppUrl(returnTo, request);
-      target.searchParams.set("github_app_user", outcome);
+      target.searchParams.set(GITHUB_APP_USER_OUTCOME_PARAM, outcome);
       return NextResponse.redirect(target);
     };
 

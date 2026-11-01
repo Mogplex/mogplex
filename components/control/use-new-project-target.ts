@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  GITHUB_APP_USER_OUTCOME_PARAM,
   GITHUB_ORG_READ_SCOPE,
   GITHUB_REAUTHORIZE_HEADER,
 } from "@/lib/github-oauth";
@@ -15,6 +16,27 @@ export const LAST_GITHUB_OWNER_KEY = "mogplex:last-github-repo-owner";
 const AVAILABILITY_DEBOUNCE_MS = 350;
 
 export type NewProjectAction = { href: string; label: string } | null;
+
+/** What to say when the App user authorization round trip did not succeed. */
+const AUTHORIZE_OUTCOME_MESSAGES: Record<string, string> = {
+  account_mismatch:
+    "GitHub authorized a different account. Authorize again with the GitHub account connected to Mogplex.",
+  failed: "GitHub authorization did not finish. Try again.",
+  state_mismatch: "GitHub authorization did not finish. Try again.",
+};
+
+/**
+ * Reads and clears the authorization callback's outcome from the URL, so a
+ * reload does not repeat it. Returns the message to show, if any.
+ */
+function takeAuthorizeOutcome() {
+  const url = new URL(window.location.href);
+  const outcome = url.searchParams.get(GITHUB_APP_USER_OUTCOME_PARAM);
+  if (!outcome) return null;
+  url.searchParams.delete(GITHUB_APP_USER_OUTCOME_PARAM);
+  window.history.replaceState(window.history.state, "", url);
+  return AUTHORIZE_OUTCOME_MESSAGES[outcome] ?? null;
+}
 
 /**
  * Loads the GitHub accounts a new project can be created under, and checks the
@@ -39,6 +61,7 @@ export function useNewProjectTarget({
   // Where an authorize or connect round trip returns; read in an effect so
   // render never touches `window`.
   const [returnPath, setReturnPath] = useState("/");
+  const [authorizeNotice, setAuthorizeNotice] = useState<string | null>(null);
 
   const nameValidation = useMemo(() => validateGithubRepoName(name), [name]);
 
@@ -62,6 +85,7 @@ export function useNewProjectTarget({
       })
       .then(({ targets, reauthorizeScope }) => {
         setOwnerTargets(targets);
+        setAuthorizeNotice(takeAuthorizeOutcome());
         const saved = window.localStorage.getItem(LAST_GITHUB_OWNER_KEY);
         const preferred = targets.find(
           (target) => target.login.toLowerCase() === saved?.toLowerCase()
@@ -190,7 +214,8 @@ export function useNewProjectTarget({
     ownersError:
       ownersError ??
       (authorizeAction && selectedTarget
-        ? `Authorize Mogplex to create repositories in ${selectedTarget.login}.`
+        ? (authorizeNotice ??
+          `Authorize Mogplex to create repositories in ${selectedTarget.login}.`)
         : null),
     ownersAction: ownersAction ?? authorizeAction,
     availability,

@@ -148,9 +148,14 @@ export function createWorkspaceRepoPostHandler(
       );
     }
 
-    // The workspace dialog always sends owner_login. Omitting it selects the
-    // personal account, which an App deployment refuses until the App has
-    // user authorization.
+    // Like POST /api/github/repos, the owner is always named: a client that
+    // lost its selection must not fall through to the personal account.
+    if (!ownerLogin) {
+      return NextResponse.json(
+        { error: "Choose a GitHub account for the repository" },
+        { status: 400 }
+      );
+    }
     const target = await resolveRepoCreateTarget(userId, ownerLogin, deps);
     if (!target.ok) return target.response;
     const { ownerTarget, viaApp } = target;

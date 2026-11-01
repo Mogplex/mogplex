@@ -65,6 +65,32 @@ test("POST /api/workspaces/[id]/repos returns 404 for workspaces the caller does
   assert.equal(githubCreates, 0);
 });
 
+test("POST /api/workspaces/[id]/repos requires an owner instead of defaulting to the personal account", async () => {
+  const { createWorkspaceRepoPostHandler } = await loadWorkspaceRepoRoute();
+
+  const handler = createWorkspaceRepoPostHandler({
+    requireUserId: async () => "user-123",
+    getWorkspaceForScope: async () => ({ id: "ws-1", name: "Product Alpha" }),
+    getGithubToken: async () => {
+      throw new Error("must not resolve a target without an owner");
+    },
+  });
+
+  const response = await handler(
+    new Request("http://localhost/api/workspaces/ws-1/repos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "demo-app", owner_login: "  " }),
+    }),
+    { params: Promise.resolve({ id: "ws-1" }) }
+  );
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), {
+    error: "Choose a GitHub account for the repository",
+  });
+});
+
 test("POST /api/workspaces/[id]/repos returns 400 when GitHub is not connected", async () => {
   const { createWorkspaceRepoPostHandler } = await loadWorkspaceRepoRoute();
 
@@ -78,7 +104,7 @@ test("POST /api/workspaces/[id]/repos returns 400 when GitHub is not connected",
     new Request("http://localhost/api/workspaces/ws-1/repos", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: "demo-app" }),
+      body: JSON.stringify({ name: "demo-app", owner_login: "alex" }),
     }),
     { params: Promise.resolve({ id: "ws-1" }) }
   );

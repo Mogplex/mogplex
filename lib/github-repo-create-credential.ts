@@ -38,8 +38,14 @@ const defaultDeps = {
   createInstallationToken: createGithubInstallationAccessToken,
   fetchOrgMembership: fetchGithubOrgMembership,
   appUserAuthConfigured: () => hasGithubAppUserAuthConfig(),
-  /** The App user token for a personal account, bound to the acting user. */
-  getAppUserToken: async (_login: string): Promise<string | null> => null,
+  /**
+   * The App user token for a personal account, bound to the acting user.
+   * Callers must supply it; the default throws so a missing wiring surfaces
+   * as an error instead of a false "authorize" prompt.
+   */
+  getAppUserToken: async (_login: string): Promise<string | null> => {
+    throw new Error("getAppUserToken must be bound to the acting user");
+  },
 };
 
 /**
