@@ -32,6 +32,7 @@ const NOT_OPERATOR_CONFIG: Record<string, string> = {
   VERCEL_OIDC_TOKEN: "Vercel system variable",
   NEXT_PUBLIC_VERCEL_ENV: "Vercel system variable",
   NEXT_PUBLIC_MOGPLEX_DEPLOYMENT_ID: "defined at build time by next.config.mjs",
+  MOGPLEX_SENTRY_TUNNEL_ROUTE: "defined at build time by next.config.mjs",
   TRIGGER_VERSION: "set by Trigger.dev workers and the deploy workflow",
   TRIGGER_EXTERNAL_DEPLOYMENT_ID: "set by deploy-production.yml per release",
   TRIGGER_AUTOMATIC_SKEW_VERSION_PROTECTION: "set by Trigger.dev",
