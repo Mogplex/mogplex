@@ -98,6 +98,7 @@ test("POST /api/workspaces/[id]/repos creates a repo in the selected workspace",
     requireUserId: async () => "user-123",
     getWorkspaceForScope: async () => ({ id: "ws-1", name: "Product Alpha" }),
     getGithubToken: async () => "github-token",
+    appConfigured: () => false,
     loadOwnerTargets: async () => owners([alexTarget, acmeTarget]),
     resolveCreateCredential: await oauthOnlyCredential(),
     createGithubRepo: async (_token, input) => {
@@ -187,6 +188,7 @@ test("POST /api/workspaces/[id]/repos creates team-scoped repo rows", async () =
       return { id: "ws-team", name: "Team Project" };
     },
     getGithubToken: async () => "github-token",
+    appConfigured: () => false,
     loadOwnerTargets: async () => owners([alexTarget]),
     resolveCreateCredential: await oauthOnlyCredential(),
     createGithubRepo: async () => ({
@@ -251,8 +253,15 @@ async function appModeHandler(created: string[]) {
     requireUserId: async () => "user-123",
     getWorkspaceForScope: async () => ({ id: "ws-1", name: "Product Alpha" }),
     getGithubToken: async () => "identity-token",
-    // "locked" is absent, as if the live owner check had dropped it.
-    loadOwnerTargets: async () => owners([alexTarget, acmeTarget]),
+    // "locked" is not an owner the user can resolve.
+    appConfigured: () => true,
+    loadAppCreateTarget: async (_userId, _token, ownerLogin) => ({
+      target:
+        [alexTarget, acmeTarget].find(
+          (target) => target.login === (ownerLogin ?? "alex")
+        ) ?? null,
+      oauthScopes: null,
+    }),
     resolveCreateCredential: (target, token) =>
       resolveGithubRepoCreateCredential(target, token, {
         appConfigured: () => true,

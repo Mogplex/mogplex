@@ -4,18 +4,17 @@ import {
   fetchGithubUserOrgs,
   filterCreatableGithubOrgLogins,
 } from "@/lib/github-owners";
-import { hasGithubAppConfig } from "@/lib/github-app";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
 /**
- * Owners the user may create a repository under. `onlyLogin` limits the
- * per-org permission reads to the one org a create request names; the
- * owner picker omits it and lists every org.
+ * Owners the user may create a repository under, for the owner picker.
+ * `requireOwner` (App deployments) keeps only orgs the user owns, because an
+ * installation token does not apply the org's own member policy.
  */
 export async function loadGithubRepoCreationOwnerTargets(
   userId: string,
   token: string,
-  options: { onlyLogin?: string | null } = {}
+  options: { requireOwner?: boolean } = {}
 ) {
   const [profileResult, installationsResult, currentUser] = await Promise.all([
     supabaseAdmin
@@ -45,21 +44,17 @@ export async function loadGithubRepoCreationOwnerTargets(
     );
   }
 
-  const memberOrgLogins = await fetchGithubUserOrgs(token).catch((error) => {
+  const orgLogins = await fetchGithubUserOrgs(token).catch((error) => {
     console.warn("[github-owners] organization membership unavailable", {
       userId,
       error,
     });
     return [] as string[];
   });
-  const onlyLogin = options.onlyLogin?.toLowerCase();
-  const orgLogins = onlyLogin
-    ? memberOrgLogins.filter((login) => login.toLowerCase() === onlyLogin)
-    : memberOrgLogins;
   const creatableOrgLogins = await filterCreatableGithubOrgLogins(
     token,
     orgLogins,
-    { requireOwner: hasGithubAppConfig() }
+    { requireOwner: options.requireOwner }
   );
   const creatableOrgSet = new Set(
     creatableOrgLogins.map((login) => login.toLowerCase())
@@ -75,12 +70,5 @@ export async function loadGithubRepoCreationOwnerTargets(
       target.kind === "personal" ||
       creatableOrgSet.has(target.login.toLowerCase())
   );
-  return {
-    targets,
-    oauthScopes: currentUser.oauthScopes,
-    // Orgs the user belongs to but may not create in, so a refusal can say so.
-    deniedOrgLogins: orgLogins.filter(
-      (login) => !creatableOrgSet.has(login.toLowerCase())
-    ),
-  };
+  return { targets, oauthScopes: currentUser.oauthScopes };
 }

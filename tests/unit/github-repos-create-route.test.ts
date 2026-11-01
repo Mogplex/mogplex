@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { NextResponse } from "next/server";
 import type { GithubRepoOwnerTarget } from "../../lib/github-owners";
-import { GithubRepoCreateError } from "../../lib/github-create";
 
 async function loadRoute() {
   process.env.NEXT_PUBLIC_SUPABASE_URL ||= "https://example.supabase.co";
@@ -33,62 +32,6 @@ async function credentialFor(
 }
 const oauthOnlyCredential = (target: GithubRepoOwnerTarget, token: string) =>
   credentialFor(false, target, token);
-const appCredential = (target: GithubRepoOwnerTarget, token: string) =>
-  credentialFor(true, target, token);
-
-function appModeHandler(
-  createGithubRepoPostHandler: Awaited<
-    ReturnType<typeof loadRoute>
-  >["createGithubRepoPostHandler"],
-  tokens: string[],
-  refuseCreate = false
-) {
-  return createGithubRepoPostHandler({
-    requireUserId: async () => "user-123",
-    resolveActiveTeamCapabilities: async () => ({
-      ok: true,
-      teamId: TEAM_ID,
-      capabilities: new Set(["*"]),
-    }),
-    getGithubToken: async () => "identity-token",
-    resolveCreateCredential: appCredential,
-    loadOwnerTargets: async () =>
-      owners([
-        {
-          login: "alex",
-          kind: "personal",
-          github_installation_id: null,
-          scope_label: "Personal",
-          source: "oauth",
-        },
-        {
-          login: "acme",
-          kind: "org",
-          github_installation_id: 42,
-          scope_label: "Org",
-          source: "oauth+installation",
-        },
-      ]),
-    createGithubRepo: async (token, input) => {
-      tokens.push(token);
-      if (refuseCreate) {
-        throw new GithubRepoCreateError(
-          403,
-          '{"message":"Resource not accessible by integration"}'
-        );
-      }
-      return {
-        id: 123,
-        full_name: `${input.owner}/${input.name}`,
-        default_branch: "main",
-        owner: { login: input.owner ?? "alex" },
-        name: input.name,
-      };
-    },
-    upsertGithubReposForUser: async () => {},
-    loadRepoByGithubId: async () => ({ id: "repo-123" }),
-  });
-}
 
 function createRequest(ownerLogin: string) {
   return new Request("http://localhost/api/github/repos", {
@@ -97,47 +40,6 @@ function createRequest(ownerLogin: string) {
     body: JSON.stringify({ owner_login: ownerLogin, name: "widgets" }),
   });
 }
-
-test("POST /api/github/repos creates an org repo with the installation token in an App deployment", async () => {
-  const { createGithubRepoPostHandler } = await loadRoute();
-  const tokens: string[] = [];
-  const response = await appModeHandler(
-    createGithubRepoPostHandler,
-    tokens
-  )(createRequest("acme"));
-  assert.equal(response.status, 200);
-  assert.deepEqual(tokens, ["installation-42"]);
-});
-
-test("POST /api/github/repos explains an installation that lacks the Repository creation permission", async () => {
-  const { createGithubRepoPostHandler } = await loadRoute();
-  const tokens: string[] = [];
-  const response = await appModeHandler(
-    createGithubRepoPostHandler,
-    tokens,
-    true
-  )(createRequest("acme"));
-  assert.equal(response.status, 403);
-  const body = await response.json();
-  assert.equal(body.code, "GITHUB_APP_PERMISSION_REQUIRED");
-  assert.doesNotMatch(body.error, /Resource not accessible/);
-  assert.deepEqual(tokens, ["installation-42"]);
-});
-
-test("POST /api/github/repos refuses a personal repo in an App deployment", async () => {
-  const { createGithubRepoPostHandler } = await loadRoute();
-  const tokens: string[] = [];
-  const response = await appModeHandler(
-    createGithubRepoPostHandler,
-    tokens
-  )(createRequest("alex"));
-  assert.equal(response.status, 403);
-  assert.equal(
-    (await response.json()).code,
-    "GITHUB_APP_USER_AUTHORIZATION_REQUIRED"
-  );
-  assert.deepEqual(tokens, []);
-});
 
 test("POST /api/github/repos preserves authentication failures", async () => {
   const { createGithubRepoPostHandler } = await loadRoute();
@@ -194,6 +96,7 @@ test("POST /api/github/repos creates an org repo before returning its Mogplex ro
       capabilities: new Set(["*"]),
     }),
     getGithubToken: async () => "github-token",
+    appConfigured: () => false,
     resolveCreateCredential: oauthOnlyCredential,
     loadOwnerTargets: async () =>
       owners([
@@ -274,6 +177,7 @@ test("POST /api/github/repos rejects owners that cannot create repos", async () 
   const handler = createGithubRepoPostHandler({
     requireUserId: async () => "user-123",
     getGithubToken: async () => "github-token",
+    appConfigured: () => false,
     resolveCreateCredential: oauthOnlyCredential,
     loadOwnerTargets: async () => owners([]),
     createGithubRepo: async () => {
@@ -302,6 +206,7 @@ test("POST /api/github/repos returns JSON when owner discovery fails", async () 
   const handler = createGithubRepoPostHandler({
     requireUserId: async () => "user-123",
     getGithubToken: async () => "github-token",
+    appConfigured: () => false,
     resolveCreateCredential: oauthOnlyCredential,
     loadOwnerTargets: async () => {
       throw new Error("GitHub unavailable");
@@ -328,6 +233,7 @@ test("POST /api/github/repos maps GitHub name collisions to 409", async () => {
   const handler = createGithubRepoPostHandler({
     requireUserId: async () => "user-123",
     getGithubToken: async () => "github-token",
+    appConfigured: () => false,
     resolveCreateCredential: oauthOnlyCredential,
     loadOwnerTargets: async () =>
       owners([
@@ -372,6 +278,7 @@ test("POST /api/github/repos reconciles a repository left by a partial create", 
   const handler = createGithubRepoPostHandler({
     requireUserId: async () => "user-123",
     getGithubToken: async () => "github-token",
+    appConfigured: () => false,
     resolveCreateCredential: oauthOnlyCredential,
     loadOwnerTargets: async () =>
       owners([
@@ -423,6 +330,7 @@ test("POST /api/github/repos reconciles a repository left by a partial create", 
 test("POST /api/github/repos asks to reconnect when the identity grant cannot read orgs", async () => {
   const { createGithubRepoPostHandler } = await loadRoute();
   const handler = createGithubRepoPostHandler({
+    appConfigured: () => false,
     requireUserId: async () => "user-123",
     getGithubToken: async () => "identity-token",
     loadOwnerTargets: async () =>
@@ -467,21 +375,4 @@ test("POST /api/github/repos reports a failed connection lookup instead of askin
   } finally {
     console.error = originalError;
   }
-});
-
-test("POST /api/github/repos tells an org member why they cannot create there", async () => {
-  const { createGithubRepoPostHandler } = await loadRoute();
-  const lookups: Array<{ onlyLogin?: string | null } | undefined> = [];
-  const handler = createGithubRepoPostHandler({
-    requireUserId: async () => "user-123",
-    getGithubToken: async () => "identity-token",
-    loadOwnerTargets: async (_userId, _token, options) => {
-      lookups.push(options);
-      return { ...owners([]), deniedOrgLogins: ["Acme"] };
-    },
-  });
-  const response = await handler(createRequest("acme"));
-  assert.equal(response.status, 403);
-  assert.equal((await response.json()).code, "GITHUB_ORG_CREATE_NOT_ALLOWED");
-  assert.deepEqual(lookups, [{ onlyLogin: "acme" }]);
 });

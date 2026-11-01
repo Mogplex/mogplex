@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
+import { loadGithubAppCreateTarget } from "@/app/api/github/_lib/app-create-target";
 import { loadGithubRepoCreationOwnerTargets } from "@/app/api/github/_lib/repo-owner-targets";
+import { hasGithubAppConfig } from "@/lib/github-app";
 import {
   GITHUB_ORG_READ_SCOPE,
   GITHUB_REAUTHORIZE_HEADER,
@@ -10,23 +12,32 @@ import {
   resolveGithubRepoCreateCredential,
 } from "@/lib/github-repo-create-credential";
 
+type OwnerLookup = {
+  target: GithubRepoOwnerTarget | null;
+  oauthScopes: string[] | null;
+};
+
 export type RepoCreateTargetDeps = {
+  appConfigured: () => boolean;
   getGithubToken: (userId: string) => Promise<string | null>;
+  /** OAuth deployments: the owner list, filtered by the user's org policy. */
   loadOwnerTargets: (
     userId: string,
-    token: string,
-    options?: { onlyLogin?: string | null }
+    token: string
   ) => Promise<{
     targets: GithubRepoOwnerTarget[];
     oauthScopes: string[] | null;
-    deniedOrgLogins?: string[];
   }>;
+  /** App deployments: only the named owner; ownership is checked live later. */
+  loadAppCreateTarget: typeof loadGithubAppCreateTarget;
   resolveCreateCredential: typeof resolveGithubRepoCreateCredential;
 };
 
 export const defaultRepoCreateTargetDeps: RepoCreateTargetDeps = {
+  appConfigured: () => hasGithubAppConfig(),
   getGithubToken: (userId) => getGithubRepoCreationUserToken(userId),
   loadOwnerTargets: loadGithubRepoCreationOwnerTargets,
+  loadAppCreateTarget: loadGithubAppCreateTarget,
   resolveCreateCredential: resolveGithubRepoCreateCredential,
 };
 
@@ -45,6 +56,32 @@ function refuse(
   headers?: Record<string, string>
 ): RepoCreateTarget {
   return { ok: false, response: NextResponse.json(body, { status, headers }) };
+}
+
+async function lookUpOwner(
+  userId: string,
+  token: string,
+  ownerLogin: string | null,
+  deps: RepoCreateTargetDeps
+): Promise<OwnerLookup> {
+  if (deps.appConfigured())
+    return deps.loadAppCreateTarget(userId, token, ownerLogin);
+  const { targets, oauthScopes } = await deps.loadOwnerTargets(userId, token);
+  const target =
+    targets.find((candidate) =>
+      ownerLogin === null
+        ? candidate.kind === "personal"
+        : candidate.login.toLowerCase() === ownerLogin.toLowerCase()
+    ) ?? null;
+  return { target, oauthScopes };
+}
+
+/** Org ownership is read with read:org; without it the org cannot resolve. */
+function needsOrgReadScope(lookup: OwnerLookup) {
+  const missing =
+    lookup.oauthScopes !== null &&
+    !lookup.oauthScopes.includes(GITHUB_ORG_READ_SCOPE);
+  return missing && (lookup.target === null || lookup.target.kind === "org");
 }
 
 /**
@@ -70,11 +107,9 @@ export async function resolveRepoCreateTarget(
   }
   if (!token) return refuse({ error: "Connect GitHub account first" }, 400);
 
-  let owners: Awaited<ReturnType<RepoCreateTargetDeps["loadOwnerTargets"]>>;
+  let lookup: OwnerLookup;
   try {
-    owners = await deps.loadOwnerTargets(userId, token, {
-      onlyLogin: ownerLogin,
-    });
+    lookup = await lookUpOwner(userId, token, ownerLogin, deps);
   } catch (error) {
     console.error("[github-repo-create] owner lookup failed", {
       userId,
@@ -82,42 +117,23 @@ export async function resolveRepoCreateTarget(
     });
     return refuse({ error: "GitHub accounts unavailable" }, 502);
   }
-  const ownerTarget = owners.targets.find((target) =>
-    ownerLogin === null
-      ? target.kind === "personal"
-      : target.login.toLowerCase() === ownerLogin.toLowerCase()
-  );
-  const denied = owners.deniedOrgLogins?.find(
-    (login) => login.toLowerCase() === ownerLogin?.toLowerCase()
-  );
-  if (!ownerTarget && denied) {
+  if (needsOrgReadScope(lookup)) {
     return refuse(
       {
-        error: `Your role in ${denied} cannot create repositories through Mogplex. Ask an owner of ${denied}.`,
-        code: "GITHUB_ORG_CREATE_NOT_ALLOWED",
+        error: "Reconnect GitHub to use organization accounts.",
+        code: "GITHUB_REAUTHORIZE_REQUIRED",
       },
-      403
+      400,
+      { [GITHUB_REAUTHORIZE_HEADER]: GITHUB_ORG_READ_SCOPE }
     );
   }
-  if (!ownerTarget) {
-    // Without read:org every organization drops out of the owner list.
-    if (
-      owners.oauthScopes !== null &&
-      !owners.oauthScopes.includes(GITHUB_ORG_READ_SCOPE)
-    ) {
-      return refuse(
-        {
-          error: "Reconnect GitHub to use organization accounts.",
-          code: "GITHUB_REAUTHORIZE_REQUIRED",
-        },
-        400,
-        { [GITHUB_REAUTHORIZE_HEADER]: GITHUB_ORG_READ_SCOPE }
-      );
-    }
+  const ownerTarget = lookup.target;
+  if (!ownerTarget)
     return refuse({ error: "Selected GitHub account is unavailable" }, 400);
-  }
 
-  const credential = await deps.resolveCreateCredential(ownerTarget, token);
+  const credential = await deps.resolveCreateCredential(ownerTarget, token, {
+    appConfigured: deps.appConfigured,
+  });
   if (!credential.ok) {
     return refuse(
       { error: credential.error, code: credential.code },

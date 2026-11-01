@@ -154,7 +154,9 @@ export function createGithubRepoPostHandler(
     }
     // An omitted owner selects the personal account, as in the workspace route.
     const ownerLogin =
-      typeof body.owner_login === "string" ? body.owner_login.trim() : null;
+      typeof body.owner_login === "string"
+        ? body.owner_login.trim() || null
+        : null;
 
     const target = await resolveRepoCreateTarget(userId, ownerLogin, deps);
     if (!target.ok) return target.response;

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireUserId } from "@/lib/auth";
 import { loadGithubRepoCreationOwnerTargets } from "@/app/api/github/_lib/repo-owner-targets";
+import { hasGithubAppConfig } from "@/lib/github-app";
 import { getOAuthToken } from "@/lib/oauth-tokens";
 import {
   GITHUB_ORG_READ_SCOPE,
@@ -20,7 +21,8 @@ export async function GET() {
   try {
     const { targets, oauthScopes } = await loadGithubRepoCreationOwnerTargets(
       userId,
-      githubToken
+      githubToken,
+      { requireOwner: hasGithubAppConfig() }
     );
     const headers =
       oauthScopes !== null && !oauthScopes.includes(GITHUB_ORG_READ_SCOPE)
