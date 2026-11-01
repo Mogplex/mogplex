@@ -3,6 +3,14 @@ type RoutePolicyEntry =
   | { path: string; match: "subtree" }
   | { path: string; match: "prefix" };
 
+/**
+ * Sentry's `tunnelRoute` in next.config.mjs. withSentryConfig rewrites only
+ * `/monitoring?o=<org>&p=<project>` to the ingest host; anything else under
+ * this public path would fall through to the /[scope] catch-all with no scope
+ * headers and fail the render.
+ */
+export const SENTRY_TUNNEL_ROUTE = "/monitoring";
+
 const PUBLIC_ROUTE_PATHS: readonly RoutePolicyEntry[] = [
   { path: "/", match: "exact" },
   { path: "/login", match: "subtree" },
@@ -50,7 +58,7 @@ const PUBLIC_ROUTE_PATHS: readonly RoutePolicyEntry[] = [
   { path: "/robots.txt", match: "exact" },
   { path: "/sitemap.xml", match: "exact" },
   { path: "/manifest.webmanifest", match: "exact" },
-  { path: "/monitoring", match: "subtree" },
+  { path: SENTRY_TUNNEL_ROUTE, match: "subtree" },
   { path: "/llms.txt", match: "exact" },
   { path: "/api/cli/latest", match: "subtree" },
   // Retired PAT-handoff route: now a static "update your CLI" notice for
@@ -131,6 +139,58 @@ function matchesDeclaredPaths(
   entries: readonly RoutePolicyEntry[]
 ) {
   return entries.some((entry) => matchesDeclaredPath(pathname, entry));
+}
+
+// `+`, not `*`: the rewrite's `has` value `\d*` only applies to a non-empty
+// query value, so Next never serves `?o=&p=` through the tunnel.
+const SENTRY_TUNNEL_ID_RE = /^\d+$/;
+
+/** True for the URL shape the Sentry SDK sends envelopes to: `?o=<org>&p=<project>`. */
+export function isSentryTunnelEnvelopeUrl(url: URL): boolean {
+  const orgId = url.searchParams.get("o");
+  const projectId = url.searchParams.get("p");
+  return (
+    (url.pathname === SENTRY_TUNNEL_ROUTE ||
+      url.pathname === `${SENTRY_TUNNEL_ROUTE}/`) &&
+    orgId !== null &&
+    projectId !== null &&
+    SENTRY_TUNNEL_ID_RE.test(orgId) &&
+    SENTRY_TUNNEL_ID_RE.test(projectId)
+  );
+}
+
+/**
+ * True for a request under the tunnel path that no Sentry rewrite will serve.
+ * next.config.mjs sets MOGPLEX_SENTRY_TUNNEL_ROUTE only for builds that
+ * install the rewrite; without it, everything under the path is stray.
+ */
+export function isStraySentryTunnelRequest(
+  url: URL,
+  tunnelInstalled = process.env.MOGPLEX_SENTRY_TUNNEL_ROUTE ===
+    SENTRY_TUNNEL_ROUTE
+): boolean {
+  if (
+    !matchesDeclaredPath(url.pathname, {
+      path: SENTRY_TUNNEL_ROUTE,
+      match: "subtree",
+    })
+  ) {
+    return false;
+  }
+  return !(tunnelInstalled && isSentryTunnelEnvelopeUrl(url));
+}
+
+/**
+ * First path segment of every public and unscoped-authed route. Each one must
+ * be a reserved slug: the proxy never resolves a scope under these paths, so a
+ * workspace claiming one would only ever render without scope headers.
+ */
+export function unscopedRouteTopLevelSegments(): ReadonlySet<string> {
+  return new Set(
+    [...PUBLIC_ROUTE_PATHS, ...UNSCOPED_AUTHED_ROUTE_PATHS]
+      .map((entry) => entry.path.split("/")[1])
+      .filter((segment) => segment !== "")
+  );
 }
 
 export function isPublicRoutePath(pathname: string) {

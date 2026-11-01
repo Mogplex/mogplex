@@ -1,9 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFile } from "node:fs/promises";
 import {
+  SENTRY_TUNNEL_ROUTE,
   isPublicRoutePath,
+  isStraySentryTunnelRequest,
   isUnscopedAuthedRoutePath,
+  unscopedRouteTopLevelSegments,
 } from "../../lib/auth-route-policy";
+import { isReservedSlug } from "../../lib/reserved-slugs";
 
 test("checkout is authenticated but never interpreted as a workspace slug", () => {
   assert.equal(isPublicRoutePath("/checkout"), false);
@@ -87,4 +92,67 @@ test("isPublicRoutePath preserves legacy bare-entry behavior at path boundaries"
       `${kind} "${input}" should be ${expected}`
     );
   }
+});
+
+test("every unscoped top-level route segment is a reserved slug", () => {
+  const unreserved = [...unscopedRouteTopLevelSegments()].filter(
+    (segment) => !isReservedSlug(segment)
+  );
+  assert.deepEqual(unreserved, []);
+});
+
+test("the Sentry tunnel route matches next.config.mjs", async () => {
+  const nextConfig = await readFile(
+    new URL("../../next.config.mjs", import.meta.url),
+    "utf8"
+  );
+  assert.match(nextConfig, new RegExp(`\\? "${SENTRY_TUNNEL_ROUTE}"`));
+  assert.match(nextConfig, /MOGPLEX_SENTRY_TUNNEL_ROUTE: sentryTunnelRoute/);
+  assert.match(nextConfig, /tunnelRoute: sentryTunnelRoute/);
+});
+
+test("isStraySentryTunnelRequest passes only requests the Sentry rewrite matches", () => {
+  const cases: Array<[string, boolean]> = [
+    ["/monitoring?o=4507&p=4508", false],
+    ["/monitoring/?o=4507&p=4508", false],
+    ["/monitoring?o=&p=", true],
+    ["/monitoring?o=4507&p=", true],
+    ["/monitoring?o=4507&p=4508&r=us", false],
+    ["/monitoring", true],
+    ["/monitoring?o=4507", true],
+    ["/monitoring?o=abc&p=4508", true],
+    ["/monitoring/extra?o=4507&p=4508", true],
+    ["/monitoring-dashboard", false],
+    ["/agents", false],
+  ];
+  for (const [path, stray] of cases) {
+    assert.equal(
+      isStraySentryTunnelRequest(new URL(path, "https://mogplex.com"), true),
+      stray,
+      path
+    );
+  }
+});
+
+test("the Sentry SDK still builds tunnel URLs with numeric o and p", async () => {
+  // The stray check mirrors this format; an SDK upgrade that changes it must
+  // fail here rather than silently 404 every browser error envelope.
+  const sdkSource = await readFile(
+    new URL(
+      "../../node_modules/@sentry/nextjs/build/cjs/client/tunnelRoute.js",
+      import.meta.url
+    ),
+    "utf8"
+  );
+  assert.match(sdkSource, /\?o=\$\{orgId\}&p=\$\{dsnComponents\.projectId\}/);
+});
+
+test("isStraySentryTunnelRequest treats the whole path as stray without a tunnel", () => {
+  const url = (path: string) => new URL(path, "https://mogplex.com");
+  assert.equal(
+    isStraySentryTunnelRequest(url("/monitoring?o=4507&p=4508"), false),
+    true
+  );
+  assert.equal(isStraySentryTunnelRequest(url("/monitoring"), false), true);
+  assert.equal(isStraySentryTunnelRequest(url("/agents"), false), false);
 });
