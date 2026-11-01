@@ -9,6 +9,7 @@ import {
   GITHUB_APP_USER_STATE_COOKIE,
   hasGithubAppUserAuthConfig,
 } from "@/lib/github-app-user-auth";
+import { GITHUB_APP_USER_OUTCOME_PARAM } from "@/lib/github-oauth";
 import { findProfileGithubLogin } from "@/lib/github-profile-login";
 
 const COOKIE_OPTIONS = {
@@ -30,9 +31,9 @@ export async function GET(request: Request) {
     return NextResponse.redirect(loginUrl);
   }
   if (!hasGithubAppUserAuthConfig()) {
-    return NextResponse.redirect(
-      buildAppUrl("/?error=github_app_user_unavailable", request)
-    );
+    const back = buildAppUrl(next, request);
+    back.searchParams.set(GITHUB_APP_USER_OUTCOME_PARAM, "unavailable");
+    return NextResponse.redirect(back);
   }
 
   const state = crypto.randomUUID();

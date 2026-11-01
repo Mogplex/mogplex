@@ -54,3 +54,20 @@ revoke all on function public.delete_oauth_token_if_unchanged(uuid, text, text)
   from public;
 grant execute on function public.delete_oauth_token_if_unchanged(uuid, text, text)
   to service_role;
+
+-- Default privileges can grant execute to the API roles directly, which the
+-- revoke from public does not undo. Those roles exist only on some databases.
+do $$
+declare
+  v_role text;
+begin
+  foreach v_role in array array['anon', 'authenticated'] loop
+    if exists (select 1 from pg_roles where rolname = v_role) then
+      execute format(
+        'revoke all on function public.delete_oauth_token_if_unchanged(uuid, text, text) from %I',
+        v_role
+      );
+    end if;
+  end loop;
+end;
+$$;

@@ -25,6 +25,8 @@ const AUTHORIZE_OUTCOME_MESSAGES: Record<string, string> = {
     "GitHub authorization was cancelled. Authorize to create repositories here.",
   failed: "GitHub authorization did not finish. Try again.",
   state_mismatch: "GitHub authorization did not finish. Try again.",
+  unavailable:
+    "Creating repositories in personal accounts is not available on this deployment.",
 };
 
 /**

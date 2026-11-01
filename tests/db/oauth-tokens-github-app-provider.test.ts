@@ -8,7 +8,9 @@ beforeAll(async () => {
   // The table as the baseline defines it, before this migration, and a
   // stand-in for the vault the token functions read.
   await db.exec(`
-    create role service_role;
+    create role service_role; create role anon;
+    -- As on Supabase-style databases, new functions grant execute to anon.
+    alter default privileges in schema public grant execute on functions to anon;
     CREATE SCHEMA vault;
     CREATE TABLE vault.secrets (id uuid PRIMARY KEY, secret text NOT NULL);
     CREATE VIEW vault.decrypted_secrets AS
@@ -98,4 +100,16 @@ it("forgets the grant GitHub rejected", async () => {
   await expect(
     deleteIfUnchanged(userId, '{"refreshToken":"ghr_rejected"}')
   ).resolves.toEqual({ deleted: true, remaining: 0 });
+});
+
+it("leaves the conditional delete executable by service_role only", async () => {
+  const { rows } = await db.query<{ role: string; allowed: boolean }>(
+    `SELECT r AS role,
+       has_function_privilege(r, 'public.delete_oauth_token_if_unchanged(uuid, text, text)', 'EXECUTE') AS allowed
+     FROM unnest(array['service_role', 'anon']) AS r`
+  );
+  expect(rows).toEqual([
+    { role: "service_role", allowed: true },
+    { role: "anon", allowed: false },
+  ]);
 });
