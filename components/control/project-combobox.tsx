@@ -27,21 +27,31 @@ export function ProjectCombobox({
   const searchInputRef = useRef<HTMLInputElement>(null);
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const selectedRepo = repos.find((repo) => repo.id === value);
-  const selectedLabel = loading ? "Loading projects…" : selectedRepo?.full_name ?? "New project…";
+  const selectedLabel = loading
+    ? "Loading projects…"
+    : (selectedRepo?.full_name ?? "New project…");
   const query = search.trim().toLowerCase();
   const matchingRepos = repos.filter((repo) =>
     `${repo.full_name} ${repo.owner ?? ""} ${repo.name ?? ""}`
       .toLowerCase()
       .includes(query)
   );
-  const showNewProject = !query || !repos.some((repo) =>
-    repo.full_name.toLowerCase() === query ||
-    (repo.name?.trim() || repo.full_name.split("/").at(-1))?.toLowerCase() === query
-  );
+  const showNewProject =
+    !query ||
+    !repos.some(
+      (repo) =>
+        repo.full_name.toLowerCase() === query ||
+        (
+          repo.name?.trim() || repo.full_name.split("/").at(-1)
+        )?.toLowerCase() === query
+    );
+  // "New project…" is pinned above the scrolling repo list, so it leads the
+  // keyboard order too; Enter while searching still picks the first match.
   const optionValues = [
-    ...matchingRepos.map((repo) => repo.id),
     ...(showNewProject ? [newProjectValue] : []),
+    ...matchingRepos.map((repo) => repo.id),
   ];
+  const repoOptionOffset = showNewProject ? 1 : 0;
 
   const handleOpenChange = (nextOpen: boolean) => {
     setOpen(nextOpen);
@@ -49,13 +59,18 @@ export function ProjectCombobox({
   };
 
   const selectProject = (nextValue: string) => {
-    onValueChange(nextValue, nextValue === newProjectValue ? search.trim() : undefined);
+    onValueChange(
+      nextValue,
+      nextValue === newProjectValue ? search.trim() : undefined
+    );
     handleOpenChange(false);
   };
 
   const focusOption = (index: number) => optionRefs.current[index]?.focus();
 
-  const handleSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleSearchKeyDown = (
+    event: React.KeyboardEvent<HTMLInputElement>
+  ) => {
     if (event.key === "ArrowDown" && optionValues.length > 0) {
       event.preventDefault();
       focusOption(0);
@@ -64,7 +79,7 @@ export function ProjectCombobox({
       focusOption(optionValues.length - 1);
     } else if (event.key === "Enter" && optionValues.length > 0) {
       event.preventDefault();
-      selectProject(optionValues[0]);
+      selectProject(matchingRepos[0]?.id ?? optionValues[0]);
     } else if (event.key === "Escape") {
       event.preventDefault();
       handleOpenChange(false);
@@ -110,7 +125,7 @@ export function ProjectCombobox({
           <span className="truncate">{selectedLabel}</span>
           <NavArrowDown
             aria-hidden="true"
-            className={`size-3.5 shrink-0 text-muted-foreground transition-transform ${
+            className={`text-muted-foreground size-3.5 shrink-0 transition-transform ${
               open ? "rotate-180" : ""
             }`}
           />
@@ -120,7 +135,7 @@ export function ProjectCombobox({
         align="start"
         className="border-border bg-popover w-[var(--radix-popover-trigger-width)] min-w-64 p-0 shadow-2xl"
       >
-        <div className="border-b border-border px-3">
+        <div className="border-border border-b px-3">
           <input
             autoFocus
             aria-label="Search projects"
@@ -134,71 +149,76 @@ export function ProjectCombobox({
         </div>
         <div
           aria-label="Project options"
-          className="max-h-72 overflow-y-auto p-1"
           id="control-project-options"
           role="listbox"
         >
-          {matchingRepos.map((repo, index) => {
-            const selected = repo.id === value;
-            return (
+          {showNewProject ? (
+            <div className="border-border border-b p-1">
               <button
-                aria-selected={selected}
-                className="hover:bg-accent flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs outline-none focus-visible:bg-accent"
-                key={repo.id}
-                onClick={() => selectProject(repo.id)}
+                aria-selected={value === newProjectValue}
+                className="hover:bg-accent focus-visible:bg-accent flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs outline-none"
+                onClick={() => selectProject(newProjectValue)}
                 onKeyDown={(event) =>
-                  handleOptionKeyDown(event, index, repo.id)
+                  handleOptionKeyDown(event, 0, newProjectValue)
                 }
                 ref={(element) => {
-                  optionRefs.current[index] = element;
+                  optionRefs.current[0] = element;
                 }}
                 role="option"
                 type="button"
               >
-                <span className="min-w-0 flex-1 truncate">{repo.full_name}</span>
-                {selected ? (
+                <span className="min-w-0 flex-1 truncate">
+                  {query ? `Create project "${search.trim()}"` : "New project…"}
+                </span>
+                {value === newProjectValue ? (
                   <Check
                     aria-label="Selected"
-                    className="size-3.5 shrink-0 text-foreground"
+                    className="text-foreground size-3.5 shrink-0"
                   />
                 ) : null}
               </button>
-            );
-          })}
-          {showNewProject ? (
-            <button
-              aria-selected={value === newProjectValue}
-              className="border-border hover:bg-accent mt-1 flex w-full items-center gap-2 border-t px-2 pt-2 pb-1.5 text-left text-xs outline-none focus-visible:bg-accent"
-              onClick={() => selectProject(newProjectValue)}
-              onKeyDown={(event) =>
-                handleOptionKeyDown(
-                  event,
-                  matchingRepos.length,
-                  newProjectValue
-                )
-              }
-              ref={(element) => {
-                optionRefs.current[matchingRepos.length] = element;
-              }}
-              role="option"
-              type="button"
-            >
-              <span className="min-w-0 flex-1 truncate">
-                {query ? `Create project "${search.trim()}"` : "New project…"}
-              </span>
-              {value === newProjectValue ? (
-                <Check
-                  aria-label="Selected"
-                  className="size-3.5 shrink-0 text-foreground"
-                />
-              ) : null}
-            </button>
+            </div>
           ) : null}
-          {matchingRepos.length === 0 && !showNewProject ? (
-            <p className="py-6 text-center text-xs text-muted-foreground">
-              No matching projects.
-            </p>
-          ) : null}
+          <div className="max-h-72 overflow-y-auto p-1">
+            {matchingRepos.map((repo, index) => {
+              const selected = repo.id === value;
+              return (
+                <button
+                  aria-selected={selected}
+                  className="hover:bg-accent focus-visible:bg-accent flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs outline-none"
+                  key={repo.id}
+                  onClick={() => selectProject(repo.id)}
+                  onKeyDown={(event) =>
+                    handleOptionKeyDown(
+                      event,
+                      repoOptionOffset + index,
+                      repo.id
+                    )
+                  }
+                  ref={(element) => {
+                    optionRefs.current[repoOptionOffset + index] = element;
+                  }}
+                  role="option"
+                  type="button"
+                >
+                  <span className="min-w-0 flex-1 truncate">
+                    {repo.full_name}
+                  </span>
+                  {selected ? (
+                    <Check
+                      aria-label="Selected"
+                      className="text-foreground size-3.5 shrink-0"
+                    />
+                  ) : null}
+                </button>
+              );
+            })}
+            {matchingRepos.length === 0 && !showNewProject ? (
+              <p className="text-muted-foreground py-6 text-center text-xs">
+                No matching projects.
+              </p>
+            ) : null}
+          </div>
         </div>
       </PopoverContent>
     </Popover>

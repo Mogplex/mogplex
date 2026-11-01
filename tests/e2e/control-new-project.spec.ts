@@ -71,6 +71,57 @@ test("project search offers creation with the typed name and hides it for an exa
   await expect(page.getByLabel("New project name")).toHaveValue("wid");
 });
 
+test("project picker pins New project above a scrolling repo list", async ({
+  page,
+}) => {
+  await enableScopedE2EAuth(page);
+  await mockBaseChrome(page);
+  await page.route("**/api/connections", (route) =>
+    fulfillJson(route, { connections: [] })
+  );
+  await page.route("**/api/control/sessions**", (route) =>
+    fulfillJson(route, [])
+  );
+  const repos: Repo[] = Array.from({ length: 30 }, (_, index) => ({
+    id: `repo-${index}`,
+    user_id: "user-1",
+    full_name: `acme/app-${String(index).padStart(2, "0")}`,
+    owner: "acme",
+    name: `app-${String(index).padStart(2, "0")}`,
+    default_branch: "main",
+    created_at: "2026-09-01T00:00:00Z",
+  }));
+  await page.route("**/api/repos**", (route) => fulfillJson(route, repos));
+  await page.goto(scopedPath("control"));
+  await page.getByRole("combobox", { name: "Project", exact: true }).click();
+
+  const options = page.getByRole("option");
+  const newProject = page.getByRole("option", { name: "New project…" });
+  await expect(options.first()).toHaveText("New project…");
+  await page
+    .getByRole("option", { name: "acme/app-29" })
+    .scrollIntoViewIfNeeded();
+  await expect(newProject).toBeInViewport();
+
+  const search = page.getByRole("textbox", { name: "Search projects" });
+  await search.press("ArrowDown");
+  await expect(newProject).toBeFocused();
+  await newProject.press("ArrowDown");
+  const firstRepo = page.getByRole("option", { name: "acme/app-00" });
+  await expect(firstRepo).toBeFocused();
+  await firstRepo.press("ArrowUp");
+  await expect(newProject).toBeFocused();
+  await newProject.press("ArrowUp");
+  await expect(search).toBeFocused();
+
+  await search.fill("app-0");
+  await expect(options.first()).toHaveText('Create project "app-0"');
+  await search.press("Enter");
+  await expect(
+    page.getByRole("combobox", { name: "Project", exact: true })
+  ).toContainText("acme/app-00");
+});
+
 test("new mission validates and creates an org-scoped project before starting", async ({
   page,
 }) => {
