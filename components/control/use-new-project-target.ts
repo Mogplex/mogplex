@@ -36,6 +36,9 @@ export function useNewProjectTarget({
   const [ownersError, setOwnersError] = useState<string | null>(null);
   const [ownersAction, setOwnersAction] = useState<NewProjectAction>(null);
   const [availability, setAvailability] = useState<AvailabilityState>("idle");
+  // Where an authorize or connect round trip returns; read in an effect so
+  // render never touches `window`.
+  const [returnPath, setReturnPath] = useState("/");
 
   const nameValidation = useMemo(() => validateGithubRepoName(name), [name]);
 
@@ -76,6 +79,7 @@ export function useNewProjectTarget({
         // `reauthorize=1` forces the OAuth grant even where the GitHub App is
         // configured, since only that grant can add the missing read:org scope.
         const next = `${window.location.pathname}${window.location.search}`;
+        setReturnPath(next);
         const connectHref = `/api/auth/github?next=${encodeURIComponent(next)}`;
         if (targets.length === 0) {
           setOwnersError("GitHub must be connected to create a project.");
@@ -160,7 +164,7 @@ export function useNewProjectTarget({
     selectedTarget?.authorization_required
       ? {
           href: `/api/auth/github/app-user?next=${encodeURIComponent(
-            `${window.location.pathname}${window.location.search}`
+            returnPath
           )}`,
           label: "Authorize GitHub",
         }

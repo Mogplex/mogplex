@@ -153,7 +153,7 @@ export function createWorkspaceRepoPostHandler(
     // user authorization.
     const target = await resolveRepoCreateTarget(userId, ownerLogin, deps);
     if (!target.ok) return target.response;
-    const { ownerTarget, viaInstallation } = target;
+    const { ownerTarget, viaApp } = target;
 
     try {
       const createdRepo = await createGithubRepoWithRecovery(
@@ -179,7 +179,7 @@ export function createWorkspaceRepoPostHandler(
       if (error instanceof GithubRepoCreateError) {
         const { status, body } = githubRepoCreateErrorResponse(error, {
           ownerLogin: ownerTarget.login,
-          viaInstallation,
+          viaApp,
         });
         return NextResponse.json(body, { status });
       }

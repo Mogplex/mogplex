@@ -50,7 +50,7 @@ type RepoCreateTarget =
       ok: true;
       ownerTarget: GithubRepoOwnerTarget;
       token: string;
-      viaInstallation: boolean;
+      viaApp: boolean;
     }
   | { ok: false; response: NextResponse };
 
@@ -172,6 +172,6 @@ export async function resolveRepoCreateTarget(
     ok: true,
     ownerTarget,
     token: credential.token,
-    viaInstallation: credential.viaInstallation,
+    viaApp: credential.viaApp,
   };
 }

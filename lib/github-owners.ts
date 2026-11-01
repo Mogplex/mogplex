@@ -136,11 +136,6 @@ export function canCreatePrivateGithubOrgRepo(
 }
 
 /**
- * Orgs the user may create a repository in. With `requireOwner` (App
- * deployments, which create through an installation token that ignores org
- * policy) only active owners qualify, so org settings are not read.
- */
-/**
  * Whether the user may create a repository in `login`. Throws when GitHub
  * cannot answer, so a caller can tell an outage from a refusal; GitHub
  * answers 404 for an org the user does not belong to.
@@ -169,6 +164,11 @@ export async function canCreateInGithubOrg(
   }
 }
 
+/**
+ * Orgs the user may create a repository in. With `requireOwner` (App
+ * deployments, which create through an installation token that ignores org
+ * policy) only active owners qualify, so org settings are not read.
+ */
 export async function filterCreatableGithubOrgLogins(
   token: string,
   orgLogins: string[],

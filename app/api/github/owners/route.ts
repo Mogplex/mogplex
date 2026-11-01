@@ -1,38 +1,13 @@
 import { NextResponse } from "next/server";
 import { requireUserId } from "@/lib/auth";
+import { markPersonalAuthorization } from "@/app/api/github/_lib/personal-authorization";
 import { loadGithubRepoCreationOwnerTargets } from "@/app/api/github/_lib/repo-owner-targets";
 import { hasGithubAppConfig } from "@/lib/github-app";
-import {
-  hasGithubAppUserAuthConfig,
-  hasGithubAppUserGrant,
-} from "@/lib/github-app-user-auth";
-import type { GithubRepoOwnerTarget } from "@/lib/github-owners";
 import { getOAuthToken } from "@/lib/oauth-tokens";
 import {
   GITHUB_ORG_READ_SCOPE,
   GITHUB_REAUTHORIZE_HEADER,
 } from "@/lib/github-oauth";
-
-/**
- * In an App deployment a personal repository is created with the user's own
- * App authorization, so the picker says when that step is still needed.
- */
-async function markPersonalAuthorization(
-  userId: string,
-  targets: GithubRepoOwnerTarget[]
-) {
-  if (!hasGithubAppConfig() || !hasGithubAppUserAuthConfig()) return targets;
-  return Promise.all(
-    targets.map(async (target) => {
-      if (target.kind !== "personal") return target;
-      const authorized = await hasGithubAppUserGrant(
-        userId,
-        target.login
-      ).catch(() => false);
-      return { ...target, authorization_required: !authorized };
-    })
-  );
-}
 
 export async function GET() {
   const userId = await requireUserId();

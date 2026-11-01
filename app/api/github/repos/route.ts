@@ -165,7 +165,7 @@ export function createGithubRepoPostHandler(
 
     const target = await resolveRepoCreateTarget(userId, ownerLogin, deps);
     if (!target.ok) return target.response;
-    const { ownerTarget, viaInstallation } = target;
+    const { ownerTarget, viaApp } = target;
 
     try {
       const createdRepo = await createGithubRepoWithRecovery(
@@ -191,7 +191,7 @@ export function createGithubRepoPostHandler(
       if (error instanceof GithubRepoCreateError) {
         const { status, body } = githubRepoCreateErrorResponse(error, {
           ownerLogin: ownerTarget.login,
-          viaInstallation,
+          viaApp,
         });
         return NextResponse.json(body, { status });
       }

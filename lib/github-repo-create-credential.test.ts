@@ -47,7 +47,7 @@ it("creates through the org installation, never the user's grant, in an App depl
   expect(credential).toEqual({
     ok: true,
     token: "installation-42",
-    viaInstallation: true,
+    viaApp: true,
   });
   expect(minted).toEqual([42]);
 });
@@ -96,7 +96,7 @@ it("keeps the user's repository grant in an OAuth-only deployment", async () => 
   expect(credential).toEqual({
     ok: true,
     token: "repo-token",
-    viaInstallation: false,
+    viaApp: false,
   });
 });
 
@@ -201,19 +201,17 @@ it("names the missing App permission and keeps GitHub's refusal as detail", () =
     403,
     '{"message":"Resource not accessible by integration"}'
   );
-  const viaInstallation = githubRepoCreateErrorResponse(refusal, {
+  const viaApp = githubRepoCreateErrorResponse(refusal, {
     ownerLogin: "acme",
-    viaInstallation: true,
+    viaApp: true,
   });
-  expect(viaInstallation.status).toBe(403);
-  expect(viaInstallation.body.code).toBe("GITHUB_APP_PERMISSION_REQUIRED");
-  expect(viaInstallation.body.detail).toBe(
-    "Resource not accessible by integration"
-  );
+  expect(viaApp.status).toBe(403);
+  expect(viaApp.body.code).toBe("GITHUB_APP_PERMISSION_REQUIRED");
+  expect(viaApp.body.detail).toBe("Resource not accessible by integration");
   expect(
     githubRepoCreateErrorResponse(refusal, {
       ownerLogin: "acme",
-      viaInstallation: false,
+      viaApp: false,
     })
   ).toEqual({
     status: 403,
@@ -230,7 +228,7 @@ it("keeps GitHub's message for an installation 403 that is not a permission refu
       403,
       '{"message":"You have exceeded a secondary rate limit."}'
     ),
-    { ownerLogin: "acme", viaInstallation: true }
+    { ownerLogin: "acme", viaApp: true }
   );
   expect(response).toEqual({
     status: 403,
@@ -240,7 +238,7 @@ it("keeps GitHub's message for an installation 403 that is not a permission refu
 });
 
 it("maps a name collision to 409 and other GitHub failures to 502", () => {
-  const context = { ownerLogin: "acme", viaInstallation: true };
+  const context = { ownerLogin: "acme", viaApp: true };
   expect(
     githubRepoCreateErrorResponse(new GithubRepoCreateError(422, "{}"), context)
       .status
@@ -342,7 +340,7 @@ it("creates a personal repository with the user's App authorization", async () =
   expect(credential).toEqual({
     ok: true,
     token: "ghu_user",
-    viaInstallation: false,
+    viaApp: true,
   });
   expect(logins).toEqual(["alex"]);
 });

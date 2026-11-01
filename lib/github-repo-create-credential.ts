@@ -28,8 +28,8 @@ export type GithubRepoCreateRefusal = {
 };
 
 export type GithubRepoCreateCredential =
-  | { ok: true; token: string; viaInstallation: boolean }
-  | GithubRepoCreateRefusal;
+  /** `viaApp`: the token carries only the GitHub App's permissions. */
+  { ok: true; token: string; viaApp: boolean } | GithubRepoCreateRefusal;
 
 const defaultDeps = {
   appConfigured: () => hasGithubAppConfig(),
@@ -69,7 +69,7 @@ export async function resolveGithubRepoCreateCredential(
 ): Promise<GithubRepoCreateCredential> {
   const deps = { ...defaultDeps, ...overrides };
   if (!deps.appConfigured())
-    return { ok: true, token: userToken, viaInstallation: false };
+    return { ok: true, token: userToken, viaApp: false };
   if (target.kind === "personal")
     return personalAccountCredential(target, deps);
   if (target.github_installation_id == null) {
@@ -90,7 +90,7 @@ export async function resolveGithubRepoCreateCredential(
     const { token } = await deps.createInstallationToken(
       target.github_installation_id
     );
-    return { ok: true, token, viaInstallation: true };
+    return { ok: true, token, viaApp: true };
   } catch (error) {
     console.warn("[github-repo-create] installation token unavailable", {
       owner: target.login,
@@ -165,7 +165,7 @@ async function personalAccountCredential(
       error: "GitHub is not responding to Mogplex right now. Try again.",
     };
   }
-  if (token) return { ok: true, token, viaInstallation: false };
+  if (token) return { ok: true, token, viaApp: true };
   return {
     ok: false,
     status: 403,
@@ -230,20 +230,20 @@ const INTEGRATION_PERMISSION_REFUSAL =
   /resource not accessible by integration|not have permission/i;
 
 /**
- * Map GitHub's refusal of a create to the route response. An installation
- * refused with 403 has not accepted the App's Repository creation permission, so
- * say that instead of GitHub's message.
+ * Map GitHub's refusal of a create to the route response. An App credential
+ * (installation or App user token) refused with 403 has not accepted the App's
+ * Repository creation permission, so say that instead of GitHub's message.
  */
 export function githubRepoCreateErrorResponse(
   error: GithubRepoCreateError,
-  context: { ownerLogin: string; viaInstallation: boolean }
+  context: { ownerLogin: string; viaApp: boolean }
 ): {
   status: number;
   body: { error: string; code?: string; detail?: string };
 } {
   const detail = extractGithubApiErrorMessage(error.body);
-  if (error.status === 403 && context.viaInstallation) {
-    console.warn("[github-repo-create] installation create refused", {
+  if (error.status === 403 && context.viaApp) {
+    console.warn("[github-repo-create] App create refused", {
       owner: context.ownerLogin,
       body: error.body,
     });
@@ -252,7 +252,7 @@ export function githubRepoCreateErrorResponse(
   // permission refusal points the user at the App's permissions.
   if (
     error.status === 403 &&
-    context.viaInstallation &&
+    context.viaApp &&
     INTEGRATION_PERMISSION_REFUSAL.test(detail ?? "")
   ) {
     return {
