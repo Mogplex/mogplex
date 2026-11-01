@@ -14,10 +14,12 @@ export type RepoCreateTargetDeps = {
   getGithubToken: (userId: string) => Promise<string | null>;
   loadOwnerTargets: (
     userId: string,
-    token: string
+    token: string,
+    options?: { onlyLogin?: string | null }
   ) => Promise<{
     targets: GithubRepoOwnerTarget[];
     oauthScopes: string[] | null;
+    deniedOrgLogins?: string[];
   }>;
   resolveCreateCredential: typeof resolveGithubRepoCreateCredential;
 };
@@ -70,7 +72,9 @@ export async function resolveRepoCreateTarget(
 
   let owners: Awaited<ReturnType<RepoCreateTargetDeps["loadOwnerTargets"]>>;
   try {
-    owners = await deps.loadOwnerTargets(userId, token);
+    owners = await deps.loadOwnerTargets(userId, token, {
+      onlyLogin: ownerLogin,
+    });
   } catch (error) {
     console.error("[github-repo-create] owner lookup failed", {
       userId,
@@ -83,6 +87,18 @@ export async function resolveRepoCreateTarget(
       ? target.kind === "personal"
       : target.login.toLowerCase() === ownerLogin.toLowerCase()
   );
+  const denied = owners.deniedOrgLogins?.find(
+    (login) => login.toLowerCase() === ownerLogin?.toLowerCase()
+  );
+  if (!ownerTarget && denied) {
+    return refuse(
+      {
+        error: `Your role in ${denied} cannot create repositories through Mogplex. Ask an owner of ${denied}.`,
+        code: "GITHUB_ORG_CREATE_NOT_ALLOWED",
+      },
+      403
+    );
+  }
   if (!ownerTarget) {
     // Without read:org every organization drops out of the owner list.
     if (

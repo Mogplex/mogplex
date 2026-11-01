@@ -156,6 +156,9 @@ function ownerRequired(login: string): GithubRepoCreateRefusal {
   };
 }
 
+const INTEGRATION_PERMISSION_REFUSAL =
+  /resource not accessible by integration|not have permission/i;
+
 /**
  * Map GitHub's refusal of a create to the route response. An installation
  * refused with 403 has not accepted the App's Repository creation permission, so
@@ -170,11 +173,18 @@ export function githubRepoCreateErrorResponse(
 } {
   const detail = extractGithubApiErrorMessage(error.body);
   if (error.status === 403 && context.viaInstallation) {
-    // Other 403 causes exist (org policy, IP allow list); keep GitHub's text.
     console.warn("[github-repo-create] installation create refused", {
       owner: context.ownerLogin,
       body: error.body,
     });
+  }
+  // Rate limits, IP allow lists and org policy also answer 403; only a
+  // permission refusal points the user at the App's permissions.
+  if (
+    error.status === 403 &&
+    context.viaInstallation &&
+    INTEGRATION_PERMISSION_REFUSAL.test(detail ?? "")
+  ) {
     return {
       status: 403,
       body: {

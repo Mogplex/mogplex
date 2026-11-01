@@ -109,7 +109,7 @@ test("POST /api/github/repos creates an org repo with the installation token in 
   assert.deepEqual(tokens, ["installation-42"]);
 });
 
-test("POST /api/github/repos explains an installation that lacks the Administration permission", async () => {
+test("POST /api/github/repos explains an installation that lacks the Repository creation permission", async () => {
   const { createGithubRepoPostHandler } = await loadRoute();
   const tokens: string[] = [];
   const response = await appModeHandler(
@@ -467,4 +467,21 @@ test("POST /api/github/repos reports a failed connection lookup instead of askin
   } finally {
     console.error = originalError;
   }
+});
+
+test("POST /api/github/repos tells an org member why they cannot create there", async () => {
+  const { createGithubRepoPostHandler } = await loadRoute();
+  const lookups: Array<{ onlyLogin?: string | null } | undefined> = [];
+  const handler = createGithubRepoPostHandler({
+    requireUserId: async () => "user-123",
+    getGithubToken: async () => "identity-token",
+    loadOwnerTargets: async (_userId, _token, options) => {
+      lookups.push(options);
+      return { ...owners([]), deniedOrgLogins: ["Acme"] };
+    },
+  });
+  const response = await handler(createRequest("acme"));
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).code, "GITHUB_ORG_CREATE_NOT_ALLOWED");
+  assert.deepEqual(lookups, [{ onlyLogin: "acme" }]);
 });

@@ -171,6 +171,22 @@ it("names the missing App permission and keeps GitHub's refusal as detail", () =
   warn.mockRestore();
 });
 
+it("keeps GitHub's message for an installation 403 that is not a permission refusal", () => {
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  const response = githubRepoCreateErrorResponse(
+    new GithubRepoCreateError(
+      403,
+      '{"message":"You have exceeded a secondary rate limit."}'
+    ),
+    { ownerLogin: "acme", viaInstallation: true }
+  );
+  expect(response).toEqual({
+    status: 403,
+    body: { error: "You have exceeded a secondary rate limit." },
+  });
+  warn.mockRestore();
+});
+
 it("maps a name collision to 409 and other GitHub failures to 502", () => {
   const context = { ownerLogin: "acme", viaInstallation: true };
   expect(

@@ -7,9 +7,15 @@ import {
 import { hasGithubAppConfig } from "@/lib/github-app";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
+/**
+ * Owners the user may create a repository under. `onlyLogin` limits the
+ * per-org permission reads to the one org a create request names; the
+ * owner picker omits it and lists every org.
+ */
 export async function loadGithubRepoCreationOwnerTargets(
   userId: string,
-  token: string
+  token: string,
+  options: { onlyLogin?: string | null } = {}
 ) {
   const [profileResult, installationsResult, currentUser] = await Promise.all([
     supabaseAdmin
@@ -39,13 +45,17 @@ export async function loadGithubRepoCreationOwnerTargets(
     );
   }
 
-  const orgLogins = await fetchGithubUserOrgs(token).catch((error) => {
+  const memberOrgLogins = await fetchGithubUserOrgs(token).catch((error) => {
     console.warn("[github-owners] organization membership unavailable", {
       userId,
       error,
     });
     return [] as string[];
   });
+  const onlyLogin = options.onlyLogin?.toLowerCase();
+  const orgLogins = onlyLogin
+    ? memberOrgLogins.filter((login) => login.toLowerCase() === onlyLogin)
+    : memberOrgLogins;
   const creatableOrgLogins = await filterCreatableGithubOrgLogins(
     token,
     orgLogins,
@@ -65,5 +75,12 @@ export async function loadGithubRepoCreationOwnerTargets(
       target.kind === "personal" ||
       creatableOrgSet.has(target.login.toLowerCase())
   );
-  return { targets, oauthScopes: currentUser.oauthScopes };
+  return {
+    targets,
+    oauthScopes: currentUser.oauthScopes,
+    // Orgs the user belongs to but may not create in, so a refusal can say so.
+    deniedOrgLogins: orgLogins.filter(
+      (login) => !creatableOrgSet.has(login.toLowerCase())
+    ),
+  };
 }
