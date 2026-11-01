@@ -75,6 +75,7 @@ it("builds the App authorize URL with state and redirect", () => {
   );
   expect(url.searchParams.get("client_id")).toBe("Iv23client");
   expect(url.searchParams.get("state")).toBe("s1");
+  expect(url.searchParams.get("scope")).toBe("offline_access");
 });
 
 it("exchanges a code and records when each token expires", async () => {
@@ -219,4 +220,20 @@ it("reports a live grant for the matching account", async () => {
   await expect(
     hasGithubAppUserGrant("user-1", "other", deps({}))
   ).resolves.toBe(false);
+});
+
+it("agrees with token lookup on grants at the edges of expiry", async () => {
+  const cases = [
+    // Refresh token expired, access token still fresh: creates still work.
+    grant({ refreshTokenExpiresAt: NOW - 1 }),
+    // Access token expiring and no refresh token: creates need authorization.
+    grant({ accessTokenExpiresAt: NOW, refreshToken: null }),
+  ];
+  for (const edge of cases) {
+    const { deps } = store(edge);
+    const token = await getGithubAppUserToken("user-1", "alex", deps({}));
+    await expect(
+      hasGithubAppUserGrant("user-1", "alex", deps({}))
+    ).resolves.toBe(token !== null);
+  }
 });

@@ -23,7 +23,11 @@ export type GithubRepoCreateRefusal = {
   error: string;
   /** OAuth scope a reconnect must grant, sent as the reauthorize header. */
   reauthorizeScope?: string;
-  /** Where the user grants what is missing, when Mogplex can ask for it. */
+  /**
+   * Where the user grants what is missing, when Mogplex can ask for it. The
+   * API cannot know the page the user came from, so a client appends
+   * `?next=<its own path>` to return there afterwards.
+   */
   authorizeUrl?: string;
 };
 

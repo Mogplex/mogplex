@@ -79,6 +79,9 @@ export function buildGithubAppUserAuthorizeUrl(input: {
     client_id: credentials.clientId,
     redirect_uri: input.redirectUri,
     state: input.state,
+    // Asks GitHub for a refresh token with the expiring access token, so one
+    // authorization keeps working until the refresh token expires.
+    scope: "offline_access",
   });
   // Suggests the account already connected; GitHub still lets the user choose.
   if (input.login) params.set("login", input.login);
@@ -187,18 +190,8 @@ export async function getGithubAppUserToken(
   if (grant?.login.toLowerCase() !== login.toLowerCase()) return null;
 
   const now = deps.now();
-  if (
-    grant.accessTokenExpiresAt === null ||
-    grant.accessTokenExpiresAt - now > REFRESH_MARGIN_MS
-  ) {
-    return grant.accessToken;
-  }
-  if (
-    !grant.refreshToken ||
-    (grant.refreshTokenExpiresAt !== null && grant.refreshTokenExpiresAt <= now)
-  ) {
-    return null;
-  }
+  if (accessTokenFresh(grant, now)) return grant.accessToken;
+  if (!refreshTokenUsable(grant, now)) return null;
   try {
     const refreshed = await requestToken(
       { grant_type: "refresh_token", refresh_token: grant.refreshToken },
@@ -248,7 +241,28 @@ async function recoverRejectedRefresh(
  */
 const GRANT_REJECTION_CODES = new Set(["bad_refresh_token", "invalid_grant"]);
 
-/** Whether the user has authorized the App for `login`, without refreshing. */
+function accessTokenFresh(grant: GithubAppUserGrant, now: number) {
+  return (
+    grant.accessTokenExpiresAt === null ||
+    grant.accessTokenExpiresAt - now > REFRESH_MARGIN_MS
+  );
+}
+
+function refreshTokenUsable(
+  grant: GithubAppUserGrant,
+  now: number
+): grant is GithubAppUserGrant & { refreshToken: string } {
+  return (
+    grant.refreshToken !== null &&
+    (grant.refreshTokenExpiresAt === null || grant.refreshTokenExpiresAt > now)
+  );
+}
+
+/**
+ * Whether the user has authorized the App for `login`, without refreshing.
+ * Agrees with `getGithubAppUserToken`: a fresh access token or a usable
+ * refresh token counts.
+ */
 export async function hasGithubAppUserGrant(
   userId: string,
   login: string,
@@ -257,8 +271,6 @@ export async function hasGithubAppUserGrant(
   const deps = { ...defaultDeps, ...overrides };
   const grant = parseGrant(await deps.getToken(userId));
   if (grant?.login.toLowerCase() !== login.toLowerCase()) return false;
-  return (
-    grant.refreshTokenExpiresAt === null ||
-    grant.refreshTokenExpiresAt > deps.now()
-  );
+  const now = deps.now();
+  return accessTokenFresh(grant, now) || refreshTokenUsable(grant, now);
 }
