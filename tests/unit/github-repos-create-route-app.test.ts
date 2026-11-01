@@ -52,7 +52,7 @@ function appModeHandler(
               scope_label: "Org",
               source: "installation",
             }
-          : ownerLogin === null || ownerLogin === "alex"
+          : ownerLogin === "alex"
             ? {
                 login: "alex",
                 kind: "personal",
