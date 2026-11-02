@@ -176,7 +176,7 @@ export function useRepositoryAdmin() {
           ? {
               title: "Could not remove all repositories",
               description: `${removed} removed; ${failed} could not be removed. ${errorMessage(failures[0]?.reason)}`,
-              variant: "destructive",
+              variant: removed > 0 ? "warning" : "destructive",
             }
           : {
               variant: "info",

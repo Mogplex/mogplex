@@ -126,7 +126,7 @@ test("deleting the selected workflow selects another workflow even when the list
 
   await expect(
     page
-      .locator("li[class*='destructive']")
+      .locator('[data-variant="info"]')
       .filter({ hasText: "Workflow deleted" })
   ).toBeVisible();
 
@@ -200,7 +200,7 @@ test("deleting the selected workflow selects another workflow", async ({
 
   await expect(
     page
-      .locator("li[class*='destructive']")
+      .locator('[data-variant="info"]')
       .filter({ hasText: "Workflow deleted" })
   ).toBeVisible();
 

@@ -110,7 +110,7 @@ test("personal workflow templates bind a target repository and can be saved from
     page.getByRole("button", { name: "Delete Critical repo review template" })
   ).toHaveCount(0);
   const deletionToast = page
-    .locator("li[class*='destructive']")
+    .locator('[data-variant="info"]')
     .filter({ hasText: "Template deleted" });
   await expect(deletionToast).toBeVisible();
   await expect(deletionToast).toContainText(

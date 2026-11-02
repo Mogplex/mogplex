@@ -176,6 +176,11 @@ test("toast actions and keyboard dismissal work on mobile with reduced motion", 
   const close = toast.getByRole("button", { name: "Dismiss notification" });
   const box = await close.boundingBox();
   expect(box?.width).toBeGreaterThanOrEqual(44);
+  const actionBox = await toast
+    .getByRole("button", { name: "Undo", exact: true })
+    .boundingBox();
+  expect(actionBox?.height).toBeGreaterThanOrEqual(44);
+  expect(actionBox?.width).toBeGreaterThanOrEqual(44);
   await toast.getByRole("button", { name: "Undo", exact: true }).click();
   await expect(page.getByTestId("undo-count")).toHaveText("1");
   await expect(page.getByTestId("closed-count")).toHaveText("1");

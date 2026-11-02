@@ -180,7 +180,7 @@ export function useFlowTemplateHandlers(
       toast({
         title: "Template deleted",
         description: `"${templateDeleteTarget.template.name}" was permanently deleted.`,
-        variant: "destructive",
+        variant: "info",
       });
       setTemplateDeleteTarget(null);
     } catch (error) {

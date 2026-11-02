@@ -202,7 +202,7 @@ export function useFlowCrudHandlers(
       toast({
         title: "Workflow deleted",
         description: `"${selectedFlow.name}" was permanently deleted.`,
-        variant: "destructive",
+        variant: "info",
       });
     } catch (error) {
       toast({
