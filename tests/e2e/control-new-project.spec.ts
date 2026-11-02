@@ -116,6 +116,9 @@ test("project picker pins New project above a scrolling repo list", async ({
   await newProject.press("ArrowUp");
   await expect(search).toBeFocused();
 
+  await search.fill("no-such-repo");
+  await expect(listbox.getByRole("group")).toHaveCount(1);
+  await expect(options).toHaveCount(1);
   await search.fill("app-0");
   await expect(options.first()).toHaveText('Create project "app-0"');
   await search.press("Enter");

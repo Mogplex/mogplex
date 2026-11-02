@@ -77,6 +77,8 @@ export function ProjectCombobox({
       event.preventDefault();
       focusOption(0);
     } else if (event.key === "ArrowUp" && optionValues.length > 0) {
+      // Standard listbox wrap: ArrowUp from search reaches the last repo;
+      // the pinned create row is the ArrowDown target instead.
       event.preventDefault();
       focusOption(optionValues.length - 1);
     } else if (event.key === "Enter" && optionValues.length > 0) {
@@ -185,45 +187,47 @@ export function ProjectCombobox({
               </button>
             </div>
           ) : null}
-          <div
-            aria-label="Repositories"
-            className="max-h-72 overflow-y-auto p-1"
-            role="group"
-          >
-            {matchingRepos.map((repo, index) => {
-              const selected = repo.id === value;
-              return (
-                <button
-                  aria-selected={selected}
-                  className="hover:bg-accent focus-visible:bg-accent flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs outline-none"
-                  key={repo.id}
-                  onClick={() => selectProject(repo.id)}
-                  onKeyDown={(event) =>
-                    handleOptionKeyDown(
-                      event,
-                      repoOptionOffset + index,
-                      repo.id
-                    )
-                  }
-                  ref={(element) => {
-                    optionRefs.current[repoOptionOffset + index] = element;
-                  }}
-                  role="option"
-                  type="button"
-                >
-                  <span className="min-w-0 flex-1 truncate">
-                    {repo.full_name}
-                  </span>
-                  {selected ? (
-                    <Check
-                      aria-label="Selected"
-                      className="text-foreground size-3.5 shrink-0"
-                    />
-                  ) : null}
-                </button>
-              );
-            })}
-          </div>
+          {matchingRepos.length > 0 ? (
+            <div
+              aria-label="Repositories"
+              className="max-h-72 overflow-y-auto p-1"
+              role="group"
+            >
+              {matchingRepos.map((repo, index) => {
+                const selected = repo.id === value;
+                return (
+                  <button
+                    aria-selected={selected}
+                    className="hover:bg-accent focus-visible:bg-accent flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs outline-none"
+                    key={repo.id}
+                    onClick={() => selectProject(repo.id)}
+                    onKeyDown={(event) =>
+                      handleOptionKeyDown(
+                        event,
+                        repoOptionOffset + index,
+                        repo.id
+                      )
+                    }
+                    ref={(element) => {
+                      optionRefs.current[repoOptionOffset + index] = element;
+                    }}
+                    role="option"
+                    type="button"
+                  >
+                    <span className="min-w-0 flex-1 truncate">
+                      {repo.full_name}
+                    </span>
+                    {selected ? (
+                      <Check
+                        aria-label="Selected"
+                        className="text-foreground size-3.5 shrink-0"
+                      />
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
         </div>
       </PopoverContent>
     </Popover>
