@@ -28,10 +28,7 @@ import {
   buildDetectBunUsageScript,
   commandRequiresBun,
 } from "./client-shell";
-import {
-  buildPreviewReadinessOptions,
-  readSandboxTextFile,
-} from "./client-readiness";
+import { buildPreviewReadinessOptions } from "./client-readiness";
 
 export async function resolveBootstrapDetection(
   sandbox: Sandbox,
@@ -57,22 +54,29 @@ export async function resolveBootstrapDetection(
   };
 }
 
+/**
+ * Read the dev script from package.json. A missing file reports no dev
+ * script and no manifest; an empty, unreadable or malformed one counts as
+ * present with a dev script, so the npm path runs and fails loudly.
+ */
 export async function readPackageDevScriptInfo(
   sandbox: Sandbox,
   normalizedRoot: string | null
 ) {
   try {
     const pkgPath = resolveSandboxPath(normalizedRoot, "package.json");
-    const pkgText = await readSandboxTextFile(sandbox, pkgPath);
-    if (!pkgText) {
+    const buffer = await sandbox.readFileToBuffer({ path: pkgPath });
+    if (!buffer) {
       return {
         packageDevScript: null,
-        hasDevScript: true,
+        hasDevScript: false,
         hasPackageJson: false,
       };
     }
 
-    const pkg = JSON.parse(pkgText) as { scripts?: Record<string, string> };
+    const pkg = JSON.parse(buffer.toString("utf-8")) as {
+      scripts?: Record<string, string>;
+    };
     const packageDevScript =
       typeof pkg.scripts?.dev === "string" ? pkg.scripts.dev.trim() : null;
 
@@ -187,11 +191,12 @@ export async function resolveBootstrapContext(
   const nodeWithoutPackageJson =
     !packageInfo.hasPackageJson && isNodeRuntime(effectiveRuntime);
   const skipDefaultInstall = nodeWithoutPackageJson && !opts.installCommand;
-  // packageInfo.hasDevScript is true for a Python repo without package.json
-  // (its strategy supplies the dev command) and for an unreadable manifest.
+  // A Python repo without package.json keeps its strategy's dev command.
   const hasDevScript =
     Boolean(opts.devCommand) ||
-    (!nodeWithoutPackageJson && packageInfo.hasDevScript);
+    (packageInfo.hasPackageJson
+      ? packageInfo.hasDevScript
+      : !isNodeRuntime(effectiveRuntime));
   const emptyNodeProject = skipDefaultInstall && !hasDevScript;
   const workspaceBuildCommand = await resolveWorkspaceBuildCommand(
     sandbox,

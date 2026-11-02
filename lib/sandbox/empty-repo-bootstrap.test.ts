@@ -166,11 +166,36 @@ describe("bootstrap for a repository without package.json", () => {
     }
   );
 
+  it("should finish without the package.json warning when package.json has no dev script", async () => {
+    const { sandbox } = fakeSandbox({
+      "package.json": JSON.stringify({ scripts: { build: "tsc" } }),
+    });
+
+    const events = await collect(bootstrapSandboxStreaming(sandbox));
+
+    expect(events).not.toContainEqual(noPackageJsonWarning);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "log",
+        data: expect.stringContaining("No dev script found in package.json"),
+      })
+    );
+    expect(events.at(-1)).toEqual({ type: "status", status: "running" });
+  });
+
+  it("should take the npm path for an empty package.json", async () => {
+    const { events } = await streamUntilInstall({ "package.json": "" });
+
+    expect(events).not.toContainEqual(noPackageJsonWarning);
+    expect(events.at(-1)).toEqual({ type: "status", status: "installing" });
+  });
+
   it("should still install a Python repo that has no package.json", async () => {
     const { events } = await streamUntilInstall({
       "requirements.txt": "fastapi\n",
     });
 
+    expect(events).not.toContainEqual(noPackageJsonWarning);
     expect(events.at(-1)).toEqual({ type: "status", status: "installing" });
   });
 
