@@ -1,6 +1,6 @@
 import type { McpServer, KeyValueEntry, FormState } from "./types";
 import { EMPTY_FORM } from "./types";
-import { readToolPolicy } from "@/lib/mcp-servers/policy";
+import { normalizeToolNames, readToolPolicy } from "@/lib/mcp-servers/policy";
 
 export function createEntry(partial?: Partial<KeyValueEntry>): KeyValueEntry {
   return {
@@ -172,8 +172,26 @@ function buildKeyValuePayload(entries: KeyValueEntry[], label: string) {
   return { plain, secrets };
 }
 
+/**
+ * Trim and dedupe the allowed and blocked tool lists an HTTP server's
+ * permissions editor manages. This runs at save rather than on blur: tidying
+ * on blur shrank the auto-sized textareas under the pointer, so a Save click
+ * right after editing a list could miss the button.
+ */
+function normalizeToolLists(extra: Record<string, unknown>) {
+  const next = { ...extra };
+  for (const key of ["enabled_tools", "disabled_tools"] as const) {
+    const value = next[key];
+    if (Array.isArray(value) && value.every((name) => typeof name === "string"))
+      next[key] = normalizeToolNames(value);
+  }
+  return next;
+}
+
 export function buildPayload(form: FormState) {
-  const extra = parseExtra(form.extraText);
+  const parsed = parseExtra(form.extraText);
+  // Other transports' Extra JSON passes through untouched.
+  const extra = form.transport === "http" ? normalizeToolLists(parsed) : parsed;
   if (form.transport === "http") {
     try {
       readToolPolicy(extra);

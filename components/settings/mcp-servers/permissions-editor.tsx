@@ -25,7 +25,13 @@ export function PermissionsEditor({ extraText, onChange, toolNames = [] }: {
     return <p role="alert" className="text-sm text-destructive">Tool permissions are invalid. Correct the permission fields in Extra JSON before saving.</p>;
   }
   const write = (value: Record<string, unknown>) => onChange(JSON.stringify(value, null, 2));
-  const names = [...new Set([...toolNames, ...Object.keys(policy.tools ?? {}), ...(policy.enabled_tools ?? []), ...(policy.disabled_tools ?? [])])].filter(Boolean).sort();
+  // Rows show the lists as they will be saved; the textareas keep raw text.
+  const shown = {
+    ...policy,
+    ...(policy.enabled_tools ? { enabled_tools: normalizeToolNames(policy.enabled_tools) } : {}),
+    ...(policy.disabled_tools ? { disabled_tools: normalizeToolNames(policy.disabled_tools) } : {}),
+  };
+  const names = [...new Set([...toolNames, ...Object.keys(policy.tools ?? {}), ...(shown.enabled_tools ?? []), ...(shown.disabled_tools ?? [])])].filter(Boolean).sort();
   const setMode = (mode: ToolApproval | "inherit", tool?: string) => write(updateToolPolicy(extra, { mode, tool }));
   const lines = (value: string) => value ? value.split("\n") : [];
 
@@ -56,12 +62,12 @@ export function PermissionsEditor({ extraText, onChange, toolNames = [] }: {
     </div>
     {policy.enabled_tools !== undefined && <div className="space-y-2">
       <Label htmlFor="mcp-allowed-tools">Allowed tools (one name per line)</Label>
-      <Textarea id="mcp-allowed-tools" value={policy.enabled_tools.join("\n")} onChange={(event) => write({ ...extra, enabled_tools: lines(event.target.value) })} onBlur={(event) => write({ ...extra, enabled_tools: normalizeToolNames(lines(event.target.value)) })} />
+      <Textarea id="mcp-allowed-tools" value={policy.enabled_tools.join("\n")} onChange={(event) => write({ ...extra, enabled_tools: lines(event.target.value) })} />
       <p className="text-sm text-muted-foreground">An empty list allows no tools. New tools stay unavailable until added here.</p>
     </div>}
     <div className="space-y-2">
       <Label htmlFor="mcp-blocked-tools">Blocked tools (one name per line)</Label>
-      <Textarea id="mcp-blocked-tools" value={(policy.disabled_tools ?? []).join("\n")} onChange={(event) => write({ ...extra, disabled_tools: lines(event.target.value) })} onBlur={(event) => write({ ...extra, disabled_tools: normalizeToolNames(lines(event.target.value)) })} />
+      <Textarea id="mcp-blocked-tools" value={(policy.disabled_tools ?? []).join("\n")} onChange={(event) => write({ ...extra, disabled_tools: lines(event.target.value) })} />
       <p className="text-sm text-muted-foreground">Blocked tools remain unavailable even if their approval allows them.</p>
     </div>
     <div className="space-y-3">
@@ -69,7 +75,7 @@ export function PermissionsEditor({ extraText, onChange, toolNames = [] }: {
       {names.map((name) => {
         const entry = policy.tools?.[name];
         const mode = entry?.approval_mode === "approve" ? "auto" : entry?.approval_mode ?? "inherit";
-        const effective = toolApproval(policy, name);
+        const effective = toolApproval(shown, name);
         return <div key={name} className="grid gap-2 border-b border-border pb-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
           <div className="min-w-0">
             <p className="break-all font-mono text-sm">{name}</p>
