@@ -69,5 +69,8 @@ it.each([false, true])(
     expect(calls).toBe(cancel ? 125 : 175);
     expect(steps).toBe(cancel ? 125 : 176);
     if (!cancel) expect(await result.finishReason).toBe("stop");
-  }
+  },
+  // Coverage instruments 176 real SDK steps. Allow CI runner contention without
+  // weakening the model-completion or cancellation assertions above.
+  30_000
 );

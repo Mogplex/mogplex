@@ -133,7 +133,6 @@ test("automatic cleanup excludes its own call, stops compute, and preserves the 
       deps: {
         loadState: async () => ({
           status: "running",
-          persistent: true,
           previewUrl: null,
         }),
       },
