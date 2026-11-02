@@ -32,6 +32,39 @@ type ProjectSettingsDeps = {
 const SETTINGS_COLUMNS =
   "id,runtime,root_directory,install_command,dev_command,dev_port,dev_port_auto,env_sync_mode,sandbox_env_vars";
 const ENV_NAME = /^[A-Za-z_]\w*$/;
+// Names that change how every program in the sandbox starts. A value saved
+// here re-arms on each boot, so only the operator may set these.
+const LOADER_ENV_NAMES = new Set([
+  "BASH_ENV",
+  "ENV",
+  "NODE_OPTIONS",
+  "NODE_PATH",
+  "PATH",
+  "PERL5OPT",
+  "PROMPT_COMMAND",
+  "PYTHONPATH",
+  "PYTHONSTARTUP",
+  "RUBYOPT",
+  "SHELL",
+]);
+const LOADER_ENV_PREFIXES = ["LD_", "DYLD_"];
+
+function isLoaderEnvName(name: string) {
+  const upper = name.toUpperCase();
+  return (
+    LOADER_ENV_NAMES.has(upper) ||
+    LOADER_ENV_PREFIXES.some((prefix) => upper.startsWith(prefix))
+  );
+}
+
+function logWriteError(action: string, repoId: string, error: unknown) {
+  console.error(
+    `[control/project-settings] ${action} failed for repo ${repoId}:`,
+    error instanceof Error
+      ? error.message
+      : ((error as { message?: unknown } | null)?.message ?? error)
+  );
+}
 
 type SettingsRow = {
   id: string;
@@ -130,9 +163,10 @@ const updateParams = z.object({
     .int()
     .min(1)
     .max(65_535)
+    .nullable()
     .optional()
     .describe(
-      "Port the dev server listens on; saving it turns off port detection."
+      "Port the dev server listens on; saving it turns off port detection. null turns detection back on."
     ),
   rootDirectory: z
     .string()
@@ -143,7 +177,10 @@ const updateParams = z.object({
 
 const envParams = z.object({
   name: z.string().describe("Variable name, e.g. NODE_ENV."),
-  value: z.string().describe("Non-secret value for the variable."),
+  value: z
+    .string()
+    .nullable()
+    .describe("Non-secret value for the variable; null deletes it."),
 });
 
 /**
@@ -158,16 +195,24 @@ export function createProjectSettingsTools(
     resolveTeam: overrides.resolveTeam ?? resolveActiveTeamCapabilities,
   };
 
-  const withRow = async <T>(
+  const withScope = async <T>(
     access: "read" | "write",
-    run: (row: SettingsRow, scope: ProductResourceScope) => Promise<T>
+    run: (scope: ProductResourceScope) => Promise<T>
   ) => {
     const scope = await resolveScope(target, deps, access);
     if ("error" in scope) return scope;
-    const row = await loadSettings(target, scope);
-    if ("error" in row) return row;
-    return run(row, scope);
+    return run(scope);
   };
+
+  const withRow = async <T>(
+    access: "read" | "write",
+    run: (row: SettingsRow, scope: ProductResourceScope) => Promise<T>
+  ) =>
+    withScope(access, async (scope) => {
+      const row = await loadSettings(target, scope);
+      if ("error" in row) return row;
+      return run(row, scope);
+    });
 
   return {
     project_settings: defineTool({
@@ -182,7 +227,7 @@ export function createProjectSettingsTools(
         "Save install command, dev command, dev port, or root directory for the selected project so future sandbox boots use them. Save only commands you ran successfully in the sandbox.",
       inputSchema: updateParams,
       execute: async (input: z.infer<typeof updateParams>) =>
-        withRow("write", async (_row, scope) => {
+        withScope("write", async (scope) => {
           const updates = normalizeRepoSettingsPatch({
             ...(input.installCommand === undefined
               ? {}
@@ -190,10 +235,13 @@ export function createProjectSettingsTools(
             ...(input.devCommand === undefined
               ? {}
               : { dev_command: input.devCommand }),
-            // A saved port only applies with auto-detection off.
+            // A saved port only applies with auto-detection off; clearing it
+            // turns detection back on and leaves the stored port unused.
             ...(input.devPort === undefined
               ? {}
-              : { dev_port: input.devPort, dev_port_auto: false }),
+              : input.devPort === null
+                ? { dev_port_auto: true }
+                : { dev_port: input.devPort, dev_port_auto: false }),
             ...(input.rootDirectory === undefined
               ? {}
               : { root_directory: input.rootDirectory }),
@@ -209,23 +257,39 @@ export function createProjectSettingsTools(
           const { data, error } = await query
             .select(SETTINGS_COLUMNS)
             .maybeSingle();
-          if (error || !data)
+          if (error) {
+            logWriteError("settings update", target.repoId, error);
             return { error: "Could not save project settings." };
+          }
+          if (!data) return { error: "Project not found." };
           return { ok: true, settings: describeSettings(data as SettingsRow) };
         }),
     }),
     project_env_set: defineTool({
       description:
-        "Save one NON-SECRET environment variable (for example NODE_ENV, PORT, or a public URL) on the selected project. Never use it for passwords, API keys, tokens, or connection strings: ask the operator to add those in Project settings instead.",
+        "Save one NON-SECRET environment variable (for example NODE_ENV, PORT, or a public URL) on the selected project, or delete one with value null. Never use it for passwords, API keys, tokens, or connection strings: ask the operator to add those in Project settings instead.",
       inputSchema: envParams,
       execute: async ({ name, value }: z.infer<typeof envParams>) => {
         const key = name.trim();
         if (!ENV_NAME.test(key) || key === "__proto__") {
           return { error: `${key || "That"} is not a valid variable name.` };
         }
+        if (isLoaderEnvName(key)) {
+          return {
+            error: `${key} changes how every program in the sandbox starts. Ask the operator to set it in Project settings.`,
+          };
+        }
         return withRow("write", async (row, scope) => {
           const previous = row.sandbox_env_vars;
-          const next = { ...normalizeEnvVars(previous), [key]: value };
+          const next = normalizeEnvVars(previous);
+          if (value === null) {
+            if (!Object.hasOwn(next, key)) {
+              return { ok: true, name: key, note: "The variable was not set." };
+            }
+            delete next[key];
+          } else {
+            next[key] = value;
+          }
           let query = supabaseAdmin
             .from("repos")
             .update({ sandbox_env_vars: next })
@@ -237,7 +301,10 @@ export function createProjectSettingsTools(
               ? query.is("sandbox_env_vars", null)
               : query.eq("sandbox_env_vars", JSON.stringify(previous));
           const { data, error } = await query.select("id").maybeSingle();
-          if (error) return { error: "Could not save the variable." };
+          if (error) {
+            logWriteError("env var save", target.repoId, error);
+            return { error: "Could not save the variable." };
+          }
           if (!data) {
             return {
               error: "Project variables changed while saving. Try again.",
@@ -246,7 +313,8 @@ export function createProjectSettingsTools(
           return {
             ok: true,
             name: key,
-            note: "New sandbox boots and new commands get it; restart a running dev server to pick it up.",
+            ...(value === null ? { deleted: true } : {}),
+            note: "New sandbox boots and new commands see the change; restart a running dev server to pick it up.",
           };
         });
       },

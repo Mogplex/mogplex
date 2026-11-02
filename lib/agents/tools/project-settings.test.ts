@@ -55,6 +55,7 @@ function installRepo(
     ...overrides,
   };
   const writes: Row[] = [];
+  const reads = { count: 0 };
   const query = () => {
     const filters: Filter[] = [];
     let patch: Row | null = null;
@@ -74,6 +75,7 @@ function installRepo(
       },
       maybeSingle: async () => {
         if (patch) beforeWrite(row);
+        else reads.count += 1;
         if (!matches(row, filters)) return { data: null, error: null };
         if (patch) {
           writes.push(patch);
@@ -89,7 +91,7 @@ function installRepo(
     writable: true,
     value: query,
   });
-  return { row, writes };
+  return { row, writes, reads };
 }
 
 type ToolRecord = Record<
@@ -269,5 +271,76 @@ describe("project settings tools", () => {
     expect(schema.safeParse({ devPort: 0 }).success).toBe(false);
     expect(schema.safeParse({ devPort: 70_000 }).success).toBe(false);
     expect(schema.safeParse({ devPort: 5173 }).success).toBe(true);
+  });
+
+  it("should refuse names that change how every sandbox program starts", async () => {
+    const { writes } = installRepo();
+
+    for (const name of [
+      "NODE_OPTIONS",
+      "LD_PRELOAD",
+      "DYLD_INSERT_LIBRARIES",
+      "path",
+      "BASH_ENV",
+    ]) {
+      expect(
+        await tools().project_env_set.execute({ name, value: "x" })
+      ).toEqual({
+        error: `${name} changes how every program in the sandbox starts. Ask the operator to set it in Project settings.`,
+      });
+    }
+    expect(writes).toEqual([]);
+  });
+
+  it("should delete a variable it is given null for", async () => {
+    const { row } = installRepo({
+      sandbox_env_vars: {
+        DATABASE_URL: "postgres://owner@db/app",
+        PORT: "8000",
+      },
+    });
+
+    expect(
+      await tools().project_env_set.execute({ name: "PORT", value: null })
+    ).toMatchObject({ ok: true, name: "PORT", deleted: true });
+    expect(row.sandbox_env_vars).toEqual({
+      DATABASE_URL: "postgres://owner@db/app",
+    });
+  });
+
+  it("should not write when deleting a variable that is not set", async () => {
+    const { writes } = installRepo();
+
+    expect(
+      await tools().project_env_set.execute({ name: "PORT", value: null })
+    ).toMatchObject({ ok: true, note: "The variable was not set." });
+    expect(writes).toEqual([]);
+  });
+
+  it("should turn port detection back on when the port is cleared", async () => {
+    const { writes } = installRepo({ dev_port: 8000, dev_port_auto: false });
+
+    const result = await tools().project_settings_update.execute({
+      devPort: null,
+    });
+
+    expect(result).toMatchObject({ ok: true, settings: { devPortAuto: true } });
+    expect(writes).toEqual([{ dev_port_auto: true }]);
+  });
+
+  it("should save settings without reading the project first", async () => {
+    const { reads } = installRepo();
+
+    await tools().project_settings_update.execute({ devCommand: "make dev" });
+
+    expect(reads.count).toBe(0);
+  });
+
+  it("should report a missing project when a settings save matches no row", async () => {
+    installRepo({ owner_user_id: "someone-else" });
+
+    expect(
+      await tools().project_settings_update.execute({ devCommand: "make dev" })
+    ).toEqual({ error: "Project not found." });
   });
 });
