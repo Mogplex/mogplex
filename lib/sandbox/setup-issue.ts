@@ -1,3 +1,4 @@
+import { redactSecretsInText } from "@/lib/ai-telemetry";
 import { extractDevLogTail } from "./client-readiness";
 import { SandboxBootstrapError } from "./client-validation";
 import { detectMissingEnvVarHint } from "./env-var-hint";
@@ -11,6 +12,17 @@ export function setupFailureMessage(
   issue: SandboxSetupIssue | null | undefined
 ) {
   return issue && issue.phase !== "detect" ? issue.message : null;
+}
+
+/**
+ * Whether a boot's setup issue means a baseline snapshot build would fail the
+ * same way: dependencies never installed. A dev-server failure (installed)
+ * or an unrecognized project still warms the snapshot as before.
+ */
+export function setupIssueSkipsSnapshotWarmup(
+  issue: SandboxSetupIssue | null | undefined
+) {
+  return issue?.phase === "prerequisite" || issue?.phase === "install";
 }
 
 /**
@@ -44,12 +56,15 @@ export function setupIssueRecordFields(
 export function setupIssueFromError(
   error: SandboxBootstrapError
 ): SandboxSetupIssue {
-  const log = error.devLog || error.installLog || "";
+  // The tail reaches the model and the sandbox record; install and dev output
+  // can echo tokens (.npmrc auth, env dumps), so redact it like exec output.
+  const message = redactSecretsInText(error.message);
+  const log = redactSecretsInText(error.devLog || error.installLog || "");
   return {
     phase: error.phase,
-    message: error.message.split("\n")[0] ?? error.message,
+    message: message.split("\n")[0]?.trim() || "Project setup failed",
     logTail: extractDevLogTail(log),
-    envVarHint: detectMissingEnvVarHint(`${error.message}\n${log}`),
+    envVarHint: detectMissingEnvVarHint(`${message}\n${log}`),
   };
 }
 

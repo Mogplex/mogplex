@@ -5,7 +5,10 @@ import {
   bootstrapSandboxStreaming,
 } from "@/lib/sandbox/client";
 import { checkSandboxHealth } from "@/lib/sandbox/health-status";
-import { setupIssueRecordFields } from "@/lib/sandbox/setup-issue";
+import {
+  setupIssueRecordFields,
+  setupIssueSkipsSnapshotWarmup,
+} from "@/lib/sandbox/setup-issue";
 import { updateSandboxRecord } from "@/lib/sandbox/records";
 import { getRepoLinkedVercelProject } from "@/lib/vercel/env-vars";
 import { readSandboxPersistentFlag } from "@/lib/sandbox/persistence";
@@ -281,7 +284,11 @@ async function activateRunningSandboxRecord(input: {
   );
   input.emit({ type: "ready", sandbox: readySandbox });
 
-  if (sandboxStatus === "running") {
+  // A failed install would fail the baseline build the same way.
+  if (
+    sandboxStatus === "running" &&
+    !setupIssueSkipsSnapshotWarmup(input.state.setupIssue)
+  ) {
     await maybeQueueDeferredSnapshotWarmup(input);
   }
 

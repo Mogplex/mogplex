@@ -13,7 +13,11 @@ import {
   withTimeout,
 } from "./client-validation";
 
-/** Provider images pin a minor release; a repository can require a newer one. */
+/**
+ * Provider images pin a minor release; a repository can require a newer one.
+ * Every failure is a prerequisite SandboxBootstrapError, so the boot keeps
+ * the sandbox running and hands the problem to the agent.
+ */
 export async function ensureNodePrerequisite(
   sandbox: Sandbox,
   runtime: SandboxRuntime,
@@ -21,6 +25,25 @@ export async function ensureNodePrerequisite(
   previewUrl: string
 ) {
   if (!runtime.startsWith("node")) return "";
+  try {
+    return await provisionNode(sandbox, runtime, rootDirectory, previewUrl);
+  } catch (error) {
+    if (error instanceof SandboxBootstrapError) throw error;
+    throw new SandboxBootstrapError(
+      error instanceof Error && error.message
+        ? error.message
+        : "Runtime prerequisite failed",
+      { previewUrl, phase: "prerequisite" }
+    );
+  }
+}
+
+async function provisionNode(
+  sandbox: Sandbox,
+  runtime: SandboxRuntime,
+  rootDirectory: string | null,
+  previewUrl: string
+) {
   const nodeRuntime = runtime as NodeRuntime;
   const requirements = await readNodeRequirements(
     sandboxRepositoryFiles(sandbox),

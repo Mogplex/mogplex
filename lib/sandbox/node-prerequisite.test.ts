@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { it as test } from "vitest";
+import { SandboxBootstrapError } from "@/lib/sandbox/client-validation";
 import { ensureNodePrerequisite } from "@/lib/sandbox/node-prerequisite";
+
+/** Every prerequisite failure must reach the setup hand-off. */
+const prerequisiteFailure = (message: RegExp) => (error: unknown) =>
+  error instanceof SandboxBootstrapError &&
+  error.phase === "prerequisite" &&
+  error.previewUrl === "https://preview.example.test" &&
+  message.test(error.message);
 
 for (const scenario of [
   "install",
@@ -9,6 +17,7 @@ for (const scenario of [
   "no-release",
   "unexpected-installed-version",
   "release-index-failure",
+  "release-index-unreachable",
   "probe-failure",
   "unsupported-arch",
   "unsupported-platform",
@@ -23,6 +32,8 @@ for (const scenario of [
       assert.equal(url, "https://nodejs.org/dist/index.json");
       if (scenario === "release-index-failure")
         return new Response(null, { status: 503 });
+      if (scenario === "release-index-unreachable")
+        throw new TypeError("fetch failed");
       return Response.json([
         { version: scenario === "no-release" ? "v26.1.0" : "v26.5.0" },
       ]);
@@ -75,21 +86,34 @@ for (const scenario of [
       switch (scenario) {
         case "checksum-failure":
         case "unexpected-installed-version": {
-          await assert.rejects(run, /Runtime prerequisite failed/);
+          await assert.rejects(
+            run,
+            prerequisiteFailure(/Runtime prerequisite failed/)
+          );
           break;
         }
         case "no-release": {
-          await assert.rejects(run, /No published Node.js/);
+          await assert.rejects(
+            run,
+            prerequisiteFailure(/No published Node.js/)
+          );
           break;
         }
         case "release-index-failure": {
-          await assert.rejects(run, /Could not load Node.js releases \(503\)/);
+          await assert.rejects(
+            run,
+            prerequisiteFailure(/Could not load Node.js releases \(503\)/)
+          );
+          break;
+        }
+        case "release-index-unreachable": {
+          await assert.rejects(run, prerequisiteFailure(/fetch failed/));
           break;
         }
         case "probe-failure": {
           await assert.rejects(
             run,
-            /Could not inspect sandbox Node.js version/
+            prerequisiteFailure(/Could not inspect sandbox Node.js version/)
           );
           break;
         }
@@ -99,7 +123,7 @@ for (const scenario of [
             "unsupported-platform",
             "unexpected-exec-path",
           ].includes(scenario)
-            ? assert.rejects(run, /Cannot provision/)
+            ? assert.rejects(run, prerequisiteFailure(/Cannot provision/))
             : run());
       }
       assert.equal(

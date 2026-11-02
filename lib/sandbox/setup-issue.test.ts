@@ -9,7 +9,9 @@ import type { SandboxBootstrapStreamEvent } from "./events";
 import {
   handOffSetupFailures,
   setupFailureMessage,
+  setupIssueFromError,
   setupIssueRecordFields,
+  setupIssueSkipsSnapshotWarmup,
 } from "./setup-issue";
 
 /** Sandbox whose install command fails with `installOutput` on stdout. */
@@ -117,6 +119,48 @@ describe("project setup hand-off", () => {
     expect(events.filter((event) => event.type === "preview_url")).toHaveLength(
       1
     );
+  });
+
+  it("should redact secrets from the log tail before the agent or record sees it", () => {
+    const issue = setupIssueFromError(
+      new SandboxBootstrapError("Install failed (npm ci)", {
+        phase: "install",
+        installLog:
+          "GET https://registry.example.test\nAuthorization: Bearer npm_live_s3cretvalue\nnpm error 401",
+      })
+    );
+
+    expect(issue.logTail).toContain("npm error 401");
+    expect(issue.logTail).not.toContain("npm_live_s3cretvalue");
+    expect(
+      JSON.stringify(setupIssueRecordFields(issue, "record-1"))
+    ).not.toContain("npm_live_s3cretvalue");
+  });
+
+  it("should keep a failure message when the error starts with a blank line", () => {
+    const issue = setupIssueFromError(
+      new SandboxBootstrapError("\nInstall failed", { phase: "install" })
+    );
+
+    expect(issue.message).toBe("Project setup failed");
+    expect(setupIssueRecordFields(issue, "record-1")).toMatchObject({
+      last_boot_error: "Project setup failed",
+    });
+  });
+
+  it("should skip the baseline snapshot build only when dependencies never installed", () => {
+    const issue = (phase: "detect" | "prerequisite" | "install" | "dev") => ({
+      phase,
+      message: "failed",
+      logTail: "",
+      envVarHint: null,
+    });
+
+    expect(setupIssueSkipsSnapshotWarmup(issue("install"))).toBe(true);
+    expect(setupIssueSkipsSnapshotWarmup(issue("prerequisite"))).toBe(true);
+    expect(setupIssueSkipsSnapshotWarmup(issue("dev"))).toBe(false);
+    expect(setupIssueSkipsSnapshotWarmup(issue("detect"))).toBe(false);
+    expect(setupIssueSkipsSnapshotWarmup(null)).toBe(false);
   });
 
   it("should rethrow errors that are not project setup failures", async () => {
