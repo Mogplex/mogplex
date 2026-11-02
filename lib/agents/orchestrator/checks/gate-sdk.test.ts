@@ -94,10 +94,24 @@ async function exercise(
     doStream: async (options) => {
       step++;
       choices.push(options.toolChoice);
-      const edit =
-        step === 1 ||
-        (["later_edit", "cancel_later_edit"].includes(scenario) && step === 3);
-      const checks = !edit && options.toolChoice?.type === "required";
+      // Script the provider interaction, including release of completion after
+      // checks. A broken gate must fail an assertion, not make this fixture
+      // repeatedly offer the same checks and starve the test runner's timers.
+      const phases = [
+        "edit",
+        "checks",
+        ...(["later_edit", "cancel_later_edit"].includes(scenario)
+          ? ["edit", "checks"]
+          : []),
+        "answer",
+      ];
+      const phase = phases[step - 1];
+      expect(phase).toBeDefined();
+      const edit = phase === "edit";
+      const checks = phase === "checks";
+      if (checks) expect(options.toolChoice).toEqual({ type: "required" });
+      if (phase === "answer")
+        expect(options.toolChoice?.type).not.toBe("required");
       return {
         stream: new ReadableStream({
           start(sink) {
@@ -170,6 +184,7 @@ async function exercise(
       verification: built.verification,
     }),
   })) {
+    if (part.type === "error") throw new Error(part.errorText);
     if (part.type === "message-metadata") {
       const value = part.messageMetadata as {
         repository_verification?: unknown;
