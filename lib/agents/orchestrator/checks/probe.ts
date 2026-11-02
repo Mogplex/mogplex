@@ -23,20 +23,27 @@ export function buildCheckProbeCommand(paths: string[] = []) {
 const fs = require("node:fs");
 const cp = require("node:child_process");
 const crypto = require("node:crypto");
+const pathLib = require("node:path");
 (async () => {
-  const names = cp.execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "-z"], {encoding: "utf8", stdio: ["ignore", "pipe", "pipe"]}).split("\\0").filter(Boolean);
-  const paths = [...new Set([...names, ...${JSON.stringify(paths)}])].sort();
+  const cwd = process.cwd();
+  const root = cp.execFileSync("git", ["rev-parse", "--show-toplevel"], {encoding: "utf8", stdio: ["ignore", "pipe", "pipe"]}).trim();
+  const relative = file => pathLib.relative(root, file).split(pathLib.sep).join("/");
+  const names = cp.execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "-z"], {cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"]}).split("\\0").filter(Boolean);
+  const paths = [...new Set([...names, ...${JSON.stringify(paths)}.map(file => relative(pathLib.resolve(cwd, file)))])].sort();
   const hash = crypto.createHash("sha256");
+  hash.update(JSON.stringify(["project", relative(cwd)]));
+  hash.update("\\0");
   for (const path of paths) {
+    const file = pathLib.join(root, path);
     let stat;
-    try { stat = fs.lstatSync(path); }
+    try { stat = fs.lstatSync(file); }
     catch (error) { if (error.code === "ENOENT") continue; throw error; }
     if (stat.isSymbolicLink()) {
-      hash.update(JSON.stringify([path, "symlink", fs.readlinkSync(path)]));
+      hash.update(JSON.stringify([path, "symlink", fs.readlinkSync(file)]));
     } else if (stat.isFile()) {
       hash.update(JSON.stringify([path, "file", stat.mode & 0o777, stat.size]));
       hash.update("\\0");
-      for await (const chunk of fs.createReadStream(path)) hash.update(chunk);
+      for await (const chunk of fs.createReadStream(file)) hash.update(chunk);
     }
     hash.update("\\0");
   }

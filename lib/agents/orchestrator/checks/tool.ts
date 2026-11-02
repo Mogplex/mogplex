@@ -30,7 +30,7 @@ export type RepositoryCheckReceipt = {
 type ExecutionOptions = Parameters<NonNullable<Tool["execute"]>>[1];
 type CheckObservation =
   | ({ ok: true; sandboxId: string } & RepositoryCheckProbe)
-  | { ok: false; error: string };
+  | { ok: false; error: string; commandCompletion: "confirmed" | "unknown" };
 
 function createCheckTerminal(
   context: OrchestratorToolContext,
@@ -58,6 +58,12 @@ export function createRepositoryCheckProbe(context: OrchestratorToolContext) {
   const terminal = createCheckTerminal(context, true);
   return async (options: ExecutionOptions): Promise<CheckObservation> => {
     options.abortSignal?.throwIfAborted();
+    let commandConfirmed = false;
+    const failure = (error: string): CheckObservation => ({
+      ok: false,
+      error,
+      commandCompletion: commandConfirmed ? "confirmed" : "unknown",
+    });
     try {
       const output = await terminal.execute!(
         {
@@ -68,6 +74,14 @@ export function createRepositoryCheckProbe(context: OrchestratorToolContext) {
         options
       );
       options.abortSignal?.throwIfAborted();
+      commandConfirmed = Boolean(
+        output &&
+        typeof output === "object" &&
+        "exitCode" in output &&
+        typeof output.exitCode === "number" &&
+        Number.isInteger(output.exitCode) &&
+        controlToolOutcome("output-available", output) !== "running"
+      );
       if (
         !output ||
         typeof output !== "object" ||
@@ -75,31 +89,25 @@ export function createRepositoryCheckProbe(context: OrchestratorToolContext) {
         output.exitCode !== 0 ||
         controlToolOutcome("output-available", output) !== "done"
       ) {
-        return {
-          ok: false,
-          error:
-            "Could not inspect the workspace revision and repository check commands.",
-        };
+        return failure(
+          "Could not inspect the workspace revision and repository check commands."
+        );
       }
       const record = output as Record<string, unknown>;
       const parsed = repositoryCheckProbeSchema.safeParse(
         JSON.parse(typeof record.stdout === "string" ? record.stdout : "")
       );
       if (!parsed.success || typeof record.sandboxId !== "string") {
-        return {
-          ok: false,
-          error:
-            "Could not validate the workspace revision and repository check commands.",
-        };
+        return failure(
+          "Could not validate the workspace revision and repository check commands."
+        );
       }
       return { ok: true, sandboxId: record.sandboxId, ...parsed.data };
     } catch {
       options.abortSignal?.throwIfAborted();
-      return {
-        ok: false,
-        error:
-          "Could not inspect the workspace revision and repository check commands.",
-      };
+      return failure(
+        "Could not inspect the workspace revision and repository check commands."
+      );
     }
   };
 }

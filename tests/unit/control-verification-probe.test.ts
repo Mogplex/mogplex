@@ -16,7 +16,10 @@ function withRepository(
   run: (input: {
     root: string;
     git: (...args: string[]) => void;
-    probe: (paths?: string[]) => {
+    probe: (
+      paths?: string[],
+      cwd?: string
+    ) => {
       revision: string;
       manifest: {
         packageManager: string;
@@ -30,10 +33,10 @@ function withRepository(
   const git = (...args: string[]) => {
     execFileSync("git", args, { cwd: root, stdio: "pipe" });
   };
-  const probe = (paths: string[] = []) =>
+  const probe = (paths: string[] = [], cwd: string = root) =>
     JSON.parse(
       execFileSync("sh", ["-lc", buildCheckProbeCommand(paths)], {
-        cwd: root,
+        cwd,
         encoding: "utf8",
       })
     );
@@ -117,5 +120,33 @@ test("explicitly edited ignored files participate without exposing file contents
     assert.equal(probe().revision, ordinary);
     assert.equal(existsSync(join(root, "unsafe")), false);
     assert.throws(() => buildCheckProbeCommand(["../outside"]), /path/i);
+  });
+});
+
+test("a configured subproject's receipt covers shared repository source and its own project scope", () => {
+  withRepository(({ root, probe }) => {
+    const app = join(root, "apps", "web");
+    mkdirSync(app, { recursive: true });
+    writeFileSync(
+      join(app, "package.json"),
+      JSON.stringify({
+        packageManager: "pnpm@10.12.4",
+        scripts: { build: "next build" },
+      })
+    );
+    const before = probe([], app);
+    assert.equal(before.manifest.scripts.build, "defined");
+    assert.notEqual(before.revision, probe().revision);
+    writeFileSync(join(root, "index.ts"), "export const value = 2;\n");
+    assert.notEqual(probe([], app).revision, before.revision);
+    mkdirSync(join(app, ".mogplex"));
+    const ignored = ".mogplex/identity.ts";
+    const initial = probe([ignored], app).revision;
+    writeFileSync(join(app, ignored), "private-application-content");
+    assert.notEqual(probe([ignored], app).revision, initial);
+    assert.doesNotMatch(
+      JSON.stringify(probe([ignored], app)),
+      /private-application-content/
+    );
   });
 });
