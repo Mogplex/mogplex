@@ -27,24 +27,17 @@ export function ProjectCombobox({
   const searchInputRef = useRef<HTMLInputElement>(null);
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const selectedRepo = repos.find((repo) => repo.id === value);
-  const selectedLabel = loading
-    ? "Loading projects…"
-    : (selectedRepo?.full_name ?? "New project…");
+  const selectedLabel = loading ? "Loading projects…" : selectedRepo?.full_name ?? "New project…";
   const query = search.trim().toLowerCase();
   const matchingRepos = repos.filter((repo) =>
     `${repo.full_name} ${repo.owner ?? ""} ${repo.name ?? ""}`
       .toLowerCase()
       .includes(query)
   );
-  const showNewProject =
-    !query ||
-    !repos.some(
-      (repo) =>
-        repo.full_name.toLowerCase() === query ||
-        (
-          repo.name?.trim() || repo.full_name.split("/").at(-1)
-        )?.toLowerCase() === query
-    );
+  const showNewProject = !query || !repos.some((repo) =>
+    repo.full_name.toLowerCase() === query ||
+    (repo.name?.trim() || repo.full_name.split("/").at(-1))?.toLowerCase() === query
+  );
   // "New project…" is pinned above the scrolling repo list, so it leads the
   // keyboard order too. Enter in the search box still picks the first
   // matching repo: typing a name and pressing Enter is how people switch
@@ -61,18 +54,13 @@ export function ProjectCombobox({
   };
 
   const selectProject = (nextValue: string) => {
-    onValueChange(
-      nextValue,
-      nextValue === newProjectValue ? search.trim() : undefined
-    );
+    onValueChange(nextValue, nextValue === newProjectValue ? search.trim() : undefined);
     handleOpenChange(false);
   };
 
   const focusOption = (index: number) => optionRefs.current[index]?.focus();
 
-  const handleSearchKeyDown = (
-    event: React.KeyboardEvent<HTMLInputElement>
-  ) => {
+  const handleSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "ArrowDown" && optionValues.length > 0) {
       event.preventDefault();
       focusOption(0);
@@ -129,7 +117,7 @@ export function ProjectCombobox({
           <span className="truncate">{selectedLabel}</span>
           <NavArrowDown
             aria-hidden="true"
-            className={`text-muted-foreground size-3.5 shrink-0 transition-transform ${
+            className={`size-3.5 shrink-0 text-muted-foreground transition-transform ${
               open ? "rotate-180" : ""
             }`}
           />
@@ -139,7 +127,7 @@ export function ProjectCombobox({
         align="start"
         className="border-border bg-popover w-[var(--radix-popover-trigger-width)] min-w-64 p-0 shadow-2xl"
       >
-        <div className="border-border border-b px-3">
+        <div className="border-b border-border px-3">
           <input
             autoFocus
             aria-label="Search projects"
@@ -157,14 +145,10 @@ export function ProjectCombobox({
           role="listbox"
         >
           {showNewProject ? (
-            <div
-              aria-label="New project"
-              className="border-border border-b p-1"
-              role="group"
-            >
+            <div aria-label="New project" className="border-b border-border p-1" role="group">
               <button
                 aria-selected={value === newProjectValue}
-                className="hover:bg-accent focus-visible:bg-accent flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs outline-none"
+                className="hover:bg-accent flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs outline-none focus-visible:bg-accent"
                 onClick={() => selectProject(newProjectValue)}
                 onKeyDown={(event) =>
                   handleOptionKeyDown(event, 0, newProjectValue)
@@ -181,32 +165,24 @@ export function ProjectCombobox({
                 {value === newProjectValue ? (
                   <Check
                     aria-label="Selected"
-                    className="text-foreground size-3.5 shrink-0"
+                    className="size-3.5 shrink-0 text-foreground"
                   />
                 ) : null}
               </button>
             </div>
           ) : null}
           {matchingRepos.length > 0 ? (
-            <div
-              aria-label="Repositories"
-              className="max-h-72 overflow-y-auto p-1"
-              role="group"
-            >
+            <div aria-label="Repositories" className="max-h-72 overflow-y-auto p-1" role="group">
               {matchingRepos.map((repo, index) => {
                 const selected = repo.id === value;
                 return (
                   <button
                     aria-selected={selected}
-                    className="hover:bg-accent focus-visible:bg-accent flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs outline-none"
+                    className="hover:bg-accent flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs outline-none focus-visible:bg-accent"
                     key={repo.id}
                     onClick={() => selectProject(repo.id)}
                     onKeyDown={(event) =>
-                      handleOptionKeyDown(
-                        event,
-                        repoOptionOffset + index,
-                        repo.id
-                      )
+                      handleOptionKeyDown(event, repoOptionOffset + index, repo.id)
                     }
                     ref={(element) => {
                       optionRefs.current[repoOptionOffset + index] = element;
@@ -214,13 +190,11 @@ export function ProjectCombobox({
                     role="option"
                     type="button"
                   >
-                    <span className="min-w-0 flex-1 truncate">
-                      {repo.full_name}
-                    </span>
+                    <span className="min-w-0 flex-1 truncate">{repo.full_name}</span>
                     {selected ? (
                       <Check
                         aria-label="Selected"
-                        className="text-foreground size-3.5 shrink-0"
+                        className="size-3.5 shrink-0 text-foreground"
                       />
                     ) : null}
                   </button>
