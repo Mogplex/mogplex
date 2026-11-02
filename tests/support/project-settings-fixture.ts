@@ -42,11 +42,13 @@ const matches = (row: Row, filters: Filter[]) =>
 
 /**
  * One repos row behind the database boundary; records every write.
- * `beforeWrite` runs before each update and may return a database error.
+ * `beforeWrite` runs before each update and may return a database error;
+ * `readError`, when set, fails every read with that error.
  */
 export function installRepo(
   overrides: Row = {},
-  beforeWrite: (row: Row) => unknown = () => null
+  beforeWrite: (row: Row) => unknown = () => null,
+  readError: unknown = null
 ) {
   const row: Row = {
     id: REPO_ID,
@@ -85,7 +87,10 @@ export function installRepo(
         if (patch) {
           const error = beforeWrite(row);
           if (error) return { data: null, error };
-        } else reads.count += 1;
+        } else {
+          reads.count += 1;
+          if (readError) return { data: null, error: readError };
+        }
         if (!matches(row, filters)) return { data: null, error: null };
         if (patch) {
           writes.push(patch);

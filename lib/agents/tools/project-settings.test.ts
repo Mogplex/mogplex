@@ -219,6 +219,20 @@ describe("project settings tools", () => {
     expect(writes).toEqual([{ root_directory: "api" }]);
   });
 
+  it("should redact a secret quoted in a failed load's message", async () => {
+    installRepo({}, () => null, {
+      message: 'syntax error near "api_token=opaque-load-value"',
+    });
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    expect(await tools().project_settings.execute({})).toEqual({
+      error: "Could not load project settings.",
+    });
+    expect(JSON.stringify(log.mock.calls)).toContain("syntax error near");
+    expect(JSON.stringify(log.mock.calls)).not.toContain("opaque-load-value");
+    log.mockRestore();
+  });
+
   it("should log only the error code when a settings save fails", async () => {
     installRepo({}, () => ({
       code: "23514",

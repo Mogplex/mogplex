@@ -121,7 +121,10 @@ async function loadSettings(
   } catch (error) {
     console.error(
       `[control/project-settings] load failed for repo ${target.repoId}:`,
-      error instanceof Error ? error.message : error
+      // No code survives getRepoForScope's rethrow; redact the message.
+      redactSecretsInText(
+        error instanceof Error ? error.message : String(error)
+      )
     );
     return { error: "Could not load project settings." };
   }
@@ -180,7 +183,7 @@ const updateParams = z.object({
     .nullable()
     .optional()
     .describe(
-      "Port the dev server listens on; saving it turns off port detection. null turns detection back on."
+      "Port the dev server listens on; saving it turns off port detection. null turns detection back on; changing or clearing a pinned port needs replace: true."
     ),
   rootDirectory: z
     .string()
