@@ -120,7 +120,7 @@ export function SkillsSection({ compact }: Props) {
       return;
     }
     await Promise.all([mutateSkills(), mutateAllSkills(), mutateCache(skillCatalogKey())]);
-    toast({ title: "Skill deleted" });
+    toast({ variant: "info", title: "Skill deleted" });
   };
 
   const installVercelDoc = async (doc: VercelDoc) => {
@@ -139,7 +139,7 @@ export function SkillsSection({ compact }: Props) {
         is_public: false,
       });
       showInstalledSkills();
-      toast({ title: "Skill installed", description: data.title || doc.title });
+      toast({ variant: "success", title: "Skill installed", description: data.title || doc.title });
     } catch (error) {
       toast({ title: "Install failed", description: error instanceof Error ? error.message : "Failed to install skill", variant: "destructive" });
     } finally {
@@ -164,7 +164,7 @@ export function SkillsSection({ compact }: Props) {
         description: detailData?.description || rs.description || null,
       });
       showInstalledSkills();
-      toast({ title: "Skill installed", description: detailData?.name || rs.name });
+      toast({ variant: "success", title: "Skill installed", description: detailData?.name || rs.name });
     } catch (error) {
       toast({ title: "Install failed", description: error instanceof Error ? error.message : "Failed to install skill", variant: "destructive" });
     } finally {

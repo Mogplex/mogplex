@@ -114,6 +114,7 @@ export function useFlowTemplateHandlers(
       setSaveTemplateOpen(false);
       setTemplatePickerOpen(true);
       toast({
+        variant: payload.reconnect?.length ? "warning" : "success",
         title: savingToTeam ? "Team template saved" : "Template saved",
         description: payload.reconnect?.length
           ? savingToTeam

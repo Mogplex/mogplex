@@ -117,6 +117,7 @@ export function useFlowCrudHandlers(
           savedTemplate ??
           FLOW_STARTER_TEMPLATES.find((entry) => entry.id === templateId);
         toast({
+          variant: "success",
           title: "Workflow created",
           description: template ? `Started from ${template.name}.` : undefined,
         });
@@ -162,7 +163,7 @@ export function useFlowCrudHandlers(
         revalidate: false,
       });
       setSelectedFlowId(duplicate.id);
-      toast({ title: "Flow duplicated" });
+      toast({ variant: "success", title: "Flow duplicated" });
     } catch (error) {
       toast({
         title: "Error",

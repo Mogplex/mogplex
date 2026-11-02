@@ -33,7 +33,7 @@ export function SkillEditor({
         content,
         is_public: isPublic,
       })
-      toast({ title: skill ? "Skill saved" : "Skill created", description: name })
+      toast({ variant: "success", title: skill ? "Skill saved" : "Skill created", description: name })
     } catch (error) {
       toast({
         title: skill ? "Save failed" : "Create failed",

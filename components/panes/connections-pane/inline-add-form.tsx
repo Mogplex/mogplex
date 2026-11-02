@@ -77,7 +77,7 @@ export function InlineAddForm({ repoId, onCreated, onCancel, mcpCount }: {
         const data = await res.json()
         throw new Error(data.error || "Failed to create connection")
       }
-      toast({ title: "Connection created" })
+      toast({ variant: "success", title: "Connection created" })
       onCreated()
     } catch (e) {
       toast({ title: "Error", description: (e as Error).message, variant: "destructive" })

@@ -78,6 +78,8 @@ export function useFlowRunHandlers(deps: FlowRunHandlersDeps): FlowRunHandlers {
           mutateSelectedRunDetail(),
         ]);
         toast({
+          variant:
+            action === "cancel" && payload.cancelError ? "warning" : "info",
           title:
             action === "repair"
               ? "Repair queued"
@@ -147,6 +149,7 @@ export function useFlowRunHandlers(deps: FlowRunHandlersDeps): FlowRunHandlers {
         await mutateSelectedRunDetail();
 
         toast({
+          variant: payload?.created === false ? "info" : "success",
           title:
             payload?.created === false
               ? "Issue already linked"

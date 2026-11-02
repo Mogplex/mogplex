@@ -335,6 +335,7 @@ export function FileTreePane({
       if (!isDirectoryTreePath(payload.path)) openFilePath(payload.path);
       await refreshTreeRef.current({ focusPath: payload.path, silent: true });
       toast({
+        variant: "success",
         title: createDialog.kind === "directory" ? "Folder created" : "File created",
         description: stripDirectoryTreePath(payload.path),
       });
@@ -359,6 +360,7 @@ export function FileTreePane({
       onClearFilePathRef.current?.(payload.path, sandboxId);
       await refreshTreeRef.current({ focusPath: getParentDirectoryTreePath(payload.path), silent: true });
       toast({
+        variant: "info",
         title: deleteTarget.kind === "directory" ? "Folder deleted" : "File deleted",
         description: stripDirectoryTreePath(payload.path),
       });

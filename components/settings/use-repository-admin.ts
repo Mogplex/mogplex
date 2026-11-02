@@ -132,6 +132,7 @@ export function useRepositoryAdmin() {
       try {
         await setHidden(repo, !restoring);
         toast({
+          variant: restoring ? "success" : "info",
           title: restoring ? "Repository restored" : "Repository removed",
           description: repo.full_name,
         });
@@ -178,6 +179,7 @@ export function useRepositoryAdmin() {
               variant: "destructive",
             }
           : {
+              variant: "info",
               title: `Removed ${removed} ${removed === 1 ? "repository" : "repositories"}`,
               description: owner,
             }

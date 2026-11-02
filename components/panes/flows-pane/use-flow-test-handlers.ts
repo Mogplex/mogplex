@@ -121,6 +121,7 @@ export function useFlowTestHandlers(
       });
       await Promise.all([mutateSelectedFlow(), mutateFlows()]);
       toast({
+        variant: "warning",
         title: selectedFlow.webhook_configured
           ? "Webhook secret rotated"
           : "Webhook secret generated",
@@ -152,7 +153,7 @@ export function useFlowTestHandlers(
   const copyWebhookValue = useCallback(async (value: string, label: string) => {
     try {
       await navigator.clipboard.writeText(value);
-      toast({ title: `${label} copied` });
+      toast({ variant: "success", title: `${label} copied` });
     } catch {
       toast({
         title: "Copy failed",
@@ -185,6 +186,7 @@ export function useFlowTestHandlers(
         }
         await mutateFlowRuns();
         toast({
+          variant: "info",
           title:
             resultPayload?.outcome === "queued"
               ? "Test event queued"

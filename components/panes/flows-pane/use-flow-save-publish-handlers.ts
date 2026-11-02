@@ -165,6 +165,7 @@ export function useFlowSavePublishHandlers(
         await Promise.all([mutateSelectedFlow(), mutateFlows()]);
         if (!options?.silentSuccess) {
           toast({
+            variant: "success",
             title: "Draft saved",
             description: "The latest workflow changes are stored.",
           });
@@ -233,6 +234,7 @@ export function useFlowSavePublishHandlers(
         publishStateTimeoutRef.current = null;
       }, publishSuccessStateMs);
       toast({
+        variant: "success",
         title: wasActive
           ? "Published to live workflow"
           : "Flow published and activated",
@@ -282,6 +284,7 @@ export function useFlowSavePublishHandlers(
       }
       await Promise.all([mutateSelectedFlow(), mutateFlows()]);
       toast({
+        variant: nextStatus === "active" ? "success" : "info",
         title: nextStatus === "active" ? "Flow activated" : "Flow deactivated",
         description:
           nextStatus === "active"

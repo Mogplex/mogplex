@@ -83,7 +83,7 @@ export function TriggersPane() {
     try {
       await mutateJson(`/api/triggers?id=${id}`, { method: "DELETE" });
       await mutateTriggers();
-      toast({ title: "Trigger deleted" });
+      toast({ variant: "info", title: "Trigger deleted" });
     } catch (error) {
       toast({
         title: "Cannot delete trigger",

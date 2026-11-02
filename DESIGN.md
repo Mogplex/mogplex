@@ -113,6 +113,13 @@ semantic colors for state. Light and dark themes use the same semantic roles.
 **State needs more than color.** Pair status with text, an icon, or another
 accessible indicator. Confirm text and focus contrast in both themes.
 
+**Toasts always carry a status.** Use `toast.success()` for completed actions,
+`toast.info()` for neutral state changes (archived, paused, removed, copied,
+queued), `toast.warning()` for partial success or something that needs
+attention, and `toast.error()` (variant `destructive`) for failures or
+irreversible deletion. Each variant tints the surface, adds an accent bar, and
+shows a matching icon with a screen-reader label.
+
 ## Typography
 
 Use `font-sans` for human-readable text and `font-mono` for code, paths, commands,

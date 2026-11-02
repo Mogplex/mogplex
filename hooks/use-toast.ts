@@ -139,7 +139,17 @@ function dispatch(action: Action) {
 
 type Toast = Omit<ToasterToast, "id">;
 
-function toast({ ...props }: Toast) {
+/**
+ * Show a toast. Always choose a status `variant` so users can read state at a
+ * glance:
+ * - `success`: an action completed (created, saved, connected).
+ * - `info`: neutral state change or FYI (archived, paused, copied, queued).
+ * - `warning`: partial success or something needs attention.
+ * - `destructive`: the action failed or data was removed irreversibly.
+ * Prefer the `toast.success()` / `toast.info()` / `toast.warning()` /
+ * `toast.error()` helpers.
+ */
+function showToast({ ...props }: Toast) {
   const id = genId();
 
   const update = (props: ToasterToast) =>
@@ -167,6 +177,16 @@ function toast({ ...props }: Toast) {
     update,
   };
 }
+
+type StatusToast = Omit<Toast, "variant">;
+
+const toast = Object.assign(showToast, {
+  success: (props: StatusToast) => showToast({ ...props, variant: "success" }),
+  info: (props: StatusToast) => showToast({ ...props, variant: "info" }),
+  warning: (props: StatusToast) => showToast({ ...props, variant: "warning" }),
+  error: (props: StatusToast) =>
+    showToast({ ...props, variant: "destructive" }),
+});
 
 function useToast() {
   const [state, setState] = React.useState(memoryState);

@@ -68,7 +68,11 @@ export function useRepoSettingsActions(mutateRepos: KeyedMutator<Repo[]>) {
           (current ?? []).map((item) => (item.id === data.id ? data : item)),
         { revalidate: false }
       );
-      toast({ title: "Settings saved", description: repo.full_name });
+      toast({
+        variant: "success",
+        title: "Settings saved",
+        description: repo.full_name,
+      });
     },
     [activeTeamId, mutateRepos]
   );

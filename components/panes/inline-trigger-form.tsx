@@ -114,7 +114,7 @@ export function InlineTriggerForm({
         const data = await res.json();
         throw new Error(data.error || "Failed to create trigger");
       }
-      toast({ title: "Trigger created" });
+      toast({ variant: "success", title: "Trigger created" });
       onCreated();
     } catch (e) {
       toast({
