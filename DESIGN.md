@@ -237,6 +237,17 @@ behavior. Defaults can be overridden by the owning screen; inspect it first.
   composer with that repository selected. Run links open the original run in
   Command Center. Live runs accept guidance; completed runs can continue in
   the same chat after saved history loads. Opening a link never starts an agent.
+  Follow-ups and steering stay in one continuous, scrollable transcript. Keep
+  earlier requests and their open tool details mounted when another turn arrives;
+  do not move them behind an automatic history disclosure. Only the latest
+  request shows live activity. Follow new output while the reader is at the
+  bottom; scrolling up pauses automatic following.
+  Durable workspace files do not require always-running compute. Pause idle
+  compute after task work, retaining it for an active preview, worker, command,
+  or explicit keep-running request. Show routine running/paused state in the
+  sandbox controls; chat explains known reasons cleanup was refused and
+  warns when its outcome cannot be confirmed. Preserve each distinct warning
+  when cleanup touches several workspaces, with actionable refusals first.
   Active tool buttons also collapse their pane. Right panes and the terminal
   drawer can expand into the workspace and restore their previous split size;
   Escape restores the split view. Sidebar collapse preserves project disclosure

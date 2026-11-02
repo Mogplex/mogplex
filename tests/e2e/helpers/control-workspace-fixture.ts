@@ -92,6 +92,11 @@ export async function mockControlWorkspace(
     root_directory: null,
   }));
   const mutations: string[] = [];
+  const presenceEvents: Array<{
+    event: string;
+    sessionId: string;
+    sandboxId: string;
+  }> = [];
   await page.route("**/api/control/sessions**", (route) => {
     const request = route.request();
     const id = new URL(request.url()).searchParams.get("id");
@@ -123,6 +128,14 @@ export async function mockControlWorkspace(
   await page.route("**/api/sandbox**", (route) => {
     const request = route.request();
     const url = new URL(request.url());
+    if (url.pathname.endsWith("/presence")) {
+      const body = request.postDataJSON() as {
+        event: string;
+        sessionId: string;
+      };
+      presenceEvents.push({ ...body, sandboxId: url.pathname.split("/")[3] });
+      return fulfillJson(route, { ok: true });
+    }
     if (url.pathname.endsWith("/terminal/connect"))
       return fulfillJson(route, { available: false, reason: "disabled" });
     if (request.method() !== "GET") mutations.push(url.pathname);
@@ -169,5 +182,5 @@ export async function mockControlWorkspace(
     route.fulfill({ contentType: "text/html", body: "<h1>Welcome home</h1>" })
   );
   await page.goto(`${scopedPath("control")}?mission=task-one`);
-  return { mutations, sessions, sandboxes };
+  return { mutations, sessions, sandboxes, presenceEvents };
 }

@@ -6,6 +6,7 @@ import { Collapse, Expand, Eye, Folder, GitCompare, Notes, Terminal, Xmark } fro
 import type { UIMessage } from "ai";
 import type { Repo, SandboxRecord } from "@/lib/types";
 import { usePanelWidth } from "@/hooks/use-panel-width";
+import { useSandboxPresence } from "@/hooks/use-sandbox-presence";
 import { lastUserMessageText } from "@/lib/agents/ui-message-text";
 import { collectChangedFiles } from "@/lib/control/changed-files";
 import { ChangedFilesBar } from "@/components/sandbox-changes/changed-files-bar";
@@ -64,6 +65,10 @@ export function TaskWorkspace({ sessionId, repo, sandbox, messages, terminalMess
     if (!selectedTool) openTool("artifacts");
   }, [artifactKey, sessionId, selectedTool, openTool]);
   const running = sandbox?.runtime_summary.status === "running";
+  const sandboxRecordId = sandbox?.id;
+  const interactivePresence = useMemo(() => running && sandboxRecordId && (tools.openedTools.includes("preview") || tools.terminalOpened)
+    ? [{ sandboxRecordId, sessionId }] : [], [running, sandboxRecordId, sessionId, tools.openedTools, tools.terminalOpened]);
+  useSandboxPresence(interactivePresence);
   const previewUrl = sandbox?.runtime_summary.preview_url ?? undefined;
   const inactiveMessage = !repo ? "Connect a repository to use its workspace tools." : sandbox ? "Resume this sandbox in Preview to access its files." : "Start or select a sandbox to access its files.";
   const panel = (tool: TaskTool) => {

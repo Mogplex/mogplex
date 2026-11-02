@@ -17,6 +17,12 @@ import {
 import { toSandboxClientRecord } from "@/lib/sandbox/summary";
 import { isNotFoundError } from "@/lib/sandbox/sdk-adapter";
 import { withSandboxMutationLock } from "@/lib/sandbox/mutation-lock";
+import {
+  hasActiveAiCall,
+  hasRunningAutomation,
+  hasAttachedSandboxClient,
+  resolveCompletingSandboxAiCallId,
+} from "@/lib/sandbox/auto-pause-deps";
 import { resolveSandboxWorkingDirectory } from "@/lib/sandbox/working-directory";
 import {
   UNCOMMITTED_CHANGES_COMMAND,
@@ -63,6 +69,10 @@ type SandboxStopDeps = {
   prepareSandboxBillingClose: typeof prepareSandboxBillingClose;
   finalizeSandboxBillingClose: typeof finalizeSandboxBillingClose;
   withSandboxMutationLock: typeof withSandboxMutationLock;
+  hasActiveAiCall: typeof hasActiveAiCall;
+  hasRunningAutomation: typeof hasRunningAutomation;
+  hasAttachedSandboxClient: typeof hasAttachedSandboxClient;
+  resolveCompletingSandboxAiCallId: typeof resolveCompletingSandboxAiCallId;
 };
 
 const defaultSandboxStopDeps: SandboxStopDeps = {
@@ -74,6 +84,10 @@ const defaultSandboxStopDeps: SandboxStopDeps = {
   prepareSandboxBillingClose,
   finalizeSandboxBillingClose,
   withSandboxMutationLock,
+  hasActiveAiCall,
+  hasRunningAutomation,
+  hasAttachedSandboxClient,
+  resolveCompletingSandboxAiCallId,
 };
 
 type RemoteStopOutcome = {
@@ -240,8 +254,61 @@ export function createSandboxStopHandler(
 
     // A Stop request alone never authorizes discarding legacy workspace files.
     const body = await request.json().catch(() => null);
-    const preserveChanges = body?.discardChanges !== true;
+    const automatic = body?.automatic === true;
+    const completingAiCallId =
+      typeof body?.completingAiCallId === "string"
+        ? body.completingAiCallId
+        : undefined;
+    const preserveChanges = automatic || body?.discardChanges !== true;
     const stop = async () => {
+      // Cleanup ends this turn's compute only. Other runs can still be using
+      // the same durable workspace, even between their shell commands.
+      if (automatic) {
+        try {
+          const excludedCallId = completingAiCallId
+            ? await deps.resolveCompletingSandboxAiCallId({
+                aiCallId: completingAiCallId,
+                userId: loaded.auth.userId,
+                sandboxRecordId: id,
+                sandboxId: loaded.record.sandbox_id,
+              })
+            : undefined;
+          const [activeCall, runningWorker, attachedClient] = await Promise.all(
+            [
+              deps.hasActiveAiCall({
+                sandboxRecordId: id,
+                sandboxId: loaded.record.sandbox_id,
+                excludeAiCallId: excludedCallId,
+              }),
+              deps.hasRunningAutomation(id, excludedCallId),
+              deps.hasAttachedSandboxClient(id),
+            ]
+          );
+          if (activeCall || runningWorker || attachedClient)
+            return NextResponse.json(
+              {
+                error:
+                  "An agent or attached workspace is still using this sandbox.",
+                reason: "sandbox_active_work",
+                activity: { activeCall, runningWorker, attachedClient },
+              },
+              { status: 409 }
+            );
+        } catch (error) {
+          console.error(
+            "[sandbox/stop] Automatic cleanup activity check failed",
+            { sandboxId: id, error }
+          );
+          return NextResponse.json(
+            {
+              error:
+                "Could not verify sandbox activity. Compute was left running.",
+              reason: "activity_unknown",
+            },
+            { status: 503 }
+          );
+        }
+      }
       let billingClose: Awaited<ReturnType<typeof prepareSandboxBillingClose>> =
         null;
       try {
@@ -278,13 +345,13 @@ export function createSandboxStopHandler(
           expectedSandboxId: loaded.record.sandbox_id,
           healthStatus: "stopped",
           fromStatuses: STOPPABLE_SANDBOX_STATUSES,
-          stopReason: "manual",
+          stopReason: automatic ? "auto_pause" : "manual",
         });
         if (!stopped) {
           await deps.stopSandboxRecord(id, {
             healthStatus: "stopped",
             fromStatuses: STOPPABLE_SANDBOX_STATUSES,
-            stopReason: "manual",
+            stopReason: automatic ? "auto_pause" : "manual",
           });
         }
       }

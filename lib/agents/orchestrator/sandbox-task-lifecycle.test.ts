@@ -14,10 +14,9 @@ function createLifecycle(overrides?: {
   };
   state?: {
     status: string;
-    persistent: boolean;
     previewUrl: string | null;
   };
-  stopResult?: boolean;
+  stopResult?: boolean | "active_work";
 }) {
   const stop = vi.fn(async () => overrides?.stopResult ?? true);
   const binding = overrides?.binding ?? {
@@ -26,13 +25,13 @@ function createLifecycle(overrides?: {
   };
   const lifecycle = createSandboxTaskLifecycle({
     userId: "user-1",
+    aiCallId: "current-call",
     userText: overrides?.userText ?? "run the check",
     binding,
     deps: {
       loadState: async () =>
         overrides?.state ?? {
           status: "running",
-          persistent: false,
           previewUrl: null,
         },
       stop,
@@ -46,6 +45,8 @@ describe("sandbox task lifecycle", () => {
     ["keep the sandbox running", true],
     ["don't keep it running", false],
     ["do not leave the sandbox running", false],
+    ["use a persistent session to fix the tests", false],
+    ["review the follow-up work", false],
   ])("parses explicit retention intent in %j", (userText, expected) => {
     expect(shouldRetainSandboxForRequest(userText)).toBe(expected);
   });
@@ -88,17 +89,10 @@ describe("sandbox task lifecycle", () => {
 
   it.each([
     [
-      "persistent session",
-      "run the check",
-      { status: "running", persistent: true, previewUrl: null },
-      "persistent",
-    ],
-    [
       "live preview",
       "check the preview",
       {
         status: "running",
-        persistent: false,
         previewUrl: "https://preview.example",
       },
       "preview",
@@ -106,7 +100,7 @@ describe("sandbox task lifecycle", () => {
     [
       "explicit request",
       "keep the sandbox running for follow-up",
-      { status: "running", persistent: false, previewUrl: null },
+      { status: "running", previewUrl: null },
       "explicit",
     ],
   ])("preserves a %s", async (_name, userText, state, reason) => {
@@ -131,7 +125,6 @@ describe("sandbox task lifecycle", () => {
     const { lifecycle, stop } = createLifecycle({
       state: {
         status: "running",
-        persistent: false,
         previewUrl: "https://preview.example",
       },
     });
@@ -149,6 +142,93 @@ describe("sandbox task lifecycle", () => {
     });
     expect(stop).toHaveBeenCalledOnce();
   });
+
+  it.each(["run_command", "edit_file"])(
+    "pauses a durable workspace after %s without adding a compute footer",
+    async (toolName) => {
+      const { lifecycle, binding, stop } = createLifecycle({
+        userText: "fix the tests",
+        state: { status: "running", previewUrl: null },
+      });
+      const toolCall = { toolName, input: { command: "pnpm test" } };
+      lifecycle.onToolStart({ toolCall });
+      lifecycle.onToolFinish({
+        toolCall,
+        output: { exitCode: 0 },
+        success: true,
+      });
+
+      await expect(lifecycle.footer()).resolves.toBeNull();
+      expect(stop).toHaveBeenCalledOnce();
+      expect(binding.status).toBe("unavailable");
+      await expect(lifecycle.cleanup()).resolves.toMatchObject({
+        state: "stopped",
+      });
+    }
+  );
+
+  it("keeps required compute without adding routine infrastructure chatter", async () => {
+    const { lifecycle, stop } = createLifecycle({
+      userText: "keep the sandbox running",
+      state: { status: "running", previewUrl: null },
+    });
+    lifecycle.onToolStart({ toolCall: { toolName: "run_command" } });
+    lifecycle.onToolFinish({
+      toolCall: { toolName: "run_command" },
+      success: true,
+    });
+    await expect(lifecycle.cleanup()).resolves.toMatchObject({
+      state: "running",
+      reason: "explicit",
+    });
+    await expect(lifecycle.footer()).resolves.toBeNull();
+    expect(stop).not.toHaveBeenCalled();
+  });
+
+  it("warns when a safe automatic stop cannot be confirmed", async () => {
+    const { lifecycle, binding } = createLifecycle({ stopResult: false });
+    lifecycle.onToolStart({ toolCall: { toolName: "run_command" } });
+    lifecycle.onToolFinish({
+      toolCall: { toolName: "run_command" },
+      success: true,
+    });
+    await expect(lifecycle.footer()).resolves.toBe(
+      "Could not confirm that sandbox compute stopped. Check its status before leaving."
+    );
+    expect(binding.status).toBe("running");
+  });
+
+  it("retains compute used by another active run without a warning", async () => {
+    const { lifecycle, binding } = createLifecycle({
+      stopResult: "active_work",
+    });
+    lifecycle.onToolStart({ toolCall: { toolName: "run_command" } });
+    lifecycle.onToolFinish({
+      toolCall: { toolName: "run_command" },
+      success: true,
+    });
+    await expect(lifecycle.footer()).resolves.toBeNull();
+    await expect(lifecycle.cleanup()).resolves.toMatchObject({
+      state: "running",
+      reason: "follow_up",
+    });
+    expect(binding.status).toBe("running");
+  });
+
+  it.each(["spawn_worktree", "spawn_subagent"])(
+    "does not retain idle compute just because %s ran earlier",
+    async (toolName) => {
+      const { lifecycle } = createLifecycle();
+      lifecycle.onToolStart({ toolCall: { toolName } });
+      lifecycle.onToolFinish({
+        toolCall: { toolName },
+        success: true,
+      });
+      await expect(lifecycle.cleanup()).resolves.toMatchObject({
+        state: "stopped",
+      });
+    }
+  );
 
   it("does not treat starting a sandbox as a request to retain it", async () => {
     const { lifecycle, stop } = createLifecycle({
@@ -189,7 +269,7 @@ describe("sandbox task lifecycle", () => {
 
   it("does not report a failed server start as still running", async () => {
     const { lifecycle, stop } = createLifecycle({
-      state: { status: "running", persistent: false, previewUrl: null },
+      state: { status: "running", previewUrl: null },
     });
     lifecycle.onToolStart({
       toolCall: { toolName: "run_command", input: { command: "pnpm dev" } },
@@ -255,7 +335,7 @@ describe("sandbox task lifecycle", () => {
     expect(stop).not.toHaveBeenCalled();
   });
 
-  it("appends the confirmed lifecycle status before the stream finish", async () => {
+  it("appends an actionable lifecycle warning before the stream finish", async () => {
     const source = new ReadableStream<UIMessageChunk>({
       start(controller) {
         controller.enqueue({ type: "start" });
@@ -266,7 +346,7 @@ describe("sandbox task lifecycle", () => {
     const chunks: UIMessageChunk[] = [];
     const reader = appendSandboxTaskLifecycleFooter(source, {
       footer: async () =>
-        "Compute: stopped automatically; no sandbox task remains running.",
+        "Could not confirm that sandbox compute stopped. Check its status before leaving.",
       textPartId: "lifecycle-status",
     }).getReader();
     for (;;) {
@@ -284,7 +364,7 @@ describe("sandbox task lifecycle", () => {
     ]);
     expect(chunks[2]).toMatchObject({
       delta:
-        "\n\nCompute: stopped automatically; no sandbox task remains running.",
+        "\n\nCould not confirm that sandbox compute stopped. Check its status before leaving.",
     });
   });
 });

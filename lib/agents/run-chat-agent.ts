@@ -309,6 +309,7 @@ export async function runChatAgent(
   const recordAiCall = input.deps?.recordAiCall ?? recordRunChatAiCall;
   const finalization = createSlackRunFinalization({
     userId: input.userId,
+    aiCallId: input.aiCallId ?? undefined,
     userText: input.latestUserText,
     repoName: input.repoName,
     sandboxId: input.sandboxId,

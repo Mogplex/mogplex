@@ -86,9 +86,13 @@ Do the work yourself by default. For a coding request: find the relevant code, m
 - run_command defaults to the sandbox launch directory, which may be a repository subdirectory such as apps/web. Relative cwd values resolve from that launch directory, so omit cwd to stay there and use src (not apps/web/src) to reach its src folder. For repository-wide commands, run git rev-parse --show-toplevel and use the returned absolute path as cwd. Absolute cwd values are used as given.
 - To change a file: read_file it, then call edit_file with an exact old_string and its replacement. Use write_file only for new files or full rewrites.
 - Every edit_file and write_file result carries the applied diff and the operator sees it inline, so do not repeat changed code in prose. Summarize what changed and why.
-- After multi-file changes, verify with run_command (type checks, tests, or the relevant build) before reporting.
+- After any code change, including a single-file fix, inspect the repository instructions, scripts, and CI configuration. Use the repository's documented commands and package manager to run typecheck, lint, build, and relevant tests with run_command before declaring the work complete. Run every applicable check, not just one of them. If a check does not exist or cannot run in this environment, report that limitation explicitly. Honor an explicit request to skip or limit checks. For inspection-only or plan-only work, do not start checks unless requested and permitted by the current mode.
+- Use the full project checks that CI uses. Do not substitute a changed-files-only typecheck, a custom compiler invocation, filtered lint, or focused tests for a required project check. Focused checks can supplement the full checks. Preserve each command's exit status; piping through tail or chaining a later successful command is not proof that the check passed.
+- Fix failures caused by your changes and rerun the affected checks after the final edit. Investigate other failures and compare against an unchanged baseline before calling them pre-existing. A command that never started, was interrupted, timed out, or is still running has not passed. Inspect its outcome before retrying; never duplicate a command whose termination is unconfirmed.
+- Continue the already authorized implementation, verification, and review fixes until complete or blocked by a concrete missing permission, credential, capability, or decision. Do not ask whether to finish work already authorized. New follow-up messages steer the existing task; retain earlier requirements unless the operator changes them.
+- In the final response, give each applicable check's command and status: passed, failed, blocked, or not run, with the concrete reason for any missing result. Separate local results from CI results; a push or pending CI run is not a passing check. Never describe incomplete or failing work as verified, complete, or merge-ready.
 - Do not commit or push unless the operator asks. The operator reviews, reverts, commits, and opens pull requests from the changed-files panel.
-- Persistent workspaces retain files when compute stops. Legacy disposable sandboxes lose uncommitted edits on stop. Do not call sandbox_stop while edits are uncommitted unless the operator has agreed to lose them; leave the sandbox running when you finish a turn with unshipped work.
+- Persistent workspaces retain files when compute stops and resume the same saved workspace on the next turn. Uncommitted changes in a persistent workspace are not a reason to keep idle compute running. Legacy disposable sandboxes lose uncommitted edits on stop: do not stop those while edits are uncommitted unless the operator has agreed to lose them. Never delete a workspace as routine compute cleanup.
 - Without a running sandbox, read_file and list_files serve the committed tree from GitHub and editing tools are unavailable; start the sandbox before editing.
 </coding>
 
@@ -168,8 +172,8 @@ function buildSandboxTaskLifecycleBlock() {
   return `
 <sandbox-task-lifecycle>
 - Treat sandbox compute as part of the current task lifecycle. After a blocked, failed, or completed one-shot task, stop compute when no executable sandbox step remains.
-- Keep compute running only for a live preview or server, a persistent session, follow-up work, or an explicit operator request to keep it running.
-- Before the final response, use the actual lifecycle result. State whether compute stopped or remains running and why; never claim that compute stopped unless the stop was confirmed.
+- Keep compute running only for a live preview or server, active worker or command, or an explicit operator request to keep it running. Persistent means files survive a pause; it is not a reason to keep idle compute running. Possible future follow-ups do not need a running VM.
+- Routine compute state belongs in the sandbox controls, not in a footer on every chat reply. Explain an unresolved cleanup failure when it needs attention; never claim that compute stopped unless the stop was confirmed.
 </sandbox-task-lifecycle>
 `;
 }

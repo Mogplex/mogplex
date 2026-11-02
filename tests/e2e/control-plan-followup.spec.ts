@@ -60,7 +60,13 @@ test("new work in an existing thread receives its own task while earlier work re
       {
         id: "earlier-result",
         role: "assistant",
-        parts: [{ type: "text", text: "Initial review saved." }],
+        parts: [
+          { type: "text", text: "Initial review saved." },
+          {
+            type: "text",
+            text: "Compute: still running because this is a persistent session.",
+          },
+        ],
       },
     ] as UIMessage[],
   };
@@ -128,6 +134,15 @@ test("new work in an existing thread receives its own task while earlier work re
     });
   });
   await page.goto(scopedPath("control?mission=existing-thread"));
+  await expect(
+    page.getByText("Initial review saved.", { exact: true })
+  ).toBeVisible();
+  await expect(
+    page.getByText(
+      "Compute: still running because this is a persistent session.",
+      { exact: true }
+    )
+  ).toHaveCount(0);
   await page
     .getByRole("textbox", { name: "Ask for follow-up changes" })
     .fill("Review the new documentation");
@@ -140,9 +155,9 @@ test("new work in an existing thread receives its own task while earlier work re
   expect(savedTasks).toHaveLength(2);
   expect(savedTasks[0]).toEqual(oldTask);
   await expect(page).toHaveURL(/mission=existing-thread/);
-  await page
-    .getByRole("button", { name: "Earlier conversation · 1 request" })
-    .click();
+  await expect(
+    page.getByRole("button", { name: /Earlier conversation/i })
+  ).toHaveCount(0);
   await expect(
     page.getByText("Initial review saved.", { exact: true })
   ).toBeVisible();

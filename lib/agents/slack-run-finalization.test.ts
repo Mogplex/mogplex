@@ -12,7 +12,6 @@ describe("Slack run finalization", () => {
       lifecycleDeps: {
         loadState: async () => ({
           status: "running",
-          persistent: false,
           previewUrl: null,
         }),
         stop,
@@ -43,6 +42,6 @@ describe("Slack run finalization", () => {
       /github_api|GET\/HEAD|workspace repo|cross-repository paths/i
     );
     expect(output).toMatch(/GitHub connection/i);
-    expect(output).toMatch(/Compute: stopped automatically/i);
+    expect(output).not.toMatch(/Compute:/i);
   });
 });

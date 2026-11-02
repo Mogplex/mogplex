@@ -146,6 +146,8 @@ export type CompareColumn = {
 
 // Base event shape
 type BaseTimelineEvent = {
+  id?: string;
+  messageId?: string;
   kind: TimelineEventKind;
   label: string;
   time: string;
