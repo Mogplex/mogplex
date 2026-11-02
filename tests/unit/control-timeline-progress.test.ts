@@ -144,7 +144,8 @@ test("control timeline shows the command a settings save will run on every boot"
         toolCallId: "settings-1",
         state: "output-available",
         input: {
-          installCommand: "pip install -e .",
+          installCommand:
+            "npm config set //registry.npmjs.org/:_authToken=opaque-npm-value && pip install -e .",
           devCommand: "API_TOKEN=sk-secretvalue uvicorn app:app",
           devPort: 8000,
           replace: true,
@@ -157,9 +158,12 @@ test("control timeline shows the command a settings save will run on every boot"
   const [event] = events;
   assert.match(
     event?.body ?? "",
-    /^Replaced saved project settings: dev command · install command: pip install -e \. · dev command: make serve → API_TOKEN=.* uvicorn app:app · dev port: 8000$/
+    /^Replaced saved project settings: dev command · install command: npm config set \/\/registry\.npmjs\.org\/:_authToken=\[redacted\] && pip install -e \. · dev command: make serve → API_TOKEN=.* uvicorn app:app · dev port: 8000$/
   );
-  assert.doesNotMatch(JSON.stringify(events), /sk-secretvalue/);
+  assert.doesNotMatch(
+    JSON.stringify(events),
+    /sk-secretvalue|opaque-npm-value/
+  );
 });
 
 test("control timeline marks a saved command it cuts short", () => {
