@@ -6,7 +6,11 @@ import {
 } from "./client-bootstrap";
 import { SandboxBootstrapError } from "./client-validation";
 import type { SandboxBootstrapStreamEvent } from "./events";
-import { handOffSetupFailures, setupFailureMessage } from "./setup-issue";
+import {
+  handOffSetupFailures,
+  setupFailureMessage,
+  setupIssueRecordFields,
+} from "./setup-issue";
 
 /** Sandbox whose install command fails with `installOutput` on stdout. */
 function failingInstallSandbox(installOutput: string) {
@@ -144,5 +148,43 @@ describe("project setup hand-off", () => {
         envVarHint: null,
       })
     ).toBe("Install failed (npm install)");
+  });
+});
+
+describe("setup issue record fields", () => {
+  it("should record a failed step with its log and app_error health", () => {
+    expect(
+      setupIssueRecordFields(
+        {
+          phase: "install",
+          message: "Install failed (npm ci)",
+          logTail: "npm error ERESOLVE",
+          envVarHint: null,
+        },
+        "record-1"
+      )
+    ).toEqual({
+      last_boot_error: "Install failed (npm ci)",
+      health_status: "app_error",
+      error: null,
+      install_log: "npm error ERESOLVE",
+    });
+  });
+
+  it("should record nothing beyond a cleared boot error for an unrecognized project", () => {
+    expect(
+      setupIssueRecordFields(
+        {
+          phase: "detect",
+          message: "No manifest",
+          logTail: "",
+          envVarHint: null,
+        },
+        "record-1"
+      )
+    ).toEqual({ last_boot_error: null });
+    expect(setupIssueRecordFields(null, "record-1")).toEqual({
+      last_boot_error: null,
+    });
   });
 });

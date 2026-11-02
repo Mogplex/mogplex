@@ -13,6 +13,33 @@ export function setupFailureMessage(
   return issue && issue.phase !== "detect" ? issue.message : null;
 }
 
+/**
+ * Record fields for a boot that finished with a setup issue, shared by
+ * launch, restart and resume so each keeps the same diagnosis: the failed
+ * step as the boot error, its log tail, and `app_error` health. An
+ * unrecognized project (`detect`) records nothing. Logs the hand-off once.
+ */
+export function setupIssueRecordFields(
+  issue: SandboxSetupIssue | null | undefined,
+  sandboxRecordId: string
+) {
+  const failure = setupFailureMessage(issue);
+  if (!issue || !failure) return { last_boot_error: null };
+  console.warn(
+    `[sandbox/setup] record=${sandboxRecordId} phase=${issue.phase}: ${failure}`
+  );
+  return {
+    last_boot_error: failure,
+    health_status: "app_error" as const,
+    error: null,
+    ...(issue.logTail
+      ? issue.phase === "dev"
+        ? { dev_log: issue.logTail }
+        : { install_log: issue.logTail }
+      : {}),
+  };
+}
+
 /** Describe a failed setup step for the agent and the launch log. */
 export function setupIssueFromError(
   error: SandboxBootstrapError

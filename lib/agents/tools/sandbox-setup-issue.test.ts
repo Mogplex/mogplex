@@ -63,6 +63,32 @@ describe("sandbox_start with a project setup issue", () => {
   });
 });
 
+describe("sandbox_start for a repo with no project manifest", () => {
+  it("should report a ready sandbox rather than a failed setup step", async () => {
+    global.fetch = async () =>
+      sseResponse([
+        {
+          type: "setup_issue",
+          issue: {
+            phase: "detect",
+            message:
+              "No package.json, pyproject.toml or requirements.txt found",
+            logTail: "",
+            envVarHint: null,
+          },
+        },
+        { type: "ready", sandbox: { id: "sandbox-new", status: "running" } },
+      ]);
+
+    const result = await startSandbox();
+
+    expect(result.message).toContain(
+      "Sandbox is ready. No project manifest was detected"
+    );
+    expect(result.message).not.toContain("did not finish");
+  });
+});
+
 describe("sandbox_start reusing a sandbox whose setup failed", () => {
   it("should tell the agent about the last boot's setup failure", async () => {
     installSandboxRows([

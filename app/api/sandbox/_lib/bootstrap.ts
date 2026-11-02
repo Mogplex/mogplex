@@ -5,7 +5,7 @@ import {
   bootstrapSandboxStreaming,
 } from "@/lib/sandbox/client";
 import { checkSandboxHealth } from "@/lib/sandbox/health-status";
-import { setupFailureMessage } from "@/lib/sandbox/setup-issue";
+import { setupIssueRecordFields } from "@/lib/sandbox/setup-issue";
 import { updateSandboxRecord } from "@/lib/sandbox/records";
 import { getRepoLinkedVercelProject } from "@/lib/vercel/env-vars";
 import { readSandboxPersistentFlag } from "@/lib/sandbox/persistence";
@@ -23,7 +23,7 @@ import {
   stopSandboxInstanceBestEffort,
   prepareSandboxLaunchBillingCloseBestEffort,
 } from "./failure-handling";
-import type { SandboxEvent, SandboxSetupIssue } from "@/lib/sandbox/events";
+import type { SandboxEvent } from "@/lib/sandbox/events";
 import type { SandboxRecord, SandboxRecordRow } from "@/lib/types";
 import type {
   SandboxLaunchPreparation,
@@ -192,13 +192,6 @@ async function maybeQueueDeferredSnapshotWarmup(input: {
   }
 }
 
-function setupIssueLogColumns(issue: SandboxSetupIssue | null | undefined) {
-  if (!issue?.logTail) return {};
-  return issue.phase === "dev"
-    ? { dev_log: issue.logTail }
-    : { install_log: issue.logTail };
-}
-
 async function activateRunningSandboxRecord(input: {
   state: SandboxLaunchState;
   launch: SandboxLaunchPreparation;
@@ -227,16 +220,16 @@ async function activateRunningSandboxRecord(input: {
 
   // After a failed setup step the preview probe only restates that nothing
   // serves yet; report the step as the error, like restart and resume do.
-  const setupFailure = setupFailureMessage(input.state.setupIssue);
+  const setupFields = setupIssueRecordFields(
+    input.state.setupIssue,
+    input.state.streamSandboxRecord.id
+  );
+  const setupFailure = setupFields.last_boot_error;
   const activated = await updateSandboxRecord(
     input.state.streamSandboxRecord.id,
     {
       status: sandboxStatus,
       preview_url: input.state.previewUrl,
-      health_status:
-        setupFailure && sandboxStatus === "running"
-          ? "app_error"
-          : previewHealth.status,
       last_health_check_at: timestamp,
       last_active_at: timestamp,
       last_preview_http_status: previewHealth.statusCode ?? null,
@@ -247,11 +240,14 @@ async function activateRunningSandboxRecord(input: {
           ? null
           : previewHealth.message,
       last_boot_completed_at: timestamp,
+      error: null,
       // A failed setup step leaves the sandbox running; keep the reason and
       // its log on the record so the preview pane and agent can show it.
-      last_boot_error: setupFailure,
-      ...setupIssueLogColumns(input.state.setupIssue),
-      error: null,
+      ...setupFields,
+      health_status:
+        setupFailure && sandboxStatus === "running"
+          ? "app_error"
+          : previewHealth.status,
     },
     {
       expectedSandboxId: input.state.sandbox!.name,

@@ -13,7 +13,10 @@ import {
 import { isSandboxExplicitlyNonPersistent } from "@/lib/sandbox/persistence";
 import { isNotFoundError } from "@/lib/sandbox/sdk-adapter";
 import type { SandboxEvent, SandboxSetupIssue } from "@/lib/sandbox/events";
-import { setupFailureMessage } from "@/lib/sandbox/setup-issue";
+import {
+  setupFailureMessage,
+  setupIssueRecordFields,
+} from "@/lib/sandbox/setup-issue";
 import type { SandboxRuntime } from "@/lib/sandbox/runtimes";
 import { presentSandboxBillingAdmissionError } from "@/lib/billing/sandbox-usage";
 
@@ -343,13 +346,11 @@ async function handlePersistentRestart(
                   record.id,
                   {
                     status: "running",
-                    health_status: setupFailureMessage(setupIssue)
-                      ? "app_error"
-                      : "running",
+                    health_status: "running",
                     preview_url: finalPreviewUrl,
                     last_active_at: new Date().toISOString(),
                     last_boot_completed_at: new Date().toISOString(),
-                    last_boot_error: setupFailureMessage(setupIssue),
+                    ...setupIssueRecordFields(setupIssue, record.id),
                   },
                   {
                     expectedSandboxId: record.sandbox_id,

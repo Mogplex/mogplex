@@ -43,13 +43,20 @@ function normalizeLifecycle(
 }
 
 const SETUP_STEP_LABELS = {
-  detect: "project detection",
   prerequisite: "the runtime prerequisite install",
   install: "the dependency install",
   dev: "the dev server",
 } as const;
 
 export function getSandboxStartMessage(sandbox: SandboxResolution) {
+  if (sandbox.setupIssue?.phase === "detect") {
+    // Nothing failed: the boot found no project to install, by design.
+    return (
+      "Sandbox is ready. No project manifest was detected, so nothing was " +
+      "installed and no dev server is running. If the task needs a running " +
+      "app, set the project up first: see setupIssue and follow <environment_setup>."
+    );
+  }
   if (sandbox.setupIssue) {
     const step = SETUP_STEP_LABELS[sandbox.setupIssue.phase];
     return (
