@@ -174,7 +174,7 @@ function toolProgressBody(
   const complete = state === "output-available";
   const projectSave = PROJECT_SAVE_BODIES[toolName];
   if (projectSave)
-    return complete ? projectSave(output, input) : "Saving project setup";
+    return complete ? projectSave(output, input) : toolActivityLabel(toolName);
   if (toolName === "plan_mission")
     return complete ? "Plan saved" : "Saving plan";
   if (toolName === "sandbox_start") {
@@ -197,6 +197,14 @@ function toolProgressBody(
   return null;
 }
 
+const FAILURE_LABELS: Partial<Record<string, string>> = {
+  spawn_worktree: "Worktree creation failed",
+  spawn_subagent: "Worker start failed",
+  plan_mission: "Plan could not be saved",
+  project_env_set: "Variable save failed",
+  project_settings_update: "Project settings save failed",
+};
+
 function toolFailureBody(
   toolName: string,
   output: Record<string, unknown> | null = null
@@ -210,10 +218,7 @@ function toolFailureBody(
     }
     return "Sandbox startup failed.";
   }
-  if (toolName === "spawn_worktree") return "Worktree creation failed";
-  if (toolName === "spawn_subagent") return "Worker start failed";
-  if (toolName === "plan_mission") return "Plan could not be saved";
-  return `${toolName} failed`;
+  return FAILURE_LABELS[toolName] ?? `${toolName} failed`;
 }
 
 function toolDetails(toolName: string, input: unknown) {

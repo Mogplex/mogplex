@@ -244,6 +244,34 @@ test("control timeline names unguarded settings changes too", () => {
   );
 });
 
+test("control timeline names variable saves while running and when refused", () => {
+  const events = buildCombinedTimeline(undefined, [
+    assistant([
+      {
+        type: "tool-project_env_set",
+        toolCallId: "env-running",
+        state: "input-available",
+        input: { name: "NODE_ENV", value: "development" },
+      },
+      {
+        type: "tool-project_env_set",
+        toolCallId: "env-refused",
+        state: "output-available",
+        input: { name: "GITHUB_TOKEN", value: "x" },
+        output: { error: "GITHUB_TOKEN looks like a secret." },
+      },
+    ]),
+  ]);
+
+  assert.deepEqual(
+    events.map(({ kind, body }) => ({ kind, body })),
+    [
+      { kind: "progress", body: "Saving variable" },
+      { kind: "fail", body: "Variable save failed" },
+    ]
+  );
+});
+
 test("control timeline surfaces structured tool failures as failures", () => {
   const events = buildCombinedTimeline(undefined, [
     assistant([

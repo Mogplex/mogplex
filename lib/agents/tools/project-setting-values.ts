@@ -44,3 +44,14 @@ export function envValueProblem(name: string, value: string) {
   }
   return null;
 }
+
+/**
+ * Columns a settings update must still match to write: the ones it writes,
+ * plus the pinned port when it clears the pin, since clearing depends on it.
+ */
+export function comparedSettingColumns(updates: Record<string, unknown>) {
+  const columns = Object.keys(updates);
+  if (updates.dev_port_auto === true && !("dev_port" in updates))
+    columns.push("dev_port");
+  return columns;
+}

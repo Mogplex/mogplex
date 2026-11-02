@@ -25,6 +25,7 @@ import {
 } from "@/lib/team-resource-scope";
 import { ENV_NAME, isLoaderEnvName, storedEnvMap } from "./project-env-names";
 import {
+  comparedSettingColumns,
   envValueProblem,
   notRedacted,
   savedCommand,
@@ -430,8 +431,9 @@ export function createProjectSettingsTools(
             .eq("id", target.repoId);
           query = applyResourceOwnerScope(query, scope);
           // Never overwrite a setting the operator saved after our read.
-          for (const column of Object.keys(updates) as (keyof SettingsRow &
-            keyof SettingsUpdates)[]) {
+          for (const column of comparedSettingColumns(
+            updates
+          ) as (keyof SettingsRow & keyof SettingsUpdates)[]) {
             const saved = row[column] ?? null;
             query =
               saved === null ? query.is(column, null) : query.eq(column, saved);

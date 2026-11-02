@@ -154,6 +154,24 @@ describe("project settings tools", () => {
     });
   });
 
+  it("should not clear a pin the operator changed after the read", async () => {
+    const { row, writes } = installRepo(
+      { dev_port: 3000, dev_port_auto: false },
+      (current) => {
+        current.dev_port = 9000;
+      }
+    );
+
+    expect(
+      await tools().project_settings_update.execute({
+        devPort: null,
+        replace: true,
+      })
+    ).toEqual({ error: "Project settings changed while saving. Try again." });
+    expect(writes).toEqual([]);
+    expect(row).toMatchObject({ dev_port: 9000, dev_port_auto: false });
+  });
+
   it("should guard a pinned port stored as the string false", async () => {
     const { writes } = installRepo({ dev_port: 8000, dev_port_auto: "false" });
 
