@@ -10,6 +10,7 @@ import {
 } from "@/lib/agents/user-facing-output";
 import { redactSecretsInText } from "@/lib/ai-telemetry";
 import type { TimelineEvent } from "@/lib/control/types";
+import { isLegacyRoutineComputeFooter } from "@/lib/control/legacy-compute-footer";
 import {
   toolActivityLabel,
   toolActivityDetail,
@@ -479,7 +480,7 @@ export function buildCombinedTimeline(
           String(part.text),
           userFacingOptions
         ).trim();
-        if (!text) continue;
+        if (!text || isLegacyRoutineComputeFooter(text)) continue;
         append({
           kind: "assistant",
           label: "MOGPLEX",
