@@ -46,7 +46,9 @@ export function ProjectCombobox({
         )?.toLowerCase() === query
     );
   // "New project…" is pinned above the scrolling repo list, so it leads the
-  // keyboard order too; Enter while searching still picks the first match.
+  // keyboard order too. Enter in the search box still picks the first
+  // matching repo: typing a name and pressing Enter is how people switch
+  // projects, and creating stays one ArrowDown or click away.
   const optionValues = [
     ...(showNewProject ? [newProjectValue] : []),
     ...matchingRepos.map((repo) => repo.id),
@@ -153,7 +155,11 @@ export function ProjectCombobox({
           role="listbox"
         >
           {showNewProject ? (
-            <div className="border-border border-b p-1">
+            <div
+              aria-label="New project"
+              className="border-border border-b p-1"
+              role="group"
+            >
               <button
                 aria-selected={value === newProjectValue}
                 className="hover:bg-accent focus-visible:bg-accent flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs outline-none"
@@ -179,7 +185,11 @@ export function ProjectCombobox({
               </button>
             </div>
           ) : null}
-          <div className="max-h-72 overflow-y-auto p-1">
+          <div
+            aria-label="Repositories"
+            className="max-h-72 overflow-y-auto p-1"
+            role="group"
+          >
             {matchingRepos.map((repo, index) => {
               const selected = repo.id === value;
               return (
@@ -213,11 +223,6 @@ export function ProjectCombobox({
                 </button>
               );
             })}
-            {matchingRepos.length === 0 && !showNewProject ? (
-              <p className="text-muted-foreground py-6 text-center text-xs">
-                No matching projects.
-              </p>
-            ) : null}
           </div>
         </div>
       </PopoverContent>

@@ -98,6 +98,8 @@ test("project picker pins New project above a scrolling repo list", async ({
   const options = page.getByRole("option");
   const newProject = page.getByRole("option", { name: "New project…" });
   await expect(options.first()).toHaveText("New project…");
+  const listbox = page.getByRole("listbox", { name: "Project options" });
+  await expect(listbox.getByRole("group")).toHaveCount(2);
   await page
     .getByRole("option", { name: "acme/app-29" })
     .scrollIntoViewIfNeeded();
