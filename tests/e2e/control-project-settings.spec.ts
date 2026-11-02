@@ -254,10 +254,14 @@ test("on a phone, project settings replace the sessions sheet", async ({
   await page
     .getByRole("menuitem", { name: "Environment variables", exact: true })
     .click();
+  const settings = page.getByRole("dialog", { name: "Project settings" });
+  await expect(settings).toBeVisible();
+  // The open settings dialog hides everything else from assistive tech, so
+  // check the sessions sheet once settings close: it must not be left behind.
+  await settings.getByRole("button", { name: "Close" }).click();
+  await expect(settings).toBeHidden();
   await expect(
-    page.getByRole("dialog", { name: "Sessions", exact: true })
-  ).toBeHidden();
-  await expect(
-    page.getByRole("dialog", { name: "Project settings" })
+    page.getByRole("button", { name: "Open sessions" })
   ).toBeVisible();
+  await expect(sessions).toBeHidden();
 });
