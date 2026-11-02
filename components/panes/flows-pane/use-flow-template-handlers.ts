@@ -114,6 +114,7 @@ export function useFlowTemplateHandlers(
       setSaveTemplateOpen(false);
       setTemplatePickerOpen(true);
       toast({
+        variant: payload.reconnect?.length ? "warning" : "success",
         title: savingToTeam ? "Team template saved" : "Template saved",
         description: payload.reconnect?.length
           ? savingToTeam
@@ -179,7 +180,7 @@ export function useFlowTemplateHandlers(
       toast({
         title: "Template deleted",
         description: `"${templateDeleteTarget.template.name}" was permanently deleted.`,
-        variant: "destructive",
+        variant: "info",
       });
       setTemplateDeleteTarget(null);
     } catch (error) {

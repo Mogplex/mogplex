@@ -235,7 +235,7 @@ export const useSandboxStore = create<SandboxStore>((set, get) => ({
         headers: getActiveTeamRequestHeaders(),
       });
       if (res.status === 409) {
-        toast({
+        toast.warning({
           title: "Sandbox is still booting",
           description: "Wait for the current launch to finish, then try again.",
         });

@@ -52,7 +52,7 @@ export function RepoSnapshotPanel({ repo }: { repo: Repo }) {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || "Snapshot creation failed")
       setSnapshot(data.snapshot)
-      toast({ title: "Snapshot created" })
+      toast({ variant: "success", title: "Snapshot created" })
     } catch (err) {
       toast({ title: "Error", description: (err as Error).message, variant: "destructive" })
     } finally {
@@ -66,7 +66,7 @@ export function RepoSnapshotPanel({ repo }: { repo: Repo }) {
       const res = await fetch(`/api/repos/${repo.id}/snapshot`, { method: "DELETE" })
       if (!res.ok) throw new Error("Failed to clear snapshot")
       setSnapshot(null)
-      toast({ title: "Snapshot cleared" })
+      toast({ variant: "info", title: "Snapshot cleared" })
     } catch (err) {
       toast({ title: "Error", description: (err as Error).message, variant: "destructive" })
     } finally {

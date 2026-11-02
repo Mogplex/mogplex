@@ -113,6 +113,20 @@ semantic colors for state. Light and dark themes use the same semantic roles.
 **State needs more than color.** Pair status with text, an icon, or another
 accessible indicator. Confirm text and focus contrast in both themes.
 
+**Toasts always carry a status.** Use `toast.success()` for completed actions
+(created, saved, connected, copied), `toast.info()` for neutral state changes
+(archived, paused, removed, queued), `toast.warning()` for partial success or
+something that needs attention, and `toast.error()` (variant `destructive`) for
+failed actions. Each variant tints the surface, adds an accent bar, and
+shows a distinct, high-contrast icon with a screen-reader label.
+Notifications sit below the app and workspace toolbars, with room reserved for
+the conversation controls on short screens. They never take focus when they
+appear and keep a visible dismiss button. Bursts preserve every message
+in a scrollable stack. Respect reduced motion, and let users pause expiry by
+hovering or focusing a notification. Routine updates, including warnings, use
+polite screen-reader announcements; failures interrupt by default. Override
+the announcement type only when a specific message requires urgency.
+
 ## Typography
 
 Use `font-sans` for human-readable text and `font-mono` for code, paths, commands,

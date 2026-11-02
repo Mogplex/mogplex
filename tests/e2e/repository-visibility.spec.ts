@@ -91,6 +91,11 @@ test("remove owner persists, and a removed repository can be restored", async ({
     .click();
   await expect(connected(page).getByText("alex/alpha")).toHaveCount(0);
   await expect(connected(page).getByText("alex/beta")).toHaveCount(0);
+  await expect(
+    page
+      .locator('[data-variant="info"]')
+      .filter({ hasText: "Removed 2 repositories" })
+  ).toBeVisible();
   expect(writes).toEqual([
     { id: "alpha", is_hidden: true },
     { id: "beta", is_hidden: true },
@@ -170,6 +175,11 @@ test("bulk removal reports partial failures without claiming every repository wa
     page.getByText("Could not remove all repositories", { exact: true })
   ).toBeVisible();
   await expect(
+    page
+      .locator('[data-variant="warning"]')
+      .filter({ hasText: "Could not remove all repositories" })
+  ).toBeVisible();
+  await expect(
     page.getByText("1 removed; 1 could not be removed. Database unavailable", {
       exact: true,
     })
@@ -178,6 +188,26 @@ test("bulk removal reports partial failures without claiming every repository wa
     page.getByText("Removed 2 repositories", { exact: true })
   ).toHaveCount(0);
   await expect(connected(page).getByText("alex/alpha")).toHaveCount(0);
+  await expect(connected(page).getByText("alex/beta")).toBeVisible();
+});
+
+test("bulk removal reports a full failure when no repositories were removed", async ({
+  page,
+}) => {
+  await dashboard(page, ["alpha", "beta"]);
+  await page.getByLabel("Owner", { exact: true }).selectOption("alex");
+  await page
+    .getByRole("button", { name: "Remove all from alex", exact: true })
+    .click();
+  await page
+    .getByRole("alertdialog", { name: "Remove all 2 repositories from alex?" })
+    .getByRole("button", { name: "Remove 2 repositories" })
+    .click();
+  const failure = page
+    .locator('[data-variant="destructive"]')
+    .filter({ hasText: "Could not remove all repositories" });
+  await expect(failure).toContainText("0 removed; 2 could not be removed.");
+  await expect(connected(page).getByText("alex/alpha")).toBeVisible();
   await expect(connected(page).getByText("alex/beta")).toBeVisible();
 });
 

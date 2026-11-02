@@ -76,7 +76,7 @@ export function useSessionArchive({ setSessionArchived, reserveArchiveSession }:
         setError(message);
         if (!archived || !changed.length) toast({ title: message, variant: "destructive" });
       } else if (!changed.length && skipped) {
-        toast({ title: "Chats with active or unsaved work stay in the sidebar." });
+        toast({ variant: "info", title: "Chats with active or unsaved work stay in the sidebar." });
       }
       return { changed, failed, skipped };
     } finally {
@@ -96,6 +96,7 @@ export function useSessionArchive({ setSessionArchived, reserveArchiveSession }:
     const { changed, failed, skipped } = await change(targets, true);
     if (!changed.length) return;
     toast({
+      variant: failed ? "warning" : "info",
       title: `${changed.length} ${changed.length === 1 ? "chat" : "chats"} archived`,
       description: failed ? `${failed} could not be archived. Try again.` : skipped ? "Chats with active or unsaved work stay in the sidebar." : undefined,
       action: <ToastAction altText="Restore archived chats" onClick={() => { void change(changed, false); }}>Undo</ToastAction>,

@@ -5,7 +5,6 @@ import * as React from "react";
 
 import type { ToastActionElement, ToastProps } from "@/components/ui/toast";
 
-const TOAST_LIMIT = 1;
 const TOAST_REMOVE_DELAY = 10000;
 
 type ToasterToast = ToastProps & {
@@ -76,7 +75,7 @@ export const reducer = (state: State, action: Action): State => {
     case "ADD_TOAST":
       return {
         ...state,
-        toasts: [action.toast, ...state.toasts].slice(0, TOAST_LIMIT),
+        toasts: [action.toast, ...state.toasts],
       };
 
     case "UPDATE_TOAST":
@@ -126,28 +125,59 @@ export const reducer = (state: State, action: Action): State => {
   }
 };
 
-const listeners: Array<(state: State) => void> = [];
+const listeners = new Set<() => void>();
 
 let memoryState: State = { toasts: [] };
 
 function dispatch(action: Action) {
   memoryState = reducer(memoryState, action);
   for (const listener of listeners) {
-    listener(memoryState);
+    listener();
   }
 }
 
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+const getSnapshot = () => memoryState;
+
 type Toast = Omit<ToasterToast, "id">;
 
-function toast({ ...props }: Toast) {
+/**
+ * Show a toast. Always choose a status `variant` so users can read state at a
+ * glance:
+ * - `success`: an action completed (created, saved, connected).
+ * - `info`: neutral state change or FYI (archived, paused, removed, queued).
+ * - `warning`: partial success or something needs attention.
+ * - `destructive`: the action failed.
+ * Prefer the `toast.success()` / `toast.info()` / `toast.warning()` /
+ * `toast.error()` helpers.
+ */
+function showToast({ ...props }: Toast) {
   const id = genId();
 
-  const update = (props: ToasterToast) =>
+  const dismiss = () => dispatch({ type: "DISMISS_TOAST", toastId: id });
+  let onOpenChange = props.onOpenChange;
+  const handleOpenChange = (open: boolean) => {
+    if (!open) dismiss();
+    onOpenChange?.(open);
+  };
+  const update = (updates: Partial<Toast>) => {
+    if ("onOpenChange" in updates) onOpenChange = updates.onOpenChange;
+    if (updates.open === true) {
+      clearTimeout(toastTimeouts.get(id));
+      toastTimeouts.delete(id);
+    }
     dispatch({
       type: "UPDATE_TOAST",
-      toast: { ...props, id },
+      toast: { ...updates, id, onOpenChange: handleOpenChange },
     });
-  const dismiss = () => dispatch({ type: "DISMISS_TOAST", toastId: id });
+    if (updates.open === false) dismiss();
+  };
 
   dispatch({
     type: "ADD_TOAST",
@@ -155,9 +185,7 @@ function toast({ ...props }: Toast) {
       ...props,
       id,
       open: true,
-      onOpenChange: (open) => {
-        if (!open) dismiss();
-      },
+      onOpenChange: handleOpenChange,
     },
   });
 
@@ -168,18 +196,18 @@ function toast({ ...props }: Toast) {
   };
 }
 
-function useToast() {
-  const [state, setState] = React.useState(memoryState);
+type StatusToast = Omit<Toast, "variant">;
 
-  React.useEffect(() => {
-    listeners.push(setState);
-    return () => {
-      const index = listeners.indexOf(setState);
-      if (index !== -1) {
-        listeners.splice(index, 1);
-      }
-    };
-  }, [state]);
+const toast = Object.assign(showToast, {
+  success: (props: StatusToast) => showToast({ ...props, variant: "success" }),
+  info: (props: StatusToast) => showToast({ ...props, variant: "info" }),
+  warning: (props: StatusToast) => showToast({ ...props, variant: "warning" }),
+  error: (props: StatusToast) =>
+    showToast({ ...props, variant: "destructive" }),
+});
+
+function useToast() {
+  const state = React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
   return {
     ...state,

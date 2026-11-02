@@ -115,11 +115,11 @@ function SlackInstallationRow({
         { method: "DELETE" }
       );
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      toast({ title: "Slack workspace disconnected" });
+      toast({ variant: "info", title: "Slack workspace disconnected" });
       onChanged();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "unknown error";
-      toast({ title: "Failed to disconnect", description: msg });
+      toast({ variant: "destructive", title: "Failed to disconnect", description: msg });
     } finally {
       setRemoving(false);
     }
@@ -196,6 +196,7 @@ function SlackPolicyControls({
       (!Number.isInteger(parsedLimit) || parsedLimit <= 0)
     ) {
       toast({
+        variant: "warning",
         title: "Invalid monthly limit",
         description: "Use a positive whole number or leave it blank.",
       });
@@ -223,11 +224,11 @@ function SlackPolicyControls({
         } | null;
         throw new Error(body?.error ?? `HTTP ${response.status}`);
       }
-      toast({ title: "Slack controls updated" });
+      toast({ variant: "success", title: "Slack controls updated" });
       onChanged();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "unknown error";
-      toast({ title: "Failed to update Slack controls", description: msg });
+      toast({ variant: "destructive", title: "Failed to update Slack controls", description: msg });
     } finally {
       setSaving(false);
     }
@@ -348,13 +349,13 @@ function ChannelLinkManager({ teamId }: { teamId: string }) {
         } | null;
         throw new Error(body?.error ?? `HTTP ${r.status}`);
       }
-      toast({ title: "Channel linked" });
+      toast({ variant: "success", title: "Channel linked" });
       setChannelId("");
       setRepoId("");
       mutateLinks().catch(logRevalidationFailure("links after add"));
     } catch (err) {
       const msg = err instanceof Error ? err.message : "unknown error";
-      toast({ title: "Failed to link channel", description: msg });
+      toast({ variant: "destructive", title: "Failed to link channel", description: msg });
     } finally {
       setSaving(false);
     }
@@ -368,7 +369,7 @@ function ChannelLinkManager({ teamId }: { teamId: string }) {
       mutateLinks().catch(logRevalidationFailure("links after delete"));
     } catch (err) {
       const msg = err instanceof Error ? err.message : "unknown error";
-      toast({ title: "Failed to remove link", description: msg });
+      toast({ variant: "destructive", title: "Failed to remove link", description: msg });
     } finally {
       setDeletingId(null);
     }
@@ -385,7 +386,7 @@ function ChannelLinkManager({ teamId }: { teamId: string }) {
       setNextCursor(data.nextCursor);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "unknown error";
-      toast({ title: "Failed to load Slack channels", description: msg });
+      toast({ variant: "destructive", title: "Failed to load Slack channels", description: msg });
     } finally {
       setLoadingMoreChannels(false);
     }

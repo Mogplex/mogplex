@@ -70,7 +70,7 @@ export function CronPane() {
     try {
       await mutateJson(`/api/assignments?id=${id}`, { method: "DELETE" })
       await mutate()
-      toast({ title: "Cron deleted" })
+      toast({ variant: "info", title: "Cron deleted" })
     } catch (error) {
       toast({ title: "Cannot delete cron", description: error instanceof Error ? error.message : "Action failed", variant: "destructive" })
     } finally {

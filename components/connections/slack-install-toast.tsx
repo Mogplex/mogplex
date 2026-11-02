@@ -7,19 +7,26 @@ import { toast } from "@/hooks/use-toast";
 
 const MESSAGES: Record<
   string,
-  { title: string; description?: string; variant?: "destructive" }
+  {
+    title: string;
+    description?: string;
+    variant: "success" | "info" | "destructive";
+  }
 > = {
   connected: {
     title: "Slack workspace connected",
     description: "The Mogplex bot can now reply in DMs and linked channels.",
+    variant: "success",
   },
   linked: {
     title: "Slack account linked",
     description: "Mogplex can now act on Slack requests from your account.",
+    variant: "success",
   },
   denied: {
     title: "Slack install cancelled",
     description: "No workspace was connected.",
+    variant: "info",
   },
   invalid_state: {
     title: "Slack install failed",

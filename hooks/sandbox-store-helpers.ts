@@ -337,7 +337,7 @@ export async function executeExtend(
     });
     return;
   }
-  toast({
+  toast.success({
     title: "Sandbox extended",
     description: `Extended by ${minutes} minutes`,
   });
@@ -372,7 +372,7 @@ export async function executePause(
   const data = await res.json().catch(() => ({}));
   if (data.sandbox?.id) {
     get().setSandboxRecord(toSandboxRecord(data.sandbox));
-    toast({ title: "Sandbox paused" });
+    toast({ variant: "info", title: "Sandbox paused" });
     return;
   }
   set((state) => {
@@ -387,7 +387,7 @@ export async function executePause(
       )
     );
   });
-  toast({ title: "Sandbox paused" });
+  toast({ variant: "info", title: "Sandbox paused" });
 }
 
 export async function executeStop(

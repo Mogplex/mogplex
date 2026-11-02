@@ -289,6 +289,7 @@ export default function NewTeamPage() {
               );
             }
             toast({
+              variant: s.delivery_failed > 0 || truncatedCount > 0 ? "warning" : "success",
               title: "Invites sent",
               description: parts.join(" · "),
             });

@@ -166,7 +166,7 @@ export function useConnectionActions({
           });
         }
 
-        toast({ title: `${preset.name} connected` });
+        toast({ variant: "success", title: `${preset.name} connected` });
       } catch (e) {
         const message = (e as Error).message || "Network error";
         setPresetStatus({ presetId: preset.id, type: "error", message });
@@ -275,7 +275,7 @@ export function useConnectionActions({
           throw new Error(data.error || "Failed to delete connection");
         }
         await mutate();
-        toast({ title: "Connection deleted" });
+        toast({ variant: "info", title: "Connection deleted" });
       } catch (e) {
         toast({
           title: "Error",
@@ -306,7 +306,10 @@ export function useConnectionActions({
           throw new Error(data.error || "Connection test failed");
         }
         if (data.healthy) {
-          toast({ title: data.summary || "Connection healthy" });
+          toast({
+            variant: "success",
+            title: data.summary || "Connection healthy",
+          });
         } else {
           toast({
             title: getConnectionStatusLabel(data.status || "error"),

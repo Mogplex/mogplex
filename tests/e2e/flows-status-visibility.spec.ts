@@ -53,7 +53,7 @@ function buildFlow(input: {
   };
 }
 
-test("workflow picker surfaces active/inactive status and deletion shows a destructive toast", async ({
+test("workflow picker surfaces active/inactive status and deletion shows an informational toast", async ({
   page,
 }) => {
   await enableScopedE2EAuth(page);
@@ -133,7 +133,7 @@ test("workflow picker surfaces active/inactive status and deletion shows a destr
 
   await expect.poll(() => deleteCalls).toBe(1);
   const toast = page
-    .locator("li[class*='destructive']")
+    .locator('[data-variant="info"]')
     .filter({ hasText: "Workflow deleted" });
   await expect(toast).toBeVisible();
   await expect(toast).toContainText('"Live Review" was permanently deleted.');
