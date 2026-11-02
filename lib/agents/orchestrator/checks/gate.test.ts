@@ -334,3 +334,20 @@ it("attests full manual checks in the canonical selected project directory", asy
     await f.run("run_command", { command, cwd: "/workspace/project" });
   expect(f.gate.summary()).toMatchObject({ required: false, verified: true });
 });
+
+it("replaces a carried pending instruction without changing the conversation and clears it after checks", async () => {
+  const f = fixture();
+  await f.run("write_file", { path: "index.ts" });
+  const messages = [{ role: "user" as const, content: "Finish the change." }];
+  const prepare = f.gate.prepareStep();
+  const first = await prepare({ messages });
+  const second = await prepare({ messages: first.messages! });
+  expect(messages).toHaveLength(1);
+  expect(
+    second.messages!.filter((message) => message.role === "system")
+  ).toHaveLength(1);
+  await f.run("run_checks");
+  expect((await prepare({ messages: second.messages! })).messages).toEqual(
+    messages
+  );
+});
