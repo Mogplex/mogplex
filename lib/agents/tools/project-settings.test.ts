@@ -163,6 +163,30 @@ describe("project settings tools", () => {
     expect(writes).toEqual([{ dev_port: 5173, dev_port_auto: false }]);
   });
 
+  it("should redact a credential inside a saved command it reads back", async () => {
+    installRepo({
+      install_command:
+        "npm config set //registry.npmjs.org/:_authToken=opaque-npm-value && npm ci",
+    });
+
+    const settings = await tools().project_settings.execute({});
+    const refused = await tools().project_settings_update.execute({
+      installCommand: "pnpm install",
+    });
+
+    expect(settings).toMatchObject({
+      installCommand:
+        "npm config set //registry.npmjs.org/:_authToken=[redacted] && npm ci",
+    });
+    expect(refused).toMatchObject({
+      saved: {
+        installCommand:
+          "npm config set //registry.npmjs.org/:_authToken=[redacted] && npm ci",
+      },
+    });
+    expect(JSON.stringify([settings, refused])).not.toContain("opaque-npm");
+  });
+
   it("should report a pinned dev port as the one boots use", async () => {
     installRepo({ dev_port: 8000, dev_port_auto: false });
 

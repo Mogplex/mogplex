@@ -27,6 +27,8 @@ const SENSITIVE_KEY_TERMS = [
   "access_key_id",
   "accesskeyid",
 ] as const;
+// npm registry credentials: `//registry.example/:_authToken=...`.
+const NPM_AUTH_PATTERN = /(:_(?:authToken|auth|password)\s*=\s*)[^\s,;]+/gi;
 const TEXT_ASSIGNMENT_PATTERN =
   /\b([a-z][a-z0-9_-]*)(["']?\s*[:=]\s*)(?!\[redacted\])("[^"\r\n]*"|'[^'\r\n]*'|[^\s,;]+)/gi;
 
@@ -73,6 +75,7 @@ export function redactSecretsInText(value: string) {
       "$1[redacted]:[redacted]@"
     )
     .replace(/(x-access-token:)[^\s@]+@/gi, "$1[redacted]@")
+    .replace(NPM_AUTH_PATTERN, "$1[redacted]")
     .replace(
       /\bauthorization\s*[:=]\s*((?:basic|bearer)\s+)?[^\s,;]+/gi,
       (_match, scheme = "") => `Authorization: ${scheme}[redacted]`

@@ -75,6 +75,15 @@ const SETTING_NAMES: Partial<Record<string, string>> = {
 };
 
 const SHOWN_COMMANDS = ["installCommand", "devCommand"] as const;
+const SHOWN_COMMAND_LENGTH = 180;
+
+/** Redacted command text; a cut-off command ends with an ellipsis. */
+function shownCommandText(command: string) {
+  const text = redactSecretsInText(command);
+  return text.length > SHOWN_COMMAND_LENGTH
+    ? `${text.slice(0, SHOWN_COMMAND_LENGTH)}…`
+    : text;
+}
 
 function settingsSaveBody(
   output: Record<string, unknown> | null,
@@ -90,9 +99,7 @@ function settingsSaveBody(
   const saved = asRecord(input) ?? {};
   const commands = SHOWN_COMMANDS.flatMap((key) =>
     typeof saved[key] === "string"
-      ? [
-          `${SETTING_NAMES[key]}: ${redactSecretsInText(saved[key]).slice(0, 180)}`,
-        ]
+      ? [`${SETTING_NAMES[key]}: ${shownCommandText(saved[key])}`]
       : []
   );
   return [heading, ...commands].join(" · ");

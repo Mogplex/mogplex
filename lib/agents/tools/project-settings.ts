@@ -7,6 +7,7 @@ import {
   resolveEffectiveEnvSyncMode,
   type RepoEnvVars,
 } from "@/lib/repo-settings";
+import { redactSecretsInText } from "@/lib/ai-telemetry";
 import { getRepoForScope } from "@/lib/repos";
 import { isValidSandboxRootDirectory } from "@/lib/sandbox/launch-config";
 import { SUPPORTED_RUNTIMES } from "@/lib/sandbox/runtimes/types";
@@ -121,13 +122,18 @@ async function loadSettings(
   }
 }
 
+function shownCommand(command: string | null) {
+  return command === null ? null : redactSecretsInText(command);
+}
+
 /** Settings as the agent sees them: env var names, never values. */
 function describeSettings(row: SettingsRow) {
   return {
     runtime: row.runtime,
     rootDirectory: row.root_directory,
-    installCommand: row.install_command,
-    devCommand: row.dev_command,
+    // A saved command can carry an inline credential; it stays in the row.
+    installCommand: shownCommand(row.install_command),
+    devCommand: shownCommand(row.dev_command),
     // The same resolvers boot uses, so Control is told what boots apply.
     // devPort is null while boots detect the port.
     devPort: resolveConfiguredDevPort(row.dev_port, row.dev_port_auto),
@@ -202,7 +208,7 @@ function replacedSettings(row: SettingsRow, updates: SettingsUpdates) {
     if (!(column in updates)) continue;
     const saved = row[column];
     if (saved !== null && saved !== "" && saved !== updates[column])
-      replaced[name] = saved;
+      replaced[name] = shownCommand(saved);
   }
   if (pinnedPortReplaced(row, updates)) replaced.devPort = row.dev_port;
   return replaced;
@@ -356,7 +362,7 @@ export function createProjectSettingsTools(
     }),
     project_settings_update: defineTool({
       description:
-        "Save runtime, install command, dev command, dev port, or root directory for the selected project so future sandbox boots use them. Save only commands you ran successfully in the sandbox. Filling an empty setting needs no confirmation; changing one that is already saved needs replace: true, which you pass only once the operator agrees.",
+        "Save runtime, install command, dev command, dev port, or root directory for the selected project so future sandbox boots use them. Save only commands you ran successfully in the sandbox. Filling an empty setting, or changing the runtime or root directory, needs no confirmation; changing a saved install or dev command, or a pinned dev port, needs replace: true, which you pass only once the operator agrees.",
       inputSchema: updateParams,
       execute: async (input: z.infer<typeof updateParams>) =>
         withRow("write", async (row, scope) => {

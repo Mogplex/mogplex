@@ -10,6 +10,16 @@ describe("redactSecretsInText", () => {
     ).toBe("[redacted] https://x-access-token:[redacted]@github.com");
   });
 
+  it("redacts an npm registry auth token in a saved command", () => {
+    expect(
+      redactSecretsInText(
+        "npm config set //registry.npmjs.org/:_authToken=opaque-npm-value && npm ci"
+      )
+    ).toBe(
+      "npm config set //registry.npmjs.org/:_authToken=[redacted] && npm ci"
+    );
+  });
+
   it("redacts assignments, JWTs, cloud keys, and credential URLs", () => {
     const credentialUrl = `postgres://${["app", "database-password"].join(":")}@${["db", "example"].join(".")}/app`;
     const output = redactSecretsInText(

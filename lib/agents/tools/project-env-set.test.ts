@@ -120,6 +120,9 @@ describe("project_env_set", () => {
       "git_ssh",
       "LESSOPEN",
       "PYTHONHOME",
+      "PERL5LIB",
+      "maven_opts",
+      "ZDOTDIR",
     ]) {
       expect(
         await tools().project_env_set.execute({ name, value: "x" })

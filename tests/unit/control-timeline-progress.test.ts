@@ -162,6 +162,24 @@ test("control timeline shows the command a settings save will run on every boot"
   assert.doesNotMatch(JSON.stringify(events), /sk-secretvalue|make serve/);
 });
 
+test("control timeline marks a saved command it cuts short", () => {
+  const longCommand = `make setup ${"x".repeat(200)} tail-marker`;
+  const [event] = buildCombinedTimeline(undefined, [
+    assistant([
+      {
+        type: "tool-project_settings_update",
+        toolCallId: "settings-long",
+        state: "output-available",
+        input: { installCommand: longCommand },
+        output: { ok: true },
+      },
+    ]),
+  ]);
+
+  assert.match(event?.body ?? "", /install command: make setup x+…$/);
+  assert.doesNotMatch(event?.body ?? "", /tail-marker/);
+});
+
 test("control timeline surfaces structured tool failures as failures", () => {
   const events = buildCombinedTimeline(undefined, [
     assistant([
