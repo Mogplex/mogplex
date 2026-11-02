@@ -66,6 +66,16 @@ export async function runRepositoryChecks(
       typeof record.stdout === "string" ? record.stdout : undefined;
     const stderr =
       typeof record.stderr === "string" ? record.stderr : undefined;
+    if (record.commandStarted === false) {
+      checks.push({
+        kind,
+        command,
+        status: "not_run",
+        exitCode: null,
+        reason: controlToolFailureDetail(record) || "Command was not started.",
+      });
+      continue;
+    }
     if (exitCode === null) {
       unknownOutcome = true;
       checks.push({

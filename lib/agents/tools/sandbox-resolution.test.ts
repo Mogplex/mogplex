@@ -202,6 +202,7 @@ describe("sandbox command tool contract", () => {
     await expect(tool.execute({ command: "pwd" })).resolves.toEqual({
       error: "No sandbox available. Select a repository first.",
       reason: "repo_not_selected",
+      commandStarted: false,
       command: "pwd",
     });
   });
@@ -224,6 +225,7 @@ describe("sandbox command tool contract", () => {
     await expect(tool.execute({ command: "pwd" })).resolves.toEqual({
       error: "INTERNAL_API_SECRET is required for delegated internal API calls",
       reason: "auth_unavailable",
+      commandStarted: false,
       command: "pwd",
     });
     expect(fetched).toBe(false);

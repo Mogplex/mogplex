@@ -90,7 +90,8 @@ export function createControlVerificationGate(
     // GitHub-only work never provisions a VM just to open a pull request.
     if (
       DELIVERY_TOOLS.has(name) &&
-      context.sandboxBinding?.status !== "running"
+      context.sandboxBinding?.status !== "running" &&
+      !state.summary().changed
     )
       return execute(input, options);
     const args = record(input);
@@ -107,6 +108,8 @@ export function createControlVerificationGate(
     const before = await observe(options);
     if (!before.ok && uncertainCommand) return block(before.error, true);
     if (DELIVERY_TOOLS.has(name)) {
+      // Inspection failure may allow repairs, never delivery without evidence.
+      if (!before.ok) return block(before.error);
       state.requireChecks();
       if (state.summary().required)
         return {
@@ -129,6 +132,7 @@ export function createControlVerificationGate(
     const result = record(output);
     if (
       name === "run_command" &&
+      result.commandStarted !== false &&
       (typeof result.exitCode !== "number" ||
         !Number.isInteger(result.exitCode) ||
         controlToolOutcome("output-available", result) === "running")
@@ -138,9 +142,9 @@ export function createControlVerificationGate(
     }
     // A confirmed failed inspection (e.g. Node is unavailable) must not stop
     // useful file edits, nor manufacture a passing verification receipt.
-    if (!before.ok) return output;
     const after = await observe(options);
     if (
+      before.ok &&
       after.ok &&
       before.sandboxId === after.sandboxId &&
       before.revision === after.revision &&

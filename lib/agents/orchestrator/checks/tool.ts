@@ -70,10 +70,11 @@ export function createRepositoryCheckProbe(context: OrchestratorToolContext) {
       commandConfirmed = Boolean(
         output &&
         typeof output === "object" &&
-        "exitCode" in output &&
-        typeof output.exitCode === "number" &&
-        Number.isInteger(output.exitCode) &&
-        controlToolOutcome("output-available", output) !== "running"
+        (("commandStarted" in output && output.commandStarted === false) ||
+          ("exitCode" in output &&
+            typeof output.exitCode === "number" &&
+            Number.isInteger(output.exitCode) &&
+            controlToolOutcome("output-available", output) !== "running"))
       );
       if (
         !output ||
@@ -164,7 +165,7 @@ export function createRunChecksTool(context: OrchestratorToolContext) {
           ? {
               ...check,
               status: "skipped",
-              reason: `Skipped at the operator's request: ${input.reason}`,
+              reason: `Omitted with the agent-reported reason: ${input.reason}`,
             }
           : check
       );

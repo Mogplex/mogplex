@@ -19,7 +19,7 @@ export function createRepositoryVerificationState() {
   const same = (left: WorkspaceCheckRevision, right: WorkspaceCheckRevision) =>
     left.sandboxId === right.sandboxId && left.revision === right.revision;
   const observe = (revision: WorkspaceCheckRevision) => {
-    if (current && !same(current, revision)) {
+    if (blocked || (current && !same(current, revision))) {
       changed = true;
       attempted = false;
       blocked = null;
@@ -78,6 +78,9 @@ export function createRepositoryVerificationState() {
         return;
       }
       blocked = null;
+      // This is an attempt/visibility gate, not a passing-check requirement.
+      // Explicit scope limits and unavailable scripts can end a turn, while
+      // only actual passes for all four commands can set verified below.
       attempted = true;
       results.clear();
       manualKinds.clear();

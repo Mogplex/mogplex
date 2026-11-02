@@ -60,3 +60,46 @@ for (const sample of [
     }
   });
 }
+
+test("sandbox startup that never launched a command can recover in the same turn", async () => {
+  const previous = process.env.INTERNAL_API_SECRET;
+  process.env.INTERNAL_API_SECRET = "fixture-internal-secret";
+  const binding = {
+    sandboxId: "sandbox-1",
+    status: "pending" as "pending" | "running",
+  };
+  let calls = 0;
+  try {
+    const probe = createRepositoryCheckProbe({
+      userId: "user-1",
+      repoId: "repo-1",
+      sandboxBinding: binding,
+      sandboxExecution: {
+        execute: async () => {
+          calls++;
+          return Response.json({
+            exitCode: 0,
+            stdout: JSON.stringify({
+              revision: "a".repeat(64),
+              manifest: { available: false, scripts: {}, lockfiles: [] },
+            }),
+          });
+        },
+      },
+    });
+    const options = { context: {}, toolCallId: "probe", messages: [] };
+    assert.deepEqual(await probe(options), {
+      ok: false,
+      error:
+        "Could not inspect the workspace revision and repository check commands.",
+      commandCompletion: "confirmed",
+    });
+    assert.equal(calls, 0);
+    binding.status = "running";
+    assert.equal((await probe(options)).ok, true);
+    assert.equal(calls, 1);
+  } finally {
+    if (previous === undefined) delete process.env.INTERNAL_API_SECRET;
+    else process.env.INTERNAL_API_SECRET = previous;
+  }
+});

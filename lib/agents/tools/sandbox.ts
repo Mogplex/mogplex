@@ -182,7 +182,8 @@ export function createTerminalExec(
     inputSchema: terminalParams,
     execute: async (input: z.infer<typeof terminalParams>) => {
       const blocked = getBlockedAgentShellCommand(input.command);
-      if (blocked) return { ...blocked, command: input.command };
+      if (blocked)
+        return { ...blocked, command: input.command, commandStarted: false };
       return decisionScope
         ? runWithCommandRiskCheck(input.command, decisionScope, () =>
             runCommand(input)
@@ -196,11 +197,18 @@ export function createTerminalExec(
       return {
         error: "Sandbox startup is still in progress.",
         reason: "sandbox_pending" as const,
+        commandStarted: false,
         command,
       };
     }
     const boundSandboxId = sandboxBinding?.sandboxId ?? undefined;
-    if (sandboxBinding && boundSandboxId !== selectedSandboxId) {
+    if (
+      sandboxBinding &&
+      (boundSandboxId !== selectedSandboxId ||
+        (sandboxBinding.status === "running" &&
+          boundSandboxId &&
+          !cachedSandbox))
+    ) {
       selectedSandboxId = boundSandboxId;
       cachedSandbox = selectedSandboxId
         ? {
@@ -216,6 +224,7 @@ export function createTerminalExec(
       return {
         error: requestHeaders.error,
         reason: requestHeaders.reason,
+        commandStarted: false,
         command,
       };
     }
@@ -230,6 +239,7 @@ export function createTerminalExec(
       if (resolution && "error" in resolution) {
         return {
           ...resolution,
+          commandStarted: false,
           command,
         };
       }
@@ -242,6 +252,7 @@ export function createTerminalExec(
       return {
         error: "No sandbox available. Select a repository first.",
         reason: "repo_not_selected" as const,
+        commandStarted: false,
         command,
       };
     }

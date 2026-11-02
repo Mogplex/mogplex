@@ -103,3 +103,18 @@ it("does not replay an execution whose observation failed", async () => {
   expect(result.checks.every((check) => check.status === "blocked")).toBe(true);
   expect(JSON.stringify(result)).not.toContain("sensitive details");
 });
+
+it("reports commands rejected before launch without treating them as possibly running", async () => {
+  const result = await runRepositoryChecks(plan, async () => ({
+    commandStarted: false,
+    error: "Sandbox startup is still in progress.",
+  }));
+  expect(result.checks.map((row) => row.status)).toEqual([
+    "not_run",
+    "not_run",
+    "not_run",
+    "not_run",
+  ]);
+  expect(result.checks[0].reason).toContain("startup");
+  expect(result.ok).toBe(false);
+});

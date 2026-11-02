@@ -84,6 +84,8 @@ function fixture() {
         effects.push(command);
         if (command === "rewrite") source = "c";
         if (command === "lost") return { error: "Lost observation" };
+        if (command === "not_started")
+          return { commandStarted: false, error: "Sandbox pending" };
         return { sandboxId: "workspace-1", exitCode: 0, stdout: "Passed" };
       },
     }),
@@ -236,4 +238,30 @@ it("does not force a denied check repeatedly and keeps the background cancellati
       throw new Error("Cancelled");
     })()
   ).rejects.toThrow("Cancelled");
+});
+
+it("refuses delivery after a confirmed inspection failure and permits repair then checks", async () => {
+  const f = fixture();
+  f.setObservation("known_failure");
+  await f.run("write_file", { path: "package.json" });
+  expect(await f.run("open_pr")).toMatchObject({
+    ok: false,
+    reason: "verification_unconfirmed",
+  });
+  expect(f.effects).toEqual(["write"]);
+  f.setObservation("ok");
+  await f.run("run_command", { command: "repair" });
+  await f.run("run_checks");
+  await f.run("open_pr");
+  expect(f.effects).toEqual(["write", "repair", "open_pr"]);
+  expect(f.gate.summary().verified).toBe(true);
+});
+
+it("allows a command rejected before launch to recover without latching an unknown execution", async () => {
+  const f = fixture();
+  await f.run("run_command", { command: "not_started" });
+  await f.run("write_file", { path: "index.ts" });
+  await f.run("run_checks");
+  expect(f.effects).toEqual(["not_started", "write"]);
+  expect(f.gate.summary().verified).toBe(true);
 });
