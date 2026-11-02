@@ -36,7 +36,10 @@ const matches = (row: Row, filters: Filter[]) =>
   });
 
 /** One repos row behind the database boundary; records every write. */
-function installRepo(overrides: Row = {}) {
+function installRepo(
+  overrides: Row = {},
+  beforeWrite: (row: Row) => void = () => {}
+) {
   const row: Row = {
     id: REPO_ID,
     owner_type: "user",
@@ -70,6 +73,7 @@ function installRepo(overrides: Row = {}) {
         return builder;
       },
       maybeSingle: async () => {
+        if (patch) beforeWrite(row);
         if (!matches(row, filters)) return { data: null, error: null };
         if (patch) {
           writes.push(patch);
@@ -90,21 +94,27 @@ function installRepo(overrides: Row = {}) {
 
 type ToolRecord = Record<
   string,
-  { execute: (input: Record<string, unknown>) => Promise<Row> }
+  {
+    execute: (input: Record<string, unknown>) => Promise<Row>;
+    inputSchema: { safeParse: (input: unknown) => { success: boolean } };
+  }
 >;
 
 function tools(
   teamId: string | null = null,
-  role: "developer" | "viewer" = "developer"
+  role: "developer" | "viewer" | "lookup-failed" = "developer"
 ) {
   return createProjectSettingsTools(
     { userId: USER_ID, repoId: REPO_ID, teamId },
     {
-      resolveTeam: async () => ({
-        ok: true,
-        teamId: teamId ?? "",
-        capabilities: presetForRole(role),
-      }),
+      resolveTeam: async () =>
+        role === "lookup-failed"
+          ? { ok: false, status: 500, error: "Internal server error" }
+          : {
+              ok: true,
+              teamId: teamId ?? "",
+              capabilities: presetForRole(role),
+            },
     }
   ) as unknown as ToolRecord;
 }
@@ -137,8 +147,10 @@ describe("project settings tools", () => {
       ok: true,
       settings: { devPort: 8000, rootDirectory: "api" },
     });
+    expect(result).toMatchObject({ settings: { devPortAuto: false } });
     expect(writes).toEqual([
       expect.objectContaining({
+        dev_port_auto: false,
         install_command: "pip install -e .",
         dev_command: "uvicorn app.main:app --host 0.0.0.0 --port 8000",
         dev_port: 8000,
@@ -209,5 +221,53 @@ describe("project settings tools", () => {
     expect(await tools().project_settings.execute({})).toEqual({
       error: "Project not found.",
     });
+  });
+
+  it("should let a team viewer read settings it cannot change", async () => {
+    installRepo({
+      owner_type: "team",
+      owner_user_id: null,
+      product_team_id: "team-1",
+    });
+
+    expect(
+      await tools("team-1", "viewer").project_settings.execute({})
+    ).toMatchObject({ envVarNames: ["DATABASE_URL"] });
+  });
+
+  it("should not call a failed team lookup a permission problem", async () => {
+    installRepo();
+
+    expect(
+      await tools("team-1", "lookup-failed").project_settings.execute({})
+    ).toEqual({ error: "Could not check your team access. Try again." });
+  });
+
+  it("should save the first variable on a project that has none", async () => {
+    const { row } = installRepo({ sandbox_env_vars: null });
+
+    expect(
+      await tools().project_env_set.execute({ name: "PORT", value: "8000" })
+    ).toMatchObject({ ok: true });
+    expect(row.sandbox_env_vars).toEqual({ PORT: "8000" });
+  });
+
+  it("should not overwrite variables the operator saved after the read", async () => {
+    const { row } = installRepo({}, (current) => {
+      current.sandbox_env_vars = { OPERATOR_KEY: "saved-meanwhile" };
+    });
+
+    expect(
+      await tools().project_env_set.execute({ name: "PORT", value: "8000" })
+    ).toEqual({ error: "Project variables changed while saving. Try again." });
+    expect(row.sandbox_env_vars).toEqual({ OPERATOR_KEY: "saved-meanwhile" });
+  });
+
+  it("should reject a dev port outside the valid range", () => {
+    const schema = tools().project_settings_update.inputSchema;
+
+    expect(schema.safeParse({ devPort: 0 }).success).toBe(false);
+    expect(schema.safeParse({ devPort: 70_000 }).success).toBe(false);
+    expect(schema.safeParse({ devPort: 5173 }).success).toBe(true);
   });
 });

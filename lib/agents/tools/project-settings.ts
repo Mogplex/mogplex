@@ -30,7 +30,7 @@ type ProjectSettingsDeps = {
 
 // Typed as string so the query builder does not parse the column list.
 const SETTINGS_COLUMNS =
-  "id,runtime,root_directory,install_command,dev_command,dev_port,env_sync_mode,sandbox_env_vars";
+  "id,runtime,root_directory,install_command,dev_command,dev_port,dev_port_auto,env_sync_mode,sandbox_env_vars";
 const ENV_NAME = /^[A-Za-z_]\w*$/;
 
 type SettingsRow = {
@@ -40,25 +40,35 @@ type SettingsRow = {
   install_command: string | null;
   dev_command: string | null;
   dev_port: number | null;
+  dev_port_auto: boolean | null;
   env_sync_mode: string | null;
   sandbox_env_vars: RepoEnvVars | null;
 };
 
 /**
- * Resolve who owns the write: the operator's personal projects, or the
- * active team's when the operator holds its project-write capability, the
- * same rule the repos PATCH route applies.
+ * Resolve who owns the project: the operator's personal projects, or the
+ * active team's. Any member may read; writing also needs the team's
+ * project-write capability, the same rule the repos PATCH route applies.
  */
-async function resolveWriteScope(
+async function resolveScope(
   target: ProjectSettingsTarget,
-  deps: ProjectSettingsDeps
+  deps: ProjectSettingsDeps,
+  access: "read" | "write"
 ): Promise<ProductResourceScope | { error: string }> {
   if (!target.teamId) {
     return { kind: "personal", userId: target.userId, productTeamId: null };
   }
   const team = await deps.resolveTeam(target.userId, target.teamId);
+  if (!team.ok) {
+    return {
+      error:
+        team.status >= 500
+          ? "Could not check your team access. Try again."
+          : "You are not a member of this project's team.",
+    };
+  }
   if (
-    !team.ok ||
+    access === "write" &&
     !hasCapability(
       team.capabilities ?? new Set(),
       TEAM_RESOURCE_WRITE_CAPABILITY
@@ -80,7 +90,11 @@ async function loadSettings(
       SETTINGS_COLUMNS
     );
     return row ?? { error: "Project not found." };
-  } catch {
+  } catch (error) {
+    console.error(
+      `[control/project-settings] load failed for repo ${target.repoId}:`,
+      error instanceof Error ? error.message : error
+    );
     return { error: "Could not load project settings." };
   }
 }
@@ -93,6 +107,8 @@ function describeSettings(row: SettingsRow) {
     installCommand: row.install_command,
     devCommand: row.dev_command,
     devPort: row.dev_port,
+    // When true, boots detect the port and ignore devPort.
+    devPortAuto: row.dev_port_auto !== false,
     envVarScope: row.env_sync_mode,
     envVarNames: Object.keys(row.sandbox_env_vars ?? {}).sort(),
   };
@@ -112,8 +128,12 @@ const updateParams = z.object({
   devPort: z
     .number()
     .int()
+    .min(1)
+    .max(65_535)
     .optional()
-    .describe("Port the dev server listens on."),
+    .describe(
+      "Port the dev server listens on; saving it turns off port detection."
+    ),
   rootDirectory: z
     .string()
     .nullable()
@@ -139,9 +159,10 @@ export function createProjectSettingsTools(
   };
 
   const withRow = async <T>(
+    access: "read" | "write",
     run: (row: SettingsRow, scope: ProductResourceScope) => Promise<T>
   ) => {
-    const scope = await resolveWriteScope(target, deps);
+    const scope = await resolveScope(target, deps, access);
     if ("error" in scope) return scope;
     const row = await loadSettings(target, scope);
     if ("error" in row) return row;
@@ -153,14 +174,15 @@ export function createProjectSettingsTools(
       description:
         "Read the selected project's saved setup: runtime, root directory, install and dev commands, dev port, and the names (never values) of its environment variables.",
       inputSchema: z.object({}),
-      execute: async () => withRow(async (row) => describeSettings(row)),
+      execute: async () =>
+        withRow("read", async (row) => describeSettings(row)),
     }),
     project_settings_update: defineTool({
       description:
         "Save install command, dev command, dev port, or root directory for the selected project so future sandbox boots use them. Save only commands you ran successfully in the sandbox.",
       inputSchema: updateParams,
       execute: async (input: z.infer<typeof updateParams>) =>
-        withRow(async (_row, scope) => {
+        withRow("write", async (_row, scope) => {
           const updates = normalizeRepoSettingsPatch({
             ...(input.installCommand === undefined
               ? {}
@@ -168,7 +190,10 @@ export function createProjectSettingsTools(
             ...(input.devCommand === undefined
               ? {}
               : { dev_command: input.devCommand }),
-            ...(input.devPort === undefined ? {} : { dev_port: input.devPort }),
+            // A saved port only applies with auto-detection off.
+            ...(input.devPort === undefined
+              ? {}
+              : { dev_port: input.devPort, dev_port_auto: false }),
             ...(input.rootDirectory === undefined
               ? {}
               : { root_directory: input.rootDirectory }),
@@ -198,7 +223,7 @@ export function createProjectSettingsTools(
         if (!ENV_NAME.test(key) || key === "__proto__") {
           return { error: `${key || "That"} is not a valid variable name.` };
         }
-        return withRow(async (row, scope) => {
+        return withRow("write", async (row, scope) => {
           const previous = row.sandbox_env_vars;
           const next = { ...normalizeEnvVars(previous), [key]: value };
           let query = supabaseAdmin
