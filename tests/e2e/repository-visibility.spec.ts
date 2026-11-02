@@ -189,6 +189,10 @@ test("network failures during removal are visible", async ({ page }) => {
       : route.fallback()
   );
   await page.getByRole("button", { name: "Remove alex/alpha" }).click();
+  await page
+    .getByRole("alertdialog", { name: "Remove alex/alpha?" })
+    .getByRole("button", { name: "Remove repository" })
+    .click();
   await expect(
     page.getByText("Could not remove alex/alpha", { exact: true })
   ).toBeVisible();
@@ -199,4 +203,42 @@ test("network failures during removal are visible", async ({ page }) => {
     )
   ).toBeVisible();
   await expect(connected(page).getByText("alex/alpha")).toBeVisible();
+});
+
+test("removing one repository waits for confirmation", async ({ page }) => {
+  const { writes } = await dashboard(page);
+  await page.getByRole("button", { name: "Remove alex/alpha" }).click();
+  await page
+    .getByRole("alertdialog", { name: "Remove alex/alpha?" })
+    .getByRole("button", { name: "Cancel", exact: true })
+    .click();
+  await expect(connected(page).getByText("alex/alpha")).toBeVisible();
+  expect(writes).toEqual([]);
+
+  await page.getByRole("button", { name: "Remove alex/alpha" }).click();
+  await page
+    .getByRole("alertdialog", { name: "Remove alex/alpha?" })
+    .getByRole("button", { name: "Remove repository" })
+    .click();
+  await expect(
+    page.getByText("Repository removed", { exact: true })
+  ).toBeVisible();
+  await expect(connected(page).getByText("alex/alpha")).toHaveCount(0);
+  expect(writes).toEqual([{ id: "alpha", is_hidden: true }]);
+});
+
+test("project settings open from a repository with no sessions", async ({
+  page,
+}) => {
+  await dashboard(page);
+  await page.getByRole("button", { name: "Settings for alex/beta" }).click();
+  const drawer = page.getByRole("dialog", { name: "Project settings" });
+  await expect(drawer).toBeVisible();
+  await expect(drawer.getByText("alex/beta")).toBeVisible();
+  await expect(
+    drawer.getByRole("tab", { name: "Environment variables" })
+  ).toHaveAttribute("aria-selected", "true");
+  await expect(
+    drawer.getByRole("button", { name: "Save variables" })
+  ).toBeVisible();
 });

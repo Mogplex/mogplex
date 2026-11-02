@@ -7,7 +7,7 @@ export const APP_NAV_ITEM_DEFS = [
     path: "/control",
     // Command Center is the only place to work on repos; the repo workspace
     // view is part of it.
-    subpaths: ["/control", "/projects/workspace", "/workspaces"],
+    subpaths: ["/control", "/projects/workspace"],
     section: "primary",
   },
   {

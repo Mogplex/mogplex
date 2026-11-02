@@ -106,6 +106,10 @@ for (const width of [1280, 390]) {
     await page
       .getByRole("button", { name: "Remove acme/demo-app", exact: true })
       .click();
+    await page
+      .getByRole("alertdialog", { name: "Remove acme/demo-app?" })
+      .getByRole("button", { name: "Remove repository" })
+      .click();
     await expect(
       page.getByText("Repository removed", { exact: true })
     ).toBeVisible();

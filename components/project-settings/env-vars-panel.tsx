@@ -40,13 +40,32 @@ export function EnvVarsPanel({
   const [scope, setScope] = useState<EnvSyncMode>(() =>
     resolveEffectiveEnvSyncMode(repo.env_sync_mode || DEFAULT_ENV_SYNC_MODE)
   );
+  // Re-seed from the saved project when it changes underneath an untouched
+  // draft, e.g. after a save the server normalized (quotes stripped).
+  const savedKey = JSON.stringify([
+    repo.sandbox_env_vars ?? null,
+    repo.env_sync_mode ?? null,
+  ]);
+  const [seededKey, setSeededKey] = useState(savedKey);
+  const [dirty, setDirty] = useState(false);
+  if (savedKey !== seededKey && !dirty) {
+    setSeededKey(savedKey);
+    setRows(rowsFromEnvVars(repo.sandbox_env_vars));
+    setScope(
+      resolveEffectiveEnvSyncMode(repo.env_sync_mode || DEFAULT_ENV_SYNC_MODE)
+    );
+  }
+  const editRows: typeof setRows = (next) => {
+    setDirty(true);
+    setRows(next);
+  };
   const [pasteOpen, setPasteOpen] = useState(false);
   const [pasteText, setPasteText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const updateRow = (id: string, patch: Partial<EnvVarRow>) =>
-    setRows((current) =>
+    editRows((current) =>
       current.map((row) => (row.id === id ? { ...row, ...patch } : row))
     );
 
@@ -60,7 +79,7 @@ export function EnvVarsPanel({
       setError(err instanceof Error ? err.message : "Could not read .env text");
       return;
     }
-    setRows(merged);
+    editRows(merged);
     setPasteText("");
     setPasteOpen(false);
     setError(null);
@@ -80,6 +99,7 @@ export function EnvVarsPanel({
         env_sync_mode: scope,
         sandbox_env_vars: result.vars,
       });
+      setDirty(false);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to save environment variables"
@@ -96,7 +116,10 @@ export function EnvVarsPanel({
         <select
           aria-label="Variable scope"
           value={scope}
-          onChange={(event) => setScope(event.target.value as EnvSyncMode)}
+          onChange={(event) => {
+            setDirty(true);
+            setScope(event.target.value as EnvSyncMode);
+          }}
           className="border-border bg-secondary text-foreground h-9 w-full rounded border px-2 text-sm"
         >
           {SCOPE_OPTIONS.map((option) => (
@@ -144,7 +167,7 @@ export function EnvVarsPanel({
               size="icon"
               aria-label={`Remove ${row.key.trim() || `variable ${index + 1}`}`}
               onClick={() =>
-                setRows((current) => current.filter((item) => item.id !== row.id))
+                editRows((current) => current.filter((item) => item.id !== row.id))
               }
             >
               <Trash aria-hidden className="size-4" />
@@ -158,7 +181,7 @@ export function EnvVarsPanel({
           type="button"
           variant="outline"
           size="sm"
-          onClick={() => setRows((current) => [...current, createEnvVarRow()])}
+          onClick={() => editRows((current) => [...current, createEnvVarRow()])}
         >
           <Plus aria-hidden className="size-4" />
           Add variable

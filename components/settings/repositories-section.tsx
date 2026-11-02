@@ -3,97 +3,27 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  ProjectSettingsDrawer,
+  type ProjectSettingsTab,
+} from "@/components/project-settings/project-settings-drawer";
+import { SandboxLaunchProvider } from "@/components/sandbox-launch-provider";
 import { scopedHref } from "@/lib/scoped-href";
 import { trackActivation } from "@/lib/activation-tracking";
+import {
+  filterRepositories,
+  repoOwner,
+} from "@/lib/settings/repository-filter";
 import type { Repo } from "@/lib/types";
-import { repoOwner, useRepositoryAdmin } from "./use-repository-admin";
-
-function RepositoryRow({
-  repo,
-  onToggle,
-}: {
-  repo: Repo;
-  onToggle: (repo: Repo) => void;
-}) {
-  const removed = Boolean(repo.is_hidden);
-  return (
-    <li className="border-border flex items-center justify-between gap-3 border-b px-3 py-2 last:border-b-0">
-      <span className="min-w-0 truncate text-sm">{repo.full_name}</span>
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        aria-label={`${removed ? "Restore" : "Remove"} ${repo.full_name}`}
-        className={removed ? undefined : "text-destructive hover:text-destructive"}
-        onClick={() => onToggle(repo)}
-      >
-        {removed ? "Restore" : "Remove"}
-      </Button>
-    </li>
-  );
-}
-
-function RemoveOwnerButton({
-  owner,
-  count,
-  onConfirm,
-}: {
-  owner: string;
-  count: number;
-  onConfirm: () => void;
-}) {
-  const noun = count === 1 ? "repository" : "repositories";
-  return (
-    <AlertDialog>
-      <AlertDialogTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="text-destructive hover:text-destructive"
-        >
-          Remove all from {owner}
-        </Button>
-      </AlertDialogTrigger>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>{`Remove all ${count} ${noun} from ${owner}?`}</AlertDialogTitle>
-          <AlertDialogDescription>
-            They disappear from Command Center and project pickers. Nothing
-            changes on GitHub, and you can restore each one from Show removed.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            onClick={onConfirm}
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-          >
-            Remove {count} {noun}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  );
-}
+import { ConfirmRemoveButton, RepositoryRow } from "./repository-row";
+import { useRepositoryAdmin } from "./use-repository-admin";
 
 /**
- * Settings home for connected repositories: GitHub sync, remove and restore
- * repositories, and a link to sandbox management. Day-to-day repo work lives
- * in Command Center.
+ * Settings home for connected repositories: GitHub sync, project settings,
+ * remove and restore repositories, and a link to sandbox management.
+ * Day-to-day repo work lives in Command Center.
  */
 export function RepositoriesSection() {
   const { scope } = useParams<{ scope: string }>();
@@ -101,22 +31,28 @@ export function RepositoriesSection() {
   const [search, setSearch] = useState("");
   const [owner, setOwner] = useState("all");
   const [showRemoved, setShowRemoved] = useState(false);
+  const [settingsRepoId, setSettingsRepoId] = useState<string | null>(null);
+  const [settingsTab, setSettingsTab] = useState<ProjectSettingsTab>("env");
 
   const owners = useMemo(
     () => [...new Set(admin.repos.map(repoOwner))].sort(),
     [admin.repos]
   );
-  const query = search.trim().toLowerCase();
-  const matches = admin.repos
-    .filter((repo) => owner === "all" || repoOwner(repo) === owner)
-    .filter((repo) => repo.full_name.toLowerCase().includes(query))
-    .sort((a, b) => a.full_name.localeCompare(b.full_name));
-  const connected = matches.filter((repo) => !repo.is_hidden);
-  const removed = matches.filter((repo) => repo.is_hidden);
-  const removedTotal = admin.repos.filter((repo) => repo.is_hidden).length;
-  const ownerConnectedCount = admin.repos.filter(
-    (repo) => repoOwner(repo) === owner && !repo.is_hidden
-  ).length;
+  const { query, connected, removed, removedTotal, ownerConnectedCount } =
+    filterRepositories(admin.repos, { owner, search });
+  const openSettings = (repo: Repo) => {
+    setSettingsTab("env");
+    setSettingsRepoId(repo.id);
+  };
+  const renderRow = (repo: Repo) => (
+    <RepositoryRow
+      key={repo.id}
+      repo={repo}
+      pending={admin.pendingIds.has(repo.id)}
+      onToggle={(item) => void admin.toggleHidden(item)}
+      onOpenSettings={openSettings}
+    />
+  );
   const { githubSetup } = admin;
 
   return (
@@ -184,9 +120,11 @@ export function RepositoriesSection() {
           </select>
         ) : null}
         {owner !== "all" && ownerConnectedCount > 0 ? (
-          <RemoveOwnerButton
-            owner={owner}
-            count={ownerConnectedCount}
+          <ConfirmRemoveButton
+            label={`Remove all from ${owner}`}
+            title={`Remove all ${ownerConnectedCount} ${ownerConnectedCount === 1 ? "repository" : "repositories"} from ${owner}?`}
+            confirmLabel={`Remove ${ownerConnectedCount} ${ownerConnectedCount === 1 ? "repository" : "repositories"}`}
+            disabled={admin.removingOwner}
             onConfirm={() => void admin.removeOwner(owner)}
           />
         ) : null}
@@ -220,13 +158,7 @@ export function RepositoriesSection() {
                 : "No connected repositories yet. Sync GitHub to import them."}
             </li>
           ) : (
-            connected.map((repo) => (
-              <RepositoryRow
-                key={repo.id}
-                repo={repo}
-                onToggle={(item) => void admin.toggleHidden(item)}
-              />
-            ))
+            connected.map(renderRow)
           )}
         </ul>
       )}
@@ -235,16 +167,21 @@ export function RepositoriesSection() {
         <section className="space-y-2">
           <h2 className="ui-section-title">Removed repositories</h2>
           <ul aria-label="Removed repositories" className="border-border rounded-md border">
-            {removed.map((repo) => (
-              <RepositoryRow
-                key={repo.id}
-                repo={repo}
-                onToggle={(item) => void admin.toggleHidden(item)}
-              />
-            ))}
+            {removed.map(renderRow)}
           </ul>
         </section>
       ) : null}
+
+      {/* Control mounts this provider in its shell; Settings needs its own
+          for the drawer's restart action. */}
+      <SandboxLaunchProvider>
+        <ProjectSettingsDrawer
+          repoId={settingsRepoId}
+          tab={settingsTab}
+          onTabChange={setSettingsTab}
+          onClose={() => setSettingsRepoId(null)}
+        />
+      </SandboxLaunchProvider>
     </div>
   );
 }

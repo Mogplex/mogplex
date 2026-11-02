@@ -43,7 +43,6 @@ describe("app navigation", () => {
     expect(control?.match).toEqual([
       "/acme/control",
       "/acme/projects/workspace",
-      "/acme/workspaces",
     ]);
   });
 

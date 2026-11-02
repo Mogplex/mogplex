@@ -89,6 +89,40 @@ test("environment variables open from the project menu, stay masked, and save wi
   });
 });
 
+test("after a save the table shows the values the server stored", async ({
+  page,
+}) => {
+  const { drawer } = await openProjectSettings(page, "Environment variables");
+  let stored: Record<string, unknown> | null = null;
+  await page.route("**/api/repos**", (route) => {
+    if (route.request().method() !== "PATCH")
+      return stored ? fulfillJson(route, [stored]) : route.fallback();
+    const body = route.request().postDataJSON() as RepoPatch;
+    // The server normalizes values; the drawer must not keep the draft.
+    stored = {
+      ...body,
+      full_name: "acme/widgets",
+      owner: "acme",
+      name: "widgets",
+      is_hidden: false,
+      sandbox_env_vars: {
+        API_URL: "https://stored.example.test",
+        TOKEN: "s3cret",
+      },
+    };
+    return fulfillJson(route, stored);
+  });
+  await drawer
+    .getByLabel("API_URL value", { exact: true })
+    .fill("'https://stored.example.test'");
+  await drawer.getByRole("button", { name: "Save variables" }).click();
+
+  await expect(page.getByText("Settings saved", { exact: true })).toBeVisible();
+  await expect(drawer.getByLabel("API_URL value", { exact: true })).toHaveValue(
+    "https://stored.example.test"
+  );
+});
+
 test("an unparseable .env line shows an error and keeps the table unchanged", async ({
   page,
 }) => {

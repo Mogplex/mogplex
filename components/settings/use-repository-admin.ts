@@ -13,23 +13,20 @@ import {
   presentGithubSetup,
   presentRepoSyncFailure,
 } from "@/lib/activation/setup-state";
+import { repoOwner } from "@/lib/settings/repository-filter";
 import type { Repo } from "@/lib/types";
 
-/** Owner login for grouping and bulk removal. */
-export function repoOwner(repo: Repo) {
-  return repo.owner || repo.full_name.split("/")[0] || "owner";
-}
-
-/**
- * Repository admin for Settings: GitHub sync plus remove/restore of
- * connected repositories, against the shared repos cache.
- */
 function errorMessage(err: unknown) {
   return err instanceof Error
     ? err.message
     : "Could not update repository visibility. Try again.";
 }
 
+/**
+ * Repository admin for Settings: GitHub sync plus remove/restore of
+ * connected repositories, against the shared repos cache. `pendingIds` holds
+ * repositories with a visibility write in flight so rows can't double-submit.
+ */
 export function useRepositoryAdmin() {
   const activeTeamId = useActiveTeamId();
   const { user } = useUser();
@@ -37,6 +34,21 @@ export function useRepositoryAdmin() {
   const { repos, isLoading, error, mutate } = useRepos({ showHidden: true });
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [pendingIds, setPendingIds] = useState<ReadonlySet<string>>(
+    () => new Set()
+  );
+  const [removingOwner, setRemovingOwner] = useState(false);
+
+  const markPending = useCallback((ids: string[], pending: boolean) => {
+    setPendingIds((current) => {
+      const next = new Set(current);
+      for (const id of ids) {
+        if (pending) next.add(id);
+        else next.delete(id);
+      }
+      return next;
+    });
+  }, []);
 
   const sync = useCallback(async () => {
     setSyncing(true);
@@ -116,6 +128,7 @@ export function useRepositoryAdmin() {
   const toggleHidden = useCallback(
     async (repo: Repo) => {
       const restoring = Boolean(repo.is_hidden);
+      markPending([repo.id], true);
       try {
         await setHidden(repo, !restoring);
         toast({
@@ -130,9 +143,11 @@ export function useRepositoryAdmin() {
           description: errorMessage(err),
           variant: "destructive",
         });
+      } finally {
+        markPending([repo.id], false);
       }
     },
-    [setHidden]
+    [markPending, setHidden]
   );
 
   const removeOwner = useCallback(
@@ -141,9 +156,15 @@ export function useRepositoryAdmin() {
         (repo) => repoOwner(repo) === owner && !repo.is_hidden
       );
       if (targets.length === 0) return;
+      const ids = targets.map((repo) => repo.id);
+      setRemovingOwner(true);
+      markPending(ids, true);
       const results = await Promise.allSettled(
         targets.map((repo) => setHidden(repo, true))
-      );
+      ).finally(() => {
+        setRemovingOwner(false);
+        markPending(ids, false);
+      });
       const failures = results.filter(
         (r): r is PromiseRejectedResult => r.status === "rejected"
       );
@@ -162,7 +183,7 @@ export function useRepositoryAdmin() {
             }
       );
     },
-    [repos, setHidden]
+    [markPending, repos, setHidden]
   );
 
   return {
@@ -175,5 +196,7 @@ export function useRepositoryAdmin() {
     sync,
     toggleHidden,
     removeOwner,
+    pendingIds,
+    removingOwner,
   };
 }
