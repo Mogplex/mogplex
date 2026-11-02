@@ -204,12 +204,17 @@ function replacedSettings(row: SettingsRow, updates: SettingsUpdates) {
     if (saved !== null && saved !== "" && saved !== updates[column])
       replaced[name] = saved;
   }
-  const portPinned = row.dev_port_auto === false;
-  const portChanges =
-    updates.dev_port_auto === true ||
-    (updates.dev_port !== undefined && updates.dev_port !== row.dev_port);
-  if (portPinned && portChanges) replaced.devPort = row.dev_port;
+  if (pinnedPortReplaced(row, updates)) replaced.devPort = row.dev_port;
   return replaced;
+}
+
+/** Whether the update clears or changes a port the operator pinned. */
+function pinnedPortReplaced(row: SettingsRow, updates: SettingsUpdates) {
+  if (row.dev_port_auto !== false || row.dev_port === null) return false;
+  return (
+    updates.dev_port_auto === true ||
+    (updates.dev_port !== undefined && updates.dev_port !== row.dev_port)
+  );
 }
 
 /**
@@ -217,10 +222,14 @@ function replacedSettings(row: SettingsRow, updates: SettingsUpdates) {
  * later boot, so this guard and the timeline entry for each save are what
  * stand between a mistaken or injected command and the next boot. Runtime and
  * root directory are closed, validated choices that setup itself has to
- * correct, so changing them only shows up in `replaced`. There is
- * deliberately no operator approval step: the sandbox is the trust boundary,
- * and Control can already commit to the repository itself, which persists
- * further than a saved command.
+ * correct, so changing them only shows up in `replaced`.
+ *
+ * `replace` is the model's assertion, not an enforced operator approval, for
+ * these settings and for changing or deleting a stored variable alike. That
+ * is a product decision: Control's project saves run without an approval
+ * step, the same default as connection tools. What backs it is the guard
+ * itself, the compare-and-swap, the redacted audit row, and a timeline entry
+ * that names every replaced or deleted value and shows saved commands.
  */
 const REPLACE_GUARDED = new Set(["installCommand", "devCommand", "devPort"]);
 

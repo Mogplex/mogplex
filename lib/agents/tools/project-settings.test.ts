@@ -154,6 +154,15 @@ describe("project settings tools", () => {
     });
   });
 
+  it("should not ask to replace a pinned port that has no stored number", async () => {
+    const { writes } = installRepo({ dev_port: null, dev_port_auto: false });
+
+    expect(
+      await tools().project_settings_update.execute({ devPort: 5173 })
+    ).toMatchObject({ ok: true, settings: { devPort: 5173 } });
+    expect(writes).toEqual([{ dev_port: 5173, dev_port_auto: false }]);
+  });
+
   it("should report a pinned dev port as the one boots use", async () => {
     installRepo({ dev_port: 8000, dev_port_auto: false });
 

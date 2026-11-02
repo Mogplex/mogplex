@@ -102,7 +102,7 @@ function envSaveBody(output: Record<string, unknown> | null) {
   const name = typeof output?.name === "string" ? output.name : "variable";
   if (output?.deleted === true) return `Deleted saved variable ${name}`;
   if (output?.replaced === true) return `Replaced saved variable ${name}`;
-  if (output?.unchanged === true) return `${name} was not set`;
+  if (output?.unchanged === true) return `${name} was already unset`;
   return `Saved variable ${name}`;
 }
 
