@@ -83,6 +83,24 @@ describe("saved MCP permission controls", () => {
     ).toThrow("Correct the tool permissions");
   });
 
+  it("should trim and dedupe the allowed and blocked tool lists when saving", () => {
+    const payload = buildPayload({
+      ...serverToForm(null),
+      transport: "http",
+      extraText: JSON.stringify({
+        cwd: "/repo",
+        enabled_tools: [" search ", "search", " ", "publish "],
+        disabled_tools: [" publish ", "", "publish"],
+      }),
+    });
+
+    expect(payload.extra).toEqual({
+      cwd: "/repo",
+      enabled_tools: ["search", "publish"],
+      disabled_tools: ["publish"],
+    });
+  });
+
   it("keeps CLI metadata and strict permissions through browser and API serialization", () => {
     const extra = {
       cwd: "/repo",

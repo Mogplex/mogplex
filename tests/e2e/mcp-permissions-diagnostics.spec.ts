@@ -168,6 +168,38 @@ test("allowlist editing supports keyboard newlines and never makes an empty allo
   });
 });
 
+test("Save works straight after editing an untidy tool list", async ({
+  page,
+}) => {
+  // Tall enough that the dialog does not scroll, so any shrink moves Save.
+  await page.setViewportSize({ width: 1280, height: 2400 });
+  const fixture = await setup(page);
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  await page
+    .getByLabel("Blocked tools (one name per line)")
+    .fill(" publish \n\n\n\n\n\n\npublish\n \ndelete");
+  const save = page.getByRole("button", { name: "Save changes" });
+  await page
+    .getByRole("dialog")
+    .evaluate((dialog) =>
+      Promise.all(
+        dialog
+          .getAnimations({ subtree: true })
+          .map((animation) => animation.finished)
+      )
+    );
+  const box = await save.boundingBox();
+  expect(box).not.toBeNull();
+  // Press and release where Save is, as a person does; the press moves focus
+  // out of the list, which must not shift Save before the release.
+  await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+  await page.mouse.down();
+  await page.mouse.up();
+  expect(await waitForSave(fixture.saved, 0)).toMatchObject({
+    extra: { disabled_tools: ["publish", "delete"] },
+  });
+});
+
 test("invalid saved permissions stay blocked and can be repaired without changing CLI settings", async ({
   page,
 }) => {
