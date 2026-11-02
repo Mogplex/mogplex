@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { defineTool } from "./helpers";
 import {
@@ -256,6 +256,84 @@ describe("wrapWithPolicy approval gate", () => {
     expect(result).toEqual({ ok: true });
     expect(calls).toHaveLength(1);
     expect(resolved).toEqual(["tc-5"]);
+  });
+});
+
+describe("audit log redaction", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("should keep an environment variable value out of the audit log", async () => {
+    const logged: string[] = [];
+    vi.spyOn(console, "log").mockImplementation((...args: unknown[]) => {
+      logged.push(args.map(String).join(" "));
+    });
+    const { deps } = makeDeps();
+    const { tool } = fakeTool();
+    const wrapped = wrapWithPolicy(
+      "project_env_set",
+      tool,
+      ctx,
+      deps
+    ) as unknown as WrappedTool;
+
+    await wrapped.execute({ name: "OPENAI_API_KEY", value: "sk-live-abc123" });
+
+    const audit = logged.filter((line) =>
+      line.startsWith("[orchestrator:audit]")
+    );
+    expect(audit).toHaveLength(1);
+    expect(audit[0]).toContain("OPENAI_API_KEY");
+    expect(audit[0]).not.toContain("sk-live-abc123");
+  });
+
+  it("should keep a delete visible in the audit log", async () => {
+    const logged: string[] = [];
+    vi.spyOn(console, "log").mockImplementation((...args: unknown[]) => {
+      logged.push(args.map(String).join(" "));
+    });
+    const { deps } = makeDeps();
+    const { tool } = fakeTool();
+    const wrapped = wrapWithPolicy(
+      "project_env_set",
+      tool,
+      ctx,
+      deps
+    ) as unknown as WrappedTool;
+
+    await wrapped.execute({ name: "PORT", value: null, replace: true });
+
+    const audit = logged.find((line) =>
+      line.startsWith("[orchestrator:audit]")
+    );
+    expect(audit).toContain('"value":null');
+  });
+
+  it("should keep a saved command's text but not its inline credential", async () => {
+    const logged: string[] = [];
+    vi.spyOn(console, "log").mockImplementation((...args: unknown[]) => {
+      logged.push(args.map(String).join(" "));
+    });
+    const { deps } = makeDeps();
+    const { tool } = fakeTool();
+    const wrapped = wrapWithPolicy(
+      "project_settings_update",
+      tool,
+      ctx,
+      deps
+    ) as unknown as WrappedTool;
+
+    await wrapped.execute({
+      installCommand:
+        "npm config set //registry.npmjs.org/:_authToken=opaque-npm-value && npm ci",
+      devCommand: "npm run dev",
+    });
+
+    const audit = logged.find((line) =>
+      line.startsWith("[orchestrator:audit]")
+    );
+    expect(audit).toContain("_authToken=[redacted] && npm ci");
+    expect(audit).toContain("npm run dev");
+    expect(audit).not.toContain("opaque-npm-value");
   });
 });
 

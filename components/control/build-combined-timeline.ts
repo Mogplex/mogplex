@@ -8,6 +8,7 @@ import {
   sanitizeAgentUserFacingError,
   sanitizeAgentUserFacingText,
 } from "@/lib/agents/user-facing-output";
+import { redactSecretsInText } from "@/lib/ai-telemetry";
 import type { TimelineEvent } from "@/lib/control/types";
 import {
   toolActivityLabel,
@@ -59,12 +60,139 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
+/**
+ * Saves to the project's stored setup outlive the session, so the timeline
+ * names what changed and says when a saved value was deleted or replaced.
+ * Saved commands run on every later boot, so their text is shown too
+ * (secrets redacted); variable values never are.
+ */
+const SETTING_NAMES: Partial<Record<string, string>> = {
+  devCommand: "dev command",
+  devPort: "dev port",
+  installCommand: "install command",
+  rootDirectory: "root directory",
+  runtime: "runtime",
+};
+
+const SHOWN_SETTINGS = [
+  "runtime",
+  "rootDirectory",
+  "installCommand",
+  "devCommand",
+  "devPort",
+] as const;
+const SHOWN_COMMAND_LENGTH = 180;
+// What a null in each setting means on the next boot.
+const NULL_SETTING: Record<(typeof SHOWN_SETTINGS)[number], string> = {
+  runtime: "detected",
+  rootDirectory: "repo root",
+  installCommand: "detected",
+  devCommand: "detected",
+  devPort: "detected",
+};
+
+/** Redacted command text; a cut-off command ends with an ellipsis. */
+function shownCommandText(command: string) {
+  const text = redactSecretsInText(command);
+  return text.length > SHOWN_COMMAND_LENGTH
+    ? `${text.slice(0, SHOWN_COMMAND_LENGTH)}…`
+    : text;
+}
+
+function settingsSaveBody(
+  output: Record<string, unknown> | null,
+  input: unknown
+) {
+  const replaced = Object.keys(asRecord(output?.replaced) ?? {}).map(
+    (key) => SETTING_NAMES[key] ?? key
+  );
+  const heading =
+    replaced.length > 0
+      ? `Replaced saved project settings: ${replaced.join(", ")}`
+      : "Project settings saved";
+  return [
+    heading,
+    ...settingLines(input, output?.settings, output?.replaced),
+  ].join(" · ");
+}
+
+/**
+ * Each setting a save carries, with command text redacted. When the tool
+ * returned the saved settings, show those: they are normalized the way the
+ * next boot reads them. A replaced setting also shows the value it replaced.
+ */
+function settingLines(values: unknown, saved?: unknown, replaced?: unknown) {
+  const record = asRecord(values) ?? {};
+  const stored = asRecord(saved);
+  const previous = asRecord(replaced) ?? {};
+  const show = (key: (typeof SHOWN_SETTINGS)[number], value: unknown) =>
+    value === null || value === undefined
+      ? NULL_SETTING[key]
+      : shownCommandText(String(value));
+  return SHOWN_SETTINGS.flatMap((key) => {
+    if (record[key] === undefined) return [];
+    const value = stored && key in stored ? stored[key] : record[key];
+    // A replaced value shows what it overwrote, so the change reads at a glance.
+    const before = key in previous ? `${show(key, previous[key])} → ` : "";
+    return [`${SETTING_NAMES[key]}: ${before}${show(key, value)}`];
+  });
+}
+
+/**
+ * The detail under a failed tool. A settings save refused by the replace
+ * guard carries an instruction for the model; the operator sees why instead.
+ */
+function failureLog(toolName: string, output: Record<string, unknown> | null) {
+  if (toolName === "project_settings_update" && asRecord(output?.saved))
+    return "Already saved. Control changes a saved setting only after you agree.";
+  return controlToolFailureDetail(output);
+}
+
+/** A refused settings save shows what it proposed and what is saved. */
+function failureBody(
+  toolName: string,
+  output: Record<string, unknown> | null,
+  input: unknown
+) {
+  const body = toolFailureBody(toolName, output);
+  if (toolName !== "project_settings_update") return body;
+  const proposed = settingLines(input);
+  const saved = settingLines(output?.saved);
+  return [
+    body,
+    ...(proposed.length > 0 ? [`proposed ${proposed.join(" · ")}`] : []),
+    ...(saved.length > 0 ? [`saved ${saved.join(" · ")}`] : []),
+  ].join(" · ");
+}
+
+function envSaveBody(output: Record<string, unknown> | null) {
+  const name = typeof output?.name === "string" ? output.name : "variable";
+  if (output?.deleted === true) return `Deleted saved variable ${name}`;
+  if (output?.replaced === true) return `Replaced saved variable ${name}`;
+  if (output?.unchanged === true) return `${name} was already unset`;
+  return `Saved variable ${name}`;
+}
+
+const PROJECT_SAVE_BODIES: Partial<
+  Record<
+    string,
+    (output: Record<string, unknown> | null, input: unknown) => string
+  >
+> = {
+  project_env_set: envSaveBody,
+  project_settings_update: settingsSaveBody,
+};
+
 function toolProgressBody(
   toolName: string,
   state: string,
-  output: Record<string, unknown> | null
+  output: Record<string, unknown> | null,
+  input?: unknown
 ) {
   const complete = state === "output-available";
+  const projectSave = PROJECT_SAVE_BODIES[toolName];
+  if (projectSave)
+    return complete ? projectSave(output, input) : toolActivityLabel(toolName);
   if (toolName === "plan_mission")
     return complete ? "Plan saved" : "Saving plan";
   if (toolName === "sandbox_start") {
@@ -87,6 +215,14 @@ function toolProgressBody(
   return null;
 }
 
+const FAILURE_LABELS: Partial<Record<string, string>> = {
+  spawn_worktree: "Worktree creation failed",
+  spawn_subagent: "Worker start failed",
+  plan_mission: "Plan could not be saved",
+  project_env_set: "Variable save failed",
+  project_settings_update: "Project settings save failed",
+};
+
 function toolFailureBody(
   toolName: string,
   output: Record<string, unknown> | null = null
@@ -100,10 +236,7 @@ function toolFailureBody(
     }
     return "Sandbox startup failed.";
   }
-  if (toolName === "spawn_worktree") return "Worktree creation failed";
-  if (toolName === "spawn_subagent") return "Worker start failed";
-  if (toolName === "plan_mission") return "Plan could not be saved";
-  return `${toolName} failed`;
+  return FAILURE_LABELS[toolName] ?? `${toolName} failed`;
 }
 
 function toolDetails(toolName: string, input: unknown) {
@@ -234,15 +367,18 @@ export function buildCombinedTimeline(
               kind: "fail",
               label,
               time: "now",
-              body: toolFailureBody(toolName, output),
-              log: sanitizeAgentUserFacingError(
-                controlToolFailureDetail(output)
-              ),
+              body: failureBody(toolName, output, toolInput),
+              log: sanitizeAgentUserFacingError(failureLog(toolName, output)),
             });
             continue;
           }
 
-          const progressBody = toolProgressBody(toolName, state, output);
+          const progressBody = toolProgressBody(
+            toolName,
+            state,
+            output,
+            toolInput
+          );
           result.push(
             progressBody
               ? {

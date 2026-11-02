@@ -53,6 +53,7 @@ import { FILESYSTEM_TOOLS } from "./tools/filesystem";
 import { GIT_TOOLS } from "./tools/git";
 import { EXECUTION_TOOLS } from "./tools/execution";
 import { controlDecisionScope } from "./decision-scope";
+import { createProjectSettingsTools } from "@/lib/agents/tools/project-settings";
 import { MCP_TOOLS } from "./tools/mcp";
 import { INFRASTRUCTURE_TOOLS } from "./tools/infrastructure";
 import { DELIVERY_TOOLS } from "./tools/delivery";
@@ -119,6 +120,25 @@ const skillToolsByContext = new WeakMap<
   OrchestratorToolContext,
   Record<string, Tool>
 >();
+
+const projectSettingsToolsByContext = new WeakMap<
+  OrchestratorToolContext,
+  Record<string, Tool>
+>();
+
+/** Project settings tools for the server-selected repository only. */
+function projectSettingsToolsFor(ctx: OrchestratorToolContext) {
+  if (!ctx.repoId) return null;
+  const existing = projectSettingsToolsByContext.get(ctx);
+  if (existing) return existing;
+  const tools: Record<string, Tool> = createProjectSettingsTools({
+    userId: ctx.userId,
+    repoId: ctx.repoId,
+    teamId: ctx.teamId ?? null,
+  });
+  projectSettingsToolsByContext.set(ctx, tools);
+  return tools;
+}
 
 /** Both skill tools share one catalog read per turn. */
 function skillToolsFor(ctx: OrchestratorToolContext) {
@@ -256,6 +276,13 @@ function buildToolForDef(
   }
   if (def.name === "list_agents") {
     return createListAgentsTool(ctx);
+  }
+  if (
+    def.name === "project_settings" ||
+    def.name === "project_settings_update" ||
+    def.name === "project_env_set"
+  ) {
+    return projectSettingsToolsFor(ctx)?.[def.name] ?? null;
   }
 
   return null;

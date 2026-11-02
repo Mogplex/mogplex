@@ -29,6 +29,29 @@ export const INFRASTRUCTURE_TOOLS: OrchestratorToolDef[] = [
     implemented: true,
   },
   {
+    name: "project_settings",
+    category: "infrastructure",
+    description:
+      "Read the project's saved install/dev commands, port, root directory, and env var names",
+    access: "read",
+    implemented: true,
+  },
+  {
+    name: "project_settings_update",
+    category: "infrastructure",
+    description:
+      "Save working install/dev commands, port, or root directory for future boots",
+    access: "mutation",
+    implemented: true,
+  },
+  {
+    name: "project_env_set",
+    category: "infrastructure",
+    description: "Save one non-secret environment variable on the project",
+    access: "mutation",
+    implemented: true,
+  },
+  {
     name: "sandbox_pause",
     category: "infrastructure",
     description: "Pause a sandbox to conserve resources",

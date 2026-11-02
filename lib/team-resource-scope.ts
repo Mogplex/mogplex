@@ -41,7 +41,23 @@ export async function resolveProductResourceScope(input: {
   requiredCapability?: Capability;
   resolveActiveTeamCapabilities?: typeof resolveActiveTeamCapabilities;
 }): Promise<ProductResourceScopeResolution> {
-  const productTeamId = readActiveTeamIdHeader(input.request);
+  return resolveProductResourceScopeForTeam({
+    ...input,
+    productTeamId: readActiveTeamIdHeader(input.request),
+  });
+}
+
+/**
+ * The scope for an already-known active team id (null for personal), for
+ * callers such as Control's tools that receive the team outside a request.
+ */
+export async function resolveProductResourceScopeForTeam(input: {
+  userId: string;
+  productTeamId: string | null | undefined;
+  requiredCapability?: Capability;
+  resolveActiveTeamCapabilities?: typeof resolveActiveTeamCapabilities;
+}): Promise<ProductResourceScopeResolution> {
+  const { productTeamId } = input;
   if (!productTeamId) {
     return {
       ok: true,

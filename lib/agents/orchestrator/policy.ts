@@ -5,6 +5,7 @@ import {
   resolveControlApproval,
   type CreateControlApprovalInput,
 } from "@/lib/control/approvals-store";
+import { redactSecretsInText } from "@/lib/ai-telemetry";
 import { isRemoteDestructiveCommand } from "@/lib/decisions/shell";
 import { controlDecisionScope } from "./decision-scope";
 import {
@@ -323,7 +324,10 @@ export function wrapWithPolicy(
         userId: ctx.userId,
         toolName,
         toolCallId: options.toolCallId,
-        toolInput: sanitizeInputForAudit(input) as Record<string, unknown>,
+        toolInput: sanitizeToolInputForAudit(toolName, input) as Record<
+          string,
+          unknown
+        >,
         summary,
         runId: ctx.missionId ?? null,
         aiCallId: ctx.aiCallId ?? null,
@@ -358,7 +362,7 @@ export function wrapWithPolicy(
         input:
           def.access === "approval"
             ? "[redacted for approval tools]"
-            : sanitizeInputForAudit(input),
+            : sanitizeToolInputForAudit(toolName, input),
       };
       logAuditEntry(auditEntry);
 
@@ -406,6 +410,35 @@ export function wrapWithPolicy(
       )(input, options);
     },
   });
+}
+
+/**
+ * Inputs whose ordinary field names carry values that may be secrets, so the
+ * key-name pattern in sanitizeInputForAudit cannot catch them. A variable
+ * value is hidden whole; a saved command keeps its text with any inline
+ * credential redacted, so the row still records what will run on each boot.
+ */
+const AUDIT_REDACTED_FIELDS: Readonly<
+  Record<string, Readonly<Record<string, "whole" | "secrets">>>
+> = {
+  project_env_set: { value: "whole" },
+  project_settings_update: { installCommand: "secrets", devCommand: "secrets" },
+};
+
+/** Audit-safe copy of one tool's input. */
+export function sanitizeToolInputForAudit(toolName: string, input: unknown) {
+  const sanitized = sanitizeInputForAudit(input);
+  const fields = AUDIT_REDACTED_FIELDS[toolName];
+  if (!fields || !sanitized || typeof sanitized !== "object") return sanitized;
+  const redacted = { ...(sanitized as Record<string, unknown>) };
+  for (const [field, mode] of Object.entries(fields)) {
+    const value = redacted[field];
+    // Keep null visible: for project_env_set it records a delete.
+    if (typeof value !== "string" || !value) continue;
+    redacted[field] =
+      mode === "whole" ? "[redacted]" : redactSecretsInText(value);
+  }
+  return redacted;
 }
 
 /**
