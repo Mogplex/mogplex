@@ -1,125 +1,8 @@
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
-import { presetForRole } from "@/lib/team-capabilities";
-import { createProjectSettingsTools } from "./project-settings";
-
-const REPO_ID = "00000000-0000-4000-8000-000000000001";
-const USER_ID = "user-1";
-
-type Row = Record<string, unknown>;
-type Filter = { op: "eq" | "is"; column: string; value: unknown };
-
-let supabaseAdmin: typeof import("@/lib/supabase/admin").supabaseAdmin;
-let originalFrom: typeof supabaseAdmin.from;
-
-beforeAll(async () => {
-  process.env.NEXT_PUBLIC_SUPABASE_URL ??= "https://example.supabase.co";
-  process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
-  ({ supabaseAdmin } = await import("@/lib/supabase/admin"));
-  originalFrom = supabaseAdmin.from.bind(supabaseAdmin);
-});
-
-afterEach(() => {
-  Object.defineProperty(supabaseAdmin, "from", {
-    configurable: true,
-    writable: true,
-    value: originalFrom,
-  });
-});
-
-const matches = (row: Row, filters: Filter[]) =>
-  filters.every(({ op, column, value }) => {
-    const actual = row[column] ?? null;
-    if (op === "is") return actual === value;
-    return column === "sandbox_env_vars"
-      ? JSON.stringify(actual) === value
-      : actual === value;
-  });
-
-/** One repos row behind the database boundary; records every write. */
-function installRepo(
-  overrides: Row = {},
-  beforeWrite: (row: Row) => void = () => {}
-) {
-  const row: Row = {
-    id: REPO_ID,
-    owner_type: "user",
-    owner_user_id: USER_ID,
-    product_team_id: null,
-    runtime: "node22",
-    root_directory: null,
-    install_command: null,
-    dev_command: null,
-    dev_port: 3000,
-    env_sync_mode: "sandbox-only",
-    sandbox_env_vars: { DATABASE_URL: "postgres://owner@db/app" },
-    ...overrides,
-  };
-  const writes: Row[] = [];
-  const reads = { count: 0 };
-  const query = () => {
-    const filters: Filter[] = [];
-    let patch: Row | null = null;
-    const builder = {
-      select: () => builder,
-      update: (next: Row) => {
-        patch = next;
-        return builder;
-      },
-      eq: (column: string, value: unknown) => {
-        filters.push({ op: "eq", column, value });
-        return builder;
-      },
-      is: (column: string, value: unknown) => {
-        filters.push({ op: "is", column, value });
-        return builder;
-      },
-      maybeSingle: async () => {
-        if (patch) beforeWrite(row);
-        else reads.count += 1;
-        if (!matches(row, filters)) return { data: null, error: null };
-        if (patch) {
-          writes.push(patch);
-          Object.assign(row, patch);
-        }
-        return { data: { ...row }, error: null };
-      },
-    };
-    return builder;
-  };
-  Object.defineProperty(supabaseAdmin, "from", {
-    configurable: true,
-    writable: true,
-    value: query,
-  });
-  return { row, writes, reads };
-}
-
-type ToolRecord = Record<
-  string,
-  {
-    execute: (input: Record<string, unknown>) => Promise<Row>;
-    inputSchema: { safeParse: (input: unknown) => { success: boolean } };
-  }
->;
-
-function tools(
-  teamId: string | null = null,
-  role: "developer" | "viewer" | "lookup-failed" = "developer"
-) {
-  return createProjectSettingsTools(
-    { userId: USER_ID, repoId: REPO_ID, teamId },
-    {
-      resolveTeam: async () =>
-        role === "lookup-failed"
-          ? { ok: false, status: 500, error: "Internal server error" }
-          : {
-              ok: true,
-              teamId: teamId ?? "",
-              capabilities: presetForRole(role),
-            },
-    }
-  ) as unknown as ToolRecord;
-}
+import { describe, expect, it } from "vitest";
+import {
+  installRepo,
+  tools,
+} from "../../../tests/support/project-settings-fixture";
 
 describe("project settings tools", () => {
   it("should report variable names without their values", async () => {
@@ -163,32 +46,6 @@ describe("project settings tools", () => {
     ]);
   });
 
-  it("should add a variable without dropping the ones already saved", async () => {
-    const { row } = installRepo();
-
-    const result = await tools().project_env_set.execute({
-      name: "NODE_ENV",
-      value: "development",
-    });
-
-    expect(result).toMatchObject({ ok: true, name: "NODE_ENV" });
-    expect(row.sandbox_env_vars).toEqual({
-      DATABASE_URL: "postgres://owner@db/app",
-      NODE_ENV: "development",
-    });
-  });
-
-  it("should reject names a shell or the stored object cannot hold", async () => {
-    const { writes } = installRepo();
-
-    for (const name of ["1PORT", "MY-VAR", "__proto__", " "]) {
-      expect(
-        await tools().project_env_set.execute({ name, value: "x" })
-      ).toHaveProperty("error");
-    }
-    expect(writes).toEqual([]);
-  });
-
   it("should refuse a team project to a member without project write access", async () => {
     const { writes } = installRepo({
       owner_type: "team",
@@ -223,7 +80,8 @@ describe("project settings tools", () => {
     installRepo({ owner_user_id: "someone-else" });
 
     expect(await tools().project_settings.execute({})).toEqual({
-      error: "Project not found.",
+      error:
+        "Project not found in your personal projects. If it belongs to a team, select that team and try again.",
     });
   });
 
@@ -247,85 +105,12 @@ describe("project settings tools", () => {
     ).toEqual({ error: "Could not check your team access. Try again." });
   });
 
-  it("should save the first variable on a project that has none", async () => {
-    const { row } = installRepo({ sandbox_env_vars: null });
-
-    expect(
-      await tools().project_env_set.execute({ name: "PORT", value: "8000" })
-    ).toMatchObject({ ok: true });
-    expect(row.sandbox_env_vars).toEqual({ PORT: "8000" });
-  });
-
-  it("should not overwrite variables the operator saved after the read", async () => {
-    const { row } = installRepo({}, (current) => {
-      current.sandbox_env_vars = { OPERATOR_KEY: "saved-meanwhile" };
-    });
-
-    expect(
-      await tools().project_env_set.execute({ name: "PORT", value: "8000" })
-    ).toEqual({ error: "Project variables changed while saving. Try again." });
-    expect(row.sandbox_env_vars).toEqual({ OPERATOR_KEY: "saved-meanwhile" });
-  });
-
   it("should reject a dev port outside the valid range", () => {
     const schema = tools().project_settings_update.inputSchema;
 
     expect(schema.safeParse({ devPort: 0 }).success).toBe(false);
     expect(schema.safeParse({ devPort: 70_000 }).success).toBe(false);
     expect(schema.safeParse({ devPort: 5173 }).success).toBe(true);
-  });
-
-  it("should refuse names that change how every sandbox program starts", async () => {
-    const { writes } = installRepo();
-
-    for (const name of [
-      "NODE_OPTIONS",
-      "LD_PRELOAD",
-      "DYLD_INSERT_LIBRARIES",
-      "JAVA_TOOL_OPTIONS",
-      "npm_config_registry",
-      "http_proxy",
-      "GIT_CONFIG_COUNT",
-      "NODE_TLS_REJECT_UNAUTHORIZED",
-      "path",
-      "BASH_ENV",
-    ]) {
-      expect(
-        await tools().project_env_set.execute({ name, value: "x" })
-      ).toEqual({
-        error: `${name} changes how every program in the sandbox starts. Ask the operator to set it in Project settings.`,
-      });
-    }
-    expect(writes).toEqual([]);
-  });
-
-  it("should delete a variable it is given null for", async () => {
-    const { row } = installRepo({
-      sandbox_env_vars: {
-        DATABASE_URL: "postgres://owner@db/app",
-        PORT: "8000",
-      },
-    });
-
-    expect(
-      await tools().project_env_set.execute({
-        name: "PORT",
-        value: null,
-        replace: true,
-      })
-    ).toMatchObject({ ok: true, name: "PORT", deleted: true });
-    expect(row.sandbox_env_vars).toEqual({
-      DATABASE_URL: "postgres://owner@db/app",
-    });
-  });
-
-  it("should not write when deleting a variable that is not set", async () => {
-    const { writes } = installRepo();
-
-    expect(
-      await tools().project_env_set.execute({ name: "PORT", value: null })
-    ).toMatchObject({ ok: true, note: "The variable was not set." });
-    expect(writes).toEqual([]);
   });
 
   it("should turn port detection back on when the port is cleared", async () => {
@@ -349,7 +134,10 @@ describe("project settings tools", () => {
 
     expect(
       await tools().project_settings_update.execute({ devCommand: "make dev" })
-    ).toEqual({ error: "Project not found." });
+    ).toEqual({
+      error:
+        "Project not found in your personal projects. If it belongs to a team, select that team and try again.",
+    });
   });
 
   it("should report a pinned dev port as the one boots use", async () => {
@@ -359,37 +147,6 @@ describe("project settings tools", () => {
       devPort: 8000,
       devPortAuto: false,
     });
-  });
-
-  it("should not replace a stored value unless asked to", async () => {
-    const { row, writes } = installRepo();
-
-    expect(
-      await tools().project_env_set.execute({
-        name: "DATABASE_URL",
-        value: "placeholder",
-      })
-    ).toEqual({
-      error:
-        "DATABASE_URL is already set and its value may be a secret. Ask the operator before changing it, then call again with replace: true.",
-    });
-    expect(writes).toEqual([]);
-    expect(row.sandbox_env_vars).toEqual({
-      DATABASE_URL: "postgres://owner@db/app",
-    });
-  });
-
-  it("should say so when it replaces a stored value", async () => {
-    const { row } = installRepo({ sandbox_env_vars: { PORT: "3000" } });
-
-    expect(
-      await tools().project_env_set.execute({
-        name: "PORT",
-        value: "8000",
-        replace: true,
-      })
-    ).toMatchObject({ ok: true, replaced: true });
-    expect(row.sandbox_env_vars).toEqual({ PORT: "8000" });
   });
 
   it("should save a runtime for future boots", async () => {
@@ -410,48 +167,6 @@ describe("project settings tools", () => {
       tools().project_settings_update.inputSchema.safeParse({ runtime: "ruby" })
         .success
     ).toBe(false);
-  });
-
-  it("should not delete a stored value unless asked to", async () => {
-    const { row, writes } = installRepo();
-
-    expect(
-      await tools().project_env_set.execute({
-        name: "DATABASE_URL",
-        value: null,
-      })
-    ).toEqual({
-      error:
-        "DATABASE_URL is already set and its value may be a secret. Ask the operator before deleting it, then call again with replace: true.",
-    });
-    expect(writes).toEqual([]);
-    expect(row.sandbox_env_vars).toEqual({
-      DATABASE_URL: "postgres://owner@db/app",
-    });
-  });
-
-  it("should store a quoted value the way the operator's editor does", async () => {
-    const { row } = installRepo({ sandbox_env_vars: null });
-
-    await tools().project_env_set.execute({
-      name: "NODE_ENV",
-      value: '"production"',
-    });
-
-    expect(row.sandbox_env_vars).toEqual({ NODE_ENV: "production" });
-  });
-
-  it("should leave other stored values exactly as they were", async () => {
-    const { row } = installRepo({
-      sandbox_env_vars: { QUOTED: '"kept-with-quotes"' },
-    });
-
-    await tools().project_env_set.execute({ name: "PORT", value: "8000" });
-
-    expect(row.sandbox_env_vars).toEqual({
-      QUOTED: '"kept-with-quotes"',
-      PORT: "8000",
-    });
   });
 
   it("should not replace a saved command without the operator's say-so", async () => {
@@ -490,5 +205,41 @@ describe("project settings tools", () => {
     expect(schema.safeParse({ rootDirectory: "my app" }).success).toBe(false);
     expect(schema.safeParse({ rootDirectory: "apps/web" }).success).toBe(true);
     expect(schema.safeParse({ rootDirectory: null }).success).toBe(true);
+  });
+
+  it("should say which team was searched when a team project is missing", async () => {
+    installRepo();
+
+    expect(await tools("team-1").project_settings.execute({})).toEqual({
+      error:
+        "Project not found in the selected team. If it is a personal project or belongs to another team, switch to that scope and try again.",
+    });
+  });
+
+  it("should not overwrite a setting the operator saved after the read", async () => {
+    const { row, writes } = installRepo({}, (current) => {
+      current.dev_command = "make serve";
+    });
+
+    expect(
+      await tools().project_settings_update.execute({
+        devCommand: "npm run dev",
+      })
+    ).toEqual({ error: "Project settings changed while saving. Try again." });
+    expect(writes).toEqual([]);
+    expect(row.dev_command).toBe("make serve");
+  });
+
+  it("should treat an empty saved command as unset", async () => {
+    installRepo({ install_command: "" });
+
+    expect(
+      await tools().project_settings_update.execute({
+        installCommand: "pip install -e .",
+      })
+    ).toMatchObject({
+      ok: true,
+      settings: { installCommand: "pip install -e ." },
+    });
   });
 });

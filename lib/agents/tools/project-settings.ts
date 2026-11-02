@@ -135,6 +135,13 @@ async function resolveScope(
   return { kind: "team", userId: target.userId, productTeamId: target.teamId };
 }
 
+/** Say which projects were searched, so a team/personal mix-up is fixable. */
+function notFoundMessage(scope: ProductResourceScope) {
+  return scope.kind === "team"
+    ? "Project not found in the selected team. If it is a personal project or belongs to another team, switch to that scope and try again."
+    : "Project not found in your personal projects. If it belongs to a team, select that team and try again.";
+}
+
 async function loadSettings(
   target: ProjectSettingsTarget,
   scope: ProductResourceScope
@@ -145,7 +152,7 @@ async function loadSettings(
       scope,
       SETTINGS_COLUMNS
     );
-    return row ?? { error: "Project not found." };
+    return row ?? { error: notFoundMessage(scope) };
   } catch (error) {
     console.error(
       `[control/project-settings] load failed for repo ${target.repoId}:`,
@@ -219,6 +226,12 @@ type SettingsUpdates = ReturnType<typeof normalizeRepoSettingsPatch>;
 /**
  * Saved values this update would change: a set command, directory, runtime,
  * or pinned port being replaced or cleared. Filling an empty one is not.
+ *
+ * Saved commands run on every later boot, so this guard and the timeline
+ * entry for each save are what stand between a mistaken or injected command
+ * and the next boot. There is deliberately no operator approval step: the
+ * sandbox is the trust boundary, and Control can already commit to the
+ * repository itself, which persists further than a saved command.
  */
 function replacedSettings(row: SettingsRow, updates: SettingsUpdates) {
   const replaced: Record<string, string | number | null> = {};
@@ -231,7 +244,8 @@ function replacedSettings(row: SettingsRow, updates: SettingsUpdates) {
   for (const [column, name] of fields) {
     if (!(column in updates)) continue;
     const saved = row[column];
-    if (saved !== null && saved !== updates[column]) replaced[name] = saved;
+    if (saved !== null && saved !== "" && saved !== updates[column])
+      replaced[name] = saved;
   }
   const portPinned = row.dev_port_auto === false;
   const portChanges =
@@ -335,6 +349,13 @@ export function createProjectSettingsTools(
             .update(updates)
             .eq("id", target.repoId);
           query = applyResourceOwnerScope(query, scope);
+          // Never overwrite a setting the operator saved after our read.
+          for (const column of Object.keys(updates) as (keyof SettingsRow &
+            keyof SettingsUpdates)[]) {
+            const saved = row[column] ?? null;
+            query =
+              saved === null ? query.is(column, null) : query.eq(column, saved);
+          }
           const { data, error } = await query
             .select(SETTINGS_COLUMNS)
             .maybeSingle();
@@ -342,7 +363,11 @@ export function createProjectSettingsTools(
             logWriteError("settings update", target.repoId, error);
             return { error: "Could not save project settings." };
           }
-          if (!data) return { error: "Project not found." };
+          if (!data) {
+            return {
+              error: "Project settings changed while saving. Try again.",
+            };
+          }
           return {
             ok: true,
             settings: describeSettings(data as SettingsRow),

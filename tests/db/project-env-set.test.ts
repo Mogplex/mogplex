@@ -117,3 +117,33 @@ test("project_env_set does not overwrite a change saved after its read", async (
   expect(stored).toMatchObject({ OPERATOR: "x" });
   expect(stored).not.toHaveProperty("LATE");
 });
+
+test("project_settings_update matches its read through the real shim and catches a concurrent save", async () => {
+  const update = () =>
+    (
+      createProjectSettingsTools({ userId: owner, repoId })
+        .project_settings_update as unknown as EnvSet
+    ).execute({ devCommand: "npm run dev", devPort: 5173 });
+
+  expect(await update()).toMatchObject({
+    ok: true,
+    settings: { devCommand: "npm run dev", devPort: 5173, devPortAuto: false },
+  });
+
+  await db.query(
+    "update repos set dev_command = null, dev_port_auto = true where id = $1",
+    [repoId]
+  );
+  beforeRepoUpdate = () =>
+    db.query("update repos set dev_command = 'make serve' where id = $1", [
+      repoId,
+    ]);
+  expect(await update()).toEqual({
+    error: "Project settings changed while saving. Try again.",
+  });
+  const stored = await db.query<{ dev_command: string }>(
+    "select dev_command from repos where id = $1",
+    [repoId]
+  );
+  expect(stored.rows[0]?.dev_command).toBe("make serve");
+});
