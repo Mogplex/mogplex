@@ -206,7 +206,7 @@ export function TimelineCard({ event, eventIndex, getWorktree, onApprove, onTool
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-3">
           <span className="text-foreground">{event.body}</span>
-          <span className="text-muted-foreground text-xs">{running ? "Running" : event.state === "done" ? "Complete" : event.state === "running" ? "Interrupted" : ""}</span>
+          <span className="text-muted-foreground text-xs">{running ? "Running" : event.state === "done" ? "Complete" : event.state === "running" ? "Status unconfirmed" : ""}</span>
         </div>
         {event.kind === "tool" && event.details && <details className="mt-1 text-muted-foreground text-xs">
           <summary className="cursor-pointer truncate hover:text-foreground">{event.details}</summary>

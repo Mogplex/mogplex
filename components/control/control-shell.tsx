@@ -429,6 +429,7 @@ function ControlShellInner({ initialData, initialMissionId, initialRepo }: Contr
                   }}
                   onToolApprovalResponse={handleToolApprovalResponse}
                   pending={chatPending}
+                  activeMessageId={status === "streaming" ? messages.findLast(message => message.role === "assistant")?.id : undefined}
                   trailing={
                     <TimelineTrailing
                       messages={messages}

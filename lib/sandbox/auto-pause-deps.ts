@@ -177,6 +177,7 @@ export async function hasRunningAutomation(
     .select("id", { count: "exact", head: true })
     .eq("sandbox_record_id", sandboxRecordId)
     .in("status", ["pending", "streaming"]);
+  // external_agent_runs.ai_call_id is NOT NULL in the canonical schema.
   if (excludeAiCallId) query = query.neq("ai_call_id", excludeAiCallId);
   if (userId) query = query.eq("user_id", userId);
   const { count, error } = await query;
@@ -187,6 +188,17 @@ export async function hasRunningAutomation(
     );
   }
 
+  return (count ?? 0) > 0;
+}
+
+export async function hasAttachedSandboxClient(sandboxRecordId: string) {
+  const { count, error } = await supabaseAdmin
+    .from("sandbox_client_sessions")
+    .select("id", { count: "exact", head: true })
+    .eq("sandbox_record_id", sandboxRecordId)
+    .is("released_at", null);
+  if (error)
+    throw new Error(`Failed to load sandbox clients: ${error.message}`);
   return (count ?? 0) > 0;
 }
 

@@ -25,13 +25,20 @@ export type SandboxTaskLifecycleDeps = {
     sandboxId: string,
     userId: string
   ) => Promise<SandboxState | null>;
-  stop: (sandboxId: string, userId: string) => Promise<boolean | "active_work">;
+  stop: (
+    sandboxId: string,
+    userId: string
+  ) => Promise<
+    boolean | "active_work" | "unsaved_work" | "inspection_unavailable"
+  >;
 };
 
 type RetainedSandboxReason =
   | "explicit"
   | "preview"
   | "follow_up"
+  | "unsaved_work"
+  | "inspection_unavailable"
   | "unconfirmed";
 
 export type SandboxTaskLifecycleOutcome =
@@ -40,7 +47,7 @@ export type SandboxTaskLifecycleOutcome =
   | {
       state: "running";
       sandboxIds: string[];
-      reason: "explicit" | "preview" | "follow_up" | "unconfirmed";
+      reason: RetainedSandboxReason;
     };
 
 const SANDBOX_TOOLS = new Set([
@@ -152,6 +159,10 @@ async function stopSandboxCompute(
     ["sandbox_busy", "sandbox_active_work"].includes(data?.reason ?? "")
   )
     return "active_work" as const;
+  if (response.status === 409 && data?.reason === "uncommitted_changes")
+    return "unsaved_work" as const;
+  if (response.status === 409 && data?.reason === "inspection_unavailable")
+    return "inspection_unavailable" as const;
   if (!response.ok) return false;
   return data?.sandbox?.runtime_summary?.status === "stopped";
 }
@@ -184,6 +195,8 @@ async function cleanupSandboxCandidate(input: {
     if (input.retainReason) return input.retainReason;
     const result = await input.deps.stop(input.sandboxId, input.userId);
     if (result === "active_work") return "follow_up";
+    if (result === "unsaved_work" || result === "inspection_unavailable")
+      return result;
     return result ? null : "unconfirmed";
   } catch (error) {
     console.error("[agent] automatic sandbox stop failed", {
@@ -215,6 +228,13 @@ function toolRequiresFollowUp(
 }
 
 function computeFooter(outcome: SandboxTaskLifecycleOutcome) {
+  if (outcome.state === "running" && outcome.reason === "unsaved_work")
+    return "This workspace cannot preserve uncommitted changes when stopped. Commit and push the changes before stopping compute.";
+  if (
+    outcome.state === "running" &&
+    outcome.reason === "inspection_unavailable"
+  )
+    return "Could not check for unsaved changes. Compute was left running to protect your work. Review its changes before stopping it.";
   if (outcome.state !== "running" || outcome.reason !== "unconfirmed")
     return null;
   return "Could not confirm that sandbox compute stopped. Check its status before leaving.";

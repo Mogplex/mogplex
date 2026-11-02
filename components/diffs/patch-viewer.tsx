@@ -1,7 +1,7 @@
 "use client"
 
 import type { CSSProperties } from "react"
-import { lazy, Suspense, useMemo } from "react"
+import { lazy, Suspense, useMemo, memo } from "react"
 import { cn } from "@/lib/utils"
 import { detectPatch, type DetectedPatch } from "@/lib/diffs/detect"
 
@@ -34,7 +34,7 @@ interface PatchViewerProps {
   className?: string
 }
 
-export function PatchViewer({ patch, detectedPatch, className }: PatchViewerProps) {
+export const PatchViewer = memo(function PatchViewer({ patch, detectedPatch, className }: PatchViewerProps) {
   const resolvedPatch = useMemo(() => {
     if (detectedPatch) return detectedPatch
     if (!patch) return null
@@ -60,4 +60,4 @@ export function PatchViewer({ patch, detectedPatch, className }: PatchViewerProp
       </Suspense>
     </div>
   )
-}
+})

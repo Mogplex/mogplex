@@ -20,6 +20,7 @@ import { withSandboxMutationLock } from "@/lib/sandbox/mutation-lock";
 import {
   hasActiveAiCall,
   hasRunningAutomation,
+  hasAttachedSandboxClient,
 } from "@/lib/sandbox/auto-pause-deps";
 import { resolveSandboxWorkingDirectory } from "@/lib/sandbox/working-directory";
 import {
@@ -69,6 +70,7 @@ type SandboxStopDeps = {
   withSandboxMutationLock: typeof withSandboxMutationLock;
   hasActiveAiCall: typeof hasActiveAiCall;
   hasRunningAutomation: typeof hasRunningAutomation;
+  hasAttachedSandboxClient: typeof hasAttachedSandboxClient;
 };
 
 const defaultSandboxStopDeps: SandboxStopDeps = {
@@ -82,6 +84,7 @@ const defaultSandboxStopDeps: SandboxStopDeps = {
   withSandboxMutationLock,
   hasActiveAiCall,
   hasRunningAutomation,
+  hasAttachedSandboxClient,
 };
 
 type RemoteStopOutcome = {
@@ -259,28 +262,31 @@ export function createSandboxStopHandler(
       // the same durable workspace, even between their shell commands.
       if (automatic) {
         try {
-          const [activeCall, runningWorker] = await Promise.all([
-            deps.hasActiveAiCall({
-              sandboxRecordId: id,
-              sandboxId: loaded.record.sandbox_id,
-              excludeAiCallId: completingAiCallId,
-              userId: loaded.record.user_id,
-            }),
-            deps.hasRunningAutomation(
-              id,
-              completingAiCallId,
-              loaded.record.user_id
-            ),
-          ]);
-          if (activeCall || runningWorker)
+          const [activeCall, runningWorker, attachedClient] = await Promise.all(
+            [
+              deps.hasActiveAiCall({
+                sandboxRecordId: id,
+                sandboxId: loaded.record.sandbox_id,
+                excludeAiCallId: completingAiCallId,
+              }),
+              deps.hasRunningAutomation(id, completingAiCallId),
+              deps.hasAttachedSandboxClient(id),
+            ]
+          );
+          if (activeCall || runningWorker || attachedClient)
             return NextResponse.json(
               {
-                error: "Another agent is still using this sandbox.",
+                error:
+                  "An agent or attached workspace is still using this sandbox.",
                 reason: "sandbox_active_work",
               },
               { status: 409 }
             );
-        } catch {
+        } catch (error) {
+          console.error(
+            "[sandbox/stop] Automatic cleanup activity check failed",
+            { sandboxId: id, error }
+          );
           return NextResponse.json(
             {
               error:

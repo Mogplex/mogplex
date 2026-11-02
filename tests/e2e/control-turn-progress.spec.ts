@@ -286,7 +286,7 @@ test("a follow-up preserves one continuous conversation with live command progre
     page
       .getByRole("region", { name: "Latest request" })
       .getByTestId("tool-activity")
-  ).toContainText("Interrupted");
+  ).toContainText("Status unconfirmed");
   // Earlier turns remain part of this transcript on a phone, with no panel to open.
   await page.getByText(/Earlier analysis/).scrollIntoViewIfNeeded();
   await expect(page.getByText(/Earlier analysis/)).toBeVisible();

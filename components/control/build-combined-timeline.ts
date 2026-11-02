@@ -301,6 +301,17 @@ export function buildCombinedTimeline(
   // Append chat messages as timeline events
   for (const msg of messages) {
     if (!msg.parts || !Array.isArray(msg.parts)) continue;
+    let partKey = "user";
+    const append = (event: TimelineEvent) =>
+      result.push({
+        ...event,
+        id: JSON.stringify([
+          msg.id,
+          partKey,
+          event.kind === "diff" ? "diff" : "event",
+        ]),
+        messageId: msg.id,
+      });
 
     if (msg.role === "user") {
       const text = msg.parts
@@ -319,7 +330,7 @@ export function buildCombinedTimeline(
           ? `${fileCount} attachment${fileCount === 1 ? "" : "s"} included.`
           : "");
       if (body) {
-        result.push({ kind: "user", label: "YOU", time: "now", body });
+        append({ kind: "user", label: "YOU", time: "now", body });
       }
       continue;
     }
@@ -332,11 +343,12 @@ export function buildCombinedTimeline(
     };
 
     let stepNumber = 0;
-    for (const part of msg.parts) {
+    for (const [partIndex, part] of msg.parts.entries()) {
       if (typeof part !== "object" || part == null || !("type" in part)) {
         continue;
       }
 
+      partKey = `part:${partIndex}`;
       if (part.type === "step-start") {
         stepNumber += 1;
         continue;
@@ -355,7 +367,7 @@ export function buildCombinedTimeline(
             "toolCallId" in part ? String(part.toolCallId) : "";
 
           if (state === "approval-requested") {
-            result.push({
+            append({
               kind: "approval",
               label: "APPROVAL",
               time: "now",
@@ -371,7 +383,7 @@ export function buildCombinedTimeline(
             state === "output-denied"
           ) {
             const isApproved = approvalInfo?.approved === true;
-            result.push({
+            append({
               kind: "approval",
               label: "APPROVAL",
               time: "now",
@@ -390,7 +402,7 @@ export function buildCombinedTimeline(
         if (state === "output-error") {
           const log =
             "errorText" in part ? String(part.errorText) : "unknown error";
-          result.push({
+          append({
             kind: "fail",
             label,
             time: "now",
@@ -400,7 +412,7 @@ export function buildCombinedTimeline(
         } else {
           const toolInput = "input" in part ? part.input : undefined;
           if (controlToolOutcome(state, output) === "failed") {
-            result.push({
+            append({
               kind: "fail",
               label,
               time: "now",
@@ -412,7 +424,7 @@ export function buildCombinedTimeline(
 
           const envRequest = envRequestEvent(toolName, state, output);
           if (envRequest) {
-            result.push(envRequest);
+            append(envRequest);
             continue;
           }
 
@@ -422,7 +434,7 @@ export function buildCombinedTimeline(
             output,
             toolInput
           );
-          result.push(
+          append(
             progressBody
               ? {
                   kind: "progress",
@@ -447,7 +459,7 @@ export function buildCombinedTimeline(
             extractPatchFromValue("output" in part ? part.output : undefined) ??
             extractPatchFromValue(toolInput);
           if (patch) {
-            result.push({
+            append({
               kind: "diff",
               label: "DIFF",
               time: "now",
@@ -468,7 +480,7 @@ export function buildCombinedTimeline(
           userFacingOptions
         ).trim();
         if (!text) continue;
-        result.push({
+        append({
           kind: "assistant",
           label: "MOGPLEX",
           time: "now",

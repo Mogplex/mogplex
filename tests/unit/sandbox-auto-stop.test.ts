@@ -9,7 +9,12 @@ import {
   buildResolvedSandboxRouteContext,
 } from "./sandbox-record-route-test-harness";
 
-for (const active of ["ai_call", "worker", "unknown"] as const) {
+for (const active of [
+  "ai_call",
+  "worker",
+  "attached_client",
+  "unknown",
+] as const) {
   test(`automatic task cleanup preserves compute with ${active} activity`, async () => {
     const { createSandboxStopHandler } = await loadSandboxStopRouteModule();
     let locked = false;
@@ -33,6 +38,7 @@ for (const active of ["ai_call", "worker", "unknown"] as const) {
         return active === "ai_call";
       },
       hasRunningAutomation: async () => active === "worker",
+      hasAttachedSandboxClient: async () => active === "attached_client",
       getSandbox: async () => {
         throw new Error("Active work must not reach provider shutdown");
       },
@@ -75,6 +81,7 @@ test("automatic cleanup excludes its own call, stops compute, and preserves the 
       buildResolvedSandboxRouteContext(loaded) as never,
     hasActiveAiCall: async (input) => input.excludeAiCallId !== "current-call",
     hasRunningAutomation: async (_id, excluded) => excluded !== "current-call",
+    hasAttachedSandboxClient: async () => false,
     getSandbox: (async () => ({
       persistent: true,
       status: "running",
