@@ -50,24 +50,27 @@ export function noDevServerMessage(
  */
 export function noProjectManifestWarning(
   rootDirectory: string | null,
+  skippedDefaultInstall: boolean,
   mismatch: { runtime: SandboxRuntime; found: SandboxRuntime } | null = null
 ) {
   const location = rootDirectory ? ` in ${rootDirectory}` : "";
+  // A configured install command still ran; only say "skipped" when it did not.
+  const outcome = skippedDefaultInstall
+    ? "so Mogplex skipped the default install and started no dev server"
+    : "so after your install command no dev server was started";
   if (mismatch) {
     const found = isNodeRuntime(mismatch.found) ? "Node.js" : "Python";
     return (
       `The runtime is set to ${RUNTIME_LABELS[mismatch.runtime]}, but the ` +
-      `project${location} is a ${found} project, so Mogplex skipped the ` +
-      "default install and started no dev server. Change the runtime in " +
-      "Project settings, or set install and dev commands there."
+      `project${location} is a ${found} project, ${outcome}. Change the ` +
+      "runtime in Project settings, or set a dev command there."
     );
   }
   return (
     `No package.json, pyproject.toml or requirements.txt found${location}, ` +
-    "so Mogplex skipped the default install and started no dev server. Set " +
-    "install and dev commands in Project settings, or ask the agent to set " +
-    "up the environment. If the app lives in a subdirectory, set its root " +
-    "directory there."
+    `${outcome}. Set ${skippedDefaultInstall ? "install and dev commands" : "a dev command"} ` +
+    "in Project settings, or ask the agent to set up the environment. If the " +
+    "app lives in a subdirectory, set its root directory there."
   );
 }
 

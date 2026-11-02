@@ -1,9 +1,9 @@
 import type { Sandbox, NetworkPolicy } from "@vercel/sandbox";
 import type { SandboxHealthStatus } from "@/lib/sandbox/health-status";
 import type {
+  DetectionResult,
   SandboxRuntime,
   getStrategy,
-  detectRuntime,
 } from "@/lib/sandbox/runtimes";
 import type {
   EnvSyncMode,
@@ -71,7 +71,7 @@ export type BootstrapSandboxOpts = {
   runtime?: SandboxRuntime | null;
 };
 
-export type BootstrapDetection = Awaited<ReturnType<typeof detectRuntime>>;
+export type BootstrapDetection = DetectionResult;
 export type BootstrapStrategy = ReturnType<typeof getStrategy>;
 
 export type PreviewReadyResult = {

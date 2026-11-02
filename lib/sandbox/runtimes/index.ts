@@ -46,18 +46,11 @@ export async function detectProjectRuntime(
   return null;
 }
 
-/** Like detectProjectRuntime, falling back to node22 when nothing matches. */
-export async function detectRuntime(
-  sandbox: Sandbox,
-  rootDir?: string | null
-): Promise<DetectionResult> {
-  return (
-    (await detectProjectRuntime(sandbox, rootDir)) ?? {
-      runtime: "node22",
-      packageManager: "npm",
-    }
-  );
-}
+/** Tooling assumed when no strategy recognizes the checkout. */
+export const DEFAULT_DETECTION: DetectionResult = {
+  runtime: "node22",
+  packageManager: "npm",
+};
 
 /**
  * Pre-detect runtime via GitHub API before creating the sandbox VM.

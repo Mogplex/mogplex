@@ -8,7 +8,11 @@ import {
   resolveSandboxPath,
 } from "@/lib/repo-settings";
 import { prepareSandboxVercelLink } from "@/lib/vercel/env-vars";
-import { detectProjectRuntime, getStrategy } from "@/lib/sandbox/runtimes";
+import {
+  DEFAULT_DETECTION,
+  detectProjectRuntime,
+  getStrategy,
+} from "@/lib/sandbox/runtimes";
 import { isNodeRuntime } from "@/lib/sandbox/runtimes/types";
 import {
   detectWorkspaceDependencies,
@@ -56,8 +60,7 @@ export async function resolveBootstrapDetection(
     isNodeRuntime(runtimeOverride) !== isNodeRuntime(detection.runtime)
       ? await strategy.detect(sandbox, normalizedRoot)
       : detection;
-  const effectiveDetection = runtimeDetection ??
-    detection ?? { runtime: "node22", packageManager: "npm" };
+  const effectiveDetection = runtimeDetection ?? detection ?? DEFAULT_DETECTION;
 
   return {
     effectiveRuntime,

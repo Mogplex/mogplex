@@ -349,6 +349,7 @@ type NoDevServerBootContext = Pick<
 function manifestWarning(context: NoDevServerBootContext) {
   return noProjectManifestWarning(
     context.normalizedRoot,
+    context.skipDefaultInstall,
     context.foreignManifestRuntime
       ? {
           runtime: context.effectiveRuntime,
@@ -393,6 +394,8 @@ export function buildNoDevScriptBootstrapResult(
     runtime: context.effectiveRuntime,
     packageManager: context.packageManager,
     framework: context.framework,
+    // "(none)" is a display value for logs and the launch result; nothing
+    // stores it back as a configured command.
     installCommand: context.skipDefaultInstall
       ? "(none)"
       : context.installCommand,

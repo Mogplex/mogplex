@@ -126,6 +126,26 @@ describe("bootstrap for a repository without a project manifest", () => {
     });
   });
 
+  it("should not claim the install was skipped when a configured install ran", async () => {
+    const { sandbox } = fakeSandbox({ "README.md": "# test" });
+
+    const events = await collect(
+      bootstrapSandboxStreaming(sandbox, {
+        installCommand: "npm install --global serve",
+      })
+    );
+    const warning = events.find((event) => event.type === "warning");
+
+    expect(warning).toMatchObject({
+      message: expect.stringContaining(
+        "after your install command no dev server was started"
+      ),
+    });
+    expect(JSON.stringify(warning)).not.toContain(
+      "skipped the default install"
+    );
+  });
+
   it("should skip the default install but run a configured dev command in the blocking bootstrap", async () => {
     const { sandbox, commands } = fakeSandbox({ "README.md": "# test" });
 
