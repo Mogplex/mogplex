@@ -23,7 +23,9 @@ const ToastViewport = React.forwardRef<
     ref={ref}
     data-slot="toast-viewport"
     className={cn(
-      'pointer-events-none fixed inset-x-0 top-[calc(env(safe-area-inset-top)+4rem)] z-[100] flex max-h-[50dvh] w-full flex-col gap-2 overflow-y-auto overscroll-y-contain p-3 sm:left-auto sm:right-3 sm:w-[390px] sm:p-0',
+      // Clear the app header, workspace actions, and task toolbar. Reserve the
+      // bottom composer as well when a short viewport needs a smaller stack.
+      'pointer-events-none fixed inset-x-0 top-[calc(env(safe-area-inset-top)+11rem)] z-[100] flex max-h-[min(50dvh,calc(100dvh-22rem))] w-full flex-col gap-2 overflow-y-auto overscroll-y-contain p-3 sm:left-auto sm:right-3 sm:w-[390px] sm:p-0',
       className,
     )}
     {...props}

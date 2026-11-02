@@ -199,6 +199,20 @@ test("Undo waits for another archive instead of discarding the restore", async (
       page.getByText("1 chat archived", { exact: true })
     ).toBeVisible();
     await sidebar.getByRole("button", { name: /^Fix 6 / }).click();
+    // A visible Undo must not cover the menu needed for the next action.
+    expect(
+      await page
+        .getByRole("button", { name: "More options" })
+        .evaluate((button) => {
+          const bounds = button.getBoundingClientRect();
+          return button.contains(
+            document.elementFromPoint(
+              bounds.x + bounds.width / 2,
+              bounds.y + bounds.height / 2
+            )
+          );
+        })
+    ).toBe(true);
     await archiveSelected(page);
     await archiving.promise;
     await page.getByRole("button", { name: "Undo", exact: true }).click();

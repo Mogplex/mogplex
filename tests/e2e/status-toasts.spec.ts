@@ -200,6 +200,29 @@ test("notifications keep steering and stop controls available and can be dismiss
   await expect(page.getByTestId("stop-count")).toHaveText("2");
 });
 
+test("short screens keep the toast stack clear of toolbars and the composer", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 600 });
+  await loadStatusToastFixture(page, "dark");
+  await page.getByRole("button", { name: "Show burst", exact: true }).click();
+  await expect(page.locator("[data-variant]")).toHaveCount(12);
+  const viewport = page.locator('[data-slot="toast-viewport"]');
+  const stack = await viewport.boundingBox();
+  const composer = page.getByRole("textbox", { name: "Steer agent" });
+  const input = await composer.boundingBox();
+  expect(stack!.y).toBeGreaterThanOrEqual(176);
+  expect(stack!.y + stack!.height).toBeLessThan(input!.y);
+  expect(
+    await viewport.evaluate(
+      (element) => element.scrollHeight > element.clientHeight
+    )
+  ).toBe(true);
+  await composer.fill("Keep this easy to steer.");
+  await page.getByRole("button", { name: "Stop agent", exact: true }).click();
+  await expect(page.getByTestId("stop-count")).toHaveText("1");
+});
+
 test("toast actions and keyboard dismissal work on mobile with reduced motion", async ({
   page,
 }, testInfo) => {

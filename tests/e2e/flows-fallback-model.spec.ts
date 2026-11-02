@@ -212,6 +212,18 @@ test("flows inspector saves a fallback and restores inherited model defaults", a
     .click();
   await expect(modelSelect).toHaveAttribute("data-value", "");
   await expect(page.getByTestId("flows-missing-model-warning")).toHaveCount(0);
+  // Save feedback must leave the inspector close control immediately usable.
+  expect(
+    await page.getByTestId("flows-inspector-close").evaluate((button) => {
+      const bounds = button.getBoundingClientRect();
+      return button.contains(
+        document.elementFromPoint(
+          bounds.x + bounds.width / 2,
+          bounds.y + bounds.height / 2
+        )
+      );
+    })
+  ).toBe(true);
   await page.getByTestId("flows-inspector-close").click();
   const saved = page.waitForResponse(
     (response) =>
