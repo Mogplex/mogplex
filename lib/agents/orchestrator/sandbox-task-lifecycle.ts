@@ -25,14 +25,20 @@ export type SandboxTaskLifecycleDeps = {
     sandboxId: string,
     userId: string
   ) => Promise<SandboxState | null>;
-  stop: (sandboxId: string, userId: string) => Promise<boolean>;
+  stop: (
+    sandboxId: string,
+    userId: string
+  ) => Promise<
+    boolean | "active_work" | "unsaved_work" | "inspection_unavailable"
+  >;
 };
 
 type RetainedSandboxReason =
   | "explicit"
-  | "persistent"
   | "preview"
   | "follow_up"
+  | "unsaved_work"
+  | "inspection_unavailable"
   | "unconfirmed";
 
 export type SandboxTaskLifecycleOutcome =
@@ -41,18 +47,14 @@ export type SandboxTaskLifecycleOutcome =
   | {
       state: "running";
       sandboxIds: string[];
-      reason:
-        | "explicit"
-        | "persistent"
-        | "preview"
-        | "follow_up"
-        | "unconfirmed";
+      reason: RetainedSandboxReason;
     };
 
 const SANDBOX_TOOLS = new Set([
   "bash",
   "run_command",
   "write_file",
+  "edit_file",
   "start_sandbox",
   "sandbox_start",
   "stop_sandbox",
@@ -61,7 +63,6 @@ const SANDBOX_TOOLS = new Set([
   "spawn_subagent",
 ]);
 
-const FOLLOW_UP_TOOLS = new Set(["spawn_worktree", "spawn_subagent"]);
 const COMMAND_TOOLS = new Set(["bash", "run_command"]);
 const STOP_TOOLS = new Set(["sandbox_stop", "stop_sandbox"]);
 
@@ -86,8 +87,7 @@ export function shouldRetainSandboxForRequest(userText: string) {
   }
   return (
     /\b(?:keep|leave)\b.{0,24}\b(?:running|open|alive)\b/.test(text) ||
-    /\b(?:do not|don't|dont)\s+(?:stop|shut down|shutdown)\b/.test(text) ||
-    /\b(?:persistent|follow[- ]?up)\s+(?:sandbox|session|work)\b/.test(text)
+    /\b(?:do not|don't|dont)\s+(?:stop|shut down|shutdown)\b/.test(text)
   );
 }
 
@@ -132,24 +132,40 @@ async function loadSandboxState(
     : null;
 }
 
-async function stopSandboxCompute(sandboxId: string, userId: string) {
+async function stopSandboxCompute(
+  sandboxId: string,
+  userId: string,
+  aiCallId?: string
+) {
   const requestHeaders = getSandboxRequestHeaders(userId);
   if ("error" in requestHeaders) return false;
   const response = await fetch(
     `${resolveAppBaseUrl()}/api/sandbox/${sandboxId}/stop`,
-    { method: "POST", headers: requestHeaders.headers }
+    {
+      method: "POST",
+      headers: {
+        ...requestHeaders.headers,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ automatic: true, completingAiCallId: aiCallId }),
+    }
   );
-  if (!response.ok) return false;
   const data = (await response.json().catch(() => null)) as {
+    reason?: string;
     sandbox?: { runtime_summary?: { status?: unknown } };
   } | null;
+  if (
+    response.status === 409 &&
+    ["sandbox_busy", "sandbox_active_work"].includes(data?.reason ?? "")
+  )
+    return "active_work" as const;
+  if (response.status === 409 && data?.reason === "uncommitted_changes")
+    return "unsaved_work" as const;
+  if (response.status === 409 && data?.reason === "inspection_unavailable")
+    return "inspection_unavailable" as const;
+  if (!response.ok) return false;
   return data?.sandbox?.runtime_summary?.status === "stopped";
 }
-
-const defaultDeps: SandboxTaskLifecycleDeps = {
-  loadState: loadSandboxState,
-  stop: stopSandboxCompute,
-};
 
 function isConfirmedSandboxStop(
   event: ToolEvent,
@@ -175,12 +191,13 @@ async function cleanupSandboxCandidate(input: {
     const state = await input.deps.loadState(input.sandboxId, input.userId);
     if (!state) return "unconfirmed";
     if (["stopped", "paused", "error"].includes(state.status)) return null;
-    if (state.persistent) return "persistent";
     if (state.previewUrl && input.retainPreview) return "preview";
     if (input.retainReason) return input.retainReason;
-    return (await input.deps.stop(input.sandboxId, input.userId))
-      ? null
-      : "unconfirmed";
+    const result = await input.deps.stop(input.sandboxId, input.userId);
+    if (result === "active_work") return "follow_up";
+    if (result === "unsaved_work" || result === "inspection_unavailable")
+      return result;
+    return result ? null : "unconfirmed";
   } catch (error) {
     console.error("[agent] automatic sandbox stop failed", {
       sandboxId: input.sandboxId,
@@ -203,7 +220,6 @@ function toolRequiresFollowUp(
   output: Record<string, unknown> | null
 ) {
   if (event.success !== true) return false;
-  if (FOLLOW_UP_TOOLS.has(event.toolCall.toolName)) return true;
   if (!COMMAND_TOOLS.has(event.toolCall.toolName)) return false;
   const command = readString(asRecord(event.toolCall.input)?.command);
   return Boolean(
@@ -212,21 +228,16 @@ function toolRequiresFollowUp(
 }
 
 function computeFooter(outcome: SandboxTaskLifecycleOutcome) {
-  if (outcome.state === "unused") return null;
-  if (outcome.state === "stopped") {
-    return "Compute: stopped automatically; no sandbox task remains running.";
-  }
-  const reason =
-    outcome.reason === "preview"
-      ? "the preview remains available"
-      : outcome.reason === "persistent"
-        ? "this is a persistent session"
-        : outcome.reason === "follow_up"
-          ? "follow-up work still needs it"
-          : outcome.reason === "explicit"
-            ? "you asked to keep it running"
-            : "an automatic stop could not be confirmed";
-  return `Compute: still running because ${reason}.`;
+  if (outcome.state === "running" && outcome.reason === "unsaved_work")
+    return "This workspace cannot preserve uncommitted changes when stopped. Commit and push the changes before stopping compute.";
+  if (
+    outcome.state === "running" &&
+    outcome.reason === "inspection_unavailable"
+  )
+    return "Could not check for unsaved changes. Compute was left running to protect your work. Review its changes before stopping it.";
+  if (outcome.state !== "running" || outcome.reason !== "unconfirmed")
+    return null;
+  return "Could not confirm that sandbox compute stopped. Check its status before leaving.";
 }
 
 export function appendSandboxTaskLifecycleFooter(
@@ -260,9 +271,15 @@ export function createSandboxTaskLifecycle(input: {
   userId: string;
   userText: string;
   binding: SandboxBinding;
+  aiCallId?: string;
   deps?: Partial<SandboxTaskLifecycleDeps>;
 }) {
-  const deps = { ...defaultDeps, ...input.deps };
+  const deps: SandboxTaskLifecycleDeps = {
+    loadState: loadSandboxState,
+    stop: (sandboxId, userId) =>
+      stopSandboxCompute(sandboxId, userId, input.aiCallId),
+    ...input.deps,
+  };
   const touched = new Set<string>();
   const stopped = new Set<string>();
   const sandboxToolIdleWaiters = new Set<() => void>();

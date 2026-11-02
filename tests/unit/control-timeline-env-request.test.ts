@@ -32,6 +32,8 @@ test("control timeline turns a variable request into a Set variables card", () =
   assert.deepEqual(events, [
     {
       kind: "env_request",
+      id: '["assistant-1","part:0","event"]',
+      messageId: "assistant-1",
       label: "VARIABLES",
       time: "now",
       body: "Checkout needs a key.",

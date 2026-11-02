@@ -238,6 +238,7 @@ export async function executeControlChatRequest(input: {
     const finalization = createControlFinalizationGuard();
     const sandboxTaskLifecycle = createSandboxTaskLifecycle({
       userId: input.userId,
+      aiCallId: activeCall.id,
       userText: input.latestUserText,
       binding: sandboxBinding,
     });

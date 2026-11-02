@@ -25,6 +25,9 @@ export async function fulfillJson(route: Route, data: unknown, status = 200) {
 }
 
 export async function mockBaseChrome(page: Page) {
+  await page.route("**/api/sandbox/*/presence", (route) =>
+    fulfillJson(route, { ok: true })
+  );
   // Control restores the session list before showing a new mission. Keep the
   // default empty account independent of a hosted database; tests can override
   // this route when they need persisted sessions or request failures.

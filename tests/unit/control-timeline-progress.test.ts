@@ -303,6 +303,8 @@ test("control timeline surfaces structured tool failures as failures", () => {
       label: "STEP 1",
       time: "now",
       body: "Sandbox startup failed.",
+      id: '["assistant-1","part:1","event"]',
+      messageId: "assistant-1",
       log: "Provider stopped the sandbox",
     },
   ]);
@@ -329,6 +331,8 @@ test("control timeline presents recoverable sandbox selection outcomes", () => {
         label: "STEP 1",
         time: "now",
         body: "Sandbox selection needed",
+        id: '["assistant-1","part:1","event"]',
+        messageId: "assistant-1",
         log: "Selection required",
       },
     ]);
@@ -346,6 +350,8 @@ test("assistant text is primary conversation content, not a tool event", () => {
       label: "MOGPLEX",
       time: "now",
       body: "I saved the plan.",
+      id: '["assistant-1","part:0","event"]',
+      messageId: "assistant-1",
     },
   ]);
 });
@@ -436,6 +442,8 @@ test("tool activity identifies the file without exposing its contents", () => {
       body: "Editing file",
       state: "running",
       details: "private/path.ts",
+      id: '["assistant-1","part:0","event"]',
+      messageId: "assistant-1",
     },
   ]);
   assert.doesNotMatch(JSON.stringify(events), /private file contents/);

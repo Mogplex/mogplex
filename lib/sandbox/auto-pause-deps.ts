@@ -140,11 +140,37 @@ export async function loadPresenceState(input: {
   };
 }
 
-export async function hasActiveAiCall(input: {
+/** Only an authenticated actor's call bound to this workspace may be excluded. */
+export async function resolveCompletingSandboxAiCallId(input: {
+  aiCallId: string;
+  userId: string;
   sandboxRecordId: string;
   sandboxId: string;
 }) {
-  const { count, error } = await supabaseAdmin
+  const { data, error } = await supabaseAdmin
+    .from("ai_calls")
+    .select("id")
+    .eq("id", input.aiCallId)
+    .eq("user_id", input.userId)
+    .or(
+      buildActiveAiCallSandboxMetadataFilter(
+        input.sandboxRecordId,
+        input.sandboxId
+      )
+    )
+    .maybeSingle();
+  if (error)
+    throw new Error(`Failed to validate completing ai_call: ${error.message}`);
+  return data?.id as string | undefined;
+}
+
+export async function hasActiveAiCall(input: {
+  sandboxRecordId: string;
+  sandboxId: string;
+  excludeAiCallId?: string;
+  userId?: string;
+}) {
+  let query = supabaseAdmin
     .from("ai_calls")
     .select("id", { count: "exact", head: true })
     .in("status", ["pending", "streaming"])
@@ -154,6 +180,9 @@ export async function hasActiveAiCall(input: {
         input.sandboxId
       )
     );
+  if (input.excludeAiCallId) query = query.neq("id", input.excludeAiCallId);
+  if (input.userId) query = query.eq("user_id", input.userId);
+  const { count, error } = await query;
 
   if (error) {
     throw new Error(`Failed to load active ai_calls: ${error.message}`);
@@ -162,12 +191,20 @@ export async function hasActiveAiCall(input: {
   return (count ?? 0) > 0;
 }
 
-export async function hasRunningAutomation(sandboxRecordId: string) {
-  const { count, error } = await supabaseAdmin
+export async function hasRunningAutomation(
+  sandboxRecordId: string,
+  excludeAiCallId?: string,
+  userId?: string
+) {
+  let query = supabaseAdmin
     .from("external_agent_runs")
     .select("id", { count: "exact", head: true })
     .eq("sandbox_record_id", sandboxRecordId)
     .in("status", ["pending", "streaming"]);
+  // external_agent_runs.ai_call_id is NOT NULL in the canonical schema.
+  if (excludeAiCallId) query = query.neq("ai_call_id", excludeAiCallId);
+  if (userId) query = query.eq("user_id", userId);
+  const { count, error } = await query;
 
   if (error) {
     throw new Error(
@@ -175,6 +212,19 @@ export async function hasRunningAutomation(sandboxRecordId: string) {
     );
   }
 
+  return (count ?? 0) > 0;
+}
+
+export async function hasAttachedSandboxClient(sandboxRecordId: string) {
+  // Presence has no heartbeat: age alone cannot distinguish a live tab from a
+  // crashed one. Release events and the existing idle reaper own stale cleanup.
+  const { count, error } = await supabaseAdmin
+    .from("sandbox_client_sessions")
+    .select("id", { count: "exact", head: true })
+    .eq("sandbox_record_id", sandboxRecordId)
+    .is("released_at", null);
+  if (error)
+    throw new Error(`Failed to load sandbox clients: ${error.message}`);
   return (count ?? 0) > 0;
 }
 

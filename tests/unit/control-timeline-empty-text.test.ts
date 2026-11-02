@@ -34,3 +34,25 @@ test("buildCombinedTimeline skips empty assistant text parts between tool calls"
   );
   assert.equal(events.at(-1)?.body, "Here are the results.");
 });
+
+test("saved replies hide legacy routine compute footers without hiding warnings or user text", () => {
+  const footer = "Compute: still running because this is a persistent session.";
+  const warning =
+    "Compute: still running because an automatic stop could not be confirmed.";
+  const messages: UIMessage[] = [
+    { id: "user", role: "user", parts: [{ type: "text", text: footer }] },
+    {
+      id: "reply",
+      role: "assistant",
+      parts: [
+        { type: "text", text: "The tests passed." },
+        { type: "text", text: footer },
+        { type: "text", text: warning },
+      ],
+    },
+  ];
+  assert.deepEqual(
+    buildCombinedTimeline([], messages).map((event) => event.body),
+    [footer, "The tests passed.", warning]
+  );
+});

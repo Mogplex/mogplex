@@ -9,10 +9,12 @@ export function createSlackRunFinalization(input: {
   userText: string;
   repoName?: string | null;
   sandboxId?: string | null;
+  aiCallId?: string;
   lifecycleDeps?: Partial<SandboxTaskLifecycleDeps>;
 }) {
   const lifecycle = createSandboxTaskLifecycle({
     userId: input.userId,
+    aiCallId: input.aiCallId,
     userText: input.userText,
     binding: {
       sandboxId: input.sandboxId ?? null,
