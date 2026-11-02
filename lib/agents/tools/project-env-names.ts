@@ -10,7 +10,10 @@ export const ENV_NAME = /^[A-Za-z_]\w*$/;
 // here re-arms on each boot, so only the operator may set these. The sandbox
 // itself is the trust boundary (Control can run any command there); this list
 // keeps an accidental or injected hook from persisting past the session.
-// It is best-effort: a denylist cannot name every hook a tool reads.
+// It is best-effort: a denylist cannot name every hook a tool reads. It only
+// covers the variable route: a saved install or dev command can set the same
+// variables inline, an accepted tradeoff described at REPLACE_GUARDED in
+// project-settings.ts.
 const LOADER_ENV_NAMES = new Set([
   "ALL_PROXY",
   "BASH_ENV",
