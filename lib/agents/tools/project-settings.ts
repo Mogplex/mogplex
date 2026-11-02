@@ -47,8 +47,10 @@ const LOADER_ENV_NAMES = new Set([
   "GIT_ASKPASS",
   "GIT_SSH_COMMAND",
   "GOFLAGS",
+  "HOME",
   "HTTPS_PROXY",
   "HTTP_PROXY",
+  "IFS",
   "JAVA_TOOL_OPTIONS",
   "JDK_JAVA_OPTIONS",
   "MAKEFLAGS",
@@ -415,7 +417,12 @@ export function createProjectSettingsTools(
           let replaced = false;
           const exists = Object.hasOwn(next, key);
           if (value === null && !exists) {
-            return { ok: true, name: key, note: "The variable was not set." };
+            return {
+              ok: true,
+              name: key,
+              unchanged: true,
+              note: "The variable was not set.",
+            };
           }
           // Control cannot see stored values, so changing or deleting one
           // that exists needs the operator's say-so.

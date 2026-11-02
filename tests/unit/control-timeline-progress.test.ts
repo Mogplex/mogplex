@@ -100,6 +100,42 @@ test("control timeline distinguishes ordinary starts and recovered cleanup", () 
   );
 });
 
+test("control timeline spells out saves to the project's stored setup", () => {
+  const save = (toolName: string, output: Record<string, unknown>) => ({
+    type: `tool-${toolName}`,
+    toolCallId: `${toolName}-${JSON.stringify(output)}`,
+    state: "output-available",
+    input: { value: "private value" },
+    output,
+  });
+  const events = buildCombinedTimeline(undefined, [
+    assistant([
+      save("project_env_set", { ok: true, name: "API_URL", deleted: true }),
+      save("project_env_set", { ok: true, name: "API_URL", replaced: true }),
+      save("project_env_set", { ok: true, name: "API_URL", unchanged: true }),
+      save("project_env_set", { ok: true, name: "PORT" }),
+      save("project_settings_update", {
+        ok: true,
+        replaced: { devCommand: "make serve", runtime: "node22" },
+      }),
+      save("project_settings_update", { ok: true }),
+    ]),
+  ]);
+
+  assert.deepEqual(
+    events.map(({ body }) => body),
+    [
+      "Deleted saved variable API_URL",
+      "Replaced saved variable API_URL",
+      "API_URL was not set",
+      "Saved variable PORT",
+      "Replaced saved project settings: devCommand, runtime",
+      "Project settings saved",
+    ]
+  );
+  assert.doesNotMatch(JSON.stringify(events), /private value|make serve/);
+});
+
 test("control timeline surfaces structured tool failures as failures", () => {
   const events = buildCombinedTimeline(undefined, [
     assistant([

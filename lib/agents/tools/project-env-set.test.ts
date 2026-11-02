@@ -67,6 +67,8 @@ describe("project_env_set", () => {
       "BASH_ENV",
       "PIP_INDEX_URL",
       "pip_extra_index_url",
+      "HOME",
+      "IFS",
     ]) {
       expect(
         await tools().project_env_set.execute({ name, value: "x" })
@@ -102,7 +104,11 @@ describe("project_env_set", () => {
 
     expect(
       await tools().project_env_set.execute({ name: "PORT", value: null })
-    ).toMatchObject({ ok: true, note: "The variable was not set." });
+    ).toMatchObject({
+      ok: true,
+      unchanged: true,
+      note: "The variable was not set.",
+    });
     expect(writes).toEqual([]);
   });
 

@@ -59,12 +59,41 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
+/**
+ * Saves to the project's stored setup outlive the session, so the timeline
+ * names what changed, and a deleted or replaced value is spelled out.
+ */
+function settingsSaveBody(output: Record<string, unknown> | null) {
+  const replaced = Object.keys(asRecord(output?.replaced) ?? {});
+  return replaced.length > 0
+    ? `Replaced saved project settings: ${replaced.join(", ")}`
+    : "Project settings saved";
+}
+
+function envSaveBody(output: Record<string, unknown> | null) {
+  const name = typeof output?.name === "string" ? output.name : "variable";
+  if (output?.deleted === true) return `Deleted saved variable ${name}`;
+  if (output?.replaced === true) return `Replaced saved variable ${name}`;
+  if (output?.unchanged === true) return `${name} was not set`;
+  return `Saved variable ${name}`;
+}
+
+const PROJECT_SAVE_BODIES: Partial<
+  Record<string, (output: Record<string, unknown> | null) => string>
+> = {
+  project_env_set: envSaveBody,
+  project_settings_update: settingsSaveBody,
+};
+
 function toolProgressBody(
   toolName: string,
   state: string,
   output: Record<string, unknown> | null
 ) {
   const complete = state === "output-available";
+  const projectSave = PROJECT_SAVE_BODIES[toolName];
+  if (projectSave)
+    return complete ? projectSave(output) : "Saving project setup";
   if (toolName === "plan_mission")
     return complete ? "Plan saved" : "Saving plan";
   if (toolName === "sandbox_start") {
