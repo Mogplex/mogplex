@@ -27,6 +27,20 @@ export function rowsFromEnvVars(vars: RepoEnvVars | null | undefined) {
 }
 
 /** Append an empty, requested row for each name the table does not have. */
+/**
+ * Names that still need a value. A name stored with an empty or blank value
+ * counts as missing: a credential that is present but empty is not set.
+ */
+export function missingEnvNames(
+  stored: RepoEnvVars | null | undefined,
+  names: readonly string[]
+) {
+  return names.filter((name) => {
+    const value = stored && Object.hasOwn(stored, name) ? stored[name] : "";
+    return String(value ?? "").trim() === "";
+  });
+}
+
 export function withRequestedNames(
   rows: EnvVarRow[],
   names: readonly string[] = []

@@ -25,6 +25,18 @@ describe("project_env_request", () => {
     expect(writes).toEqual([]);
   });
 
+  it("should count a variable stored with a blank value as missing", async () => {
+    installRepo({
+      sandbox_env_vars: { API_KEY: "", PORT: " ", NODE_ENV: "dev" },
+    });
+
+    expect(
+      await tools().project_env_request.execute({
+        names: ["API_KEY", "PORT", "NODE_ENV"],
+      })
+    ).toMatchObject({ ok: true, missing: ["API_KEY", "PORT"] });
+  });
+
   it("should refuse an invalid name in a variable request", async () => {
     installRepo();
 

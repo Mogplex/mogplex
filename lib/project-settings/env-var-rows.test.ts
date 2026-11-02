@@ -4,6 +4,7 @@ import {
   envVarsFromRows,
   mergePastedEnv,
   rowsFromEnvVars,
+  missingEnvNames,
   withRequestedNames,
 } from "./env-var-rows";
 
@@ -105,6 +106,18 @@ describe("env var rows", () => {
       ["API_KEY", ""],
     ]);
     expect(rows.at(-1)?.requested).toBe(true);
+  });
+
+  it("should report names stored empty or blank as missing", () => {
+    expect(
+      missingEnvNames({ API_KEY: "", PORT: "  ", NODE_ENV: "dev" }, [
+        "API_KEY",
+        "PORT",
+        "NODE_ENV",
+        "DATABASE_URL",
+      ])
+    ).toEqual(["API_KEY", "PORT", "DATABASE_URL"]);
+    expect(missingEnvNames(null, ["API_KEY"])).toEqual(["API_KEY"]);
   });
 
   it("should treat a requested name with stray spaces as the stored one", () => {

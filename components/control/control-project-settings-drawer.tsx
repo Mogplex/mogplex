@@ -11,7 +11,12 @@ export function ControlProjectSettingsDrawer() {
   const close = useProjectSettingsDrawer((state) => state.close);
   // The store outlives Control; leaving with the drawer open must not
   // reopen it, with an old request, on the next visit.
-  useEffect(() => close, [close]);
+  useEffect(
+    () => () => {
+      close();
+    },
+    [close]
+  );
   return (
     <ProjectSettingsDrawer
       repoId={request?.repoId ?? null}

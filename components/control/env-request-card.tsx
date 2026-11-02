@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { useProjectSettingsDrawer } from "@/hooks/use-project-settings-drawer"
 import { useRepos } from "@/hooks/use-repos"
 import type { EnvRequestEvent } from "@/lib/control/types"
+import { missingEnvNames } from "@/lib/project-settings/env-var-rows"
 
 /**
  * Names Control asked for, with a button that opens Project settings ready
@@ -16,9 +17,8 @@ export function EnvRequestCard({ event }: { event: EnvRequestEvent }) {
   // Read the project live, so the card turns to "set" once the operator saves;
   // the tool's snapshot covers the moment before the project list loads.
   const repo = repos.find((candidate) => candidate.id === event.repoId)
-  const stored = repo?.sandbox_env_vars ?? {}
   const missingNames = repo
-    ? event.names.filter((name) => !Object.hasOwn(stored, name))
+    ? missingEnvNames(repo.sandbox_env_vars, event.names)
     : event.missing
   const missing = new Set(missingNames)
   return (

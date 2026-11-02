@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { RepoEnvVars } from "@/lib/repo-settings";
 import { ENV_NAME } from "./project-env-names";
+import { missingEnvNames } from "@/lib/project-settings/env-var-rows";
 import { defineTool } from "./shared";
 
 const requestParams = z.object({
@@ -40,7 +41,7 @@ export function createProjectEnvRequestTool(
         return { error: `${invalid || "That"} is not a valid variable name.` };
       }
       return readStoredVariables(async (stored) => {
-        const missing = keys.filter((key) => !Object.hasOwn(stored, key));
+        const missing = missingEnvNames(stored, keys);
         return {
           ok: true,
           repoId,
