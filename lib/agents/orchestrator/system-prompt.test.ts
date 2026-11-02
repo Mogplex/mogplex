@@ -200,7 +200,7 @@ describe("orchestrator resource decision prompt", () => {
     expect(prompt).toContain("git rev-parse --show-toplevel");
     expect(prompt).toContain("ripgrep is not installed");
     expect(prompt).toContain(
-      "Persistent workspaces retain files when compute stops."
+      "Persistent workspaces retain files when compute stops"
     );
     expect(prompt).toContain(
       "Direct edits land on the selected sandbox's working branch."
@@ -399,6 +399,13 @@ describe("orchestrator resource decision prompt", () => {
     );
     expect(prompt).toContain(
       "never claim that compute stopped unless the stop was confirmed"
+    );
+    expect(prompt).toContain("Persistent means files survive a pause");
+    expect(prompt).toContain(
+      "Uncommitted changes in a persistent workspace are not a reason to keep idle compute running"
+    );
+    expect(prompt).toContain(
+      "Routine compute state belongs in the sandbox controls"
     );
   });
 

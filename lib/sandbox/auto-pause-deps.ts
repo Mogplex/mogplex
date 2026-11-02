@@ -143,8 +143,10 @@ export async function loadPresenceState(input: {
 export async function hasActiveAiCall(input: {
   sandboxRecordId: string;
   sandboxId: string;
+  excludeAiCallId?: string;
+  userId?: string;
 }) {
-  const { count, error } = await supabaseAdmin
+  let query = supabaseAdmin
     .from("ai_calls")
     .select("id", { count: "exact", head: true })
     .in("status", ["pending", "streaming"])
@@ -154,6 +156,9 @@ export async function hasActiveAiCall(input: {
         input.sandboxId
       )
     );
+  if (input.excludeAiCallId) query = query.neq("id", input.excludeAiCallId);
+  if (input.userId) query = query.eq("user_id", input.userId);
+  const { count, error } = await query;
 
   if (error) {
     throw new Error(`Failed to load active ai_calls: ${error.message}`);
@@ -162,12 +167,19 @@ export async function hasActiveAiCall(input: {
   return (count ?? 0) > 0;
 }
 
-export async function hasRunningAutomation(sandboxRecordId: string) {
-  const { count, error } = await supabaseAdmin
+export async function hasRunningAutomation(
+  sandboxRecordId: string,
+  excludeAiCallId?: string,
+  userId?: string
+) {
+  let query = supabaseAdmin
     .from("external_agent_runs")
     .select("id", { count: "exact", head: true })
     .eq("sandbox_record_id", sandboxRecordId)
     .in("status", ["pending", "streaming"]);
+  if (excludeAiCallId) query = query.neq("ai_call_id", excludeAiCallId);
+  if (userId) query = query.eq("user_id", userId);
+  const { count, error } = await query;
 
   if (error) {
     throw new Error(

@@ -92,7 +92,7 @@ Do the work yourself by default. For a coding request: find the relevant code, m
 - Continue the already authorized implementation, verification, and review fixes until complete or blocked by a concrete missing permission, credential, capability, or decision. Do not ask whether to finish work already authorized. New follow-up messages steer the existing task; retain earlier requirements unless the operator changes them.
 - In the final response, give each applicable check's command and status: passed, failed, blocked, or not run, with the concrete reason for any missing result. Separate local results from CI results; a push or pending CI run is not a passing check. Never describe incomplete or failing work as verified, complete, or merge-ready.
 - Do not commit or push unless the operator asks. The operator reviews, reverts, commits, and opens pull requests from the changed-files panel.
-- Persistent workspaces retain files when compute stops. Legacy disposable sandboxes lose uncommitted edits on stop. Do not call sandbox_stop while edits are uncommitted unless the operator has agreed to lose them; leave the sandbox running when you finish a turn with unshipped work.
+- Persistent workspaces retain files when compute stops and resume the same saved workspace on the next turn. Uncommitted changes in a persistent workspace are not a reason to keep idle compute running. Legacy disposable sandboxes lose uncommitted edits on stop: do not stop those while edits are uncommitted unless the operator has agreed to lose them. Never delete a workspace as routine compute cleanup.
 - Without a running sandbox, read_file and list_files serve the committed tree from GitHub and editing tools are unavailable; start the sandbox before editing.
 </coding>
 
@@ -172,8 +172,8 @@ function buildSandboxTaskLifecycleBlock() {
   return `
 <sandbox-task-lifecycle>
 - Treat sandbox compute as part of the current task lifecycle. After a blocked, failed, or completed one-shot task, stop compute when no executable sandbox step remains.
-- Keep compute running only for a live preview or server, a persistent session, follow-up work, or an explicit operator request to keep it running.
-- Before the final response, use the actual lifecycle result. State whether compute stopped or remains running and why; never claim that compute stopped unless the stop was confirmed.
+- Keep compute running only for a live preview or server, active worker or command, or an explicit operator request to keep it running. Persistent means files survive a pause; it is not a reason to keep idle compute running. Possible future follow-ups do not need a running VM.
+- Routine compute state belongs in the sandbox controls, not in a footer on every chat reply. Explain an unresolved cleanup failure when it needs attention; never claim that compute stopped unless the stop was confirmed.
 </sandbox-task-lifecycle>
 `;
 }

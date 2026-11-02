@@ -17,6 +17,10 @@ import {
 import { toSandboxClientRecord } from "@/lib/sandbox/summary";
 import { isNotFoundError } from "@/lib/sandbox/sdk-adapter";
 import { withSandboxMutationLock } from "@/lib/sandbox/mutation-lock";
+import {
+  hasActiveAiCall,
+  hasRunningAutomation,
+} from "@/lib/sandbox/auto-pause-deps";
 import { resolveSandboxWorkingDirectory } from "@/lib/sandbox/working-directory";
 import {
   UNCOMMITTED_CHANGES_COMMAND,
@@ -63,6 +67,8 @@ type SandboxStopDeps = {
   prepareSandboxBillingClose: typeof prepareSandboxBillingClose;
   finalizeSandboxBillingClose: typeof finalizeSandboxBillingClose;
   withSandboxMutationLock: typeof withSandboxMutationLock;
+  hasActiveAiCall: typeof hasActiveAiCall;
+  hasRunningAutomation: typeof hasRunningAutomation;
 };
 
 const defaultSandboxStopDeps: SandboxStopDeps = {
@@ -74,6 +80,8 @@ const defaultSandboxStopDeps: SandboxStopDeps = {
   prepareSandboxBillingClose,
   finalizeSandboxBillingClose,
   withSandboxMutationLock,
+  hasActiveAiCall,
+  hasRunningAutomation,
 };
 
 type RemoteStopOutcome = {
@@ -240,8 +248,49 @@ export function createSandboxStopHandler(
 
     // A Stop request alone never authorizes discarding legacy workspace files.
     const body = await request.json().catch(() => null);
-    const preserveChanges = body?.discardChanges !== true;
+    const automatic = body?.automatic === true;
+    const completingAiCallId =
+      typeof body?.completingAiCallId === "string"
+        ? body.completingAiCallId
+        : undefined;
+    const preserveChanges = automatic || body?.discardChanges !== true;
     const stop = async () => {
+      // Cleanup ends this turn's compute only. Other runs can still be using
+      // the same durable workspace, even between their shell commands.
+      if (automatic) {
+        try {
+          const [activeCall, runningWorker] = await Promise.all([
+            deps.hasActiveAiCall({
+              sandboxRecordId: id,
+              sandboxId: loaded.record.sandbox_id,
+              excludeAiCallId: completingAiCallId,
+              userId: loaded.record.user_id,
+            }),
+            deps.hasRunningAutomation(
+              id,
+              completingAiCallId,
+              loaded.record.user_id
+            ),
+          ]);
+          if (activeCall || runningWorker)
+            return NextResponse.json(
+              {
+                error: "Another agent is still using this sandbox.",
+                reason: "sandbox_active_work",
+              },
+              { status: 409 }
+            );
+        } catch {
+          return NextResponse.json(
+            {
+              error:
+                "Could not verify sandbox activity. Compute was left running.",
+              reason: "activity_unknown",
+            },
+            { status: 503 }
+          );
+        }
+      }
       let billingClose: Awaited<ReturnType<typeof prepareSandboxBillingClose>> =
         null;
       try {
