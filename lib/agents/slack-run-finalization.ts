@@ -14,7 +14,7 @@ export function createSlackRunFinalization(input: {
 }) {
   const lifecycle = createSandboxTaskLifecycle({
     userId: input.userId,
-    aiCallId: input.aiCallId,
+    aiCallId: input.aiCallId ?? null,
     userText: input.userText,
     binding: {
       sandboxId: input.sandboxId ?? null,

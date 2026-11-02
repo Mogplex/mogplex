@@ -14,7 +14,6 @@ function createLifecycle(overrides?: {
   };
   state?: {
     status: string;
-    persistent: boolean;
     previewUrl: string | null;
   };
   stopResult?: boolean | "active_work";
@@ -26,13 +25,13 @@ function createLifecycle(overrides?: {
   };
   const lifecycle = createSandboxTaskLifecycle({
     userId: "user-1",
+    aiCallId: "current-call",
     userText: overrides?.userText ?? "run the check",
     binding,
     deps: {
       loadState: async () =>
         overrides?.state ?? {
           status: "running",
-          persistent: false,
           previewUrl: null,
         },
       stop,
@@ -94,7 +93,6 @@ describe("sandbox task lifecycle", () => {
       "check the preview",
       {
         status: "running",
-        persistent: false,
         previewUrl: "https://preview.example",
       },
       "preview",
@@ -102,7 +100,7 @@ describe("sandbox task lifecycle", () => {
     [
       "explicit request",
       "keep the sandbox running for follow-up",
-      { status: "running", persistent: false, previewUrl: null },
+      { status: "running", previewUrl: null },
       "explicit",
     ],
   ])("preserves a %s", async (_name, userText, state, reason) => {
@@ -127,7 +125,6 @@ describe("sandbox task lifecycle", () => {
     const { lifecycle, stop } = createLifecycle({
       state: {
         status: "running",
-        persistent: false,
         previewUrl: "https://preview.example",
       },
     });
@@ -151,7 +148,7 @@ describe("sandbox task lifecycle", () => {
     async (toolName) => {
       const { lifecycle, binding, stop } = createLifecycle({
         userText: "fix the tests",
-        state: { status: "running", persistent: true, previewUrl: null },
+        state: { status: "running", previewUrl: null },
       });
       const toolCall = { toolName, input: { command: "pnpm test" } };
       lifecycle.onToolStart({ toolCall });
@@ -173,7 +170,7 @@ describe("sandbox task lifecycle", () => {
   it("keeps required compute without adding routine infrastructure chatter", async () => {
     const { lifecycle, stop } = createLifecycle({
       userText: "keep the sandbox running",
-      state: { status: "running", persistent: true, previewUrl: null },
+      state: { status: "running", previewUrl: null },
     });
     lifecycle.onToolStart({ toolCall: { toolName: "run_command" } });
     lifecycle.onToolFinish({
@@ -272,7 +269,7 @@ describe("sandbox task lifecycle", () => {
 
   it("does not report a failed server start as still running", async () => {
     const { lifecycle, stop } = createLifecycle({
-      state: { status: "running", persistent: false, previewUrl: null },
+      state: { status: "running", previewUrl: null },
     });
     lifecycle.onToolStart({
       toolCall: { toolName: "run_command", input: { command: "pnpm dev" } },

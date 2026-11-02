@@ -16,7 +16,6 @@ type ToolEvent = {
 
 type SandboxState = {
   status: string;
-  persistent: boolean;
   previewUrl: string | null;
 };
 
@@ -29,7 +28,11 @@ export type SandboxTaskLifecycleDeps = {
     sandboxId: string,
     userId: string
   ) => Promise<
-    boolean | "active_work" | "unsaved_work" | "inspection_unavailable"
+    | boolean
+    | "active_work"
+    | "unsaved_work"
+    | "inspection_unavailable"
+    | "activity_unknown"
   >;
 };
 
@@ -39,7 +42,20 @@ type RetainedSandboxReason =
   | "follow_up"
   | "unsaved_work"
   | "inspection_unavailable"
+  | "activity_unknown"
   | "unconfirmed";
+
+// Show actionable refusals first, but preserve every distinct warning when
+// cleanup touches several workspaces. Routine retention needs no message.
+const RETENTION_ORDER: RetainedSandboxReason[] = [
+  "unsaved_work",
+  "inspection_unavailable",
+  "activity_unknown",
+  "unconfirmed",
+  "explicit",
+  "preview",
+  "follow_up",
+];
 
 export type SandboxTaskLifecycleOutcome =
   | { state: "unused" }
@@ -48,6 +64,7 @@ export type SandboxTaskLifecycleOutcome =
       state: "running";
       sandboxIds: string[];
       reason: RetainedSandboxReason;
+      reasons: RetainedSandboxReason[];
     };
 
 const SANDBOX_TOOLS = new Set([
@@ -118,7 +135,7 @@ async function loadSandboxState(
 ): Promise<SandboxState | null> {
   const { data, error } = await supabaseAdmin
     .from("sandboxes")
-    .select("status, persistent, preview_url")
+    .select("status, preview_url")
     .eq("id", sandboxId)
     .eq("user_id", userId)
     .maybeSingle();
@@ -126,7 +143,6 @@ async function loadSandboxState(
   return data
     ? {
         status: data.status,
-        persistent: data.persistent === true,
         previewUrl: readString(data.preview_url),
       }
     : null;
@@ -135,8 +151,15 @@ async function loadSandboxState(
 async function stopSandboxCompute(
   sandboxId: string,
   userId: string,
-  aiCallId?: string
+  aiCallId: string | null
 ) {
+  if (!aiCallId) {
+    // Some Slack callers have no owning ai_call. Never invent an exclusion:
+    // the stop route must still check every active call for this workspace.
+    console.warn("[agent] automatic sandbox stop has no completing ai_call", {
+      sandboxId,
+    });
+  }
   const requestHeaders = getSandboxRequestHeaders(userId);
   if ("error" in requestHeaders) return false;
   const response = await fetch(
@@ -147,7 +170,10 @@ async function stopSandboxCompute(
         ...requestHeaders.headers,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ automatic: true, completingAiCallId: aiCallId }),
+      body: JSON.stringify({
+        automatic: true,
+        completingAiCallId: aiCallId ?? undefined,
+      }),
     }
   );
   const data = (await response.json().catch(() => null)) as {
@@ -163,6 +189,8 @@ async function stopSandboxCompute(
     return "unsaved_work" as const;
   if (response.status === 409 && data?.reason === "inspection_unavailable")
     return "inspection_unavailable" as const;
+  if (response.status === 503 && data?.reason === "activity_unknown")
+    return "activity_unknown" as const;
   if (!response.ok) return false;
   return data?.sandbox?.runtime_summary?.status === "stopped";
 }
@@ -195,7 +223,11 @@ async function cleanupSandboxCandidate(input: {
     if (input.retainReason) return input.retainReason;
     const result = await input.deps.stop(input.sandboxId, input.userId);
     if (result === "active_work") return "follow_up";
-    if (result === "unsaved_work" || result === "inspection_unavailable")
+    if (
+      result === "unsaved_work" ||
+      result === "inspection_unavailable" ||
+      result === "activity_unknown"
+    )
       return result;
     return result ? null : "unconfirmed";
   } catch (error) {
@@ -228,16 +260,23 @@ function toolRequiresFollowUp(
 }
 
 function computeFooter(outcome: SandboxTaskLifecycleOutcome) {
-  if (outcome.state === "running" && outcome.reason === "unsaved_work")
-    return "This workspace cannot preserve uncommitted changes when stopped. Commit and push the changes before stopping compute.";
-  if (
-    outcome.state === "running" &&
-    outcome.reason === "inspection_unavailable"
-  )
-    return "Could not check for unsaved changes. Compute was left running to protect your work. Review its changes before stopping it.";
-  if (outcome.state !== "running" || outcome.reason !== "unconfirmed")
-    return null;
-  return "Could not confirm that sandbox compute stopped. Check its status before leaving.";
+  if (outcome.state !== "running") return null;
+  const messages: Partial<Record<RetainedSandboxReason, string>> = {
+    unsaved_work:
+      "This workspace cannot preserve uncommitted changes when stopped. Commit and push the changes before stopping compute.",
+    inspection_unavailable:
+      "Could not check for unsaved changes. Compute was left running to protect your work. Review its changes before stopping it.",
+    activity_unknown:
+      "Compute was left running because active work could not be checked. Check the workspace’s compute status before stopping it.",
+    unconfirmed:
+      "Could not confirm that sandbox compute stopped. Check its status before leaving.",
+  };
+  return (
+    outcome.reasons
+      .map((reason) => messages[reason])
+      .filter(Boolean)
+      .join("\n\n") || null
+  );
 }
 
 export function appendSandboxTaskLifecycleFooter(
@@ -271,7 +310,8 @@ export function createSandboxTaskLifecycle(input: {
   userId: string;
   userText: string;
   binding: SandboxBinding;
-  aiCallId?: string;
+  /** Null only when the caller has no owning ai_call; no call is excluded. */
+  aiCallId: string | null;
   deps?: Partial<SandboxTaskLifecycleDeps>;
 }) {
   const deps: SandboxTaskLifecycleDeps = {
@@ -344,7 +384,7 @@ export function createSandboxTaskLifecycle(input: {
     });
 
     const remaining: string[] = [];
-    let retainedReason: RetainedSandboxReason | null = null;
+    const retainedReasons = new Set<RetainedSandboxReason>();
     const retainPreview = shouldRetainPreviewForRequest(input.userText);
     for (const sandboxId of candidates) {
       const reason = await cleanupSandboxCandidate({
@@ -356,15 +396,18 @@ export function createSandboxTaskLifecycle(input: {
       });
       if (reason) {
         remaining.push(sandboxId);
-        retainedReason =
-          reason === "unconfirmed" ? reason : (retainedReason ?? reason);
+        retainedReasons.add(reason);
       }
     }
     if (remaining.length > 0) {
+      const reasons = RETENTION_ORDER.filter((reason) =>
+        retainedReasons.has(reason)
+      );
       return {
         state: "running",
         sandboxIds: remaining,
-        reason: retainedReason ?? "unconfirmed",
+        reason: reasons[0],
+        reasons,
       };
     }
     input.binding.sandboxId = null;
