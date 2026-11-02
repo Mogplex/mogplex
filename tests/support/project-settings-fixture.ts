@@ -40,10 +40,13 @@ const matches = (row: Row, filters: Filter[]) =>
       : actual === value;
   });
 
-/** One repos row behind the database boundary; records every write. */
+/**
+ * One repos row behind the database boundary; records every write.
+ * `beforeWrite` runs before each update and may return a database error.
+ */
 export function installRepo(
   overrides: Row = {},
-  beforeWrite: (row: Row) => void = () => {}
+  beforeWrite: (row: Row) => unknown = () => null
 ) {
   const row: Row = {
     id: REPO_ID,
@@ -79,8 +82,10 @@ export function installRepo(
         return builder;
       },
       maybeSingle: async () => {
-        if (patch) beforeWrite(row);
-        else reads.count += 1;
+        if (patch) {
+          const error = beforeWrite(row);
+          if (error) return { data: null, error };
+        } else reads.count += 1;
         if (!matches(row, filters)) return { data: null, error: null };
         if (patch) {
           writes.push(patch);
@@ -103,7 +108,9 @@ type ToolRecord = Record<
   string,
   {
     execute: (input: Record<string, unknown>) => Promise<Row>;
-    inputSchema: { safeParse: (input: unknown) => { success: boolean } };
+    inputSchema: {
+      safeParse: (input: unknown) => { success: boolean; data?: Row };
+    };
   }
 >;
 

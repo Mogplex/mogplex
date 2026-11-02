@@ -59,6 +59,8 @@ const LOADER_ENV_NAMES = new Set([
   "PAGER",
   "PATH",
   "PERL5OPT",
+  "PIP_EXTRA_INDEX_URL",
+  "PIP_INDEX_URL",
   "PROMPT_COMMAND",
   "PYTHONPATH",
   "PYTHONSTARTUP",
@@ -81,11 +83,12 @@ function isLoaderEnvName(name: string) {
 }
 
 function logWriteError(action: string, repoId: string, error: unknown) {
+  // Database messages can quote the row being written, which may hold
+  // secrets, so log only the error code.
+  const code = (error as { code?: unknown } | null)?.code;
   console.error(
     `[control/project-settings] ${action} failed for repo ${repoId}:`,
-    error instanceof Error
-      ? error.message
-      : ((error as { message?: unknown } | null)?.message ?? error)
+    typeof code === "string" ? code : "unknown error"
   );
 }
 
@@ -207,6 +210,7 @@ const updateParams = z.object({
     ),
   rootDirectory: z
     .string()
+    .trim()
     .refine((value) => !PARENT_SEGMENT.test(value) && !/\s/.test(value), {
       message: "Use a path inside the repository, without spaces or '..'.",
     })
@@ -217,7 +221,7 @@ const updateParams = z.object({
     .boolean()
     .optional()
     .describe(
-      "Required to change a saved value that is already set to something else. Use it only when the operator asked, or for a value you saved earlier in this conversation."
+      "Required to change a saved install or dev command, or a pinned dev port, that is already set to something else. Use it only when the operator asked, or for a value you saved earlier in this conversation."
     ),
 });
 
@@ -226,12 +230,6 @@ type SettingsUpdates = ReturnType<typeof normalizeRepoSettingsPatch>;
 /**
  * Saved values this update would change: a set command, directory, runtime,
  * or pinned port being replaced or cleared. Filling an empty one is not.
- *
- * Saved commands run on every later boot, so this guard and the timeline
- * entry for each save are what stand between a mistaken or injected command
- * and the next boot. There is deliberately no operator approval step: the
- * sandbox is the trust boundary, and Control can already commit to the
- * repository itself, which persists further than a saved command.
  */
 function replacedSettings(row: SettingsRow, updates: SettingsUpdates) {
   const replaced: Record<string, string | number | null> = {};
@@ -254,6 +252,18 @@ function replacedSettings(row: SettingsRow, updates: SettingsUpdates) {
   if (portPinned && portChanges) replaced.devPort = row.dev_port;
   return replaced;
 }
+
+/**
+ * Replaced settings that need `replace: true`. Saved commands run on every
+ * later boot, so this guard and the timeline entry for each save are what
+ * stand between a mistaken or injected command and the next boot. Runtime and
+ * root directory are closed, validated choices that setup itself has to
+ * correct, so changing them only shows up in `replaced`. There is
+ * deliberately no operator approval step: the sandbox is the trust boundary,
+ * and Control can already commit to the repository itself, which persists
+ * further than a saved command.
+ */
+const REPLACE_GUARDED = new Set(["installCommand", "devCommand", "devPort"]);
 
 const envParams = z.object({
   name: z.string().describe("Variable name, e.g. NODE_ENV."),
@@ -337,11 +347,15 @@ export function createProjectSettingsTools(
             return { error: "No settings to save." };
           }
           const replaced = replacedSettings(row, updates);
-          const names = Object.keys(replaced);
+          const names = Object.keys(replaced).filter((name) =>
+            REPLACE_GUARDED.has(name)
+          );
           if (names.length > 0 && !input.replace) {
             return {
               error: `${names.join(", ")} already saved. Tell the operator what you would change and why; call again with replace: true only once they agree.`,
-              saved: replaced,
+              saved: Object.fromEntries(
+                names.map((name) => [name, replaced[name]])
+              ),
             };
           }
           let query = supabaseAdmin
@@ -371,7 +385,7 @@ export function createProjectSettingsTools(
           return {
             ok: true,
             settings: describeSettings(data as SettingsRow),
-            ...(names.length > 0 ? { replaced } : {}),
+            ...(Object.keys(replaced).length > 0 ? { replaced } : {}),
           };
         }),
     }),

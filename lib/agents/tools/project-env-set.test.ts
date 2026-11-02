@@ -65,6 +65,8 @@ describe("project_env_set", () => {
       "NODE_TLS_REJECT_UNAUTHORIZED",
       "path",
       "BASH_ENV",
+      "PIP_INDEX_URL",
+      "pip_extra_index_url",
     ]) {
       expect(
         await tools().project_env_set.execute({ name, value: "x" })

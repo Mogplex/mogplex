@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   installRepo,
   tools,
@@ -149,14 +149,35 @@ describe("project settings tools", () => {
     });
   });
 
+  it("should let setup correct a saved runtime or directory without replace", async () => {
+    const { writes } = installRepo({ root_directory: "web" });
+
+    expect(
+      await tools().project_settings_update.execute({ rootDirectory: "api" })
+    ).toMatchObject({ ok: true, replaced: { rootDirectory: "web" } });
+    expect(writes).toEqual([{ root_directory: "api" }]);
+  });
+
+  it("should log only the error code when a settings save fails", async () => {
+    installRepo({}, () => ({
+      code: "23514",
+      message: "failing row contains (make dev)",
+    }));
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    expect(
+      await tools().project_settings_update.execute({ devCommand: "make dev" })
+    ).toEqual({ error: "Could not save project settings." });
+    expect(log).toHaveBeenCalledWith(expect.any(String), "23514");
+    expect(JSON.stringify(log.mock.calls)).not.toContain("failing row");
+    log.mockRestore();
+  });
+
   it("should save a runtime for future boots", async () => {
     const { writes } = installRepo();
 
     expect(
-      await tools().project_settings_update.execute({
-        runtime: "python3.13",
-        replace: true,
-      })
+      await tools().project_settings_update.execute({ runtime: "python3.13" })
     ).toMatchObject({
       ok: true,
       settings: { runtime: "python3.13" },
@@ -205,6 +226,9 @@ describe("project settings tools", () => {
     expect(schema.safeParse({ rootDirectory: "my app" }).success).toBe(false);
     expect(schema.safeParse({ rootDirectory: "apps/web" }).success).toBe(true);
     expect(schema.safeParse({ rootDirectory: null }).success).toBe(true);
+    expect(schema.safeParse({ rootDirectory: " apps/web\n" }).data).toEqual({
+      rootDirectory: "apps/web",
+    });
   });
 
   it("should say which team was searched when a team project is missing", async () => {
