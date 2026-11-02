@@ -8,12 +8,8 @@ for (const [reason, status, expected] of [
     409,
     "Commit and push the changes before stopping compute.",
   ],
-  ["inspection_unavailable", 409, "Review its changes before stopping it."],
-  [
-    "activity_unknown",
-    503,
-    "Check the workspace’s compute status before stopping it.",
-  ],
+  ["inspection_unavailable", 409, "Review the changes before stopping it."],
+  ["activity_unknown", 503, "Check compute status before stopping it."],
 ] as const) {
   test(`automatic cleanup explains the known ${reason} refusal`, async () => {
     const originalFetch = globalThis.fetch;

@@ -264,11 +264,11 @@ function computeFooter(outcome: SandboxTaskLifecycleOutcome) {
   if (outcome.state !== "running") return null;
   const messages: Record<RetainedSandboxReason, string | null> = {
     unsaved_work:
-      "This workspace cannot preserve uncommitted changes when stopped. Commit and push the changes before stopping compute.",
+      "Compute was left running to protect changes that cannot be preserved when their workspace stops. Commit and push the changes before stopping compute.",
     inspection_unavailable:
-      "Could not check for unsaved changes. Compute was left running to protect your work. Review its changes before stopping it.",
+      "Could not check all workspaces for unsaved changes. Compute was left running to protect your work. Review the changes before stopping it.",
     activity_unknown:
-      "Compute was left running because active work could not be checked. Check the workspace’s compute status before stopping it.",
+      "Compute was left running because active work could not be checked. Check compute status before stopping it.",
     unconfirmed:
       "Could not confirm that sandbox compute stopped. Check its status before leaving.",
     explicit: null,

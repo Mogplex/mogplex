@@ -43,8 +43,8 @@ it.each([false, true])(
     const footer = await lifecycle.footer();
     expect(footer).toBe(
       [
-        "This workspace cannot preserve uncommitted changes when stopped. Commit and push the changes before stopping compute.",
-        "Could not check for unsaved changes. Compute was left running to protect your work. Review its changes before stopping it.",
+        "Compute was left running to protect changes that cannot be preserved when their workspace stops. Commit and push the changes before stopping compute.",
+        "Could not check all workspaces for unsaved changes. Compute was left running to protect your work. Review the changes before stopping it.",
         "Could not confirm that sandbox compute stopped. Check its status before leaving.",
       ].join("\n\n")
     );
