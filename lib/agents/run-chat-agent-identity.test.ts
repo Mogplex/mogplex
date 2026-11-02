@@ -17,10 +17,12 @@ it.each([undefined, "00000000-0000-4000-8000-000000000099"])(
     vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key");
     vi.stubEnv("INTERNAL_API_SECRET", "test-internal-api-secret");
     let stopBody: Record<string, unknown> | undefined;
+    let recordedStatus: string | undefined;
     vi.stubGlobal(
       "fetch",
       async (input: RequestInfo | URL, init?: RequestInit) => {
         if (String(input).includes("/api/sandbox/sandbox-1/stop")) {
+          expect(recordedStatus).toBe("success");
           stopBody = JSON.parse(String(init?.body));
           return Response.json({
             sandbox: { runtime_summary: { status: "stopped" } },
@@ -28,7 +30,6 @@ it.each([undefined, "00000000-0000-4000-8000-000000000099"])(
         }
         return Response.json({
           status: "running",
-          persistent: true,
           preview_url: null,
         });
       }
@@ -109,7 +110,9 @@ it.each([undefined, "00000000-0000-4000-8000-000000000099"])(
           })) as never,
           resolveSkills: async () => NO_CONVERSATION_SKILLS,
         },
-        recordAiCall: async () => {},
+        recordAiCall: async (record) => {
+          recordedStatus = record.status;
+        },
       },
     });
     expect(stopBody?.automatic).toBe(true);

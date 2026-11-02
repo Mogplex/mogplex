@@ -154,13 +154,6 @@ async function stopSandboxCompute(
   userId: string,
   aiCallId: string | null
 ) {
-  if (!aiCallId) {
-    // Some Slack callers have no owning ai_call. Never invent an exclusion:
-    // the stop route must still check every active call for this workspace.
-    console.warn("[agent] automatic sandbox stop has no completing ai_call", {
-      sandboxId,
-    });
-  }
   const requestHeaders = getSandboxRequestHeaders(userId);
   if ("error" in requestHeaders) return false;
   const response = await fetch(
@@ -318,10 +311,23 @@ export function createSandboxTaskLifecycle(input: {
   aiCallId: string | null;
   deps?: Partial<SandboxTaskLifecycleDeps>;
 }) {
+  let warnedMissingAiCall = false;
   const deps: SandboxTaskLifecycleDeps = {
     loadState: loadSandboxState,
-    stop: (sandboxId, userId) =>
-      stopSandboxCompute(sandboxId, userId, input.aiCallId),
+    stop: (sandboxId, userId) => {
+      if (!input.aiCallId && !warnedMissingAiCall) {
+        warnedMissingAiCall = true;
+        // Warn once per cleanup. A caller without an owning ai_call must not
+        // invent an exclusion; every active call still protects its workspace.
+        console.warn(
+          "[agent] automatic sandbox stop has no completing ai_call",
+          {
+            sandboxId,
+          }
+        );
+      }
+      return stopSandboxCompute(sandboxId, userId, input.aiCallId);
+    },
     ...input.deps,
   };
   const touched = new Set<string>();
