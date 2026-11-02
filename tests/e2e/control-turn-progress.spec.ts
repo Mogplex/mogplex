@@ -44,7 +44,7 @@ function currentWorker(
   };
 }
 
-test("a follow-up focuses the latest request and shows live command progress and stop", async ({
+test("a follow-up preserves one continuous conversation with live command progress and stop", async ({
   page,
 }, testInfo) => {
   const browserErrors: string[] = [];
@@ -137,6 +137,17 @@ test("a follow-up focuses the latest request and shows live command progress and
                 delta: "Earlier analysis. ".repeat(100),
               });
               send({ type: "text-end", id: "t" });
+              send({
+                type: "tool-input-available",
+                toolCallId: "earlier-read",
+                toolName: "read_file",
+                input: { path: "app/page.tsx" },
+              });
+              send({
+                type: "tool-output-available",
+                toolCallId: "earlier-read",
+                output: { content: "Earlier source content" },
+              });
               send({ type: "finish" });
               controller.enqueue(encoder.encode("data: [DONE]\n\n"));
               controller.close();
@@ -181,6 +192,11 @@ test("a follow-up focuses the latest request and shows live command progress and
     "Previous batch output"
   );
   await page.getByRole("button", { name: "Close terminal" }).click();
+  const earlierTool = page
+    .getByTestId("tool-activity")
+    .filter({ hasText: "Reading file" });
+  await earlierTool.locator("summary").click();
+  await expect(earlierTool.locator("details")).toHaveAttribute("open", "");
   await composer.fill("Fix the failing tests");
   await page.getByRole("button", { name: "Send", exact: true }).click();
   const progress = page.getByRole("status", { name: "Current activity" });
@@ -195,10 +211,12 @@ test("a follow-up focuses the latest request and shows live command progress and
   await expect(
     page.getByRole("region", { name: "Latest request" })
   ).toContainText("Fix the failing tests");
-  await expect(page.getByText(/Earlier analysis/)).not.toBeVisible();
+  await expect(page.getByText(/Earlier analysis/)).toHaveCount(1);
+  await expect(earlierTool.locator("details")).toHaveAttribute("open", "");
   await expect(
-    page.getByText("Earlier conversation · 1 request")
-  ).toBeVisible();
+    page.getByRole("button", { name: /Earlier conversation/i })
+  ).toHaveCount(0);
+  await expect(page.getByRole("log", { name: "Conversation" })).toHaveCount(1);
   await expect(
     page.getByRole("button", { name: "Stop", exact: true })
   ).toHaveText("Stop");
@@ -264,10 +282,28 @@ test("a follow-up focuses the latest request and shows live command progress and
   ).toBeVisible();
   await page.getByRole("button", { name: "Stop", exact: true }).click();
   await expect(progress).toHaveCount(0);
-  await expect(page.getByTestId("tool-activity")).toContainText("Interrupted");
-  await page
-    .getByRole("button", { name: "Earlier conversation · 1 request" })
-    .click();
+  await expect(
+    page
+      .getByRole("region", { name: "Latest request" })
+      .getByTestId("tool-activity")
+  ).toContainText("Interrupted");
+  // Earlier turns remain part of this transcript on a phone, with no panel to open.
+  await page.getByText(/Earlier analysis/).scrollIntoViewIfNeeded();
   await expect(page.getByText(/Earlier analysis/)).toBeVisible();
+  await page.screenshot({
+    path: testInfo.outputPath("conversation-history-mobile.png"),
+  });
+  await composer.fill("Also check the build");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(
+    page.getByRole("region", { name: "Latest request" })
+  ).toContainText("Also check the build");
+  await expect(
+    page.getByText("Fix the failing tests", { exact: true })
+  ).toHaveCount(1);
+  await expect(page.getByText(/Earlier analysis/)).toHaveCount(1);
+  await expect(earlierTool.locator("details")).toHaveAttribute("open", "");
+  await expect(page.getByRole("log", { name: "Conversation" })).toHaveCount(1);
+  await page.getByRole("button", { name: "Stop", exact: true }).click();
   expect(browserErrors).toEqual([]);
 });

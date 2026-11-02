@@ -6,6 +6,46 @@ import {
   getToolImplementationSummary,
 } from "./system-prompt";
 
+describe("orchestrator coding completion prompt", () => {
+  it("requires the repository's full checks even for a single-file change", () => {
+    const prompt = buildOrchestratorSystemPrompt({});
+    expect(prompt).toContain(
+      "After any code change, including a single-file fix"
+    );
+    expect(prompt).toContain("typecheck, lint, build, and relevant tests");
+    expect(prompt).toContain(
+      "repository's documented commands and package manager"
+    );
+    expect(prompt).toContain(
+      "Do not substitute a changed-files-only typecheck"
+    );
+    expect(prompt).not.toContain("After multi-file changes, verify");
+  });
+
+  it("requires actual final-revision results and an explicit status for missing checks", () => {
+    const prompt = buildOrchestratorSystemPrompt({});
+    expect(prompt).toContain("after the final edit");
+    expect(prompt).toContain("passed, failed, blocked, or not run");
+    expect(prompt).toContain(
+      "A command that never started, was interrupted, timed out, or is still running has not passed"
+    );
+    expect(prompt).toContain("Separate local results from CI results");
+  });
+
+  it("continues authorized fixes rather than asking the operator to repeat the request", () => {
+    const prompt = buildOrchestratorSystemPrompt({});
+    expect(prompt).toContain(
+      "Fix failures caused by your changes and rerun the affected checks"
+    );
+    expect(prompt).toContain(
+      "Do not ask whether to finish work already authorized"
+    );
+    expect(prompt).toContain(
+      "Honor an explicit request to skip or limit checks"
+    );
+  });
+});
+
 describe("orchestrator worker policy prompt", () => {
   it("forbids delegation inside worker prompts and states the per-sandbox cap", () => {
     const prompt = buildOrchestratorSystemPrompt({

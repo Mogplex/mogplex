@@ -22,7 +22,7 @@ function ControlTranscript({ messages, running }: { messages: UIMessage[]; runni
     getWorktree={() => undefined}
     onApprove={() => {}}
     pending={running}
-    collapseHistory={false}
+    recordedRun
   />;
 }
 

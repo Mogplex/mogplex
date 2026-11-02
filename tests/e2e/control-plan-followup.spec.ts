@@ -140,9 +140,9 @@ test("new work in an existing thread receives its own task while earlier work re
   expect(savedTasks).toHaveLength(2);
   expect(savedTasks[0]).toEqual(oldTask);
   await expect(page).toHaveURL(/mission=existing-thread/);
-  await page
-    .getByRole("button", { name: "Earlier conversation · 1 request" })
-    .click();
+  await expect(
+    page.getByRole("button", { name: /Earlier conversation/i })
+  ).toHaveCount(0);
   await expect(
     page.getByText("Initial review saved.", { exact: true })
   ).toBeVisible();
