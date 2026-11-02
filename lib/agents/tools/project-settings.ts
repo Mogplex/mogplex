@@ -5,6 +5,7 @@ import {
   type RepoEnvVars,
 } from "@/lib/repo-settings";
 import { getRepoForScope } from "@/lib/repos";
+import { isValidSandboxRootDirectory } from "@/lib/sandbox/launch-config";
 import { SUPPORTED_RUNTIMES } from "@/lib/sandbox/runtimes/types";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import {
@@ -33,7 +34,6 @@ type ProjectSettingsDeps = {
 const SETTINGS_COLUMNS =
   "id,runtime,root_directory,install_command,dev_command,dev_port,dev_port_auto,env_sync_mode,sandbox_env_vars";
 const ENV_NAME = /^[A-Za-z_]\w*$/;
-const PARENT_SEGMENT = /(^|\/)\.\.(\/|$)/;
 // Names that change how every program in the sandbox starts. A value saved
 // here re-arms on each boot, so only the operator may set these. The sandbox
 // itself is the trust boundary (Control can run any command there); this list
@@ -211,8 +211,10 @@ const updateParams = z.object({
   rootDirectory: z
     .string()
     .trim()
-    .refine((value) => !PARENT_SEGMENT.test(value) && !/\s/.test(value), {
-      message: "Use a path inside the repository, without spaces or '..'.",
+    // The same rule sandbox boot applies, so Control can save any directory
+    // the operator could and none that boot would refuse.
+    .refine(isValidSandboxRootDirectory, {
+      message: "Use a path inside the repository, without '..'.",
     })
     .nullable()
     .optional()
@@ -428,7 +430,7 @@ export function createProjectSettingsTools(
             replaced = exists;
             // Store it the way the operator's editor does (one surrounding
             // quote pair stripped), so later rewrites leave it unchanged.
-            next[key] = normalizeEnvVars({ [key]: value })[key] ?? value;
+            next[key] = normalizeEnvVars({ [key]: value })[key];
           }
           let query = supabaseAdmin
             .from("repos")

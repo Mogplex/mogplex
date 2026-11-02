@@ -223,7 +223,11 @@ describe("project settings tools", () => {
     expect(schema.safeParse({ rootDirectory: "apps/web/.." }).success).toBe(
       false
     );
-    expect(schema.safeParse({ rootDirectory: "my app" }).success).toBe(false);
+    expect(schema.safeParse({ rootDirectory: "%2e%2e/other" }).success).toBe(
+      false
+    );
+    // The settings drawer keeps internal spaces, so Control does too.
+    expect(schema.safeParse({ rootDirectory: "my app" }).success).toBe(true);
     expect(schema.safeParse({ rootDirectory: "apps/web" }).success).toBe(true);
     expect(schema.safeParse({ rootDirectory: null }).success).toBe(true);
     expect(schema.safeParse({ rootDirectory: " apps/web\n" }).data).toEqual({
