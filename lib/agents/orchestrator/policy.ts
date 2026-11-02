@@ -412,10 +412,6 @@ export function wrapWithPolicy(
 }
 
 /**
- * Sanitize tool input for audit logging.
- * Removes potentially sensitive fields.
- */
-/**
  * Inputs whose ordinary field names carry values that may be secrets, so the
  * key-name pattern in sanitizeInputForAudit cannot catch them.
  */
@@ -430,11 +426,17 @@ export function sanitizeToolInputForAudit(toolName: string, input: unknown) {
   if (!fields || !sanitized || typeof sanitized !== "object") return sanitized;
   const redacted = { ...(sanitized as Record<string, unknown>) };
   for (const field of fields) {
-    if (field in redacted) redacted[field] = "[redacted]";
+    // Keep null visible: for project_env_set it records a delete.
+    if (typeof redacted[field] === "string" && redacted[field])
+      redacted[field] = "[redacted]";
   }
   return redacted;
 }
 
+/**
+ * Sanitize tool input for audit logging.
+ * Removes potentially sensitive fields.
+ */
 export function sanitizeInputForAudit(input: unknown): unknown {
   if (!input || typeof input !== "object") return input;
   if (Array.isArray(input)) return input.map(sanitizeInputForAudit);

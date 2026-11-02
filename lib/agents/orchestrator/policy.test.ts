@@ -285,6 +285,28 @@ describe("audit log redaction", () => {
     expect(audit[0]).toContain("OPENAI_API_KEY");
     expect(audit[0]).not.toContain("sk-live-abc123");
   });
+
+  it("should keep a delete visible in the audit log", async () => {
+    const logged: string[] = [];
+    vi.spyOn(console, "log").mockImplementation((...args: unknown[]) => {
+      logged.push(args.map(String).join(" "));
+    });
+    const { deps } = makeDeps();
+    const { tool } = fakeTool();
+    const wrapped = wrapWithPolicy(
+      "project_env_set",
+      tool,
+      ctx,
+      deps
+    ) as unknown as WrappedTool;
+
+    await wrapped.execute({ name: "PORT", value: null, replace: true });
+
+    const audit = logged.find((line) =>
+      line.startsWith("[orchestrator:audit]")
+    );
+    expect(audit).toContain('"value":null');
+  });
 });
 
 describe("createRequestApprovalTool", () => {

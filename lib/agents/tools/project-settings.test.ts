@@ -435,4 +435,17 @@ describe("project settings tools", () => {
 
     expect(row.sandbox_env_vars).toEqual({ NODE_ENV: "production" });
   });
+
+  it("should leave other stored values exactly as they were", async () => {
+    const { row } = installRepo({
+      sandbox_env_vars: { QUOTED: '"kept-with-quotes"' },
+    });
+
+    await tools().project_env_set.execute({ name: "PORT", value: "8000" });
+
+    expect(row.sandbox_env_vars).toEqual({
+      QUOTED: '"kept-with-quotes"',
+      PORT: "8000",
+    });
+  });
 });

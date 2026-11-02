@@ -34,7 +34,9 @@ const SETTINGS_COLUMNS =
   "id,runtime,root_directory,install_command,dev_command,dev_port,dev_port_auto,env_sync_mode,sandbox_env_vars";
 const ENV_NAME = /^[A-Za-z_]\w*$/;
 // Names that change how every program in the sandbox starts. A value saved
-// here re-arms on each boot, so only the operator may set these.
+// here re-arms on each boot, so only the operator may set these. The sandbox
+// itself is the trust boundary (Control can run any command there); this list
+// keeps an accidental or injected hook from persisting past the session.
 const LOADER_ENV_NAMES = new Set([
   "ALL_PROXY",
   "BASH_ENV",
@@ -60,6 +62,7 @@ const LOADER_ENV_NAMES = new Set([
   "RUBYOPT",
   "SHELL",
   "SSH_ASKPASS",
+  "TAR_OPTIONS",
   "VISUAL",
   "_JAVA_OPTIONS",
 ]);
@@ -254,7 +257,7 @@ export function createProjectSettingsTools(
     }),
     project_settings_update: defineTool({
       description:
-        "Save runtime, install command, dev command, dev port, or root directory for the selected project so future sandbox boots use them. Save only commands you ran successfully in the sandbox.",
+        "Save runtime, install command, dev command, dev port, or root directory for the selected project so future sandbox boots use them. Save only commands you ran successfully in the sandbox. This replaces what is saved: check project_settings first, and ask the operator before replacing a command they set that still works.",
       inputSchema: updateParams,
       execute: async (input: z.infer<typeof updateParams>) =>
         withScope("write", async (scope) => {
@@ -312,7 +315,11 @@ export function createProjectSettingsTools(
         }
         return withRow("write", async (row, scope) => {
           const previous = row.sandbox_env_vars;
-          const next = normalizeEnvVars(previous);
+          // Copy stored values verbatim; only the key being written changes.
+          const next: RepoEnvVars =
+            previous && typeof previous === "object" && !Array.isArray(previous)
+              ? { ...previous }
+              : {};
           let replaced = false;
           const exists = Object.hasOwn(next, key);
           if (value === null && !exists) {
