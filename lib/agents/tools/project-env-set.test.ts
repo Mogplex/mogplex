@@ -113,7 +113,7 @@ describe("project_env_set", () => {
   it("should reject a value that is empty once its quotes are stripped", async () => {
     const { writes } = installRepo();
 
-    for (const value of ["''", '""', ' "" ']) {
+    for (const value of ["''", '""', ' "" ', "   ", '"  "']) {
       expect(
         await tools().project_env_set.execute({ name: "PORT", value })
       ).toHaveProperty("error", expect.stringContaining("value: null"));

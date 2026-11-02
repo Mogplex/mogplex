@@ -33,9 +33,10 @@ export const savedCommand = z
  * value under a secret-sounding name) is refused.
  */
 export function envValueProblem(name: string, value: string) {
-  // Quotes are stripped on save, so '""' would store an empty variable.
-  if (!normalizeEnvVars({ [name]: value })[name]) {
-    return "The value is empty once its surrounding quotes are removed. Use value: null to delete a variable.";
+  // Quotes are stripped on save, so '""' would store an empty variable; a
+  // spaces-only value is refused the same way a spaces-only command is.
+  if (!normalizeEnvVars({ [name]: value })[name]?.trim()) {
+    return "The value is empty or only spaces once its surrounding quotes are removed. Use value: null to delete a variable.";
   }
   const assignment = `${name}=${value}`;
   if (redactSecretsInText(assignment) !== assignment) {
