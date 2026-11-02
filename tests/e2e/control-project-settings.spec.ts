@@ -89,6 +89,24 @@ test("environment variables open from the project menu, stay masked, and save wi
   });
 });
 
+test("an unparseable .env line shows an error and keeps the table unchanged", async ({
+  page,
+}) => {
+  const { drawer, patches } = await openProjectSettings(
+    page,
+    "Environment variables"
+  );
+  await drawer.getByRole("button", { name: "Paste .env" }).click();
+  await drawer.getByLabel("Paste .env contents").fill("GOOD=1\nnot a pair");
+  await drawer.getByRole("button", { name: "Import", exact: true }).click();
+
+  await expect(drawer.getByRole("alert")).toHaveText(
+    "Invalid env var line: not a pair"
+  );
+  await expect(drawer.getByLabel("GOOD value", { exact: true })).toHaveCount(0);
+  expect(patches).toEqual([]);
+});
+
 test("a duplicated variable name blocks saving with an explanation", async ({
   page,
 }) => {

@@ -24,6 +24,12 @@ export function repoOwner(repo: Repo) {
  * Repository admin for Settings: GitHub sync plus remove/restore of
  * connected repositories, against the shared repos cache.
  */
+function errorMessage(err: unknown) {
+  return err instanceof Error
+    ? err.message
+    : "Could not update repository visibility. Try again.";
+}
+
 export function useRepositoryAdmin() {
   const activeTeamId = useActiveTeamId();
   const { user } = useUser();
@@ -77,8 +83,21 @@ export function useRepositoryAdmin() {
           activeTeamId
         ),
         body: JSON.stringify({ id: repo.id, is_hidden: hidden }),
+      }).catch(() => {
+        throw new Error(
+          "Could not reach Mogplex. Check your connection and try again."
+        );
       });
-      if (!res.ok) throw new Error("Could not update repository visibility");
+      if (!res.ok) {
+        const data = (await res.json().catch(() => null)) as {
+          error?: unknown;
+        } | null;
+        throw new Error(
+          typeof data?.error === "string" && data.error
+            ? data.error
+            : "Could not update repository visibility. Try again."
+        );
+      }
       const updated = (await res.json()) as Repo;
       if (updated.id !== repo.id || updated.is_hidden !== hidden) {
         throw new Error("Repository visibility was not confirmed");
@@ -103,12 +122,12 @@ export function useRepositoryAdmin() {
           title: restoring ? "Repository restored" : "Repository removed",
           description: repo.full_name,
         });
-      } catch {
+      } catch (err) {
         toast({
           title: restoring
-            ? "Could not restore repository"
-            : "Could not remove repository",
-          description: `${repo.full_name}. Try again.`,
+            ? `Could not restore ${repo.full_name}`
+            : `Could not remove ${repo.full_name}`,
+          description: errorMessage(err),
           variant: "destructive",
         });
       }
@@ -125,13 +144,16 @@ export function useRepositoryAdmin() {
       const results = await Promise.allSettled(
         targets.map((repo) => setHidden(repo, true))
       );
-      const failed = results.filter((r) => r.status === "rejected").length;
+      const failures = results.filter(
+        (r): r is PromiseRejectedResult => r.status === "rejected"
+      );
+      const failed = failures.length;
       const removed = results.length - failed;
       toast(
         failed
           ? {
               title: "Could not remove all repositories",
-              description: `${removed} removed; ${failed} could not be removed. Try again.`,
+              description: `${removed} removed; ${failed} could not be removed. ${errorMessage(failures[0]?.reason)}`,
               variant: "destructive",
             }
           : {

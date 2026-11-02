@@ -3,6 +3,17 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { scopedHref } from "@/lib/scoped-href";
@@ -35,6 +46,50 @@ function RepositoryRow({
   );
 }
 
+function RemoveOwnerButton({
+  owner,
+  count,
+  onConfirm,
+}: {
+  owner: string;
+  count: number;
+  onConfirm: () => void;
+}) {
+  const noun = count === 1 ? "repository" : "repositories";
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="text-destructive hover:text-destructive"
+        >
+          Remove all from {owner}
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{`Remove all ${count} ${noun} from ${owner}?`}</AlertDialogTitle>
+          <AlertDialogDescription>
+            They disappear from Command Center and project pickers. Nothing
+            changes on GitHub, and you can restore each one from Show removed.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={onConfirm}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          >
+            Remove {count} {noun}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
 /**
  * Settings home for connected repositories: GitHub sync, remove and restore
  * repositories, and a link to sandbox management. Day-to-day repo work lives
@@ -59,6 +114,9 @@ export function RepositoriesSection() {
   const connected = matches.filter((repo) => !repo.is_hidden);
   const removed = matches.filter((repo) => repo.is_hidden);
   const removedTotal = admin.repos.filter((repo) => repo.is_hidden).length;
+  const ownerConnectedCount = admin.repos.filter(
+    (repo) => repoOwner(repo) === owner && !repo.is_hidden
+  ).length;
   const { githubSetup } = admin;
 
   return (
@@ -126,15 +184,11 @@ export function RepositoriesSection() {
           </select>
         ) : null}
         {owner !== "all" && connected.length > 0 ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="text-destructive hover:text-destructive"
-            onClick={() => void admin.removeOwner(owner)}
-          >
-            Remove all from {owner}
-          </Button>
+          <RemoveOwnerButton
+            owner={owner}
+            count={ownerConnectedCount}
+            onConfirm={() => void admin.removeOwner(owner)}
+          />
         ) : null}
         {removedTotal > 0 ? (
           <Button

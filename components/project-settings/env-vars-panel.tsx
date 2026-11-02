@@ -51,14 +51,19 @@ export function EnvVarsPanel({
     );
 
   const importPaste = () => {
+    // Parse before touching state: a throw inside a setState updater would
+    // escape this try and surface as a render error.
+    let merged: EnvVarRow[];
     try {
-      setRows((current) => mergePastedEnv(current, pasteText));
-      setPasteText("");
-      setPasteOpen(false);
-      setError(null);
+      merged = mergePastedEnv(rows, pasteText);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not read .env text");
+      return;
     }
+    setRows(merged);
+    setPasteText("");
+    setPasteOpen(false);
+    setError(null);
   };
 
   const save = async () => {

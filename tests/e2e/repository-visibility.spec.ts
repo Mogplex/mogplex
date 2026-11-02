@@ -85,6 +85,10 @@ test("remove owner persists, and a removed repository can be restored", async ({
   await page
     .getByRole("button", { name: "Remove all from alex", exact: true })
     .click();
+  await page
+    .getByRole("alertdialog", { name: "Remove all 2 repositories from alex?" })
+    .getByRole("button", { name: "Remove 2 repositories" })
+    .click();
   await expect(connected(page).getByText("alex/alpha")).toHaveCount(0);
   await expect(connected(page).getByText("alex/beta")).toHaveCount(0);
   expect(writes).toEqual([
@@ -102,6 +106,18 @@ test("remove owner persists, and a removed repository can be restored", async ({
   await expect(connected(page).getByText("alex/beta")).toHaveCount(0);
 });
 
+test("bulk removal waits for confirmation", async ({ page }) => {
+  const { writes } = await dashboard(page);
+  await page.getByLabel("Owner", { exact: true }).selectOption("alex");
+  await page
+    .getByRole("button", { name: "Remove all from alex", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+
+  await expect(connected(page).getByText("alex/alpha")).toBeVisible();
+  expect(writes).toEqual([]);
+});
+
 test("restore failures show a retryable error and leave the repository removed", async ({
   page,
 }) => {
@@ -110,7 +126,10 @@ test("restore failures show a retryable error and leave the repository removed",
   await page.getByLabel("Search repositories").fill("removed");
   await page.getByRole("button", { name: "Restore alex/removed" }).click();
   await expect(
-    page.getByText("Could not restore repository", { exact: true })
+    page.getByText("Could not restore alex/removed", { exact: true })
+  ).toBeVisible();
+  await expect(
+    page.getByText("Database unavailable", { exact: true })
   ).toBeVisible();
   await expect(
     page.getByText("Repository restored", { exact: true })
@@ -131,11 +150,15 @@ test("bulk removal reports partial failures without claiming every repository wa
   await page
     .getByRole("button", { name: "Remove all from alex", exact: true })
     .click();
+  await page
+    .getByRole("alertdialog", { name: "Remove all 2 repositories from alex?" })
+    .getByRole("button", { name: "Remove 2 repositories" })
+    .click();
   await expect(
     page.getByText("Could not remove all repositories", { exact: true })
   ).toBeVisible();
   await expect(
-    page.getByText("1 removed; 1 could not be removed. Try again.", {
+    page.getByText("1 removed; 1 could not be removed. Database unavailable", {
       exact: true,
     })
   ).toBeVisible();
@@ -155,7 +178,13 @@ test("network failures during removal are visible", async ({ page }) => {
   );
   await page.getByRole("button", { name: "Remove alex/alpha" }).click();
   await expect(
-    page.getByText("Could not remove repository", { exact: true })
+    page.getByText("Could not remove alex/alpha", { exact: true })
+  ).toBeVisible();
+  await expect(
+    page.getByText(
+      "Could not reach Mogplex. Check your connection and try again.",
+      { exact: true }
+    )
   ).toBeVisible();
   await expect(connected(page).getByText("alex/alpha")).toBeVisible();
 });

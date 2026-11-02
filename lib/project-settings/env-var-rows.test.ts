@@ -48,6 +48,13 @@ describe("env var rows", () => {
     ).toEqual({ ok: true, vars: { constructor: "a", toString: "b" } });
   });
 
+  it("should reject __proto__, which the stored object cannot hold", () => {
+    expect(envVarsFromRows([createEnvVarRow("__proto__", "x")])).toEqual({
+      ok: false,
+      error: "__proto__ can't be used as a variable name.",
+    });
+  });
+
   it("should keep a built-in-named row's value when the paste does not set it", () => {
     const merged = mergePastedEnv(
       [createEnvVarRow("constructor", "keep")],

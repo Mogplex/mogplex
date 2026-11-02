@@ -30,6 +30,13 @@ export function envVarsFromRows(
     const key = row.key.trim();
     if (!key && !row.value) continue;
     if (!key) return { ok: false, error: "Every value needs a variable name." };
+    // The server stores variables on a plain object, where this name is lost.
+    if (key === "__proto__") {
+      return {
+        ok: false,
+        error: "__proto__ can't be used as a variable name.",
+      };
+    }
     if (vars.has(key)) return { ok: false, error: `${key} is defined twice.` };
     vars.set(key, row.value);
   }
