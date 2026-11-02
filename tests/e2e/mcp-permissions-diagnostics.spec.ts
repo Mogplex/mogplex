@@ -178,6 +178,10 @@ test("Save works straight after editing an untidy tool list", async ({
   await page
     .getByLabel("Blocked tools (one name per line)")
     .fill(" publish \n\n\n\n\n\n\npublish\n \ndelete");
+  // Tool rows already show the list as it will be saved.
+  await expect(
+    page.getByRole("combobox", { name: "Approval for publish", exact: true })
+  ).toHaveCount(1);
   const save = page.getByRole("button", { name: "Save changes" });
   await page
     .getByRole("dialog")

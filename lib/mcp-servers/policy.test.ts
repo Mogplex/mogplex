@@ -101,6 +101,18 @@ describe("saved MCP permission controls", () => {
     });
   });
 
+  it("should pass a stdio server's Extra JSON through untouched", () => {
+    const extra = { enabled_tools: [" search ", "search"], cwd: "/repo" };
+    const payload = buildPayload({
+      ...serverToForm(null),
+      transport: "stdio",
+      command: "npx",
+      extraText: JSON.stringify(extra),
+    });
+
+    expect(payload.extra).toEqual(extra);
+  });
+
   it("keeps CLI metadata and strict permissions through browser and API serialization", () => {
     const extra = {
       cwd: "/repo",

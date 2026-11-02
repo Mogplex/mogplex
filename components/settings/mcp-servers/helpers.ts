@@ -173,9 +173,10 @@ function buildKeyValuePayload(entries: KeyValueEntry[], label: string) {
 }
 
 /**
- * Trim and dedupe the allowed and blocked tool lists. This runs at save rather
- * than on blur: tidying on blur shrank the auto-sized textareas under the
- * pointer, so a Save click right after editing a list could miss the button.
+ * Trim and dedupe the allowed and blocked tool lists an HTTP server's
+ * permissions editor manages. This runs at save rather than on blur: tidying
+ * on blur shrank the auto-sized textareas under the pointer, so a Save click
+ * right after editing a list could miss the button.
  */
 function normalizeToolLists(extra: Record<string, unknown>) {
   const next = { ...extra };
@@ -188,7 +189,9 @@ function normalizeToolLists(extra: Record<string, unknown>) {
 }
 
 export function buildPayload(form: FormState) {
-  const extra = normalizeToolLists(parseExtra(form.extraText));
+  const parsed = parseExtra(form.extraText);
+  // Other transports' Extra JSON passes through untouched.
+  const extra = form.transport === "http" ? normalizeToolLists(parsed) : parsed;
   if (form.transport === "http") {
     try {
       readToolPolicy(extra);
