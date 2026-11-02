@@ -60,6 +60,11 @@ for (const width of [1280, 390]) {
           exact: true,
         })
         .click();
+      if (action === "Remove")
+        await page
+          .getByRole("alertdialog", { name: `Remove ${syncedRepo.full_name}?` })
+          .getByRole("button", { name: "Remove repository" })
+          .click();
       await expect(
         page.getByText(
           action === "Remove" ? "Repository removed" : "Repository restored",
