@@ -128,6 +128,31 @@ test("project_env_set calls made in the same step both land", async () => {
   expect(await storedVars()).toMatchObject({ SIBLING_A: "a", SIBLING_B: "b" });
 });
 
+test("project_env_set compare-and-swap holds for '::' values and a large map", async () => {
+  // Filters reach Postgres as bound parameters, not a URL, so neither a
+  // PostgREST cast separator nor the map's size can break the match.
+  const large = Object.fromEntries(
+    Array.from({ length: 300 }, (_, index) => [
+      `BULK_${index}`,
+      "v".repeat(400),
+    ])
+  );
+  await db.query("update repos set sandbox_env_vars = $2 where id = $1", [
+    repoId,
+    { ...large, BIND: "[::1]:8080", CAST: "a::text" },
+  ]);
+
+  expect(
+    await envSet().execute({ name: "AFTER_LARGE", value: "1" })
+  ).toMatchObject({ ok: true });
+  expect(await storedVars()).toMatchObject({
+    BIND: "[::1]:8080",
+    CAST: "a::text",
+    AFTER_LARGE: "1",
+    BULK_299: "v".repeat(400),
+  });
+});
+
 test("project_settings_update matches its read through the real shim and catches a concurrent save", async () => {
   const update = () =>
     (

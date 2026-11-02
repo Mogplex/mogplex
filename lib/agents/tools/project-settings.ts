@@ -22,7 +22,7 @@ import {
   resolveProductResourceScopeForTeam,
   type ProductResourceScope,
 } from "@/lib/team-resource-scope";
-import { ENV_NAME, isLoaderEnvName } from "./project-env-names";
+import { ENV_NAME, isLoaderEnvName, storedEnvMap } from "./project-env-names";
 import { defineTool } from "./shared";
 
 /** The server-selected project a Control turn may configure. */
@@ -147,7 +147,7 @@ function describeSettings(row: SettingsRow) {
     devPort: resolveConfiguredDevPort(row.dev_port, row.dev_port_auto),
     devPortAuto: normalizeDevPortAuto(row.dev_port_auto),
     envVarScope: resolveEffectiveEnvSyncMode(row.env_sync_mode),
-    envVarNames: Object.keys(row.sandbox_env_vars ?? {}).sort(),
+    envVarNames: Object.keys(storedEnvMap(row.sandbox_env_vars)).sort(),
   };
 }
 
@@ -297,10 +297,7 @@ async function writeEnvVar(
 ) {
   const previous = row.sandbox_env_vars;
   // Copy stored values verbatim; only the key being written changes.
-  const next: RepoEnvVars =
-    previous && typeof previous === "object" && !Array.isArray(previous)
-      ? { ...previous }
-      : {};
+  const next: RepoEnvVars = { ...storedEnvMap(previous) };
   const exists = Object.hasOwn(next, key);
   if (value === null && !exists) {
     return {

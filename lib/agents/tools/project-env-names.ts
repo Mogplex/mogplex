@@ -1,6 +1,8 @@
+import type { RepoEnvVars } from "@/lib/repo-settings";
+
 /**
- * Which environment variable names Control may save on a project, for the
- * project_env_set tool.
+ * Rules for the environment variables Control may save on a project: which
+ * names it may use, and what a stored variable map looks like.
  */
 export const ENV_NAME = /^[A-Za-z_]\w*$/;
 
@@ -69,4 +71,11 @@ export function isLoaderEnvName(name: string) {
     LOADER_ENV_NAMES.has(upper) ||
     LOADER_ENV_PREFIXES.some((prefix) => upper.startsWith(prefix))
   );
+}
+
+/** The stored variable map, or an empty one if the column holds anything else. */
+export function storedEnvMap(value: unknown): RepoEnvVars {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as RepoEnvVars)
+    : {};
 }

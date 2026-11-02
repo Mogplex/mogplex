@@ -201,6 +201,14 @@ describe("project settings tools", () => {
     expect(schema.safeParse({ installCommand: "npm ci" }).success).toBe(true);
   });
 
+  it("should report no variable names when the stored map is not an object", async () => {
+    installRepo({ sandbox_env_vars: "corrupt" });
+
+    expect(await tools().project_settings.execute({})).toMatchObject({
+      envVarNames: [],
+    });
+  });
+
   it("should report a pinned dev port as the one boots use", async () => {
     installRepo({ dev_port: 8000, dev_port_auto: false });
 
