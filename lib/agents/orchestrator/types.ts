@@ -77,6 +77,8 @@ export type OrchestratorToolContext = {
   /** Present only for a persisted, server-scoped Control execution. */
   workerHandoffTool?: import("ai").Tool;
   sandboxExecution?: import("@/lib/agents/tools/sandbox").SandboxCommandExecution;
+  /** Server-owned paths explicitly edited this turn, including ignored files. */
+  verificationPaths?: Set<string>;
 };
 
 /**
