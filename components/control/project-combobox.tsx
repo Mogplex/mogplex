@@ -171,6 +171,8 @@ export function ProjectCombobox({
               </button>
             </div>
           ) : null}
+          {/* The create row only hides on an exact repo match, so the list
+              is never empty while the create row is hidden. */}
           {matchingRepos.length > 0 ? (
             <div aria-label="Repositories" className="max-h-72 overflow-y-auto p-1" role="group">
               {matchingRepos.map((repo, index) => {

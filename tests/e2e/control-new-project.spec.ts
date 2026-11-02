@@ -63,6 +63,12 @@ test("project search offers creation with the typed name and hides it for an exa
   await expect(
     page.getByRole("option", { name: /Create project/ })
   ).toHaveCount(0);
+  // With the create row hidden, the first repo is option 0 for the keyboard.
+  await search.press("ArrowDown");
+  const widgets = page.getByRole("option", { name: "acme/widgets" });
+  await expect(widgets).toBeFocused();
+  await widgets.press("ArrowUp");
+  await expect(search).toBeFocused();
   await search.fill("wid");
   await expect(
     page.getByRole("option", { name: 'Create project "wid"' })
@@ -119,12 +125,12 @@ test("project picker pins New project above a scrolling repo list", async ({
   await search.fill("no-such-repo");
   await expect(listbox.getByRole("group")).toHaveCount(1);
   await expect(options).toHaveCount(1);
-  await search.fill("app-0");
-  await expect(options.first()).toHaveText('Create project "app-0"');
+  await search.fill("app-1");
+  await expect(options.first()).toHaveText('Create project "app-1"');
   await search.press("Enter");
   await expect(
     page.getByRole("combobox", { name: "Project", exact: true })
-  ).toContainText("acme/app-00");
+  ).toContainText("acme/app-10");
 });
 
 test("new mission validates and creates an org-scoped project before starting", async ({
