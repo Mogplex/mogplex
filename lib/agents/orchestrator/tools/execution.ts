@@ -17,9 +17,10 @@ export const EXECUTION_TOOLS: OrchestratorToolDef[] = [
   {
     name: "run_checks",
     category: "execution",
-    description: "Run lint, typecheck, and test commands",
+    description:
+      "Run full repository typecheck, lint, build, and test commands",
     access: "mutation",
-    implemented: false,
+    implemented: true,
   },
   {
     name: "run_bench",

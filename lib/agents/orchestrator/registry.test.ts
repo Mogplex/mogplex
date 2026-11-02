@@ -122,6 +122,7 @@ describe("buildOrchestratorTools", () => {
     });
 
     expect(ambiguousSandbox.run_command).toBeUndefined();
+    expect(ambiguousSandbox.run_checks).toBeUndefined();
     expect(ambiguousSandbox.sandbox_start).toBeUndefined();
     expect(ambiguousSandbox.sandbox_stop).toBeUndefined();
     expect(ambiguousSandbox.write_file).toBeUndefined();
@@ -142,6 +143,13 @@ describe("buildOrchestratorTools", () => {
       "replace_all",
     ]);
     expect(tools.edit_file.description).toMatch(/diff/i);
+  });
+
+  it("offers full repository verification in the selected workspace", () => {
+    expect(tools.run_checks?.description).toMatch(
+      /full typecheck, lint, build, and test/
+    );
+    expect(tools.run_checks?.execute).toBeTypeOf("function");
   });
 
   it("reads and lists through the sandbox binding and falls back to GitHub", async () => {

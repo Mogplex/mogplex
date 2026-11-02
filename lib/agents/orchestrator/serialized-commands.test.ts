@@ -10,6 +10,7 @@ it("queues file mutations and shutdown behind the current sandbox command", asyn
   const starts: string[] = [];
   const names = [
     "run_command",
+    "run_checks",
     "write_file",
     "edit_file",
     "sandbox_stop",
