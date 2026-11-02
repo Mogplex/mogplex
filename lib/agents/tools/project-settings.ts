@@ -19,6 +19,7 @@ import {
 } from "@/lib/team-capabilities";
 import {
   applyResourceOwnerScope,
+  resolveProductResourceScopeForTeam,
   type ProductResourceScope,
 } from "@/lib/team-resource-scope";
 import { ENV_NAME, isLoaderEnvName } from "./project-env-names";
@@ -71,28 +72,32 @@ async function resolveScope(
   deps: ProjectSettingsDeps,
   access: "read" | "write"
 ): Promise<ProductResourceScope | { error: string }> {
-  if (!target.teamId) {
-    return { kind: "personal", userId: target.userId, productTeamId: null };
-  }
-  const team = await deps.resolveTeam(target.userId, target.teamId);
-  if (!team.ok) {
+  // Membership goes through the same resolver as the settings routes; the
+  // capability is checked here so a missing one gets its own message.
+  const resolution = await resolveProductResourceScopeForTeam({
+    userId: target.userId,
+    productTeamId: target.teamId,
+    resolveActiveTeamCapabilities: deps.resolveTeam,
+  });
+  if (!resolution.ok) {
     return {
       error:
-        team.status >= 500
+        resolution.status >= 500
           ? "Could not check your team access. Try again."
           : "You are not a member of this project's team.",
     };
   }
   if (
     access === "write" &&
+    resolution.scope.kind === "team" &&
     !hasCapability(
-      team.capabilities ?? new Set(),
+      resolution.capabilities ?? new Set(),
       TEAM_RESOURCE_WRITE_CAPABILITY
     )
   ) {
     return { error: "You do not have permission to change this project." };
   }
-  return { kind: "team", userId: target.userId, productTeamId: target.teamId };
+  return resolution.scope;
 }
 
 /** Say which projects were searched, so a team/personal mix-up is fixable. */
@@ -238,10 +243,15 @@ function pinnedPortReplaced(row: SettingsRow, updates: SettingsUpdates) {
  *
  * Filling an empty command is not guarded at all: getting a new project to
  * boot is what these tools exist for, and asking first would stall setup.
+ * That first save is the case most likely to come from following a README,
+ * and saved commands are the same kind of persisted hook as the env names
+ * kept operator-only; the tradeoff is intended, and the timeline entry that
+ * shows each saved command is the mitigation.
  *
  * `replace` is the model's assertion, not an enforced operator approval, for
- * these settings and for changing or deleting a stored variable alike. That
- * is a product decision: Control's project saves run without an approval
+ * these settings and for changing or deleting a stored variable alike. It
+ * stops an accidental overwrite, not an injected one: an instruction in
+ * repository content can include replace: true. That is a product decision: Control's project saves run without an approval
  * step, the same default as connection tools. What backs it is the guard
  * itself, the compare-and-swap, the redacted audit row, and a timeline entry
  * that names every replaced or deleted value and shows saved commands.
