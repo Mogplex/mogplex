@@ -118,6 +118,9 @@ describe("project_env_set", () => {
     for (const [name, value] of [
       ["GITHUB_TOKEN", "anything"],
       ["STRIPE_SECRET", "opaque-value"],
+      ["OPENAI_API_KEY", "opaque-value"],
+      ["db_password", "opaque-value"],
+      ["SECRET_KEY_BASE", "opaque-value"],
       ["UPSTREAM", "ghs_installationToken123"],
       ["CALLBACK", "https://api.example.test/hook?token=opaque-value"],
     ]) {
@@ -127,12 +130,17 @@ describe("project_env_set", () => {
     }
     expect(writes).toEqual([]);
 
-    expect(
-      await tools().project_env_set.execute({
-        name: "DATABASE_HOST",
-        value: "postgres://owner@db/app",
-      })
-    ).toMatchObject({ ok: true });
+    for (const [name, value] of [
+      ["DATABASE_HOST", "postgres://owner@db/app"],
+      ["SESSION_TTL", "3600"],
+      ["MAX_TOKENS", "4096"],
+      ["TOKEN_REFRESH_INTERVAL", "60"],
+      ["KEYBOARD_LAYOUT", "us"],
+    ]) {
+      expect(
+        await tools().project_env_set.execute({ name, value })
+      ).toMatchObject({ ok: true, name });
+    }
   });
 
   it("should reject a value that is empty once its quotes are stripped", async () => {

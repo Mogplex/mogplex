@@ -110,23 +110,31 @@ function settingsSaveBody(
     replaced.length > 0
       ? `Replaced saved project settings: ${replaced.join(", ")}`
       : "Project settings saved";
-  return [heading, ...settingLines(input, output?.settings)].join(" · ");
+  return [
+    heading,
+    ...settingLines(input, output?.settings, output?.replaced),
+  ].join(" · ");
 }
 
 /**
  * Each setting a save carries, with command text redacted. When the tool
  * returned the saved settings, show those: they are normalized the way the
- * next boot reads them.
+ * next boot reads them. A replaced setting also shows the value it replaced.
  */
-function settingLines(values: unknown, saved?: unknown) {
+function settingLines(values: unknown, saved?: unknown, replaced?: unknown) {
   const record = asRecord(values) ?? {};
   const stored = asRecord(saved);
+  const previous = asRecord(replaced) ?? {};
+  const show = (key: (typeof SHOWN_SETTINGS)[number], value: unknown) =>
+    value === null || value === undefined
+      ? NULL_SETTING[key]
+      : shownCommandText(String(value));
   return SHOWN_SETTINGS.flatMap((key) => {
     if (record[key] === undefined) return [];
     const value = stored && key in stored ? stored[key] : record[key];
-    const shown =
-      value === null ? NULL_SETTING[key] : shownCommandText(String(value));
-    return [`${SETTING_NAMES[key]}: ${shown}`];
+    // A replaced value shows what it overwrote, so the change reads at a glance.
+    const before = key in previous ? `${show(key, previous[key])} → ` : "";
+    return [`${SETTING_NAMES[key]}: ${before}${show(key, value)}`];
   });
 }
 

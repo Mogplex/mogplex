@@ -26,27 +26,48 @@ export const savedCommand = z
     message: `Contains ${REDACTED_VALUE} from a read-back value. Omit the field, or write the command out in full.`,
   });
 
+// Name segments that mark a variable as a secret, matched as whole
+// `_`-separated parts so SESSION_TTL or MAX_TOKENS stay ordinary. These mark
+// a secret anywhere (SECRET_KEY_BASE); TOKEN and KEY only as the last part
+// (GITHUB_TOKEN, STRIPE_KEY, but not TOKEN_REFRESH_INTERVAL).
+const SECRET_SEGMENTS = new Set([
+  "CREDENTIAL",
+  "CREDENTIALS",
+  "PASSWD",
+  "PASSWORD",
+  "SECRET",
+]);
+const SECRET_LAST_SEGMENTS = new Set(["APIKEY", "KEY", "TOKEN"]);
+
+/** Whether a variable name says it holds a secret. */
+export function isSecretEnvName(name: string) {
+  const segments = name.toUpperCase().split("_").filter(Boolean);
+  const last = segments.at(-1) ?? "";
+  return (
+    SECRET_LAST_SEGMENTS.has(last) ||
+    segments.some((segment) => SECRET_SEGMENTS.has(segment))
+  );
+}
+
 /**
  * Why Control can't save (or, with null, delete) this variable, or null.
  * Secrets go through the operator's Project settings, never through the
- * model, so a value the redactor would hide (a token shape, a URL with a
- * password, or any value under a secret-sounding name) is refused, and so is
- * deleting a variable under a secret-sounding name.
+ * model, so a secret-named variable is refused either way, and so is a value
+ * the redactor would hide (a token shape, a URL with a password).
  */
 export function envValueProblem(name: string, value: string | null) {
-  if (value === null) {
-    const probe = `${name}=x`;
-    return redactSecretsInText(probe) === probe
-      ? null
-      : `${name} may hold a secret. Ask the operator to remove it in Project settings.`;
+  if (isSecretEnvName(name)) {
+    return value === null
+      ? `${name} may hold a secret. Ask the operator to remove it in Project settings.`
+      : `${name} looks like a secret. Ask the operator to add it in Project settings.`;
   }
+  if (value === null) return null;
   // Quotes are stripped on save, so '""' would store an empty variable; a
   // spaces-only value is refused the same way a spaces-only command is.
   if (!normalizeEnvVars({ [name]: value })[name]?.trim()) {
     return "The value is empty or only spaces once its surrounding quotes are removed. Use value: null to delete a variable.";
   }
-  const assignment = `${name}=${value}`;
-  if (redactSecretsInText(assignment) !== assignment) {
+  if (redactSecretsInText(value) !== value) {
     return `${name} looks like a secret. Ask the operator to add it in Project settings.`;
   }
   return null;
