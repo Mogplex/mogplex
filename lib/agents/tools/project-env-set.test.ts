@@ -140,6 +140,8 @@ describe("project_env_set", () => {
       "CLASSPATH",
       "bundle_gemfile",
       "SSH_AUTH_SOCK",
+      "GIT_SEQUENCE_EDITOR",
+      "sudo_askpass",
     ]) {
       expect(
         await tools().project_env_set.execute({ name, value: "x" })

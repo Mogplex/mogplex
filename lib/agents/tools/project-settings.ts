@@ -23,6 +23,11 @@ import {
   type ProductResourceScope,
 } from "@/lib/team-resource-scope";
 import { ENV_NAME, isLoaderEnvName, storedEnvMap } from "./project-env-names";
+import {
+  notRedacted,
+  savedCommand,
+  shownCommand,
+} from "./project-setting-values";
 import { defineTool } from "./shared";
 
 /** The server-selected project a Control turn may configure. */
@@ -130,10 +135,6 @@ async function loadSettings(
   }
 }
 
-function shownCommand(command: string | null) {
-  return command === null ? null : redactSecretsInText(command);
-}
-
 /** Settings as the agent sees them: env var names, never values. */
 function describeSettings(row: SettingsRow) {
   return {
@@ -150,14 +151,6 @@ function describeSettings(row: SettingsRow) {
     envVarNames: Object.keys(storedEnvMap(row.sandbox_env_vars)).sort(),
   };
 }
-
-// Commands read back through project_settings have credentials replaced by
-// the redaction marker; saving one back would break every later boot.
-const REDACTED_MARKER_MESSAGE = `Contains ${REDACTED_VALUE} from a read-back value. Omit the field, or write the command out in full.`;
-const notRedacted = (value: string) => !value.includes(REDACTED_VALUE);
-const savedCommand = z
-  .string()
-  .refine(notRedacted, { message: REDACTED_MARKER_MESSAGE });
 
 const updateParams = z.object({
   runtime: z
@@ -307,8 +300,9 @@ async function writeEnvVar(
       note: "The variable was not set.",
     };
   }
-  // Control cannot see stored values, so changing or deleting one that
-  // exists needs the operator's say-so.
+  // Control cannot see stored values, so changing or deleting one needs the
+  // operator's say-so: by product decision (see REPLACE_GUARDED), the model's
+  // replace assertion, even for a delete. Audit row and timeline record it.
   if (exists && !replace) {
     return {
       error: `${key} is already set and its value may be a secret. Ask the operator before ${value === null ? "deleting" : "changing"} it, then call again with replace: true.`,

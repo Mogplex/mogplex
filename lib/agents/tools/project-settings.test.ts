@@ -199,6 +199,8 @@ describe("project settings tools", () => {
         .success
     ).toBe(false);
     expect(schema.safeParse({ installCommand: "npm ci" }).success).toBe(true);
+    expect(schema.safeParse({ devCommand: "  " }).success).toBe(false);
+    expect(schema.safeParse({ devCommand: null }).success).toBe(true);
   });
 
   it("should report no variable names when the stored map is not an object", async () => {
