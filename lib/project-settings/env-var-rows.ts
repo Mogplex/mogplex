@@ -4,6 +4,9 @@ export type EnvVarRow = { id: string; key: string; value: string };
 
 let nextRowId = 0;
 
+const PROTO_ERROR = "__proto__ can't be used as a variable name.";
+const PROTO_LINE = /^\s*__proto__\s*=/m;
+
 /** Stable row id for React keys; never persisted. */
 export function createEnvVarRow(key = "", value = ""): EnvVarRow {
   nextRowId += 1;
@@ -48,6 +51,8 @@ export function envVarsFromRows(
  * value, new keys are appended. Throws the parser's error on a bad line.
  */
 export function mergePastedEnv(rows: EnvVarRow[], text: string) {
+  // The parser stores lines on a plain object, where this name vanishes.
+  if (PROTO_LINE.test(text)) throw new Error(PROTO_ERROR);
   const pasted = parseEnvVarsText(text);
   const merged = rows.map((row) => {
     const key = row.key.trim();

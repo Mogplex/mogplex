@@ -55,6 +55,12 @@ describe("env var rows", () => {
     });
   });
 
+  it("should reject a pasted __proto__ line instead of dropping it", () => {
+    expect(() => mergePastedEnv([], "A=1\n__proto__=x")).toThrow(
+      "__proto__ can't be used as a variable name."
+    );
+  });
+
   it("should keep a built-in-named row's value when the paste does not set it", () => {
     const merged = mergePastedEnv(
       [createEnvVarRow("constructor", "keep")],
