@@ -192,12 +192,15 @@ export async function resolveBootstrapContext(
     !packageInfo.hasPackageJson && isNodeRuntime(effectiveRuntime);
   const skipDefaultInstall = nodeWithoutPackageJson && !opts.installCommand;
   // A Python repo without package.json keeps its strategy's dev command.
-  const hasDevScript =
+  // A Python repo that carries a package.json (for tooling) follows its
+  // dev script, as before; only a missing manifest falls back to the
+  // strategy's own command.
+  const startsDevServer =
     Boolean(opts.devCommand) ||
     (packageInfo.hasPackageJson
       ? packageInfo.hasDevScript
       : !isNodeRuntime(effectiveRuntime));
-  const emptyNodeProject = skipDefaultInstall && !hasDevScript;
+  const emptyNodeProject = skipDefaultInstall && !startsDevServer;
   const workspaceBuildCommand = await resolveWorkspaceBuildCommand(
     sandbox,
     normalizedRoot,
@@ -265,7 +268,7 @@ export async function resolveBootstrapContext(
     framework,
     frameworkEntry,
     packageDevScript,
-    hasDevScript,
+    startsDevServer,
     emptyNodeProject,
     skipDefaultInstall,
     nodeWithoutPackageJson,

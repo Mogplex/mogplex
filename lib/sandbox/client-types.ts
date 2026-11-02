@@ -99,7 +99,7 @@ export type ResolvedBootstrapContext = {
   packageDevScript: string | null;
   /** Whether bootstrap starts a dev server: a dev command override, the
    * package.json dev script, or a non-Node strategy's own command. */
-  hasDevScript: boolean;
+  startsDevServer: boolean;
   /** Node runtime, no package.json, no install/dev override: skip install
    * and dev so a fresh repo boots ready for the agent to scaffold into. */
   emptyNodeProject: boolean;

@@ -55,7 +55,7 @@ export async function* bootstrapFromSnapshotStreaming(
     context
   );
 
-  if (!context.hasDevScript) {
+  if (!context.startsDevServer) {
     yield* streamNoDevServerReady(context, "snapshot");
     return;
   }
@@ -117,7 +117,7 @@ export async function bootstrapSandbox(
     : await runBlockingSetupPhases(sandbox, context, opts);
 
   // If no dev script, skip dev server — sandbox is usable for terminal/files/editor
-  if (!context.hasDevScript) {
+  if (!context.startsDevServer) {
     return buildNoDevScriptBootstrapResult(context, installLog);
   }
 
@@ -207,7 +207,7 @@ export async function* bootstrapSandboxStreaming(
   }
 
   // --- No dev script: done early ---
-  if (!context.hasDevScript) {
+  if (!context.startsDevServer) {
     yield* streamNoDevServerReady(context, "fresh");
     return;
   }

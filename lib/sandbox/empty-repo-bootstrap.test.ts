@@ -1,5 +1,5 @@
 import type { Sandbox } from "@vercel/sandbox";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   bootstrapFromBaselineSnapshotStreaming,
   bootstrapFromSnapshotStreaming,
@@ -124,6 +124,23 @@ describe("bootstrap for a repository without package.json", () => {
       devCommand: "(none)",
       devLog: expect.stringContaining("No package.json found"),
     });
+  });
+
+  it("should skip the default install but run a configured dev command in the blocking bootstrap", async () => {
+    const { sandbox, commands } = fakeSandbox({ "README.md": "# test" });
+
+    // The fake sandbox never serves the preview, so stop watching once the
+    // dev command has launched; what matters is what ran before it.
+    void bootstrapSandbox(sandbox, { devCommand: "npx serve ." }).catch(
+      () => {}
+    );
+    await vi.waitFor(() =>
+      expect(commands.some((command) => command.includes("npx serve ."))).toBe(
+        true
+      )
+    );
+
+    expect(commands.some((command) => /\binstall\b/.test(command))).toBe(false);
   });
 
   it("should restore a baseline snapshot without install or dev for a README-only repo", async () => {

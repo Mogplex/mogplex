@@ -149,7 +149,7 @@ async function* runBaselineDevPhase(
   sandbox: Sandbox,
   context: ResolvedBootstrapContext
 ): AsyncGenerator<SandboxBootstrapStreamEvent> {
-  if (!context.hasDevScript) {
+  if (!context.startsDevServer) {
     yield* streamNoDevServerReady(context, "snapshot");
     return;
   }
