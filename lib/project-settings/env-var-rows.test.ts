@@ -107,6 +107,19 @@ describe("env var rows", () => {
     expect(rows.at(-1)?.requested).toBe(true);
   });
 
+  it("should treat a requested name with stray spaces as the stored one", () => {
+    const rows = withRequestedNames(rowsFromEnvVars({ API_KEY: "x" }), [
+      " API_KEY",
+      "DATABASE_URL ",
+      "DATABASE_URL",
+    ]);
+
+    expect(pairs(rows)).toEqual([
+      ["API_KEY", "x"],
+      ["DATABASE_URL", ""],
+    ]);
+  });
+
   it("should not save a requested name left empty", () => {
     const rows = withRequestedNames(rowsFromEnvVars({ NODE_ENV: "dev" }), [
       "API_KEY",

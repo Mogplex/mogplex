@@ -3,11 +3,15 @@
 import { useEffect, useState } from "react";
 import { SidebarExpand } from "iconoir-react";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { useProjectSettingsDrawer } from "@/hooks/use-project-settings-drawer";
 import { SessionList, type SessionListProps } from "./session-list";
 
 /** The same list and action handlers as desktop, with phone-sized navigation. */
 export function MobileSessionList(props: SessionListProps) {
   const [open, setOpen] = useState(false);
+  // Project settings opens beside this sheet, not inside it; step aside for it.
+  const settingsOpen = useProjectSettingsDrawer(state => state.request !== null);
+  if (settingsOpen && open) setOpen(false);
   useEffect(() => {
     // Match the md:hidden navigation breakpoint.
     const desktop = window.matchMedia("(min-width: 768px)");

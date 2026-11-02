@@ -32,7 +32,7 @@ export function withRequestedNames(
   names: readonly string[] = []
 ) {
   const present = new Set(rows.map((row) => row.key.trim()));
-  const added = [...new Set(names)]
+  const added = [...new Set(names.map((name) => name.trim()))]
     .filter((name) => !present.has(name))
     .map((name) => ({ ...createEnvVarRow(name), requested: true }));
   return added.length > 0 ? [...rows, ...added] : rows;
