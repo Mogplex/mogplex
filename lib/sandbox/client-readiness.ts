@@ -18,11 +18,42 @@ export const NO_DEV_SCRIPT_MESSAGE =
 export const EMPTY_NODE_PROJECT_MESSAGE =
   "No package.json found — skipped install and dev server. Sandbox ready for terminal and file access.";
 
-/** Log line for a snapshot restore that starts no dev server. */
-export function snapshotNoDevServerMessage(emptyNodeProject: boolean) {
-  return emptyNodeProject
-    ? "Snapshot restored — no package.json found. Ready for terminal and file access.\n"
-    : "Snapshot restored — no dev script found. Ready for terminal and file access.\n";
+export const NO_PACKAGE_JSON_MESSAGE =
+  "No package.json found — no dev server started. Sandbox ready for terminal and file access.";
+
+type NoDevServerContext = {
+  emptyNodeProject: boolean;
+  nodeWithoutPackageJson: boolean;
+};
+
+/** Log line for a boot that ends without starting a dev server. */
+export function noDevServerMessage(
+  context: NoDevServerContext,
+  boot: "fresh" | "snapshot"
+) {
+  if (boot === "snapshot") {
+    return context.nodeWithoutPackageJson
+      ? "Snapshot restored — no package.json found. Ready for terminal and file access."
+      : "Snapshot restored — no dev script found. Ready for terminal and file access.";
+  }
+  if (context.emptyNodeProject) return EMPTY_NODE_PROJECT_MESSAGE;
+  return context.nodeWithoutPackageJson
+    ? NO_PACKAGE_JSON_MESSAGE
+    : NO_DEV_SCRIPT_MESSAGE;
+}
+
+/**
+ * Warning for a Node boot with no package.json: the sandbox reports running
+ * but nothing serves the preview, which is expected for a fresh repo and a
+ * misconfiguration for an app that lives in a subdirectory.
+ */
+export function noPackageJsonWarning(rootDirectory: string | null) {
+  const location = rootDirectory ? ` in ${rootDirectory}` : "";
+  return (
+    `No package.json found${location}, so no dev server is running and the ` +
+    "preview stays empty until the project has one. If the app lives in a " +
+    "subdirectory, set its root directory in repo settings."
+  );
 }
 
 const PREVIEW_READY_PATTERNS = [

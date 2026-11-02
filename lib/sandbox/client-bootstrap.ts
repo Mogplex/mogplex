@@ -7,12 +7,7 @@ import {
   buildSelectiveRebuildCommand,
   buildWithBunOnPathCommand,
 } from "./client-shell";
-import {
-  EMPTY_NODE_PROJECT_MESSAGE,
-  NO_DEV_SCRIPT_MESSAGE,
-  snapshotNoDevServerMessage,
-  waitForPreviewSignal,
-} from "./client-readiness";
+import { waitForPreviewSignal } from "./client-readiness";
 import { resolveBootstrapContext } from "./client-bootstrap-context";
 import {
   launchDetachedDevCommand,
@@ -22,6 +17,7 @@ import {
   runWorkspaceBuildPhase,
   runSelectiveRebuildPhase,
   streamCommandPhase,
+  streamNoDevServerReady,
   streamPreviewSignal,
   buildNoDevScriptBootstrapResult,
 } from "./client-bootstrap-phases";
@@ -57,13 +53,7 @@ export async function* bootstrapFromSnapshotStreaming(
   );
 
   if (!context.hasDevScript) {
-    yield {
-      type: "log",
-      phase: "dev",
-      data: snapshotNoDevServerMessage(context.emptyNodeProject),
-    };
-    yield { type: "preview_url", url: context.previewUrl };
-    yield { type: "status", status: "running" };
+    yield* streamNoDevServerReady(context, "snapshot");
     return;
   }
 
@@ -116,11 +106,7 @@ export async function bootstrapSandbox(
   );
 
   if (context.emptyNodeProject) {
-    return buildNoDevScriptBootstrapResult(
-      { ...context, installCommand: "(none)" },
-      "",
-      EMPTY_NODE_PROJECT_MESSAGE
-    );
+    return buildNoDevScriptBootstrapResult(context, "");
   }
 
   const installLog = await runInstallPhase(
@@ -219,13 +205,7 @@ export async function* bootstrapSandboxStreaming(
   );
 
   if (context.emptyNodeProject) {
-    yield {
-      type: "log",
-      phase: "dev",
-      data: `${EMPTY_NODE_PROJECT_MESSAGE}\n`,
-    };
-    yield { type: "preview_url", url: context.previewUrl };
-    yield { type: "status", status: "running" };
+    yield* streamNoDevServerReady(context, "fresh");
     return;
   }
 
@@ -289,13 +269,7 @@ export async function* bootstrapSandboxStreaming(
 
   // --- No dev script: done early ---
   if (!context.hasDevScript) {
-    yield {
-      type: "log",
-      phase: "dev",
-      data: `${NO_DEV_SCRIPT_MESSAGE}\n`,
-    };
-    yield { type: "preview_url", url: context.previewUrl };
-    yield { type: "status", status: "running" };
+    yield* streamNoDevServerReady(context, "fresh");
     return;
   }
 

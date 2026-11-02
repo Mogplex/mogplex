@@ -1,11 +1,14 @@
 import type { Sandbox } from "@vercel/sandbox";
 import { describe, expect, it } from "vitest";
 import {
+  bootstrapFromBaselineSnapshotStreaming,
   bootstrapFromSnapshotStreaming,
   bootstrapSandbox,
   bootstrapSandboxStreaming,
 } from "./client-bootstrap";
+import { readPackageDevScriptInfo } from "./client-bootstrap-context";
 import type { BootstrapSandboxOpts } from "./client-types";
+import type { SandboxBootstrapStreamEvent } from "@/lib/sandbox/events";
 
 function fakeSandbox(files: Record<string, string>) {
   const commands: string[] = [];
@@ -19,7 +22,11 @@ function fakeSandbox(files: Record<string, string>) {
       return {
         exitCode: 0,
         stdout: async () =>
-          args[1]?.includes("const packages = []") ? "[]" : "",
+          args[1] === "process.versions.node"
+            ? "22.11.0\n"
+            : args[1]?.includes("const packages = []")
+              ? "[]"
+              : "",
         stderr: async () => "",
         async *logs() {},
         wait: async () => ({ exitCode: 0 }),
@@ -32,6 +39,17 @@ function fakeSandbox(files: Record<string, string>) {
 
 const ranProjectSetup = (commands: string[]) =>
   commands.some((command) => /\binstall\b|\brun dev\b/.test(command));
+
+async function collect(stream: AsyncGenerator<SandboxBootstrapStreamEvent>) {
+  const events: SandboxBootstrapStreamEvent[] = [];
+  for await (const event of stream) events.push(event);
+  return events;
+}
+
+const noPackageJsonWarning = expect.objectContaining({
+  type: "warning",
+  message: expect.stringContaining("no dev server is running"),
+});
 
 async function streamUntilInstall(
   files: Record<string, string>,
@@ -54,10 +72,11 @@ describe("bootstrap for a repository without package.json", () => {
 
     expect(ranProjectSetup(commands)).toBe(false);
     expect(events.at(-1)).toEqual({ type: "status", status: "running" });
+    expect(events).toContainEqual(noPackageJsonWarning);
     expect(events).toContainEqual(
       expect.objectContaining({
         type: "log",
-        data: expect.stringContaining("No package.json found"),
+        data: expect.stringContaining("skipped install and dev server"),
       })
     );
   });
@@ -78,10 +97,7 @@ describe("bootstrap for a repository without package.json", () => {
 
   it("should restart from a snapshot without launching a dev server for a README-only repo", async () => {
     const { sandbox, commands } = fakeSandbox({ "README.md": "# test" });
-    const events = [];
-    for await (const event of bootstrapFromSnapshotStreaming(sandbox)) {
-      events.push(event);
-    }
+    const events = await collect(bootstrapFromSnapshotStreaming(sandbox));
 
     expect(ranProjectSetup(commands)).toBe(false);
     expect(events.at(-1)).toEqual({ type: "status", status: "running" });
@@ -102,8 +118,52 @@ describe("bootstrap for a repository without package.json", () => {
 
     expect(commands.some((command) => command.includes("serve"))).toBe(true);
     expect(commands.some((command) => /\brun dev\b/.test(command))).toBe(false);
-    expect(result).toMatchObject({ devCommand: "(none)" });
+    expect(result).toMatchObject({
+      installCommand: "npm install --global serve",
+      devCommand: "(none)",
+      devLog: expect.stringContaining("No package.json found"),
+    });
   });
+
+  it("should restore a baseline snapshot without install or dev for a README-only repo", async () => {
+    const { sandbox, commands } = fakeSandbox({ "README.md": "# test" });
+
+    const events = await collect(
+      bootstrapFromBaselineSnapshotStreaming(sandbox, {
+        baseBranch: "main",
+        workingBranch: "main",
+        createBranch: false,
+        expectedLockfileHash: "baseline-hash",
+      })
+    );
+
+    expect(ranProjectSetup(commands)).toBe(false);
+    expect(events.at(-1)).toEqual({ type: "status", status: "running" });
+    expect(events).toContainEqual(noPackageJsonWarning);
+  });
+
+  it.each([
+    [
+      "unreadable",
+      {
+        readFileToBuffer: async () => {
+          throw new Error("EIO");
+        },
+      },
+    ],
+    ["malformed", { readFileToBuffer: async () => Buffer.from("{ nope") }],
+  ])(
+    "should treat an %s package.json as present so the npm path still runs",
+    async (_label, sandbox) => {
+      await expect(
+        readPackageDevScriptInfo(sandbox as unknown as Sandbox, null)
+      ).resolves.toEqual({
+        packageDevScript: null,
+        hasDevScript: true,
+        hasPackageJson: true,
+      });
+    }
+  );
 
   it("should still install a Python repo that has no package.json", async () => {
     const { events } = await streamUntilInstall({

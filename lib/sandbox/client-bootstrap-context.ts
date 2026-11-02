@@ -186,8 +186,14 @@ export async function resolveBootstrapContext(
     !packageInfo.hasPackageJson && !effectiveRuntime.startsWith("python");
   const emptyNodeProject =
     nodeWithoutPackageJson && !opts.devCommand && !opts.installCommand;
-  const hasDevScript =
-    packageInfo.hasDevScript && !(nodeWithoutPackageJson && !opts.devCommand);
+  // Three cases: Node without package.json starts dev only on an override;
+  // Python without package.json keeps its strategy's dev command; otherwise
+  // the package.json dev script decides.
+  const hasDevScript = nodeWithoutPackageJson
+    ? Boolean(opts.devCommand)
+    : packageInfo.hasPackageJson
+      ? packageInfo.hasDevScript
+      : true;
   const workspaceBuildCommand = await resolveWorkspaceBuildCommand(
     sandbox,
     normalizedRoot,
@@ -257,6 +263,7 @@ export async function resolveBootstrapContext(
     packageDevScript,
     hasDevScript,
     emptyNodeProject,
+    nodeWithoutPackageJson,
     readiness,
     previewUrl,
     runtimeEnv,

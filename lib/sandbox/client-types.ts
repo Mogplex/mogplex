@@ -101,6 +101,9 @@ export type ResolvedBootstrapContext = {
   /** Node runtime, no package.json, no install/dev override: skip install
    * and dev so a fresh repo boots ready for the agent to scaffold into. */
   emptyNodeProject: boolean;
+  /** Node runtime with no package.json at the effective root, whether or not
+   * an install or dev override applies. Drives the "no package.json" notices. */
+  nodeWithoutPackageJson: boolean;
   readiness: PreviewReadinessOptions;
   previewUrl: string;
   runtimeEnv: ReturnType<typeof buildRuntimeSandboxEnv>;

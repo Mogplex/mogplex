@@ -22,7 +22,8 @@ import {
   buildWithBunOnPathCommand,
 } from "./client-shell";
 import {
-  NO_DEV_SCRIPT_MESSAGE,
+  noDevServerMessage,
+  noPackageJsonWarning,
   logSignalsPreviewReady,
   extractBoundPortFromLog,
   replacePortInSandboxDomain,
@@ -330,27 +331,63 @@ export async function* streamPreviewSignal(
   }
 }
 
+type NoDevServerBootContext = Pick<
+  ResolvedBootstrapContext,
+  | "previewUrl"
+  | "normalizedRoot"
+  | "emptyNodeProject"
+  | "nodeWithoutPackageJson"
+>;
+
+/**
+ * Finish a streaming boot that starts no dev server: warn when there is no
+ * package.json, log why, and report the sandbox running for terminal and
+ * file access.
+ */
+export async function* streamNoDevServerReady(
+  context: NoDevServerBootContext,
+  boot: "fresh" | "snapshot"
+): AsyncGenerator<SandboxBootstrapStreamEvent> {
+  if (context.nodeWithoutPackageJson) {
+    yield {
+      type: "warning",
+      message: noPackageJsonWarning(context.normalizedRoot),
+    };
+  }
+  yield {
+    type: "log",
+    phase: "dev",
+    data: `${noDevServerMessage(context, boot)}\n`,
+  };
+  yield { type: "preview_url", url: context.previewUrl };
+  yield { type: "status", status: "running" };
+}
+
 export function buildNoDevScriptBootstrapResult(
-  context: Pick<
-    ResolvedBootstrapContext,
-    | "previewUrl"
-    | "effectiveRuntime"
-    | "packageManager"
-    | "framework"
-    | "installCommand"
-  >,
-  installLog: string,
-  devLog: string = NO_DEV_SCRIPT_MESSAGE
+  context: NoDevServerBootContext &
+    Pick<
+      ResolvedBootstrapContext,
+      "effectiveRuntime" | "packageManager" | "framework" | "installCommand"
+    >,
+  installLog: string
 ) {
+  if (context.nodeWithoutPackageJson) {
+    console.warn(
+      "[sandbox/bootstrap]",
+      noPackageJsonWarning(context.normalizedRoot)
+    );
+  }
   return {
     previewUrl: context.previewUrl,
     runtime: context.effectiveRuntime,
     packageManager: context.packageManager,
     framework: context.framework,
-    installCommand: context.installCommand,
+    installCommand: context.emptyNodeProject
+      ? "(none)"
+      : context.installCommand,
     devCommand: "(none)",
     installLog,
-    devLog,
+    devLog: noDevServerMessage(context, "fresh"),
     healthStatus: "running" as const,
     readiness: { ready: true as const },
   };

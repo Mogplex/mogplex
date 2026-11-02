@@ -16,11 +16,11 @@ import type {
 import { withTimeout, BOOTSTRAP_STEP_TIMEOUT_MS } from "./client-validation";
 import { buildShellCommand, buildWithBunOnPathCommand } from "./client-shell";
 import { resolveBootstrapContext } from "./client-bootstrap-context";
-import { snapshotNoDevServerMessage } from "./client-readiness";
 import {
   launchDetachedDevCommand,
   streamRuntimePrerequisitePhase,
   streamCommandPhase,
+  streamNoDevServerReady,
   streamPreviewSignal,
 } from "./client-bootstrap-phases";
 
@@ -150,13 +150,7 @@ async function* runBaselineDevPhase(
   context: ResolvedBootstrapContext
 ): AsyncGenerator<SandboxBootstrapStreamEvent> {
   if (!context.hasDevScript) {
-    yield {
-      type: "log",
-      phase: "dev",
-      data: snapshotNoDevServerMessage(context.emptyNodeProject),
-    };
-    yield { type: "preview_url", url: context.previewUrl };
-    yield { type: "status", status: "running" };
+    yield* streamNoDevServerReady(context, "snapshot");
     return;
   }
 
