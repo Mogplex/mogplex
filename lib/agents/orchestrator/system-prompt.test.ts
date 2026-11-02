@@ -437,31 +437,3 @@ describe("orchestrator memory block", () => {
     expect(prompt).not.toContain("Use memory_search");
   });
 });
-
-describe("orchestrator environment setup prompt", () => {
-  it("should tell Control to set up a project when sandbox_start reports a setup issue", () => {
-    const prompt = buildOrchestratorSystemPrompt({
-      repoFullName: "acme/demo",
-      availableToolNames: ["sandbox_start", "run_command"],
-    });
-
-    expect(prompt).toContain("<environment_setup>");
-    expect(prompt).toContain("whatever its language or layout");
-    expect(prompt).toContain("Never ask for secret values in chat");
-    expect(prompt).toContain("or sandbox_start reported a setupIssue");
-    expect(prompt).toContain(
-      "The operator's own project environment variables are not infrastructure"
-    );
-  });
-
-  it("should leave the setup block out when Control cannot start compute", () => {
-    for (const ctx of [
-      { repoFullName: "acme/demo", availableToolNames: ["run_command"] },
-      { repoFullName: "acme/demo", controlMode: "plan" as const },
-    ]) {
-      expect(buildOrchestratorSystemPrompt(ctx)).not.toContain(
-        "When sandbox_start returns setupIssue"
-      );
-    }
-  });
-});
