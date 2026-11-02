@@ -39,6 +39,8 @@ export async function resolveBootstrapDetection(
   strategy: BootstrapStrategy;
   effectiveDetection: BootstrapDetection;
   hasProjectManifest: boolean;
+  /** Runtime of a manifest the effective (pinned) runtime does not use. */
+  foreignManifestRuntime: SandboxRuntime | null;
 }> {
   const detection = await detectProjectRuntime(sandbox, normalizedRoot);
   const effectiveRuntime: SandboxRuntime =
@@ -46,8 +48,12 @@ export async function resolveBootstrapDetection(
   const strategy = getStrategy(effectiveRuntime);
   // The manifest that counts is the one the effective runtime understands:
   // a package.json does not give a Python sandbox anything to pip install.
+  // Every strategy already ran when nothing was detected, and a pin within
+  // the detected family (node24 on a Node repo) reuses that detection.
   const runtimeDetection =
-    runtimeOverride && runtimeOverride !== detection?.runtime
+    detection &&
+    runtimeOverride &&
+    isNodeRuntime(runtimeOverride) !== isNodeRuntime(detection.runtime)
       ? await strategy.detect(sandbox, normalizedRoot)
       : detection;
   const effectiveDetection = runtimeDetection ??
@@ -58,6 +64,8 @@ export async function resolveBootstrapDetection(
     strategy,
     effectiveDetection,
     hasProjectManifest: runtimeDetection !== null,
+    foreignManifestRuntime:
+      runtimeDetection === null && detection ? detection.runtime : null,
   };
 }
 
@@ -182,8 +190,13 @@ export async function resolveBootstrapContext(
       (autoTarget.framework ? ` (${autoTarget.framework})` : "") +
       ". Set a root directory in repo settings to override."
     : null;
-  const { effectiveRuntime, strategy, effectiveDetection, hasProjectManifest } =
-    await resolveBootstrapDetection(sandbox, normalizedRoot, opts.runtime);
+  const {
+    effectiveRuntime,
+    strategy,
+    effectiveDetection,
+    hasProjectManifest,
+    foreignManifestRuntime,
+  } = await resolveBootstrapDetection(sandbox, normalizedRoot, opts.runtime);
   const { packageManager, framework, frameworkEntry } = effectiveDetection;
   const packageInfo = await readPackageDevScriptInfo(sandbox, normalizedRoot);
   const { packageDevScript } = packageInfo;
@@ -272,6 +285,7 @@ export async function resolveBootstrapContext(
     startsDevServer,
     skipDefaultInstall,
     noProjectManifest,
+    foreignManifestRuntime,
     readiness,
     previewUrl,
     runtimeEnv,

@@ -333,7 +333,12 @@ export async function* streamPreviewSignal(
 
 type NoDevServerBootContext = Pick<
   ResolvedBootstrapContext,
-  "previewUrl" | "normalizedRoot" | "skipDefaultInstall" | "noProjectManifest"
+  | "previewUrl"
+  | "normalizedRoot"
+  | "skipDefaultInstall"
+  | "noProjectManifest"
+  | "foreignManifestRuntime"
+  | "effectiveRuntime"
 >;
 
 /**
@@ -341,6 +346,18 @@ type NoDevServerBootContext = Pick<
  * project manifest, log why, and report the sandbox running for terminal and
  * file access.
  */
+function manifestWarning(context: NoDevServerBootContext) {
+  return noProjectManifestWarning(
+    context.normalizedRoot,
+    context.foreignManifestRuntime
+      ? {
+          runtime: context.effectiveRuntime,
+          found: context.foreignManifestRuntime,
+        }
+      : null
+  );
+}
+
 export async function* streamNoDevServerReady(
   context: NoDevServerBootContext,
   boot: "fresh" | "snapshot"
@@ -348,7 +365,7 @@ export async function* streamNoDevServerReady(
   if (context.noProjectManifest) {
     yield {
       type: "warning",
-      message: noProjectManifestWarning(context.normalizedRoot),
+      message: manifestWarning(context),
     };
   }
   yield {
@@ -369,10 +386,7 @@ export function buildNoDevScriptBootstrapResult(
   installLog: string
 ) {
   if (context.noProjectManifest) {
-    console.warn(
-      "[sandbox/bootstrap]",
-      noProjectManifestWarning(context.normalizedRoot)
-    );
+    console.warn("[sandbox/bootstrap]", manifestWarning(context));
   }
   return {
     previewUrl: context.previewUrl,

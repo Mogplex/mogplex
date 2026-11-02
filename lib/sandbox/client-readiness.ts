@@ -9,6 +9,7 @@ import type {
   SandboxRuntime,
 } from "./client-types";
 import { SandboxBootstrapError } from "./client-validation";
+import { isNodeRuntime, RUNTIME_LABELS } from "./runtimes/types";
 
 export const DEV_SERVER_SIGNAL_TIMEOUT_MS = 90_000;
 
@@ -16,10 +17,10 @@ export const NO_DEV_SCRIPT_MESSAGE =
   "No dev script found in package.json — sandbox ready for terminal and file access.";
 
 export const EMPTY_PROJECT_MESSAGE =
-  "No project manifest found — skipped install and dev server. Sandbox ready for terminal and file access.";
+  "No project manifest for this runtime — skipped install and dev server. Sandbox ready for terminal and file access.";
 
 export const NO_PROJECT_MANIFEST_MESSAGE =
-  "No project manifest found — no dev server started. Sandbox ready for terminal and file access.";
+  "No project manifest for this runtime — no dev server started. Sandbox ready for terminal and file access.";
 
 type NoDevServerContext = {
   skipDefaultInstall: boolean;
@@ -33,7 +34,7 @@ export function noDevServerMessage(
 ) {
   if (boot === "snapshot") {
     return context.noProjectManifest
-      ? "Snapshot restored — no project manifest found. Ready for terminal and file access."
+      ? "Snapshot restored — no project manifest for this runtime. Ready for terminal and file access."
       : "Snapshot restored — no dev script found. Ready for terminal and file access.";
   }
   if (context.skipDefaultInstall) return EMPTY_PROJECT_MESSAGE;
@@ -47,8 +48,20 @@ export function noDevServerMessage(
  * running but nothing serves the preview. That is expected for a fresh or
  * non-JS/Python repo, and a misconfiguration for an app in a subdirectory.
  */
-export function noProjectManifestWarning(rootDirectory: string | null) {
+export function noProjectManifestWarning(
+  rootDirectory: string | null,
+  mismatch: { runtime: SandboxRuntime; found: SandboxRuntime } | null = null
+) {
   const location = rootDirectory ? ` in ${rootDirectory}` : "";
+  if (mismatch) {
+    const found = isNodeRuntime(mismatch.found) ? "Node.js" : "Python";
+    return (
+      `The runtime is set to ${RUNTIME_LABELS[mismatch.runtime]}, but the ` +
+      `project${location} is a ${found} project, so Mogplex skipped the ` +
+      "default install and started no dev server. Change the runtime in " +
+      "Project settings, or set install and dev commands there."
+    );
+  }
   return (
     `No package.json, pyproject.toml or requirements.txt found${location}, ` +
     "so Mogplex skipped the default install and started no dev server. Set " +

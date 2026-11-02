@@ -92,7 +92,7 @@ describe("bootstrap for a repository without a project manifest", () => {
       installCommand: "(none)",
       devCommand: "(none)",
       healthStatus: "running",
-      devLog: expect.stringContaining("No project manifest found"),
+      devLog: expect.stringContaining("No project manifest for this runtime"),
     });
   });
 
@@ -105,7 +105,7 @@ describe("bootstrap for a repository without a project manifest", () => {
     expect(events).toContainEqual(
       expect.objectContaining({
         type: "log",
-        data: expect.stringContaining("no project manifest found"),
+        data: expect.stringContaining("no project manifest for this runtime"),
       })
     );
   });
@@ -122,7 +122,7 @@ describe("bootstrap for a repository without a project manifest", () => {
     expect(result).toMatchObject({
       installCommand: "npm install --global serve",
       devCommand: "(none)",
-      devLog: expect.stringContaining("No project manifest found"),
+      devLog: expect.stringContaining("No project manifest for this runtime"),
     });
   });
 
@@ -288,13 +288,21 @@ describe("bootstrap for a repository without a project manifest", () => {
   });
 
   it.each([
-    ["node22", { "requirements.txt": "fastapi\n" }],
-    ["python3.13", { "package.json": JSON.stringify({ name: "app" }) }],
+    ["node22", "Node.js 22", "Python", { "requirements.txt": "fastapi\n" }],
+    [
+      "python3.13",
+      "Python 3.13",
+      "Node.js",
+      { "package.json": JSON.stringify({ name: "app" }) },
+    ],
   ] as const)(
-    "should skip install when the pinned %s runtime does not recognize the repo's manifest",
-    async (runtime, files) => {
+    "should skip install and name the mismatch when the pinned %s runtime does not use the repo's manifest",
+    async (runtime, label, found, files) => {
       const { sandbox, commands } = fakeSandbox(files);
       const result = await bootstrapSandbox(sandbox, { runtime });
+      const events = await collect(
+        bootstrapSandboxStreaming(fakeSandbox(files).sandbox, { runtime })
+      );
 
       expect(ranProjectSetup(commands)).toBe(false);
       expect(result).toMatchObject({
@@ -302,8 +310,27 @@ describe("bootstrap for a repository without a project manifest", () => {
         installCommand: "(none)",
         devCommand: "(none)",
       });
+      expect(events).toContainEqual({
+        type: "warning",
+        message: expect.stringContaining(
+          `The runtime is set to ${label}, but the project is a ${found} project`
+        ),
+      });
     }
   );
+
+  it("should name the missing manifest rather than a mismatch for a README-only repo", async () => {
+    const events = await collect(
+      bootstrapSandboxStreaming(fakeSandbox({ "README.md": "# test" }).sandbox)
+    );
+
+    expect(events).toContainEqual({
+      type: "warning",
+      message: expect.stringContaining(
+        "No package.json, pyproject.toml or requirements.txt found"
+      ),
+    });
+  });
 
   it("should start the Python dev server when the repo also carries a package.json without a dev script", async () => {
     const { sandbox, commands } = fakeSandbox({

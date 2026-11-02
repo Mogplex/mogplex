@@ -193,7 +193,7 @@ export async function* bootstrapSandboxStreaming(
     yield {
       type: "log",
       phase: "install",
-      data: "No project manifest found — skipped install.\n",
+      data: "No project manifest for this runtime — skipped install.\n",
     };
   } else {
     yield* streamSetupPhases(sandbox, context, opts);

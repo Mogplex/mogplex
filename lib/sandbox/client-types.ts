@@ -107,6 +107,9 @@ export type ResolvedBootstrapContext = {
   /** No manifest the effective runtime recognizes at the effective root,
    * whether or not an override applies. Drives the "no manifest" notices. */
   noProjectManifest: boolean;
+  /** A manifest for another runtime family exists, but the pinned runtime
+   * cannot use it (e.g. Python pinned on a Node repo). */
+  foreignManifestRuntime: SandboxRuntime | null;
   readiness: PreviewReadinessOptions;
   previewUrl: string;
   runtimeEnv: ReturnType<typeof buildRuntimeSandboxEnv>;
