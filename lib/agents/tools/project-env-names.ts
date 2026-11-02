@@ -10,13 +10,19 @@ export const ENV_NAME = /^[A-Za-z_]\w*$/;
 // here re-arms on each boot, so only the operator may set these. The sandbox
 // itself is the trust boundary (Control can run any command there); this list
 // keeps an accidental or injected hook from persisting past the session.
+// It is best-effort: a denylist cannot name every hook a tool reads.
 const LOADER_ENV_NAMES = new Set([
   "ALL_PROXY",
   "BASH_ENV",
+  "BUNDLE_GEMFILE",
+  "BUNDLE_PATH",
   "CDPATH",
+  "CLASSPATH",
   "CURL_CA_BUNDLE",
   "EDITOR",
   "ENV",
+  "GEM_HOME",
+  "GEM_PATH",
   "GIT_ASKPASS",
   "GIT_EDITOR",
   "GIT_EXTERNAL_DIFF",
@@ -55,7 +61,9 @@ const LOADER_ENV_NAMES = new Set([
   "RUBYOPT",
   "SBT_OPTS",
   "SHELL",
+  "SHELLOPTS",
   "SSH_ASKPASS",
+  "SSH_AUTH_SOCK",
   "SSL_CERT_DIR",
   "SSL_CERT_FILE",
   "TAR_OPTIONS",

@@ -110,15 +110,20 @@ function settingsSaveBody(
     replaced.length > 0
       ? `Replaced saved project settings: ${replaced.join(", ")}`
       : "Project settings saved";
-  return [heading, ...settingLines(input)].join(" · ");
+  return [heading, ...settingLines(input, output?.settings)].join(" · ");
 }
 
-/** Each setting a save carries, with command text redacted. */
-function settingLines(values: unknown) {
+/**
+ * Each setting a save carries, with command text redacted. When the tool
+ * returned the saved settings, show those: they are normalized the way the
+ * next boot reads them.
+ */
+function settingLines(values: unknown, saved?: unknown) {
   const record = asRecord(values) ?? {};
+  const stored = asRecord(saved);
   return SHOWN_SETTINGS.flatMap((key) => {
-    const value = record[key];
-    if (value === undefined) return [];
+    if (record[key] === undefined) return [];
+    const value = stored && key in stored ? stored[key] : record[key];
     const shown =
       value === null ? NULL_SETTING[key] : shownCommandText(String(value));
     return [`${SETTING_NAMES[key]}: ${shown}`];

@@ -203,6 +203,28 @@ test("control timeline shows the command a refused settings save proposed", () =
   );
 });
 
+test("control timeline shows a settings save as the server normalized it", () => {
+  const [event] = buildCombinedTimeline(undefined, [
+    assistant([
+      {
+        type: "tool-project_settings_update",
+        toolCallId: "settings-normalized",
+        state: "output-available",
+        input: { rootDirectory: "./api/", devCommand: "  make dev  " },
+        output: {
+          ok: true,
+          settings: { rootDirectory: "api", devCommand: "make dev" },
+        },
+      },
+    ]),
+  ]);
+
+  assert.equal(
+    event?.body,
+    "Project settings saved · root directory: api · dev command: make dev"
+  );
+});
+
 test("control timeline names unguarded settings changes too", () => {
   const [event] = buildCombinedTimeline(undefined, [
     assistant([

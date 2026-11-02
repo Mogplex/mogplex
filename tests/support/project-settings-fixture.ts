@@ -3,6 +3,7 @@
  * settings tool tests. Importing it installs the hooks that restore
  * supabaseAdmin.from after each test.
  */
+import { isDeepStrictEqual } from "node:util";
 import { afterEach, beforeAll } from "vitest";
 import { presetForRole } from "@/lib/team-capabilities";
 import { createProjectSettingsTools } from "@/lib/agents/tools/project-settings";
@@ -35,8 +36,9 @@ const matches = (row: Row, filters: Filter[]) =>
   filters.every(({ op, column, value }) => {
     const actual = row[column] ?? null;
     if (op === "is") return actual === value;
-    return column === "sandbox_env_vars"
-      ? JSON.stringify(actual) === value
+    // jsonb equality ignores key order, so compare parsed maps.
+    return column === "sandbox_env_vars" && typeof value === "string"
+      ? isDeepStrictEqual(actual, JSON.parse(value))
       : actual === value;
   });
 
