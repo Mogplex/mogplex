@@ -286,6 +286,7 @@ describe("project settings tools", () => {
       "npm_config_registry",
       "http_proxy",
       "GIT_CONFIG_COUNT",
+      "NODE_TLS_REJECT_UNAUTHORIZED",
       "path",
       "BASH_ENV",
     ]) {
@@ -332,18 +333,15 @@ describe("project settings tools", () => {
 
     const result = await tools().project_settings_update.execute({
       devPort: null,
+      replace: true,
     });
 
-    expect(result).toMatchObject({ ok: true, settings: { devPortAuto: true } });
+    expect(result).toMatchObject({
+      ok: true,
+      settings: { devPortAuto: true },
+      replaced: { devPort: 8000 },
+    });
     expect(writes).toEqual([{ dev_port_auto: true }]);
-  });
-
-  it("should save settings without reading the project first", async () => {
-    const { reads } = installRepo();
-
-    await tools().project_settings_update.execute({ devCommand: "make dev" });
-
-    expect(reads.count).toBe(0);
   });
 
   it("should report a missing project when a settings save matches no row", async () => {
@@ -398,8 +396,15 @@ describe("project settings tools", () => {
     const { writes } = installRepo();
 
     expect(
-      await tools().project_settings_update.execute({ runtime: "python3.13" })
-    ).toMatchObject({ ok: true, settings: { runtime: "python3.13" } });
+      await tools().project_settings_update.execute({
+        runtime: "python3.13",
+        replace: true,
+      })
+    ).toMatchObject({
+      ok: true,
+      settings: { runtime: "python3.13" },
+      replaced: { runtime: "node22" },
+    });
     expect(writes).toEqual([{ runtime: "python3.13" }]);
     expect(
       tools().project_settings_update.inputSchema.safeParse({ runtime: "ruby" })
@@ -447,5 +452,43 @@ describe("project settings tools", () => {
       QUOTED: '"kept-with-quotes"',
       PORT: "8000",
     });
+  });
+
+  it("should not replace a saved command without the operator's say-so", async () => {
+    const { writes } = installRepo({ dev_command: "make serve" });
+
+    expect(
+      await tools().project_settings_update.execute({
+        devCommand: "npm run dev",
+      })
+    ).toEqual({
+      error:
+        "devCommand already saved. Tell the operator what you would change and why; call again with replace: true only once they agree.",
+      saved: { devCommand: "make serve" },
+    });
+    expect(writes).toEqual([]);
+  });
+
+  it("should treat saving the same value again as no replacement", async () => {
+    installRepo({ dev_command: "make serve" });
+
+    const result = await tools().project_settings_update.execute({
+      devCommand: "make serve",
+    });
+
+    expect(result).toMatchObject({ ok: true });
+    expect(result).not.toHaveProperty("replaced");
+  });
+
+  it("should reject a root directory outside the repository", () => {
+    const schema = tools().project_settings_update.inputSchema;
+
+    expect(schema.safeParse({ rootDirectory: "../other" }).success).toBe(false);
+    expect(schema.safeParse({ rootDirectory: "apps/web/.." }).success).toBe(
+      false
+    );
+    expect(schema.safeParse({ rootDirectory: "my app" }).success).toBe(false);
+    expect(schema.safeParse({ rootDirectory: "apps/web" }).success).toBe(true);
+    expect(schema.safeParse({ rootDirectory: null }).success).toBe(true);
   });
 });

@@ -33,6 +33,7 @@ type ProjectSettingsDeps = {
 const SETTINGS_COLUMNS =
   "id,runtime,root_directory,install_command,dev_command,dev_port,dev_port_auto,env_sync_mode,sandbox_env_vars";
 const ENV_NAME = /^[A-Za-z_]\w*$/;
+const PARENT_SEGMENT = /(^|\/)\.\.(\/|$)/;
 // Names that change how every program in the sandbox starts. A value saved
 // here re-arms on each boot, so only the operator may set these. The sandbox
 // itself is the trust boundary (Control can run any command there); this list
@@ -52,7 +53,9 @@ const LOADER_ENV_NAMES = new Set([
   "JDK_JAVA_OPTIONS",
   "MAKEFLAGS",
   "NODE_OPTIONS",
+  "NODE_EXTRA_CA_CERTS",
   "NODE_PATH",
+  "NODE_TLS_REJECT_UNAUTHORIZED",
   "PAGER",
   "PATH",
   "PERL5OPT",
@@ -197,10 +200,46 @@ const updateParams = z.object({
     ),
   rootDirectory: z
     .string()
+    .refine((value) => !PARENT_SEGMENT.test(value) && !/\s/.test(value), {
+      message: "Use a path inside the repository, without spaces or '..'.",
+    })
     .nullable()
     .optional()
     .describe("Repository-relative app directory; null for the repo root."),
+  replace: z
+    .boolean()
+    .optional()
+    .describe(
+      "Required to change a saved value that is already set to something else. Use it only when the operator asked, or for a value you saved earlier in this conversation."
+    ),
 });
+
+type SettingsUpdates = ReturnType<typeof normalizeRepoSettingsPatch>;
+
+/**
+ * Saved values this update would change: a set command, directory, runtime,
+ * or pinned port being replaced or cleared. Filling an empty one is not.
+ */
+function replacedSettings(row: SettingsRow, updates: SettingsUpdates) {
+  const replaced: Record<string, string | number | null> = {};
+  const fields = [
+    ["runtime", "runtime"],
+    ["install_command", "installCommand"],
+    ["dev_command", "devCommand"],
+    ["root_directory", "rootDirectory"],
+  ] as const;
+  for (const [column, name] of fields) {
+    if (!(column in updates)) continue;
+    const saved = row[column];
+    if (saved !== null && saved !== updates[column]) replaced[name] = saved;
+  }
+  const portPinned = row.dev_port_auto === false;
+  const portChanges =
+    updates.dev_port_auto === true ||
+    (updates.dev_port !== undefined && updates.dev_port !== row.dev_port);
+  if (portPinned && portChanges) replaced.devPort = row.dev_port;
+  return replaced;
+}
 
 const envParams = z.object({
   name: z.string().describe("Variable name, e.g. NODE_ENV."),
@@ -257,10 +296,10 @@ export function createProjectSettingsTools(
     }),
     project_settings_update: defineTool({
       description:
-        "Save runtime, install command, dev command, dev port, or root directory for the selected project so future sandbox boots use them. Save only commands you ran successfully in the sandbox. This replaces what is saved: check project_settings first, and ask the operator before replacing a command they set that still works.",
+        "Save runtime, install command, dev command, dev port, or root directory for the selected project so future sandbox boots use them. Save only commands you ran successfully in the sandbox. Filling an empty setting needs no confirmation; changing one that is already saved needs replace: true, which you pass only once the operator agrees.",
       inputSchema: updateParams,
       execute: async (input: z.infer<typeof updateParams>) =>
-        withScope("write", async (scope) => {
+        withRow("write", async (row, scope) => {
           const updates = normalizeRepoSettingsPatch({
             ...(input.runtime === undefined ? {} : { runtime: input.runtime }),
             ...(input.installCommand === undefined
@@ -283,6 +322,14 @@ export function createProjectSettingsTools(
           if (Object.keys(updates).length === 0) {
             return { error: "No settings to save." };
           }
+          const replaced = replacedSettings(row, updates);
+          const names = Object.keys(replaced);
+          if (names.length > 0 && !input.replace) {
+            return {
+              error: `${names.join(", ")} already saved. Tell the operator what you would change and why; call again with replace: true only once they agree.`,
+              saved: replaced,
+            };
+          }
           let query = supabaseAdmin
             .from("repos")
             .update(updates)
@@ -296,7 +343,11 @@ export function createProjectSettingsTools(
             return { error: "Could not save project settings." };
           }
           if (!data) return { error: "Project not found." };
-          return { ok: true, settings: describeSettings(data as SettingsRow) };
+          return {
+            ok: true,
+            settings: describeSettings(data as SettingsRow),
+            ...(names.length > 0 ? { replaced } : {}),
+          };
         }),
     }),
     project_env_set: defineTool({
