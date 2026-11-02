@@ -39,6 +39,16 @@ export function createRepositoryVerificationState() {
 
   return {
     observe,
+    invalidate() {
+      // An acknowledged file write invalidates proof without a tree scan.
+      current = null;
+      changed = true;
+      attempted = false;
+      blocked = null;
+      error = null;
+      results.clear();
+      manualKinds.clear();
+    },
     requireChecks() {
       changed = true;
     },

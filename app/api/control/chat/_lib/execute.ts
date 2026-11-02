@@ -344,6 +344,7 @@ export async function executeControlChatRequest(input: {
         controlMessagesForModel(modelMessages, claimedApprovalIds),
         {
           ignoreIncompleteToolCalls: true,
+          tools,
         }
       ),
       abortSignal: input.req.signal,

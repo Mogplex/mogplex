@@ -74,7 +74,7 @@ function fixture() {
       inputSchema: z.object({ path: z.string() }),
       execute: async () => {
         effects.push("write");
-        source = "b";
+        source = source === "a" ? "b" : "c";
         return { sandboxId: "workspace-1", path: "index.ts" };
       },
     }),
@@ -101,8 +101,12 @@ function fixture() {
       },
     }),
   });
-  const run = (name: keyof ToolSet, input = {}) =>
-    tools[name].execute!(input, options);
+  let call = 0;
+  const run = (
+    name: keyof ToolSet,
+    input = {},
+    toolCallId = `tool-${++call}`
+  ) => tools[name].execute!(input, { ...options, toolCallId });
   return {
     gate,
     run,
@@ -195,10 +199,10 @@ it("allows useful edits after a confirmed inspection failure while reporting una
   expect(f.gate.summary()).toMatchObject({ changed: true, verified: false });
 });
 
-it("stops before a mutation if the inspection itself may still be running", async () => {
+it("stops before a shell command if the inspection itself may still be running", async () => {
   const f = fixture();
   f.setObservation("lost");
-  await f.run("write_file", { path: "index.ts" });
+  await f.run("run_command", { command: "rewrite" });
   expect(f.effects).toEqual([]);
   expect(f.gate.summary().verified).toBe(false);
 });
@@ -264,4 +268,43 @@ it("allows a command rejected before launch to recover without latching an unkno
   await f.run("run_checks");
   expect(f.effects).toEqual(["not_started", "write"]);
   expect(f.gate.summary().verified).toBe(true);
+});
+
+it("records a check call once so the SDK callback cannot replace its specific failure", async () => {
+  const f = fixture();
+  const error = "Workspace inspection failed after the command finished.";
+  f.setReceipt({
+    ...receipt("a"),
+    ok: false,
+    workspaceRevisionAfter: null,
+    error,
+  });
+  await f.run("run_checks", {}, "checked-call");
+  f.gate.onToolEnd({
+    toolCall: { toolName: "run_checks", toolCallId: "checked-call" },
+  });
+  expect(f.gate.summary().error).toBe(error);
+});
+
+it("invalidates proof after file edits without scanning the whole repository per edit", async () => {
+  const f = fixture();
+  await f.run("write_file", { path: ".mogplex/identity.ts" });
+  expect(f.inspections).toEqual([]);
+  expect(f.gate.summary()).toMatchObject({
+    changed: true,
+    required: true,
+    verified: false,
+  });
+});
+
+it("a late SDK callback cannot verify contents changed after its check call", async () => {
+  const f = fixture();
+  await f.run("write_file", { path: "index.ts" });
+  await f.run("run_checks", {}, "checked-call");
+  await f.run("write_file", { path: "index.ts" });
+  f.gate.onToolEnd({
+    toolCall: { toolName: "run_checks", toolCallId: "checked-call" },
+    output: receipt("b"),
+  });
+  expect(f.gate.summary()).toMatchObject({ required: true, verified: false });
 });

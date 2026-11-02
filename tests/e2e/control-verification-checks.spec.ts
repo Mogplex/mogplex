@@ -131,7 +131,8 @@ test("mobile check results distinguish failed, unconfirmed, and skipped work", a
     command: "CI=1 pnpm run lint",
     status: "failed",
     exitCode: 1,
-    stderr: "index.ts:12 Unused import",
+    stderr:
+      "index.ts:12 Unused import\n    at lint (/vercel/sandbox/src/index.ts:12:2)\nexpected /api/health/200",
   };
   evidence.checks[2] = {
     kind: "build",
@@ -165,6 +166,10 @@ test("mobile check results distinguish failed, unconfirmed, and skipped work", a
     await expect(rows.nth(index).locator("summary")).toContainText(status);
   await rows.nth(1).locator("summary").click();
   await expect(rows.nth(1)).toContainText("index.ts:12 Unused import");
+  await expect(rows.nth(1)).toContainText(
+    "at lint (/vercel/sandbox/src/index.ts:12:2)"
+  );
+  await expect(rows.nth(1)).toContainText("expected /api/health/200");
   await rows.nth(2).locator("summary").click();
   await expect(rows.nth(2)).toContainText(
     "Command completion could not be confirmed."

@@ -10,6 +10,7 @@ export function verificationMessageMetadata(input: {
     "metadata" | "interrupt"
   >;
 }) {
+  let lastVerification: string | undefined;
   return ({
     part,
   }: {
@@ -22,14 +23,16 @@ export function verificationMessageMetadata(input: {
     const metadata =
       controlMessageMetadata(input.call.id, input.model, part) ??
       (part.type === "abort" ? { ai_call_id: input.call.id } : undefined);
-    return metadata
-      ? {
-          ...metadata,
-          repository_verification: input.verification.metadata(),
-          workspace_changes: input.call.metadata.workspace_changes,
-          workspace_snapshot_error:
-            input.call.metadata.workspace_snapshot_error,
-        }
-      : undefined;
+    if (!metadata) return undefined;
+    const verification = input.verification.metadata();
+    const serialized = JSON.stringify(verification);
+    const changed = serialized !== lastVerification;
+    lastVerification = serialized;
+    return {
+      ...metadata,
+      ...(changed ? { repository_verification: verification } : {}),
+      workspace_changes: input.call.metadata.workspace_changes,
+      workspace_snapshot_error: input.call.metadata.workspace_snapshot_error,
+    };
   };
 }

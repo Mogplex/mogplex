@@ -16,6 +16,7 @@ import {
   type RepositoryCheckProbe,
 } from "./probe";
 import { runRepositoryChecks } from "./runner";
+import { repositoryChecksModelOutput } from "./model-output";
 import type { RepositoryCheckReceipt } from "./receipt";
 
 export type { RepositoryCheckReceipt } from "./receipt";
@@ -110,6 +111,7 @@ export function createRunChecksTool(context: OrchestratorToolContext) {
   const observe = createRepositoryCheckProbe(context);
   const terminal = createCheckTerminal(context, false);
   return defineTool({
+    toModelOutput: repositoryChecksModelOutput,
     description:
       "Run the repository's full typecheck, lint, build, and test scripts in the selected workspace. Discovers the package manager and CI scripts, records each command's exit evidence, and verifies that source contents stayed unchanged. Missing, interrupted, failed, or skipped checks never count as full verification. Use skip only when the operator explicitly limits checks, and include their reason so every omission stays visible.",
     inputSchema: z

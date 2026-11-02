@@ -251,7 +251,8 @@ behavior. Defaults can be overridden by the owning screen; inspect it first.
   bottom; scrolling up pauses automatic following.
   Show workspace verification as four compact rows: typecheck, lint, build, and
   tests. Each row discloses the actual command, exit result, and output without
-  losing its open state when the chat is steered. Distinguish failed,
+  losing its open state when the chat is steered. Preserve stack frames and
+  source literals in output; redact credentials. Distinguish failed,
   unconfirmed, unavailable, and explicitly skipped checks. A passing headline
   requires all four full checks against the checked source contents; later edits
   invalidate earlier results. Operator limits stay visible with their reason.

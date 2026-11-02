@@ -100,3 +100,25 @@ test("missing or malformed evidence does not invent a verification card", () => 
       false
     );
 });
+
+test("check details preserve stack frames and source literals while redacting credentials", () => {
+  const evidence = summary();
+  const secret = ["sk", "proj", "a".repeat(40)].join("-");
+  const output =
+    "expected /api/health/200\n    at check (/vercel/sandbox/src/index.ts:12:2)";
+  evidence.checks[3] = {
+    ...evidence.checks[3],
+    status: "failed",
+    exitCode: 1,
+    stdout: output,
+    stderr: `Authorization: Bearer ${secret}`,
+    reason: "expected /api/health/200",
+  };
+  const card = buildCombinedTimeline([], [message(evidence)]).find(
+    (event) => event.kind === "verification"
+  );
+  assert.ok(card?.kind === "verification");
+  assert.equal(card.verification.checks[3].stdout, output);
+  assert.equal(card.verification.checks[3].reason, "expected /api/health/200");
+  assert.ok(!card.verification.checks[3].stderr?.includes(secret));
+});

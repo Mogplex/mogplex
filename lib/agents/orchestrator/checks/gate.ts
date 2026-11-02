@@ -36,6 +36,7 @@ export function createControlVerificationGate(
   context.verificationPaths ??= new Set();
   let uncertainCommand = false;
   let inFlight = 0;
+  const recordedCheckCalls = new Set<string>();
 
   const block = (reason: string, uncertain = false) => {
     uncertainCommand ||= uncertain;
@@ -49,15 +50,20 @@ export function createControlVerificationGate(
       else block(result.error, result.commandCompletion === "unknown");
       return result;
     } catch (error) {
+      // A broken connection is not proof the POST never started a command.
+      // Read-only tools remain available; do not replay uncertain execution.
       block(UNCONFIRMED, true);
       throw error;
     }
   };
   const onToolEnd = (event: {
-    toolCall: { toolName: string };
+    toolCall: { toolName: string; toolCallId?: string };
     output?: unknown;
   }) => {
     if (event.toolCall.toolName !== "run_checks") return;
+    const id = event.toolCall.toolCallId;
+    if (id && recordedCheckCalls.has(id)) return;
+    if (id) recordedCheckCalls.add(id);
     const receipt = repositoryCheckReceiptSchema.safeParse(event.output);
     if (receipt.success) {
       state.recordReceipt(receipt.data);
@@ -80,9 +86,14 @@ export function createControlVerificationGate(
       try {
         const output = await execute(input, options);
         options.abortSignal?.throwIfAborted();
-        onToolEnd({ toolCall: { toolName: name }, output });
+        // Record before a queued edit starts; deduplicate the later SDK event.
+        onToolEnd({
+          toolCall: { toolName: name, toolCallId: options.toolCallId },
+          output,
+        });
         return output;
       } catch (error) {
+        recordedCheckCalls.add(options.toolCallId);
         block(UNCONFIRMED, true);
         throw error;
       }
@@ -95,21 +106,20 @@ export function createControlVerificationGate(
     )
       return execute(input, options);
     const args = record(input);
-    if (
-      (name === "write_file" || name === "edit_file") &&
-      typeof args.path === "string"
-    ) {
+    const fileEdit = name === "write_file" || name === "edit_file";
+    if (fileEdit && typeof args.path === "string") {
       const path = args.path
         .trim()
         .replace(/^\.\/+/, "")
         .replace(/^\/+/, "");
       if (isSafeRepoPath(path)) context.verificationPaths!.add(path);
     }
-    const before = await observe(options);
-    if (!before.ok && uncertainCommand) return block(before.error, true);
+    const before = fileEdit ? null : await observe(options);
+    if (before && !before.ok && uncertainCommand)
+      return block(before.error, true);
     if (DELIVERY_TOOLS.has(name)) {
       // Inspection failure may allow repairs, never delivery without evidence.
-      if (!before.ok) return block(before.error);
+      if (!before?.ok) return block(before?.error ?? UNCONFIRMED);
       state.requireChecks();
       if (state.summary().required)
         return {
@@ -129,6 +139,11 @@ export function createControlVerificationGate(
       block(UNCONFIRMED, true);
       throw error;
     }
+    if (fileEdit) {
+      if (controlToolOutcome("output-available", output) === "done")
+        state.invalidate();
+      return output;
+    }
     const result = record(output);
     if (
       name === "run_command" &&
@@ -144,7 +159,7 @@ export function createControlVerificationGate(
     // useful file edits, nor manufacture a passing verification receipt.
     const after = await observe(options);
     if (
-      before.ok &&
+      before?.ok &&
       after.ok &&
       before.sandboxId === after.sandboxId &&
       before.revision === after.revision &&

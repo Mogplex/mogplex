@@ -1,3 +1,4 @@
+import { redactSecretsInText } from "@/lib/ai-telemetry";
 import type { VerificationEvent } from "@/lib/control/types";
 import { repositoryVerificationSummarySchema } from "@/lib/agents/orchestrator/checks/receipt";
 import { sanitizeAgentUserFacingError } from "@/lib/agents/user-facing-output";
@@ -19,15 +20,9 @@ export function verificationEvent(metadata: unknown): VerificationEvent | null {
     );
   verification.checks = verification.checks.map((check) => ({
     ...check,
-    reason: check.reason
-      ? sanitizeAgentUserFacingError(check.reason)
-      : undefined,
-    stdout: check.stdout
-      ? sanitizeAgentUserFacingError(check.stdout)
-      : undefined,
-    stderr: check.stderr
-      ? sanitizeAgentUserFacingError(check.stderr)
-      : undefined,
+    reason: check.reason ? redactSecretsInText(check.reason) : undefined,
+    stdout: check.stdout ? redactSecretsInText(check.stdout) : undefined,
+    stderr: check.stderr ? redactSecretsInText(check.stderr) : undefined,
   }));
   const body = verification.verified
     ? "Workspace checks passed"
