@@ -39,6 +39,27 @@ describe("env var rows", () => {
     ).toEqual({ ok: false, error: "A is defined twice." });
   });
 
+  it("should save variables named after object built-ins", () => {
+    expect(
+      envVarsFromRows([
+        createEnvVarRow("constructor", "a"),
+        createEnvVarRow("toString", "b"),
+      ])
+    ).toEqual({ ok: true, vars: { constructor: "a", toString: "b" } });
+  });
+
+  it("should keep a built-in-named row's value when the paste does not set it", () => {
+    const merged = mergePastedEnv(
+      [createEnvVarRow("constructor", "keep")],
+      "A=1"
+    );
+
+    expect(pairs(merged)).toEqual([
+      ["constructor", "keep"],
+      ["A", "1"],
+    ]);
+  });
+
   it("should overwrite existing keys and append new ones when pasting .env text", () => {
     const merged = mergePastedEnv(
       [createEnvVarRow("A", "old"), createEnvVarRow("B", "keep")],

@@ -82,11 +82,20 @@ export function ProjectSettingsDrawer({
               ))}
             </TabsList>
             <div className="min-h-0 flex-1 overflow-y-auto">
-              {/* Keyed by repo so each project opens with its own saved draft. */}
-              <TabsContent value="env">
+              {/* Keyed by repo so each project opens with its own saved draft;
+                  force-mounted so unsaved edits survive a tab switch. */}
+              <TabsContent
+                value="env"
+                forceMount
+                className="data-[state=inactive]:hidden"
+              >
                 <EnvVarsPanel key={repo.id} repo={repo} onSave={saveRepo} />
               </TabsContent>
-              <TabsContent value="general">
+              <TabsContent
+                value="general"
+                forceMount
+                className="data-[state=inactive]:hidden"
+              >
                 <RepoSettingsForm
                   key={repo.id}
                   repo={repo}

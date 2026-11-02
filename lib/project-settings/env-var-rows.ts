@@ -24,15 +24,16 @@ export function rowsFromEnvVars(vars: RepoEnvVars | null | undefined) {
 export function envVarsFromRows(
   rows: EnvVarRow[]
 ): { ok: true; vars: RepoEnvVars } | { ok: false; error: string } {
-  const vars: RepoEnvVars = {};
+  // A Map, not an object literal, so names like `constructor` are plain keys.
+  const vars = new Map<string, string>();
   for (const row of rows) {
     const key = row.key.trim();
     if (!key && !row.value) continue;
     if (!key) return { ok: false, error: "Every value needs a variable name." };
-    if (key in vars) return { ok: false, error: `${key} is defined twice.` };
-    vars[key] = row.value;
+    if (vars.has(key)) return { ok: false, error: `${key} is defined twice.` };
+    vars.set(key, row.value);
   }
-  return { ok: true, vars };
+  return { ok: true, vars: Object.fromEntries(vars) };
 }
 
 /**
@@ -41,11 +42,10 @@ export function envVarsFromRows(
  */
 export function mergePastedEnv(rows: EnvVarRow[], text: string) {
   const pasted = parseEnvVarsText(text);
-  const merged = rows.map((row) =>
-    row.key.trim() in pasted
-      ? { ...row, value: pasted[row.key.trim()] ?? row.value }
-      : row
-  );
+  const merged = rows.map((row) => {
+    const key = row.key.trim();
+    return Object.hasOwn(pasted, key) ? { ...row, value: pasted[key] } : row;
+  });
   const existing = new Set(rows.map((row) => row.key.trim()));
   for (const [key, value] of Object.entries(pasted)) {
     if (!existing.has(key)) merged.push(createEnvVarRow(key, value));

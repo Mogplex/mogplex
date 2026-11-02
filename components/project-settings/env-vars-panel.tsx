@@ -127,6 +127,9 @@ export function EnvVarsPanel({
                 updateRow(row.id, { value: event.target.value })
               }
               placeholder="value"
+              autoComplete="off"
+              data-1p-ignore
+              data-lpignore="true"
               containerClassName="flex-1"
               className="font-mono text-xs"
             />

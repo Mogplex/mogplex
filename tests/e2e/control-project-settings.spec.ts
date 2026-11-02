@@ -66,6 +66,13 @@ test("environment variables open from the project menu, stay masked, and save wi
   await expect(
     drawer.getByLabel("NEW_FLAG value", { exact: true })
   ).toHaveValue("1");
+  // The unsaved draft survives a trip to another tab.
+  await drawer.getByRole("tab", { name: "General" }).click();
+  await drawer.getByRole("tab", { name: "Environment variables" }).click();
+  await expect(
+    drawer.getByLabel("NEW_FLAG value", { exact: true })
+  ).toHaveValue("1");
+  await expect(token).toHaveAttribute("autocomplete", "off");
   await drawer.getByLabel("Variable scope").selectOption("sandbox-and-preview");
   await drawer.getByRole("button", { name: "Save variables" }).click();
 
