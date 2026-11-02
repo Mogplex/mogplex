@@ -25,6 +25,7 @@ import {
 } from "@/lib/team-resource-scope";
 import { ENV_NAME, isLoaderEnvName, storedEnvMap } from "./project-env-names";
 import {
+  envValueProblem,
   notRedacted,
   savedCommand,
   shownCommand,
@@ -253,10 +254,11 @@ function pinnedPortReplaced(row: SettingsRow, updates: SettingsUpdates) {
  * `replace` is the model's assertion, not an enforced operator approval, for
  * these settings and for changing or deleting a stored variable alike. It
  * stops an accidental overwrite, not an injected one: an instruction in
- * repository content can include replace: true. That is a product decision: Control's project saves run without an approval
- * step, the same default as connection tools. What backs it is the guard
- * itself, the compare-and-swap, the redacted audit row, and a timeline entry
- * that names every replaced or deleted value and shows saved commands.
+ * repository content can include replace: true. That is a product decision:
+ * Control's project saves run without an approval step, the same default as
+ * connection tools. What backs it is the guard itself, the compare-and-swap,
+ * the redacted audit row, and a timeline entry that names every replaced or
+ * deleted value and shows saved commands.
  */
 const REPLACE_GUARDED = new Set(["installCommand", "devCommand", "devPort"]);
 
@@ -467,13 +469,9 @@ export function createProjectSettingsTools(
             error: `${key} changes how every program in the sandbox starts. Ask the operator to set it in Project settings.`,
           };
         }
-        // Quotes are stripped on save, so '""' would store an empty variable.
-        if (value !== null && !normalizeEnvVars({ [key]: value })[key]) {
-          return {
-            error:
-              "The value is empty once its surrounding quotes are removed. Use value: null to delete a variable.",
-          };
-        }
+        const valueProblem =
+          value === null ? null : envValueProblem(key, value);
+        if (valueProblem) return { error: valueProblem };
         return withScope("write", async (scope) => {
           for (let attempt = 1; ; attempt += 1) {
             const row = await loadSettings(target, scope);

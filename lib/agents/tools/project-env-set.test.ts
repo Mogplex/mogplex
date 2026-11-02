@@ -87,6 +87,29 @@ describe("project_env_set", () => {
     expect(row.sandbox_env_vars).toEqual({ PORT: "3000" });
   });
 
+  it("should refuse values that look like secrets and keep ordinary ones", async () => {
+    const { writes } = installRepo();
+
+    for (const [name, value] of [
+      ["GITHUB_TOKEN", "anything"],
+      ["STRIPE_SECRET", "opaque-value"],
+      ["UPSTREAM", "ghs_installationToken123"],
+      ["CALLBACK", "https://api.example.test/hook?token=opaque-value"],
+    ]) {
+      expect(
+        await tools().project_env_set.execute({ name, value })
+      ).toHaveProperty("error", expect.stringContaining("looks like a secret"));
+    }
+    expect(writes).toEqual([]);
+
+    expect(
+      await tools().project_env_set.execute({
+        name: "DATABASE_HOST",
+        value: "postgres://owner@db/app",
+      })
+    ).toMatchObject({ ok: true });
+  });
+
   it("should reject a value that is empty once its quotes are stripped", async () => {
     const { writes } = installRepo();
 
