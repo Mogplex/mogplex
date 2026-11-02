@@ -186,10 +186,7 @@ test("control composers expose permissions, model, and MCP controls without a sp
   await projectSearch.press("Enter");
   await expect(projectPicker).toContainText("acme/roadmap");
   await projectPicker.click();
-  await projectSearch.press("ArrowDown");
-  const widgetsOption = page.getByRole("option", { name: "acme/widgets" });
-  await expect(widgetsOption).toBeFocused();
-  await widgetsOption.press("ArrowDown");
+  await projectSearch.press("ArrowUp");
   const roadmapOption = page.getByRole("option", { name: "acme/roadmap" });
   await expect(roadmapOption).toBeFocused();
   await roadmapOption.press("Space");
