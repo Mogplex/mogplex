@@ -243,7 +243,8 @@ function pinnedPortReplaced(row: SettingsRow, updates: SettingsUpdates) {
  * later boot, so this guard and the timeline entry for each save are what
  * stand between a mistaken or injected command and the next boot. Runtime and
  * root directory are closed, validated choices that setup itself has to
- * correct, so changing them only shows up in `replaced`.
+ * correct, and a wrong one surfaces as a setup issue on the next boot rather
+ * than running anything, so changing them only shows up in `replaced`.
  *
  * Filling an empty command is not guarded at all: getting a new project to
  * boot is what these tools exist for, and asking first would stall setup.
@@ -471,8 +472,7 @@ export function createProjectSettingsTools(
             error: `${key} changes how every program in the sandbox starts. Ask the operator to set it in Project settings.`,
           };
         }
-        const valueProblem =
-          value === null ? null : envValueProblem(key, value);
+        const valueProblem = envValueProblem(key, value);
         if (valueProblem) return { error: valueProblem };
         return withScope("write", async (scope) => {
           for (let attempt = 1; ; attempt += 1) {

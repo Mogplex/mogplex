@@ -87,6 +87,31 @@ describe("project_env_set", () => {
     expect(row.sandbox_env_vars).toEqual({ PORT: "3000" });
   });
 
+  it("should leave deleting a secret-named variable to the operator", async () => {
+    const { writes } = installRepo({
+      sandbox_env_vars: { GITHUB_TOKEN: "stored", PORT: "3000" },
+    });
+
+    expect(
+      await tools().project_env_set.execute({
+        name: "GITHUB_TOKEN",
+        value: null,
+        replace: true,
+      })
+    ).toEqual({
+      error:
+        "GITHUB_TOKEN may hold a secret. Ask the operator to remove it in Project settings.",
+    });
+    expect(writes).toEqual([]);
+    expect(
+      await tools().project_env_set.execute({
+        name: "PORT",
+        value: null,
+        replace: true,
+      })
+    ).toMatchObject({ ok: true, deleted: true });
+  });
+
   it("should refuse values that look like secrets and keep ordinary ones", async () => {
     const { writes } = installRepo();
 

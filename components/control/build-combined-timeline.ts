@@ -130,6 +130,16 @@ function settingLines(values: unknown, saved?: unknown) {
   });
 }
 
+/**
+ * The detail under a failed tool. A settings save refused by the replace
+ * guard carries an instruction for the model; the operator sees why instead.
+ */
+function failureLog(toolName: string, output: Record<string, unknown> | null) {
+  if (toolName === "project_settings_update" && asRecord(output?.saved))
+    return "Already saved. Control changes a saved setting only after you agree.";
+  return controlToolFailureDetail(output);
+}
+
 /** A refused settings save shows what it proposed and what is saved. */
 function failureBody(
   toolName: string,
@@ -350,9 +360,7 @@ export function buildCombinedTimeline(
               label,
               time: "now",
               body: failureBody(toolName, output, toolInput),
-              log: sanitizeAgentUserFacingError(
-                controlToolFailureDetail(output)
-              ),
+              log: sanitizeAgentUserFacingError(failureLog(toolName, output)),
             });
             continue;
           }

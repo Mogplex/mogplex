@@ -27,12 +27,19 @@ export const savedCommand = z
   });
 
 /**
- * Why a variable value can't be saved by Control, or null. Secrets go
- * through the operator's Project settings, never through the model, so a
- * value the redactor would hide (a token shape, a URL with a password, or any
- * value under a secret-sounding name) is refused.
+ * Why Control can't save (or, with null, delete) this variable, or null.
+ * Secrets go through the operator's Project settings, never through the
+ * model, so a value the redactor would hide (a token shape, a URL with a
+ * password, or any value under a secret-sounding name) is refused, and so is
+ * deleting a variable under a secret-sounding name.
  */
-export function envValueProblem(name: string, value: string) {
+export function envValueProblem(name: string, value: string | null) {
+  if (value === null) {
+    const probe = `${name}=x`;
+    return redactSecretsInText(probe) === probe
+      ? null
+      : `${name} may hold a secret. Ask the operator to remove it in Project settings.`;
+  }
   // Quotes are stripped on save, so '""' would store an empty variable; a
   // spaces-only value is refused the same way a spaces-only command is.
   if (!normalizeEnvVars({ [name]: value })[name]?.trim()) {
