@@ -36,7 +36,11 @@ type ModelsMutator = (
   shouldRevalidate?: boolean | MutatorOptions<ModelsResponse>
 ) => Promise<ModelsResponse | undefined> | ModelsResponse | undefined;
 
-type ModelsToast = typeof toast;
+// Only the base call is used, so injectable fakes need not implement the
+// status helpers (`toast.success`, `toast.error`, ...).
+type ModelsToast = (
+  props: Parameters<typeof toast>[0]
+) => ReturnType<typeof toast>;
 type ModelsFetch = typeof fetch;
 
 const REVALIDATION_FAILURE_DESCRIPTION =
