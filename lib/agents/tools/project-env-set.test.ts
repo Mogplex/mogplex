@@ -116,6 +116,10 @@ describe("project_env_set", () => {
       "ssl_cert_dir",
       "CURL_CA_BUNDLE",
       "REQUESTS_CA_BUNDLE",
+      "GIT_PAGER",
+      "git_ssh",
+      "LESSOPEN",
+      "PYTHONHOME",
     ]) {
       expect(
         await tools().project_env_set.execute({ name, value: "x" })

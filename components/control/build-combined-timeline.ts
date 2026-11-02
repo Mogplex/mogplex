@@ -63,8 +63,18 @@ function asRecord(value: unknown): Record<string, unknown> | null {
  * Saves to the project's stored setup outlive the session, so the timeline
  * names what changed, and a deleted or replaced value is spelled out.
  */
+const SETTING_NAMES: Partial<Record<string, string>> = {
+  devCommand: "dev command",
+  devPort: "dev port",
+  installCommand: "install command",
+  rootDirectory: "root directory",
+  runtime: "runtime",
+};
+
 function settingsSaveBody(output: Record<string, unknown> | null) {
-  const replaced = Object.keys(asRecord(output?.replaced) ?? {});
+  const replaced = Object.keys(asRecord(output?.replaced) ?? {}).map(
+    (key) => SETTING_NAMES[key] ?? key
+  );
   return replaced.length > 0
     ? `Replaced saved project settings: ${replaced.join(", ")}`
     : "Project settings saved";

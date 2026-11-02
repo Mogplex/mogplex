@@ -129,7 +129,7 @@ test("control timeline spells out saves to the project's stored setup", () => {
       "Replaced saved variable API_URL",
       "API_URL was not set",
       "Saved variable PORT",
-      "Replaced saved project settings: devCommand, runtime",
+      "Replaced saved project settings: dev command, runtime",
       "Project settings saved",
     ]
   );

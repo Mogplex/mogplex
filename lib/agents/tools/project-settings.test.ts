@@ -140,6 +140,20 @@ describe("project settings tools", () => {
     });
   });
 
+  it("should describe the port and variable scope the way boots resolve them", async () => {
+    installRepo({
+      dev_port: null,
+      dev_port_auto: false,
+      env_sync_mode: "vercel-project",
+    });
+
+    expect(await tools().project_settings.execute({})).toMatchObject({
+      devPort: 3000,
+      devPortAuto: false,
+      envVarScope: "sandbox-only",
+    });
+  });
+
   it("should report a pinned dev port as the one boots use", async () => {
     installRepo({ dev_port: 8000, dev_port_auto: false });
 

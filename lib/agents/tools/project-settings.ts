@@ -1,7 +1,10 @@
 import { z } from "zod";
 import {
+  normalizeDevPortAuto,
   normalizeEnvVars,
   normalizeRepoSettingsPatch,
+  resolveConfiguredDevPort,
+  resolveEffectiveEnvSyncMode,
   type RepoEnvVars,
 } from "@/lib/repo-settings";
 import { getRepoForScope } from "@/lib/repos";
@@ -125,10 +128,11 @@ function describeSettings(row: SettingsRow) {
     rootDirectory: row.root_directory,
     installCommand: row.install_command,
     devCommand: row.dev_command,
-    // The port boots use; null while they detect it.
-    devPort: row.dev_port_auto === false ? row.dev_port : null,
-    devPortAuto: row.dev_port_auto !== false,
-    envVarScope: row.env_sync_mode,
+    // The same resolvers boot uses, so Control is told what boots apply.
+    // devPort is null while boots detect the port.
+    devPort: resolveConfiguredDevPort(row.dev_port, row.dev_port_auto),
+    devPortAuto: normalizeDevPortAuto(row.dev_port_auto),
+    envVarScope: resolveEffectiveEnvSyncMode(row.env_sync_mode),
     envVarNames: Object.keys(row.sandbox_env_vars ?? {}).sort(),
   };
 }
