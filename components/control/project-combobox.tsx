@@ -42,11 +42,9 @@ export function ProjectCombobox({
   // keyboard order too. Enter in the search box still picks the first
   // matching repo: typing a name and pressing Enter is how people switch
   // projects, and creating stays one ArrowDown or click away.
-  const optionValues = [
-    ...(showNewProject ? [newProjectValue] : []),
-    ...matchingRepos.map((repo) => repo.id),
-  ];
+  // Keyboard index 0 is the pinned create row when shown; repos follow it.
   const repoOptionOffset = showNewProject ? 1 : 0;
+  const optionCount = repoOptionOffset + matchingRepos.length;
 
   const handleOpenChange = (nextOpen: boolean) => {
     setOpen(nextOpen);
@@ -61,15 +59,15 @@ export function ProjectCombobox({
   const focusOption = (index: number) => optionRefs.current[index]?.focus();
 
   const handleSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "ArrowDown" && optionValues.length > 0) {
+    if (event.key === "ArrowDown" && optionCount > 0) {
       event.preventDefault();
       focusOption(0);
-    } else if (event.key === "ArrowUp" && optionValues.length > 0) {
+    } else if (event.key === "ArrowUp" && optionCount > 0) {
       // Standard listbox wrap: ArrowUp from search reaches the last repo;
       // the pinned create row is the ArrowDown target instead.
       event.preventDefault();
-      focusOption(optionValues.length - 1);
-    } else if (event.key === "Enter" && optionValues.length > 0) {
+      focusOption(optionCount - 1);
+    } else if (event.key === "Enter" && optionCount > 0) {
       event.preventDefault();
       const enterTarget =
         matchingRepos[0]?.id ?? (showNewProject ? newProjectValue : null);
@@ -85,7 +83,7 @@ export function ProjectCombobox({
     index: number,
     optionValue: string
   ) => {
-    if (event.key === "ArrowDown" && index < optionValues.length - 1) {
+    if (event.key === "ArrowDown" && index < optionCount - 1) {
       event.preventDefault();
       focusOption(index + 1);
     } else if (event.key === "ArrowUp") {
@@ -176,7 +174,7 @@ export function ProjectCombobox({
           {/* The create row only hides on an exact repo match, so the list
               is never empty while the create row is hidden. */}
           {matchingRepos.length > 0 ? (
-            <div aria-label="Repositories" className="max-h-72 overflow-y-auto p-1" role="group">
+            <div aria-label="Repositories" className="max-h-72 overflow-y-auto overscroll-contain p-1" role="group">
               {matchingRepos.map((repo, index) => {
                 const selected = repo.id === value;
                 return (

@@ -105,7 +105,10 @@ test("project picker pins New project above a scrolling repo list", async ({
   const newProject = page.getByRole("option", { name: "New project…" });
   await expect(options.first()).toHaveText("New project…");
   const listbox = page.getByRole("listbox", { name: "Project options" });
-  await expect(listbox.getByRole("group")).toHaveCount(2);
+  await expect(listbox.getByRole("group", { name: "Create" })).toBeVisible();
+  await expect(
+    listbox.getByRole("group", { name: "Repositories" })
+  ).toBeVisible();
   await page
     .getByRole("option", { name: "acme/app-29" })
     .scrollIntoViewIfNeeded();
@@ -123,7 +126,9 @@ test("project picker pins New project above a scrolling repo list", async ({
   await expect(search).toBeFocused();
 
   await search.fill("no-such-repo");
-  await expect(listbox.getByRole("group")).toHaveCount(1);
+  await expect(
+    listbox.getByRole("group", { name: "Repositories" })
+  ).toHaveCount(0);
   await expect(options).toHaveCount(1);
   await search.fill("app-1");
   await expect(options.first()).toHaveText('Create project "app-1"');
