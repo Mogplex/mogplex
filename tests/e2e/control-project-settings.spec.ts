@@ -107,6 +107,20 @@ test("an unparseable .env line shows an error and keeps the table unchanged", as
   expect(patches).toEqual([]);
 });
 
+test("a non-JSON save failure shows a save message", async ({ page }) => {
+  const { drawer } = await openProjectSettings(page, "Environment variables");
+  await page.route("**/api/repos**", (route) =>
+    route.request().method() === "PATCH"
+      ? route.fulfill({ status: 502, body: "<html>Bad gateway</html>" })
+      : route.fallback()
+  );
+  await drawer.getByRole("button", { name: "Save variables" }).click();
+
+  await expect(drawer.getByRole("alert")).toHaveText(
+    "Failed to save project settings"
+  );
+});
+
 test("a duplicated variable name blocks saving with an explanation", async ({
   page,
 }) => {

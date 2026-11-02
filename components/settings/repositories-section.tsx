@@ -183,7 +183,7 @@ export function RepositoriesSection() {
             ))}
           </select>
         ) : null}
-        {owner !== "all" && connected.length > 0 ? (
+        {owner !== "all" && ownerConnectedCount > 0 ? (
           <RemoveOwnerButton
             owner={owner}
             count={ownerConnectedCount}

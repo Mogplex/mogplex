@@ -118,6 +118,18 @@ test("bulk removal waits for confirmation", async ({ page }) => {
   expect(writes).toEqual([]);
 });
 
+test("bulk removal stays available while a search hides that owner's repositories", async ({
+  page,
+}) => {
+  await dashboard(page);
+  await page.getByLabel("Owner", { exact: true }).selectOption("alex");
+  await page.getByLabel("Search repositories").fill("no-such-repo");
+
+  await expect(
+    page.getByRole("button", { name: "Remove all from alex", exact: true })
+  ).toBeVisible();
+});
+
 test("restore failures show a retryable error and leave the repository removed", async ({
   page,
 }) => {

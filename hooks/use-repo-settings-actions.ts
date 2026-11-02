@@ -54,9 +54,14 @@ export function useRepoSettingsActions(mutateRepos: KeyedMutator<Repo[]>) {
           sandbox_env_vars: repo.sandbox_env_vars,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to save project settings");
+      // A gateway error page is not JSON; fall back to a save message.
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data) {
+        throw new Error(
+          typeof data?.error === "string" && data.error
+            ? data.error
+            : "Failed to save project settings"
+        );
       }
       await mutateRepos(
         (current) =>
