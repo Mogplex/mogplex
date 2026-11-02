@@ -355,7 +355,7 @@ export function createProjectSettingsTools(
   return {
     project_settings: defineTool({
       description:
-        "Read the selected project's saved setup: runtime, root directory, install and dev commands, dev port, and the names (never values) of its environment variables.",
+        "Read the selected project's saved setup: runtime, root directory, install and dev commands, dev port, and the names (never values) of its environment variables. Saved commands come back with any inline credential replaced by [redacted]; never save one back verbatim.",
       inputSchema: z.object({}),
       execute: async () =>
         withRow("read", async (row) => describeSettings(row)),
@@ -443,6 +443,13 @@ export function createProjectSettingsTools(
         if (isLoaderEnvName(key)) {
           return {
             error: `${key} changes how every program in the sandbox starts. Ask the operator to set it in Project settings.`,
+          };
+        }
+        // Quotes are stripped on save, so '""' would store an empty variable.
+        if (value !== null && !normalizeEnvVars({ [key]: value })[key]) {
+          return {
+            error:
+              "The value is empty once its surrounding quotes are removed. Use value: null to delete a variable.",
           };
         }
         return withScope("write", async (scope) => {

@@ -87,6 +87,17 @@ describe("project_env_set", () => {
     expect(row.sandbox_env_vars).toEqual({ PORT: "3000" });
   });
 
+  it("should reject a value that is empty once its quotes are stripped", async () => {
+    const { writes } = installRepo();
+
+    for (const value of ["''", '""', ' "" ']) {
+      expect(
+        await tools().project_env_set.execute({ name: "PORT", value })
+      ).toHaveProperty("error", expect.stringContaining("value: null"));
+    }
+    expect(writes).toEqual([]);
+  });
+
   it("should reject an empty value instead of saving an empty variable", () => {
     const schema = tools().project_env_set.inputSchema;
 

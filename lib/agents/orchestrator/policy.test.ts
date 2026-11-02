@@ -307,6 +307,34 @@ describe("audit log redaction", () => {
     );
     expect(audit).toContain('"value":null');
   });
+
+  it("should keep a saved command's text but not its inline credential", async () => {
+    const logged: string[] = [];
+    vi.spyOn(console, "log").mockImplementation((...args: unknown[]) => {
+      logged.push(args.map(String).join(" "));
+    });
+    const { deps } = makeDeps();
+    const { tool } = fakeTool();
+    const wrapped = wrapWithPolicy(
+      "project_settings_update",
+      tool,
+      ctx,
+      deps
+    ) as unknown as WrappedTool;
+
+    await wrapped.execute({
+      installCommand:
+        "npm config set //registry.npmjs.org/:_authToken=opaque-npm-value && npm ci",
+      devCommand: "npm run dev",
+    });
+
+    const audit = logged.find((line) =>
+      line.startsWith("[orchestrator:audit]")
+    );
+    expect(audit).toContain("_authToken=[redacted] && npm ci");
+    expect(audit).toContain("npm run dev");
+    expect(audit).not.toContain("opaque-npm-value");
+  });
 });
 
 describe("createRequestApprovalTool", () => {
