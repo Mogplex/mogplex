@@ -1,6 +1,7 @@
 "use client"
 
 import { useProjectSettingsDrawer } from "@/hooks/use-project-settings-drawer"
+import { useRepos } from "@/hooks/use-repos"
 import type { EnvRequestEvent } from "@/lib/control/types"
 
 /**
@@ -10,7 +11,15 @@ import type { EnvRequestEvent } from "@/lib/control/types"
  */
 export function EnvRequestCard({ event }: { event: EnvRequestEvent }) {
   const open = useProjectSettingsDrawer((state) => state.open)
-  const missing = new Set(event.missing)
+  const { repos } = useRepos({ showHidden: true })
+  // Read the project live, so the card turns to "set" once the operator saves;
+  // the tool's snapshot covers the moment before the project list loads.
+  const repo = repos.find((candidate) => candidate.id === event.repoId)
+  const stored = repo?.sandbox_env_vars ?? {}
+  const missingNames = repo
+    ? event.names.filter((name) => !Object.hasOwn(stored, name))
+    : event.missing
+  const missing = new Set(missingNames)
   return (
     <div className="mt-2 space-y-2">
       <ul aria-label="Requested variables" className="flex flex-wrap gap-1.5">
@@ -24,10 +33,10 @@ export function EnvRequestCard({ event }: { event: EnvRequestEvent }) {
       </ul>
       <button
         type="button"
-        onClick={() => open({ repoId: event.repoId, tab: "env", requestedEnvNames: event.missing })}
+        onClick={() => open({ repoId: event.repoId, tab: "env", requestedEnvNames: missingNames })}
         className="rounded bg-primary px-2.5 py-1 text-[11px] font-medium text-primary-foreground hover:bg-brand-accent-hover"
       >
-        {event.missing.length > 0 ? "Set variables" : "Review variables"}
+        {missingNames.length > 0 ? "Set variables" : "Review variables"}
       </button>
     </div>
   )

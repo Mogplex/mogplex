@@ -93,7 +93,7 @@ export function ProjectSettingsDrawer({
                 className="data-[state=inactive]:hidden"
               >
                 <EnvVarsPanel
-                  key={`${repo.id}:${requestedEnvNames?.join(",") ?? ""}`}
+                  key={repo.id}
                   repo={repo}
                   onSave={saveRepo}
                   requestedNames={requestedEnvNames}

@@ -85,4 +85,16 @@ test("Set variables opens project settings with the requested names ready to fil
     NODE_ENV: "development",
     STRIPE_SECRET_KEY: "test-stripe-value",
   });
+  await expect(drawer.getByRole("status")).toHaveText(
+    /Still empty, not saved: DATABASE_URL\./
+  );
+
+  // The card follows the saved project, not the snapshot from the request.
+  await drawer.getByRole("button", { name: "Close" }).click();
+  await expect(drawer).toBeHidden();
+  await expect(requested.getByText("not set")).toHaveCount(1);
+  await page.getByRole("button", { name: "Set variables" }).click();
+  await expect(
+    drawer.getByLabel("STRIPE_SECRET_KEY value", { exact: true })
+  ).toHaveValue("test-stripe-value");
 });

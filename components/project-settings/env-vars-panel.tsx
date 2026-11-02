@@ -61,6 +61,14 @@ export function EnvVarsPanel({
       resolveEffectiveEnvSyncMode(repo.env_sync_mode || DEFAULT_ENV_SYNC_MODE)
     );
   }
+  // A new request from Control adds its names to the open draft rather than
+  // replacing it, so unsaved edits survive.
+  const requestedKey = requestedNames?.join(",") ?? "";
+  const [seededRequest, setSeededRequest] = useState(requestedKey);
+  if (requestedKey !== seededRequest) {
+    setSeededRequest(requestedKey);
+    setRows((current) => withRequestedNames(current, requestedNames));
+  }
   const editRows: typeof setRows = (next) => {
     setDirty(true);
     setRows(next);
@@ -69,6 +77,8 @@ export function EnvVarsPanel({
   const [pasteText, setPasteText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // Requested names left empty on the last save; they were not stored.
+  const [skipped, setSkipped] = useState<string[]>([]);
 
   const updateRow = (id: string, patch: Partial<EnvVarRow>) =>
     editRows((current) =>
@@ -106,6 +116,9 @@ export function EnvVarsPanel({
         sandbox_env_vars: result.vars,
       });
       setDirty(false);
+      setSkipped(
+        rows.filter((row) => row.requested && !row.value).map((row) => row.key.trim())
+      );
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to save environment variables"
@@ -235,6 +248,13 @@ export function EnvVarsPanel({
       {error ? (
         <p role="alert" className="text-destructive text-xs">
           {error}
+        </p>
+      ) : null}
+
+      {skipped.length > 0 ? (
+        <p role="status" className="text-muted-foreground text-xs">
+          Still empty, not saved: {skipped.join(", ")}. Control needs these to
+          continue.
         </p>
       ) : null}
 

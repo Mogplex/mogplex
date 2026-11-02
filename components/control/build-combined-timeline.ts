@@ -219,6 +219,7 @@ const FAILURE_LABELS: Partial<Record<string, string>> = {
   spawn_worktree: "Worktree creation failed",
   spawn_subagent: "Worker start failed",
   plan_mission: "Plan could not be saved",
+  project_env_request: "Variable request failed",
   project_env_set: "Variable save failed",
   project_settings_update: "Project settings save failed",
 };
@@ -257,7 +258,9 @@ function envRequestEvent(
   const names = stringList(output.requested);
   if (names.length === 0) return null;
   const missing = stringList(output.missing);
-  const reason = typeof output.reason === "string" ? output.reason : "";
+  // Model-written prose: redact credentials like other model text here.
+  const reason =
+    typeof output.reason === "string" ? redactSecretsInText(output.reason) : "";
   return {
     kind: "env_request",
     label: "VARIABLES",
