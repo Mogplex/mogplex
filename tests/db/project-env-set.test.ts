@@ -182,3 +182,32 @@ test("project_settings_update matches its read through the real shim and catches
   );
   expect(stored.rows[0]?.dev_command).toBe("make serve");
 });
+
+test("project_settings_update clears a pinned port through the real shim", async () => {
+  await db.query(
+    "update repos set dev_port = 8000, dev_port_auto = false where id = $1",
+    [repoId]
+  );
+  const update = (input: Record<string, unknown>) =>
+    (
+      createProjectSettingsTools({ userId: owner, repoId })
+        .project_settings_update as unknown as EnvSet
+    ).execute(input);
+
+  expect(await update({ devPort: null, replace: true })).toMatchObject({
+    ok: true,
+    settings: { devPort: null, devPortAuto: true },
+  });
+
+  // The operator pins a port again between the tool's read and its write.
+  beforeRepoUpdate = () =>
+    db.query("update repos set dev_port_auto = false where id = $1", [repoId]);
+  expect(await update({ devPort: 5173 })).toEqual({
+    error: "Project settings changed while saving. Try again.",
+  });
+  const stored = await db.query<{ dev_port: number; dev_port_auto: boolean }>(
+    "select dev_port, dev_port_auto from repos where id = $1",
+    [repoId]
+  );
+  expect(stored.rows[0]).toEqual({ dev_port: 8000, dev_port_auto: false });
+});

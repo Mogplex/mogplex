@@ -315,6 +315,9 @@ describe("project settings tools", () => {
     expect(schema.safeParse({ rootDirectory: "my app" }).success).toBe(true);
     expect(schema.safeParse({ rootDirectory: "apps/web" }).success).toBe(true);
     expect(schema.safeParse({ rootDirectory: null }).success).toBe(true);
+    for (const rootForm of ["", ".", "/", " ./ "]) {
+      expect(schema.safeParse({ rootDirectory: rootForm }).success).toBe(false);
+    }
     expect(schema.safeParse({ rootDirectory: " apps/web\n" }).data).toEqual({
       rootDirectory: "apps/web",
     });

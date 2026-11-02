@@ -3,6 +3,7 @@ import {
   normalizeDevPortAuto,
   normalizeEnvVars,
   normalizeRepoSettingsPatch,
+  normalizeRootDirectory,
   resolveConfiguredDevPort,
   resolveEffectiveEnvSyncMode,
   type RepoEnvVars,
@@ -185,6 +186,10 @@ const updateParams = z.object({
     // the operator could and none that boot would refuse.
     .refine(isValidSandboxRootDirectory, {
       message: "Use a path inside the repository, without '..'.",
+    })
+    // "", "." and "/" mean the repo root; clearing a saved one takes null.
+    .refine((value) => normalizeRootDirectory(value) !== null, {
+      message: "That is the repo root. Use null for the repo root.",
     })
     .nullable()
     .optional()
