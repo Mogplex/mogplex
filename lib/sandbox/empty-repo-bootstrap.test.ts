@@ -7,6 +7,7 @@ import {
   bootstrapSandboxStreaming,
 } from "./client-bootstrap";
 import { readPackageDevScriptInfo } from "./client-bootstrap-context";
+import { isNodeRuntime } from "./runtimes/types";
 import type { BootstrapSandboxOpts } from "./client-types";
 import type { SandboxBootstrapStreamEvent } from "@/lib/sandbox/events";
 
@@ -173,12 +174,42 @@ describe("bootstrap for a repository without package.json", () => {
     expect(events.at(-1)).toEqual({ type: "status", status: "installing" });
   });
 
-  it("should still install when repo settings give a dev command", async () => {
-    const { events } = await streamUntilInstall(
-      { "README.md": "# test" },
-      { devCommand: "npx serve ." }
-    );
+  it("should skip the default install but launch a configured dev command for a README-only repo", async () => {
+    const { sandbox, commands } = fakeSandbox({ "README.md": "# test" });
+    const events = [];
+    const stream = bootstrapSandboxStreaming(sandbox, {
+      devCommand: "npx serve .",
+    });
+    for await (const event of stream) {
+      events.push(event);
+      if (event.type === "preview_url") break;
+    }
 
-    expect(events.at(-1)).toEqual({ type: "status", status: "installing" });
+    expect(commands.some((command) => /\binstall\b/.test(command))).toBe(false);
+    expect(commands.some((command) => command.includes("npx serve ."))).toBe(
+      true
+    );
+    expect(events.at(-1)).toMatchObject({ type: "preview_url" });
+  });
+
+  it("should launch a configured dev command when package.json has no dev script", async () => {
+    const { sandbox, commands } = fakeSandbox({
+      "package.json": JSON.stringify({ scripts: { build: "tsc" } }),
+    });
+    const stream = bootstrapSandboxStreaming(sandbox, {
+      devCommand: "npx serve dist",
+    });
+    for await (const event of stream) {
+      if (event.type === "preview_url") break;
+    }
+
+    expect(commands.some((command) => command.includes("npx serve dist"))).toBe(
+      true
+    );
+  });
+
+  it("should only treat Node runtimes as Node", () => {
+    expect(isNodeRuntime("node24")).toBe(true);
+    expect(isNodeRuntime("python3.13")).toBe(false);
   });
 });

@@ -1,6 +1,9 @@
 import type { Sandbox } from "@vercel/sandbox";
 import type { SandboxBootstrapStreamEvent } from "@/lib/sandbox/events";
-import type { BootstrapSandboxOpts } from "./client-types";
+import type {
+  BootstrapSandboxOpts,
+  ResolvedBootstrapContext,
+} from "./client-types";
 import { SandboxBootstrapError } from "./client-validation";
 import {
   buildShellCommand,
@@ -109,25 +112,9 @@ export async function bootstrapSandbox(
     return buildNoDevScriptBootstrapResult(context, "");
   }
 
-  const installLog = await runInstallPhase(
-    sandbox,
-    context.requiresBun
-      ? buildWithBunOnPathCommand(context.installCommand)
-      : context.installCommand,
-    context.installDir,
-    context.runtimeEnv,
-    context.previewUrl
-  );
-  await runWorkspaceBuildPhase(
-    sandbox,
-    context.workspaceBuildCommand,
-    context.runtimeEnv
-  );
-  await runSelectiveRebuildPhase(
-    sandbox,
-    context,
-    Boolean(opts.installCommand)
-  );
+  const installLog = context.skipDefaultInstall
+    ? ""
+    : await runBlockingSetupPhases(sandbox, context, opts);
 
   // If no dev script, skip dev server — sandbox is usable for terminal/files/editor
   if (!context.hasDevScript) {
@@ -209,6 +196,77 @@ export async function* bootstrapSandboxStreaming(
     return;
   }
 
+  if (context.skipDefaultInstall) {
+    yield {
+      type: "log",
+      phase: "install",
+      data: "No package.json found — skipped install.\n",
+    };
+  } else {
+    yield* streamSetupPhases(sandbox, context, opts);
+  }
+
+  // --- No dev script: done early ---
+  if (!context.hasDevScript) {
+    yield* streamNoDevServerReady(context, "fresh");
+    return;
+  }
+
+  // --- Dev server phase ---
+  const devLaunch = await launchDetachedDevCommand(
+    sandbox,
+    context.normalizedRoot,
+    context.devCommand,
+    context.runtimeEnv,
+    { requiresBun: context.requiresBun }
+  );
+
+  yield { type: "preview_url", url: context.previewUrl };
+  yield* streamPreviewSignal(
+    sandbox,
+    devLaunch,
+    context.previewUrl,
+    context.devLogPath,
+    context.readiness
+  );
+
+  yield { type: "status", status: "running" };
+}
+
+/** Install, workspace build and native rebuild for the blocking bootstrap. */
+async function runBlockingSetupPhases(
+  sandbox: Sandbox,
+  context: ResolvedBootstrapContext,
+  opts: BootstrapSandboxOpts
+) {
+  const installLog = await runInstallPhase(
+    sandbox,
+    context.requiresBun
+      ? buildWithBunOnPathCommand(context.installCommand)
+      : context.installCommand,
+    context.installDir,
+    context.runtimeEnv,
+    context.previewUrl
+  );
+  await runWorkspaceBuildPhase(
+    sandbox,
+    context.workspaceBuildCommand,
+    context.runtimeEnv
+  );
+  await runSelectiveRebuildPhase(
+    sandbox,
+    context,
+    Boolean(opts.installCommand)
+  );
+  return installLog;
+}
+
+/** Streaming install, workspace build and native rebuild phases. */
+async function* streamSetupPhases(
+  sandbox: Sandbox,
+  context: ResolvedBootstrapContext,
+  opts: BootstrapSandboxOpts
+): AsyncGenerator<SandboxBootstrapStreamEvent> {
   // --- Install phase ---
   yield { type: "status", status: "installing" };
 
@@ -266,30 +324,4 @@ export async function* bootstrapSandboxStreaming(
     yield* streamCommandPhase(rebuild, "rebuild");
     await rebuild.wait();
   }
-
-  // --- No dev script: done early ---
-  if (!context.hasDevScript) {
-    yield* streamNoDevServerReady(context, "fresh");
-    return;
-  }
-
-  // --- Dev server phase ---
-  const devLaunch = await launchDetachedDevCommand(
-    sandbox,
-    context.normalizedRoot,
-    context.devCommand,
-    context.runtimeEnv,
-    { requiresBun: context.requiresBun }
-  );
-
-  yield { type: "preview_url", url: context.previewUrl };
-  yield* streamPreviewSignal(
-    sandbox,
-    devLaunch,
-    context.previewUrl,
-    context.devLogPath,
-    context.readiness
-  );
-
-  yield { type: "status", status: "running" };
 }

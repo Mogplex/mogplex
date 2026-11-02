@@ -9,6 +9,7 @@ import {
 } from "@/lib/repo-settings";
 import { prepareSandboxVercelLink } from "@/lib/vercel/env-vars";
 import { detectRuntime, getStrategy } from "@/lib/sandbox/runtimes";
+import { isNodeRuntime } from "@/lib/sandbox/runtimes/types";
 import {
   detectWorkspaceDependencies,
   resolveMonorepoWebTarget,
@@ -178,22 +179,20 @@ export async function resolveBootstrapContext(
   const { packageManager, framework, frameworkEntry } = effectiveDetection;
   const packageInfo = await readPackageDevScriptInfo(sandbox, normalizedRoot);
   const { packageDevScript } = packageInfo;
-  // A README-only Node repo has nothing to install or start; running
-  // `npm install` there writes a stray lockfile and `npm run dev` exits,
-  // failing the whole boot before the agent can scaffold anything. A
-  // configured install command still runs; only a dev override starts dev.
+  // A README-only Node repo has nothing to install or start; running the
+  // default `npm install` there writes a stray lockfile and `npm run dev`
+  // exits, failing the whole boot before the agent can scaffold anything.
+  // Install and dev are separate decisions: a configured install command
+  // still runs, and a configured dev command always starts.
   const nodeWithoutPackageJson =
-    !packageInfo.hasPackageJson && !effectiveRuntime.startsWith("python");
-  const emptyNodeProject =
-    nodeWithoutPackageJson && !opts.devCommand && !opts.installCommand;
-  // Three cases: Node without package.json starts dev only on an override;
-  // Python without package.json keeps its strategy's dev command; otherwise
-  // the package.json dev script decides.
-  const hasDevScript = nodeWithoutPackageJson
-    ? Boolean(opts.devCommand)
-    : packageInfo.hasPackageJson
-      ? packageInfo.hasDevScript
-      : true;
+    !packageInfo.hasPackageJson && isNodeRuntime(effectiveRuntime);
+  const skipDefaultInstall = nodeWithoutPackageJson && !opts.installCommand;
+  // packageInfo.hasDevScript is true for a Python repo without package.json
+  // (its strategy supplies the dev command) and for an unreadable manifest.
+  const hasDevScript =
+    Boolean(opts.devCommand) ||
+    (!nodeWithoutPackageJson && packageInfo.hasDevScript);
+  const emptyNodeProject = skipDefaultInstall && !hasDevScript;
   const workspaceBuildCommand = await resolveWorkspaceBuildCommand(
     sandbox,
     normalizedRoot,
@@ -263,6 +262,7 @@ export async function resolveBootstrapContext(
     packageDevScript,
     hasDevScript,
     emptyNodeProject,
+    skipDefaultInstall,
     nodeWithoutPackageJson,
     readiness,
     previewUrl,

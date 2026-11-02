@@ -336,6 +336,7 @@ type NoDevServerBootContext = Pick<
   | "previewUrl"
   | "normalizedRoot"
   | "emptyNodeProject"
+  | "skipDefaultInstall"
   | "nodeWithoutPackageJson"
 >;
 
@@ -382,7 +383,7 @@ export function buildNoDevScriptBootstrapResult(
     runtime: context.effectiveRuntime,
     packageManager: context.packageManager,
     framework: context.framework,
-    installCommand: context.emptyNodeProject
+    installCommand: context.skipDefaultInstall
       ? "(none)"
       : context.installCommand,
     devCommand: "(none)",
