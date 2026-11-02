@@ -466,7 +466,7 @@ export function createProjectSettingsTools(
     }),
     project_env_set: defineTool({
       description:
-        "Save one NON-SECRET environment variable (for example NODE_ENV, PORT, or a public URL) on the selected project, or delete one with value null. Never use it for passwords, API keys, tokens, or connection strings: ask the operator to add those in Project settings instead. Set one variable per call and wait for its result before the next.",
+        "Save one NON-SECRET environment variable (for example NODE_ENV, PORT, or a public URL) on the selected project, or delete one with value null. Never use it for passwords, API keys, tokens, or connection strings: call project_env_request with their names instead, so the operator gets a Set variables button. Set one variable per call and wait for its result before the next.",
       inputSchema: envParams,
       execute: async ({ name, value, replace }: z.infer<typeof envParams>) => {
         const key = name.trim();

@@ -84,7 +84,7 @@ export function envWriteProblem(name: string, value: string | null) {
     return `${name || "That"} is not a valid variable name.`;
   }
   if (isLoaderEnvName(name)) {
-    return `${name} changes how every program in the sandbox starts. Ask the operator to set it in Project settings.`;
+    return `${name} changes how every program in the sandbox starts. Call project_env_request with its name so the operator can set it.`;
   }
   return envValueProblem(name, value);
 }

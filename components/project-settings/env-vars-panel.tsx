@@ -69,16 +69,17 @@ export function EnvVarsPanel({
     setSeededRequest(requestedKey);
     setRows((current) => withRequestedNames(current, requestedNames));
   }
+  // Requested names left empty on the last save; they were not stored.
+  const [skipped, setSkipped] = useState<string[]>([]);
   const editRows: typeof setRows = (next) => {
     setDirty(true);
+    setSkipped([]);
     setRows(next);
   };
   const [pasteOpen, setPasteOpen] = useState(false);
   const [pasteText, setPasteText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  // Requested names left empty on the last save; they were not stored.
-  const [skipped, setSkipped] = useState<string[]>([]);
 
   const updateRow = (id: string, patch: Partial<EnvVarRow>) =>
     editRows((current) =>
@@ -108,6 +109,7 @@ export function EnvVarsPanel({
       return;
     }
     setError(null);
+    setSkipped([]);
     setSaving(true);
     try {
       await onSave({
@@ -117,7 +119,9 @@ export function EnvVarsPanel({
       });
       setDirty(false);
       setSkipped(
-        rows.filter((row) => row.requested && !row.value).map((row) => row.key.trim())
+        rows
+          .filter((row) => row.requested && !row.value && row.key.trim())
+          .map((row) => row.key.trim())
       );
     } catch (err) {
       setError(

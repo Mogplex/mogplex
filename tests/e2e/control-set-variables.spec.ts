@@ -89,6 +89,11 @@ test("Set variables opens project settings with the requested names ready to fil
     /Still empty, not saved: DATABASE_URL\./
   );
 
+  // Editing the draft again retires the notice about the last save.
+  await drawer.getByLabel("DATABASE_URL value", { exact: true }).fill("x");
+  await expect(drawer.getByRole("status")).toBeHidden();
+  await drawer.getByLabel("DATABASE_URL value", { exact: true }).fill("");
+
   // The card follows the saved project, not the snapshot from the request.
   await drawer.getByRole("button", { name: "Close" }).click();
   await expect(drawer).toBeHidden();
