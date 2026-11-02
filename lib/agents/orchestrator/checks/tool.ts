@@ -9,23 +9,16 @@ import { postSandboxExec } from "@/lib/agents/tools/sandbox-http-execution";
 import { controlToolOutcome } from "@/lib/control/tool-outcome";
 import type { OrchestratorToolContext } from "../types";
 import { controlDecisionScope } from "../decision-scope";
-import { CHECK_KINDS, buildRepositoryCheckPlan } from "./plan";
+import { CHECK_KINDS, buildRepositoryCheckPlan, type CheckKind } from "./plan";
 import {
   buildCheckProbeCommand,
   repositoryCheckProbeSchema,
   type RepositoryCheckProbe,
 } from "./probe";
-import { runRepositoryChecks, type RepositoryCheckResult } from "./runner";
+import { runRepositoryChecks } from "./runner";
+import type { RepositoryCheckReceipt } from "./receipt";
 
-export type RepositoryCheckReceipt = {
-  ok: boolean;
-  checks: RepositoryCheckResult[];
-  sandboxId?: string;
-  receiptVersion: 1;
-  workspaceRevisionBefore: string | null;
-  workspaceRevisionAfter: string | null;
-  error?: string;
-};
+export type { RepositoryCheckReceipt } from "./receipt";
 
 type ExecutionOptions = Parameters<NonNullable<Tool["execute"]>>[1];
 type CheckObservation =
@@ -117,18 +110,28 @@ export function createRunChecksTool(context: OrchestratorToolContext) {
   const terminal = createCheckTerminal(context, false);
   return defineTool({
     description:
-      "Run the repository's full typecheck, lint, build, and test scripts in the selected workspace. Discovers the package manager and CI scripts, records each command's exit evidence, and verifies that source contents stayed unchanged. Missing, interrupted, or failed checks are never passing verification.",
-    inputSchema: z.object({}),
+      "Run the repository's full typecheck, lint, build, and test scripts in the selected workspace. Discovers the package manager and CI scripts, records each command's exit evidence, and verifies that source contents stayed unchanged. Missing, interrupted, failed, or skipped checks never count as full verification. Use skip only when the operator explicitly limits checks, and include their reason so every omission stays visible.",
+    inputSchema: z
+      .object({
+        skip: z.array(z.enum(CHECK_KINDS)).optional(),
+        reason: z.string().trim().min(1).optional(),
+      })
+      .refine(
+        (input) => !input.skip?.length || Boolean(input.reason),
+        "Explain the operator's explicit request to skip checks."
+      ),
     execute: async (
-      _input: unknown,
+      input: { skip?: CheckKind[]; reason?: string },
       options: ExecutionOptions
     ): Promise<RepositoryCheckReceipt> => {
       const before = await observe(options);
       if (!before.ok) {
         return {
           ok: false,
+          verified: false,
           error: before.error,
           receiptVersion: 1,
+          commandCompletion: before.commandCompletion,
           workspaceRevisionBefore: null,
           workspaceRevisionAfter: null,
           checks: CHECK_KINDS.map((kind) => ({
@@ -148,10 +151,22 @@ export function createRunChecksTool(context: OrchestratorToolContext) {
             reason:
               "No package.json was found. Inspect repository instructions and CI to identify the applicable checks.",
           }));
+      const skipped = new Set(input.skip);
       const result = await runRepositoryChecks(
-        plan,
+        plan.map((check) =>
+          skipped.has(check.kind) ? { ...check, command: null } : check
+        ),
         async (command) => terminal.execute!({ command }, options),
         options.abortSignal
+      );
+      result.checks = result.checks.map((check) =>
+        skipped.has(check.kind)
+          ? {
+              ...check,
+              status: "skipped",
+              reason: `Skipped at the operator's request: ${input.reason}`,
+            }
+          : check
       );
       // A probe is another command too. Do not launch it after losing track
       // of a check that may still be running.
@@ -165,9 +180,20 @@ export function createRunChecksTool(context: OrchestratorToolContext) {
         before.revision === after.revision;
       return {
         ...result,
-        ok: result.ok && sameSource,
+        ok:
+          result.checks.every(
+            (check) => check.status === "passed" || check.status === "skipped"
+          ) && sameSource,
+        verified:
+          result.checks.every((check) => check.status === "passed") &&
+          sameSource,
         sandboxId: before.sandboxId,
         receiptVersion: 1,
+        commandCompletion: after?.ok
+          ? "confirmed"
+          : after
+            ? after.commandCompletion
+            : "unknown",
         workspaceRevisionBefore: before.revision,
         workspaceRevisionAfter: after?.ok ? after.revision : null,
         ...(!unknownOutcome && !sameSource

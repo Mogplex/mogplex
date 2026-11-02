@@ -2,21 +2,10 @@ import {
   controlToolOutcome,
   controlToolFailureDetail,
 } from "@/lib/control/tool-outcome";
-import {
-  CHECK_KINDS,
-  type PlannedRepositoryCheck,
-  type CheckKind,
-} from "./plan";
+import { CHECK_KINDS, type PlannedRepositoryCheck } from "./plan";
+import type { RepositoryCheckResult } from "./receipt";
 
-export type RepositoryCheckResult = {
-  kind: CheckKind;
-  command: string | null;
-  status: "passed" | "failed" | "blocked" | "not_run";
-  exitCode: number | null;
-  stdout?: string;
-  stderr?: string;
-  reason?: string;
-};
+export type { RepositoryCheckResult } from "./receipt";
 
 const UNCONFIRMED =
   "Command completion could not be confirmed. Inspect its status before retrying.";

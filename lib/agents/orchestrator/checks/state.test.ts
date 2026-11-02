@@ -9,8 +9,10 @@ const revision = (value: string) => ({
 });
 const receipt = (value: string): RepositoryCheckReceipt => ({
   ok: true,
+  verified: true,
   sandboxId: "workspace-one",
   receiptVersion: 1,
+  commandCompletion: "confirmed",
   workspaceRevisionBefore: value,
   workspaceRevisionAfter: value,
   checks: CHECK_KINDS.map((kind) => ({
@@ -167,4 +169,11 @@ it("does not hide an overall verification failure behind four passing rows", () 
   state.recordReceipt({ ...receipt("original"), ok: false });
   expect(state.summary().verified).toBe(false);
   expect(state.summary().error).toContain("could not be confirmed");
+});
+
+it("does not verify a receipt that reports unknown command completion", () => {
+  const state = createRepositoryVerificationState();
+  state.observe(revision("original"));
+  state.recordReceipt({ ...receipt("original"), commandCompletion: "unknown" });
+  expect(state.summary().verified).toBe(false);
 });

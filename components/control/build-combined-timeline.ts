@@ -14,7 +14,9 @@ import { isLegacyRoutineComputeFooter } from "@/lib/control/legacy-compute-foote
 import {
   toolActivityLabel,
   toolActivityDetail,
+  toolInvocationDetail,
 } from "@/lib/control/turn-progress";
+import { verificationEvent } from "./verification-event";
 import {
   controlToolOutcome,
   controlToolFailureDetail,
@@ -277,13 +279,6 @@ function envRequestEvent(
   };
 }
 
-function toolDetails(toolName: string, input: unknown) {
-  const argumentNames = Object.keys(asRecord(input) ?? {});
-  return argumentNames.length > 0
-    ? `${toolName}(${argumentNames.join(", ")})`
-    : toolName;
-}
-
 /**
  * Builds a combined timeline by merging mission timeline events with chat
  * messages. User messages become YOU events; assistant text becomes MOGPLEX
@@ -337,6 +332,7 @@ export function buildCombinedTimeline(
     }
 
     if (msg.role !== "assistant") continue;
+    const verification = verificationEvent(msg.metadata);
 
     const userFacingOptions = {
       diagnosticScope: resolveInfrastructureDiagnosticScope(latestUserText),
@@ -358,6 +354,12 @@ export function buildCombinedTimeline(
       if (isToolUIPart(part)) {
         const toolName = getToolOrDynamicToolName(part);
         const state = "state" in part ? String(part.state) : "";
+        if (
+          toolName === "run_checks" &&
+          state === "output-available" &&
+          verification
+        )
+          continue;
         const output = asRecord("output" in part ? part.output : undefined);
         const label = stepNumber > 0 ? `STEP ${stepNumber}` : "PROGRESS";
 
@@ -452,7 +454,7 @@ export function buildCombinedTimeline(
                   state: controlToolOutcome(state, output),
                   details:
                     toolActivityDetail(toolInput) ??
-                    toolDetails(toolName, toolInput),
+                    toolInvocationDetail(toolName, toolInput),
                 }
           );
 
@@ -489,6 +491,8 @@ export function buildCombinedTimeline(
         });
       }
     }
+    partKey = "verification";
+    if (verification) append(verification);
   }
 
   return result;

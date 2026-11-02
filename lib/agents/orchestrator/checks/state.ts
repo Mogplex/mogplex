@@ -54,6 +54,10 @@ export function createRepositoryVerificationState() {
       if (manualKinds.size === CHECK_KINDS.length) error = null;
     },
     recordReceipt(receipt: RepositoryCheckReceipt) {
+      if (receipt.commandCompletion === "unknown") {
+        block(receipt.error ?? "Command completion could not be confirmed.");
+        return;
+      }
       const {
         sandboxId,
         workspaceRevisionBefore: before,
@@ -80,7 +84,8 @@ export function createRepositoryVerificationState() {
       for (const row of receipt.checks) results.set(row.kind, { ...row });
       error =
         receipt.error ??
-        (!receipt.ok && receipt.checks.every((row) => row.status === "passed")
+        ((!receipt.ok || !receipt.verified) &&
+        receipt.checks.every((row) => row.status === "passed")
           ? "Verification completion could not be confirmed."
           : null);
     },

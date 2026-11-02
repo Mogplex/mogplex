@@ -21,6 +21,7 @@ import {
 } from "iconoir-react"
 import type { TimelineEvent, Worktree, PlanEvent, DelegateEvent, DiffEvent, FailEvent, CompareEvent, ApprovalEvent } from "@/lib/control/types"
 import { EnvRequestCard } from "./env-request-card"
+import { RepositoryCheckCard } from "./repository-check-card"
 
 export type ToolApprovalResponse = {
   approvalId: string
@@ -205,6 +206,7 @@ function TimelinePatch({ patch, defer }: { patch: string; defer: boolean }) {
 }
 
 export function TimelineCard({ event, eventIndex, getWorktree, onApprove, onToolApprovalResponse, active = false, deferPatch = false }: Props) {
+  if (event.kind === "verification") return <RepositoryCheckCard event={event} />
   const style = KIND_STYLES[event.kind] || KIND_STYLES.tool
   const inProgress = active && event.kind === "progress" && event.state === "running"
   const Icon = inProgress ? RefreshDouble : style.icon

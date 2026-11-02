@@ -71,6 +71,7 @@ export type SandboxTaskLifecycleOutcome =
 const SANDBOX_TOOLS = new Set([
   "bash",
   "run_command",
+  "run_checks",
   "write_file",
   "edit_file",
   "start_sandbox",

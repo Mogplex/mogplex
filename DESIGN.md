@@ -249,6 +249,12 @@ behavior. Defaults can be overridden by the owning screen; inspect it first.
   do not move them behind an automatic history disclosure. Only the latest
   request shows live activity. Follow new output while the reader is at the
   bottom; scrolling up pauses automatic following.
+  Show workspace verification as four compact rows: typecheck, lint, build, and
+  tests. Each row discloses the actual command, exit result, and output without
+  losing its open state when the chat is steered. Distinguish failed,
+  unconfirmed, unavailable, and explicitly skipped checks. A passing headline
+  requires all four full checks against the checked source contents; later edits
+  invalidate earlier results. Operator limits stay visible with their reason.
   Durable workspace files do not require always-running compute. Pause idle
   compute after task work, retaining it for an active preview, worker, command,
   or explicit keep-running request. Show routine running/paused state in the

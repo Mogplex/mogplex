@@ -44,7 +44,7 @@ const pathLib = require("node:path");
       hash.update(JSON.stringify([path, "file", stat.mode & 0o777, stat.size]));
       hash.update("\\0");
       for await (const chunk of fs.createReadStream(file)) hash.update(chunk);
-    }
+    } else throw new Error("Source entry could not be inspected.");
     hash.update("\\0");
   }
   const available = fs.existsSync("package.json");

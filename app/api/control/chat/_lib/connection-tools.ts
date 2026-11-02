@@ -2,6 +2,7 @@ import { wrapControlSideEffects } from "@/lib/control/tool-idempotency";
 import { guardControlBackgroundTools } from "@/lib/control/background-context";
 import { gateConnectionTools } from "@/lib/agents/orchestrator/connection-approval";
 import { serializeSandboxCommandTools } from "@/lib/agents/orchestrator/serialized-commands";
+import { createControlVerificationGate } from "@/lib/agents/orchestrator/checks/gate";
 import {
   buildOrchestratorSystemPrompt,
   buildOrchestratorTools,
@@ -156,6 +157,7 @@ export function buildControlTurnTools(input: {
   enableTools: boolean;
   assertCurrent?: () => Promise<void>;
 }) {
+  const verification = createControlVerificationGate(input.toolContext);
   const registryTools = buildOrchestratorTools(input.toolContext);
   const shadowed = Object.keys(input.connectionTools.tools).filter(
     (name) => name in registryTools
@@ -179,7 +181,9 @@ export function buildControlTurnTools(input: {
     ? serializeSandboxCommandTools(
         guardControlBackgroundTools(
           wrapToolsWithPolicy(
-            wrapControlSideEffects(rawTools, input.toolContext),
+            verification.wrapTools(
+              wrapControlSideEffects(rawTools, input.toolContext)
+            ),
             input.toolContext
           ),
           input.assertCurrent
@@ -194,5 +198,5 @@ export function buildControlTurnTools(input: {
     connectionsCanAskApproval: true,
   });
 
-  return { tools, systemPrompt };
+  return { tools, systemPrompt, verification };
 }

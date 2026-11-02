@@ -85,6 +85,22 @@ test("the probe reports manifest choices and changes when tracked or untracked s
   });
 });
 
+test("an uninspected Git submodule cannot produce a passing source receipt", () => {
+  withRepository(({ root, git, probe }) => {
+    const head = execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: root,
+      encoding: "utf8",
+    }).trim();
+    mkdirSync(join(root, "nested"));
+    writeFileSync(
+      join(root, "nested", "index.ts"),
+      "export const nested = true;\n"
+    );
+    git("update-index", "--add", "--cacheinfo", `160000,${head},nested`);
+    assert.throws(() => probe(), /Could not inspect the workspace revision/);
+  });
+});
+
 test("committing unchanged source does not invalidate passing check evidence", () => {
   withRepository(({ root, git, probe }) => {
     writeFileSync(join(root, "new.ts"), "export const added = true;\n");

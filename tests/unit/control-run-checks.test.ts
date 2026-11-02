@@ -15,6 +15,7 @@ async function withChecks(
     invalidProbe?: boolean;
     deniedProbe?: boolean;
     lostCheck?: boolean;
+    skip?: ("typecheck" | "lint" | "build" | "test")[];
   },
   run: (receipt: RepositoryCheckReceipt, commands: string[]) => void
 ) {
@@ -70,7 +71,12 @@ async function withChecks(
   try {
     const tool = createRunChecksTool(context);
     const receipt = (await tool.execute!(
-      {},
+      input.skip
+        ? {
+            skip: input.skip,
+            reason: "The operator requested these omissions.",
+          }
+        : {},
       options
     )) as RepositoryCheckReceipt;
     run(receipt, commands);
@@ -98,6 +104,22 @@ test("run_checks executes the full scripts in one workspace and returns source-b
     assert.equal(commands.length, 6);
     assert.ok(receipt.checks.every((check) => check.status === "passed"));
     assert.ok(commands[0].includes(".mogplex/identity.ts"));
+  });
+});
+
+test("explicitly limited checks run only the requested full scripts and never claim full verification", async () => {
+  await withChecks({ skip: ["build", "test"] }, (receipt, commands) => {
+    assert.equal(receipt.ok, true);
+    assert.equal(receipt.verified, false);
+    assert.deepEqual(commands.slice(1, -1), [
+      "CI=1 pnpm run typecheck",
+      "CI=1 pnpm run lint",
+    ]);
+    assert.deepEqual(
+      receipt.checks.map((row) => row.status),
+      ["passed", "passed", "skipped", "skipped"]
+    );
+    assert.match(receipt.checks[2].reason ?? "", /operator requested/);
   });
 });
 
