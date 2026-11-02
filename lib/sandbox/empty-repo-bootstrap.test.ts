@@ -186,7 +186,13 @@ describe("bootstrap for a repository without a project manifest", () => {
 
     expect(ranProjectSetup(commands)).toBe(false);
     expect(events.at(-1)).toEqual({ type: "status", status: "running" });
-    expect(events).toContainEqual(noManifestWarning);
+    // A restore never installs, so it must not claim to have skipped one.
+    expect(events).toContainEqual({
+      type: "warning",
+      message: expect.stringContaining(
+        "so the restored workspace has no dev server running"
+      ),
+    });
   });
 
   it("should not reinstall on lockfile drift when the baseline repo has no manifest", async () => {

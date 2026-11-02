@@ -1,6 +1,11 @@
 import { afterAll, afterEach, beforeAll, beforeEach } from "vitest";
 
-type RunningSandbox = { id: string; status?: string; persistent?: boolean };
+type RunningSandbox = {
+  id: string;
+  status?: string;
+  persistent?: boolean;
+  last_boot_error?: string | null;
+};
 export const OWNED_REPO_ID = "00000000-0000-4000-8000-000000000001";
 
 let supabaseAdmin: typeof import("@/lib/supabase/admin").supabaseAdmin;

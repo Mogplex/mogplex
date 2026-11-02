@@ -92,6 +92,7 @@ export async function runInstallPhase(
     throw new SandboxBootstrapError(`Install failed (${installCommand})`, {
       installLog,
       previewUrl,
+      phase: "install",
     });
   }
 
@@ -193,6 +194,7 @@ export async function runRuntimePrerequisitePhase(
     throw new SandboxBootstrapError("Runtime prerequisite failed (bun)", {
       installLog,
       previewUrl,
+      phase: "prerequisite",
     });
   }
 
@@ -346,10 +348,19 @@ type NoDevServerBootContext = Pick<
  * project manifest, log why, and report the sandbox running for terminal and
  * file access.
  */
-function manifestWarning(context: NoDevServerBootContext) {
+function manifestWarning(
+  context: NoDevServerBootContext,
+  boot: "fresh" | "snapshot"
+) {
+  const outcome =
+    boot === "snapshot"
+      ? "restored"
+      : context.skipDefaultInstall
+        ? "skipped"
+        : "installed";
   return noProjectManifestWarning(
     context.normalizedRoot,
-    context.skipDefaultInstall,
+    outcome,
     context.foreignManifestRuntime
       ? {
           runtime: context.effectiveRuntime,
@@ -366,7 +377,16 @@ export async function* streamNoDevServerReady(
   if (context.noProjectManifest) {
     yield {
       type: "warning",
-      message: manifestWarning(context),
+      message: manifestWarning(context, boot),
+    };
+    yield {
+      type: "setup_issue",
+      issue: {
+        phase: "detect",
+        message: manifestWarning(context, boot),
+        logTail: "",
+        envVarHint: null,
+      },
     };
   }
   yield {
@@ -387,7 +407,7 @@ export function buildNoDevScriptBootstrapResult(
   installLog: string
 ) {
   if (context.noProjectManifest) {
-    console.warn("[sandbox/bootstrap]", manifestWarning(context));
+    console.warn("[sandbox/bootstrap]", manifestWarning(context, "fresh"));
   }
   return {
     previewUrl: context.previewUrl,

@@ -1,5 +1,20 @@
 import type { SandboxRecord } from "@/lib/types";
 
+/**
+ * Project setup the boot could not finish while the VM itself is fine: no
+ * recognized project manifest (`detect`), or a failed runtime prerequisite,
+ * install, or dev server. The sandbox stays running so the agent or the user
+ * can set the project up from inside it.
+ */
+export type SandboxSetupIssue = {
+  phase: "detect" | "prerequisite" | "install" | "dev";
+  message: string;
+  /** Last lines of the failing step's output, for diagnosis. */
+  logTail: string;
+  /** Recognized missing-environment-variable pattern, if any. */
+  envVarHint: string | null;
+};
+
 export type SandboxStateEvent =
   | {
       type: "status";
@@ -35,6 +50,7 @@ export type SandboxEvent =
     }
   | { type: "resume_required"; reason: "cleanup_recovered" }
   | { type: "warning"; message: string }
+  | { type: "setup_issue"; issue: SandboxSetupIssue }
   | {
       type: "log";
       phase: "install" | "workspace" | "rebuild" | "dev";
@@ -46,6 +62,7 @@ export type SandboxEvent =
 
 export type SandboxBootstrapStreamEvent =
   | { type: "warning"; message: string }
+  | { type: "setup_issue"; issue: SandboxSetupIssue }
   | {
       type: "log";
       phase: "install" | "workspace" | "rebuild" | "dev";

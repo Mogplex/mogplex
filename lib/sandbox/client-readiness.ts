@@ -48,27 +48,34 @@ export function noDevServerMessage(
  * running but nothing serves the preview. That is expected for a fresh or
  * non-JS/Python repo, and a misconfiguration for an app in a subdirectory.
  */
+const MANIFEST_OUTCOMES = {
+  skipped: "so Mogplex skipped the default install and started no dev server",
+  installed: "so after your install command no dev server was started",
+  restored: "so the restored workspace has no dev server running",
+} as const;
+
+/**
+ * `outcome` says what this boot did instead: skipped the default install,
+ * ran a configured install, or restored a snapshot (which never installs).
+ */
 export function noProjectManifestWarning(
   rootDirectory: string | null,
-  skippedDefaultInstall: boolean,
+  outcome: keyof typeof MANIFEST_OUTCOMES,
   mismatch: { runtime: SandboxRuntime; found: SandboxRuntime } | null = null
 ) {
   const location = rootDirectory ? ` in ${rootDirectory}` : "";
-  // A configured install command still ran; only say "skipped" when it did not.
-  const outcome = skippedDefaultInstall
-    ? "so Mogplex skipped the default install and started no dev server"
-    : "so after your install command no dev server was started";
+  const skippedDefaultInstall = outcome === "skipped";
   if (mismatch) {
     const found = isNodeRuntime(mismatch.found) ? "Node.js" : "Python";
     return (
       `The runtime is set to ${RUNTIME_LABELS[mismatch.runtime]}, but the ` +
-      `project${location} is a ${found} project, ${outcome}. Change the ` +
+      `project${location} is a ${found} project, ${MANIFEST_OUTCOMES[outcome]}. Change the ` +
       "runtime in Project settings, or set a dev command there."
     );
   }
   return (
     `No package.json, pyproject.toml or requirements.txt found${location}, ` +
-    `${outcome}. Set ${skippedDefaultInstall ? "install and dev commands" : "a dev command"} ` +
+    `${MANIFEST_OUTCOMES[outcome]}. Set ${skippedDefaultInstall ? "install and dev commands" : "a dev command"} ` +
     "in Project settings, or ask the agent to set up the environment. If the " +
     "app lives in a subdirectory, set its root directory there."
   );
@@ -239,6 +246,7 @@ export async function failPreviewBootstrap(
   throw new SandboxBootstrapError(withContext, {
     previewUrl,
     devLog,
+    phase: "dev",
   });
 }
 

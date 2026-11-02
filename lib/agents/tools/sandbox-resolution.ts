@@ -1,3 +1,8 @@
+import type { SandboxSetupIssue } from "@/lib/sandbox/events";
+import {
+  consumeSandboxCreationStream,
+  type SandboxCreationStreamResult,
+} from "./sandbox-creation-stream";
 import { buildInternalApiHeaders } from "@/lib/internal-api-auth";
 import { isRepoId } from "@/lib/repos";
 import { SANDBOX_READINESS_WAIT_HEADER } from "@/lib/sandbox/readiness-contract";
@@ -12,6 +17,10 @@ export type SandboxResolution = {
   source: SandboxResolutionSource;
   recoveredFromCleanup?: boolean;
   cleanupWaitMs?: number;
+  /** Project setup failed during this boot; the sandbox is still running. */
+  setupIssue?: SandboxSetupIssue;
+  /** A reused running sandbox whose last boot did not finish setup. */
+  lastBootError?: string;
 };
 
 export type SandboxResolutionFailure = {
@@ -30,6 +39,7 @@ type RunningSandboxChoice = {
   working_branch: string | null;
   root_directory: string | null;
   last_active_at: string | null;
+  last_boot_error?: string | null;
 };
 
 export function getSandboxRequestHeaders(userId?: string) {
@@ -74,6 +84,10 @@ async function resolveRepoUuid(
     : { ok: false, reason: "repo_mismatch" };
 }
 
+function lastBootErrorField(value: unknown) {
+  return typeof value === "string" && value ? { lastBootError: value } : {};
+}
+
 function repoResolutionFailure(
   reason: "repo_lookup_failed" | "repo_mismatch"
 ): SandboxResolutionFailure {
@@ -93,7 +107,9 @@ async function findRunningSandboxes(
   const { supabaseAdmin } = await import("@/lib/supabase/admin");
   const { data, error } = await supabaseAdmin
     .from("sandboxes")
-    .select("id, working_branch, root_directory, last_active_at")
+    .select(
+      "id, working_branch, root_directory, last_active_at, last_boot_error"
+    )
     .eq("user_id", userId)
     .eq("repo_id", repoId)
     .eq("status", "running")
@@ -115,7 +131,7 @@ async function loadOwnedSandbox(
   const { supabaseAdmin } = await import("@/lib/supabase/admin");
   let query = supabaseAdmin
     .from("sandboxes")
-    .select("id,status,persistent")
+    .select("id,status,persistent,last_boot_error")
     .eq("id", sandboxId)
     .eq("user_id", userId);
   if (repoId) query = query.eq("repo_id", repoId);
@@ -169,152 +185,6 @@ async function readReusedSandboxResponse(
     status: "running",
     source: runningSource,
   };
-}
-
-type SandboxCreationStreamEvent =
-  | { kind: "ready"; resolution: SandboxResolution }
-  | { kind: "pending"; sandboxRecordId: string }
-  | { kind: "cleanup_recovered"; elapsedMs: number }
-  | { kind: "failed"; failure: SandboxResolutionFailure };
-
-type SandboxCreationStreamResult =
-  | SandboxResolution
-  | SandboxResolutionFailure
-  | { streamEndedAfterSandboxCreated: true; cleanupWaitMs?: number };
-
-function readSandboxCreationEvent(
-  line: string
-): SandboxCreationStreamEvent | null {
-  if (!line.startsWith("data: ")) return null;
-  let event: {
-    type?: string;
-    status?: string;
-    message?: string;
-    sandbox?: { id: string; runtime_summary?: { status?: string } };
-    recordId?: string;
-    phase?: string;
-    elapsedMs?: number;
-  };
-  try {
-    event = JSON.parse(line.slice(6));
-  } catch {
-    return null;
-  }
-
-  if (event.type === "ready" && event.sandbox) {
-    return {
-      kind: "ready",
-      resolution: {
-        sandboxId: event.sandbox.id,
-        status: "running",
-        source: "created",
-      },
-    };
-  }
-  if (event.type === "sandbox_created" && event.recordId) {
-    return {
-      kind: "pending",
-      sandboxRecordId: event.recordId,
-    };
-  }
-  if (
-    event.type === "lifecycle" &&
-    event.phase === "pending_cleanup" &&
-    event.status === "recovered"
-  ) {
-    return {
-      kind: "cleanup_recovered",
-      elapsedMs:
-        typeof event.elapsedMs === "number" && event.elapsedMs >= 0
-          ? event.elapsedMs
-          : 0,
-    };
-  }
-  const lifecycleStatus =
-    event.sandbox?.runtime_summary?.status ?? event.status;
-  if (
-    event.type === "error" ||
-    event.type === "cancelled" ||
-    lifecycleStatus === "stopped" ||
-    lifecycleStatus === "error"
-  ) {
-    return {
-      kind: "failed",
-      failure: {
-        error:
-          event.message ||
-          (lifecycleStatus === "stopped"
-            ? "Sandbox stopped before it became ready."
-            : "Sandbox failed before it became ready."),
-        reason: "sandbox_unavailable",
-      },
-    };
-  }
-  return null;
-}
-
-async function consumeSandboxCreationStream(
-  response: Response,
-  signal?: AbortSignal
-): Promise<SandboxCreationStreamResult> {
-  const failed = {
-    error: "Failed to start sandbox",
-    reason: "sandbox_unavailable" as const,
-  };
-  if (!response.ok || !response.body) return failed;
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let pendingSandboxRecordId: string | null = null;
-  let cleanupWaitMs: number | null = null;
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      buffer += decoder.decode(value, { stream: !done });
-      const lines = buffer.split(/\r?\n/);
-      buffer = done ? "" : (lines.pop() ?? "");
-
-      for (const line of lines) {
-        const settled = readSandboxCreationEvent(line);
-        if (!settled) continue;
-        if (settled.kind === "pending") {
-          pendingSandboxRecordId = settled.sandboxRecordId;
-          continue;
-        }
-        if (settled.kind === "cleanup_recovered") {
-          cleanupWaitMs = settled.elapsedMs;
-          continue;
-        }
-        await reader.cancel().catch(() => {});
-        return settled.kind === "ready"
-          ? {
-              ...settled.resolution,
-              ...(cleanupWaitMs === null
-                ? {}
-                : {
-                    recoveredFromCleanup: true,
-                    cleanupWaitMs,
-                  }),
-            }
-          : settled.failure;
-      }
-      if (done) break;
-    }
-  } catch (error) {
-    if (!pendingSandboxRecordId || signal?.aborted) throw error;
-    return {
-      streamEndedAfterSandboxCreated: true,
-      ...(cleanupWaitMs === null ? {} : { cleanupWaitMs }),
-    };
-  }
-
-  return pendingSandboxRecordId
-    ? {
-        streamEndedAfterSandboxCreated: true,
-        ...(cleanupWaitMs === null ? {} : { cleanupWaitMs }),
-      }
-    : failed;
 }
 
 async function requestSandboxStart(
@@ -416,6 +286,7 @@ export async function resolveOrCreateSandbox(
       sandboxId: selectedSandboxId,
       status: "running",
       source: "selected",
+      ...lastBootErrorField(selected.last_boot_error),
     };
   }
   if (!resolved.repoId) return null;
@@ -430,12 +301,13 @@ export async function resolveOrCreateSandbox(
       sandboxes: runningSandboxes,
     };
   }
-  const runningSandboxId = runningSandboxes[0]?.id;
-  if (runningSandboxId) {
+  const running = runningSandboxes[0];
+  if (running) {
     return {
-      sandboxId: runningSandboxId,
+      sandboxId: running.id,
       status: "running",
       source: "reused_running",
+      ...lastBootErrorField(running.last_boot_error),
     };
   }
 
@@ -470,11 +342,15 @@ export async function resolveOrCreateSandbox(
       reason: "sandbox_unavailable",
     };
   }
-  if ("error" in reattached || first.cleanupWaitMs === undefined) {
-    return reattached;
-  }
+  if ("error" in reattached) return reattached;
+  // A setup issue streamed before the first stream ended still applies.
+  const withSetup =
+    first.setupIssue && !reattached.setupIssue
+      ? { ...reattached, setupIssue: first.setupIssue }
+      : reattached;
+  if (first.cleanupWaitMs === undefined) return withSetup;
   return {
-    ...reattached,
+    ...withSetup,
     recoveredFromCleanup: true,
     cleanupWaitMs: first.cleanupWaitMs,
   };

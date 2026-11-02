@@ -12,7 +12,11 @@ import {
 } from "@/lib/sandbox/lifecycle-conflict";
 import { isSandboxExplicitlyNonPersistent } from "@/lib/sandbox/persistence";
 import { isNotFoundError } from "@/lib/sandbox/sdk-adapter";
-import type { SandboxEvent } from "@/lib/sandbox/events";
+import type { SandboxEvent, SandboxSetupIssue } from "@/lib/sandbox/events";
+import {
+  setupFailureMessage,
+  setupIssueRecordFields,
+} from "@/lib/sandbox/setup-issue";
 import type { SandboxRuntime } from "@/lib/sandbox/runtimes";
 import { presentSandboxBillingAdmissionError } from "@/lib/billing/sandbox-usage";
 
@@ -245,6 +249,7 @@ async function handlePersistentRestart(
       });
 
       let finalPreviewUrl: string | null = record.preview_url;
+      let setupIssue: SandboxSetupIssue | null = null;
 
       try {
         for await (const bevent of deps.bootstrapFromSnapshotStreaming(
@@ -277,6 +282,12 @@ async function handlePersistentRestart(
           switch (bevent.type) {
             case "warning": {
               emit({ type: "warning", message: bevent.message });
+
+              break;
+            }
+            case "setup_issue": {
+              setupIssue = bevent.issue;
+              emit({ type: "setup_issue", issue: bevent.issue });
 
               break;
             }
@@ -339,6 +350,7 @@ async function handlePersistentRestart(
                     preview_url: finalPreviewUrl,
                     last_active_at: new Date().toISOString(),
                     last_boot_completed_at: new Date().toISOString(),
+                    ...setupIssueRecordFields(setupIssue, record.id),
                   },
                   {
                     expectedSandboxId: record.sandbox_id,
@@ -363,7 +375,9 @@ async function handlePersistentRestart(
                 }
                 const readyRecord = buildClientSnapshot(runningRecord, {
                   status: "running",
-                  health_status: "running",
+                  health_status: setupFailureMessage(setupIssue)
+                    ? "app_error"
+                    : "running",
                   preview_url: finalPreviewUrl,
                 });
                 emit({

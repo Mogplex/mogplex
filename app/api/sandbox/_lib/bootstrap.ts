@@ -5,6 +5,10 @@ import {
   bootstrapSandboxStreaming,
 } from "@/lib/sandbox/client";
 import { checkSandboxHealth } from "@/lib/sandbox/health-status";
+import {
+  setupIssueRecordFields,
+  setupIssueSkipsSnapshotWarmup,
+} from "@/lib/sandbox/setup-issue";
 import { updateSandboxRecord } from "@/lib/sandbox/records";
 import { getRepoLinkedVercelProject } from "@/lib/vercel/env-vars";
 import { readSandboxPersistentFlag } from "@/lib/sandbox/persistence";
@@ -217,23 +221,36 @@ async function activateRunningSandboxRecord(input: {
   const sandboxStatus =
     previewHealth.status === "stopped" ? "stopped" : "running";
 
+  // After a failed setup step the preview probe only restates that nothing
+  // serves yet; report the step as the error, like restart and resume do.
+  const setupFields = setupIssueRecordFields(
+    input.state.setupIssue,
+    input.state.streamSandboxRecord.id
+  );
+  const setupFailure = setupFields.last_boot_error;
   const activated = await updateSandboxRecord(
     input.state.streamSandboxRecord.id,
     {
       status: sandboxStatus,
       preview_url: input.state.previewUrl,
-      health_status: previewHealth.status,
       last_health_check_at: timestamp,
       last_active_at: timestamp,
       last_preview_http_status: previewHealth.statusCode ?? null,
       last_preview_error:
+        setupFailure ||
         previewHealth.status === "running" ||
         previewHealth.status === "idle_warning"
           ? null
           : previewHealth.message,
       last_boot_completed_at: timestamp,
-      last_boot_error: null,
       error: null,
+      // A failed setup step leaves the sandbox running; keep the reason and
+      // its log on the record so the preview pane and agent can show it.
+      ...setupFields,
+      health_status:
+        setupFailure && sandboxStatus === "running"
+          ? "app_error"
+          : previewHealth.status,
     },
     {
       expectedSandboxId: input.state.sandbox!.name,
@@ -267,7 +284,11 @@ async function activateRunningSandboxRecord(input: {
   );
   input.emit({ type: "ready", sandbox: readySandbox });
 
-  if (sandboxStatus === "running") {
+  // A failed install would fail the baseline build the same way.
+  if (
+    sandboxStatus === "running" &&
+    !setupIssueSkipsSnapshotWarmup(input.state.setupIssue)
+  ) {
     await maybeQueueDeferredSnapshotWarmup(input);
   }
 
@@ -290,6 +311,12 @@ async function consumeSandboxBootstrapStreamOnce(input: {
 
   for await (const event of bootstrapStream) {
     if (event.type === "warning" || event.type === "log") {
+      input.emit(event);
+      continue;
+    }
+
+    if (event.type === "setup_issue") {
+      input.state.setupIssue = event.issue;
       input.emit(event);
       continue;
     }

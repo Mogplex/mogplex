@@ -42,7 +42,36 @@ function normalizeLifecycle(
     : (lifecycle ?? {});
 }
 
+const SETUP_STEP_LABELS = {
+  prerequisite: "the runtime prerequisite install",
+  install: "the dependency install",
+  dev: "the dev server",
+} as const;
+
 export function getSandboxStartMessage(sandbox: SandboxResolution) {
+  if (sandbox.setupIssue?.phase === "detect") {
+    // Nothing failed: the boot found no project to install, by design.
+    return (
+      "Sandbox is ready. No project manifest was detected, so nothing was " +
+      "installed and no dev server is running. If the task needs a running " +
+      "app, set the project up first: see setupIssue and follow <environment_setup>."
+    );
+  }
+  if (sandbox.setupIssue) {
+    const step = SETUP_STEP_LABELS[sandbox.setupIssue.phase];
+    return (
+      `Sandbox is running, but ${step} did not finish: ` +
+      `${sandbox.setupIssue.message}. Set up the environment before the ` +
+      "user's task: see setupIssue and follow <environment_setup>."
+    );
+  }
+  if (sandbox.lastBootError) {
+    return (
+      "Sandbox is already running, but its last boot did not finish project " +
+      `setup: ${sandbox.lastBootError}. If the project still is not set up, ` +
+      "follow <environment_setup>."
+    );
+  }
   if (sandbox.recoveredFromCleanup) {
     return "Previous sandbox cleanup finished automatically. Sandbox is ready to use.";
   }
@@ -114,6 +143,8 @@ async function startSandbox(
           cleanupWaitMs: sandbox.cleanupWaitMs ?? 0,
         }
       : {}),
+    ...(sandbox.setupIssue ? { setupIssue: sandbox.setupIssue } : {}),
+    ...(sandbox.lastBootError ? { lastBootError: sandbox.lastBootError } : {}),
     message: getSandboxStartMessage(sandbox),
   };
 }
