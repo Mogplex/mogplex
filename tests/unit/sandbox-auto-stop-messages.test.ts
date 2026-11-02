@@ -29,7 +29,6 @@ for (const [reason, status, expected] of [
         deps: {
           loadState: async () => ({
             status: "running",
-            persistent: false,
             previewUrl: null,
           }),
         },

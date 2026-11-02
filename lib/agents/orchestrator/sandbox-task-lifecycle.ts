@@ -47,15 +47,15 @@ type RetainedSandboxReason =
 
 // Show actionable refusals first, but preserve every distinct warning when
 // cleanup touches several workspaces. Routine retention needs no message.
-const RETENTION_ORDER: RetainedSandboxReason[] = [
-  "unsaved_work",
-  "inspection_unavailable",
-  "activity_unknown",
-  "unconfirmed",
-  "explicit",
-  "preview",
-  "follow_up",
-];
+const RETENTION_WEIGHT: Record<RetainedSandboxReason, number> = {
+  unsaved_work: 0,
+  inspection_unavailable: 1,
+  activity_unknown: 2,
+  unconfirmed: 3,
+  explicit: 4,
+  preview: 5,
+  follow_up: 6,
+};
 
 export type SandboxTaskLifecycleOutcome =
   | { state: "unused" }
@@ -63,6 +63,7 @@ export type SandboxTaskLifecycleOutcome =
   | {
       state: "running";
       sandboxIds: string[];
+      /** Highest-priority entry; reasons preserves the complete ordered list. */
       reason: RetainedSandboxReason;
       reasons: RetainedSandboxReason[];
     };
@@ -261,7 +262,7 @@ function toolRequiresFollowUp(
 
 function computeFooter(outcome: SandboxTaskLifecycleOutcome) {
   if (outcome.state !== "running") return null;
-  const messages: Partial<Record<RetainedSandboxReason, string>> = {
+  const messages: Record<RetainedSandboxReason, string | null> = {
     unsaved_work:
       "This workspace cannot preserve uncommitted changes when stopped. Commit and push the changes before stopping compute.",
     inspection_unavailable:
@@ -270,6 +271,9 @@ function computeFooter(outcome: SandboxTaskLifecycleOutcome) {
       "Compute was left running because active work could not be checked. Check the workspace’s compute status before stopping it.",
     unconfirmed:
       "Could not confirm that sandbox compute stopped. Check its status before leaving.",
+    explicit: null,
+    preview: null,
+    follow_up: null,
   };
   return (
     outcome.reasons
@@ -400,8 +404,8 @@ export function createSandboxTaskLifecycle(input: {
       }
     }
     if (remaining.length > 0) {
-      const reasons = RETENTION_ORDER.filter((reason) =>
-        retainedReasons.has(reason)
+      const reasons = [...retainedReasons].sort(
+        (left, right) => RETENTION_WEIGHT[left] - RETENTION_WEIGHT[right]
       );
       return {
         state: "running",

@@ -32,7 +32,6 @@ for (const stopResult of [true, "activity_unknown"] as const) {
         deps: {
           loadState: async () => ({
             status: "running",
-            persistent: true,
             previewUrl: null,
           }),
           stop: async () => stopResult,
@@ -89,7 +88,6 @@ for (const stopResult of [true, "activity_unknown"] as const) {
     const transcript = page.getByRole("log", { name: "Conversation" });
     await expect(transcript).toContainText("Typecheck passed.");
     await expect(transcript).not.toContainText("Compute:");
-    await expect(transcript).not.toContainText("persistent session");
     expect(binding.status).toBe(
       stopResult === true ? "unavailable" : "running"
     );

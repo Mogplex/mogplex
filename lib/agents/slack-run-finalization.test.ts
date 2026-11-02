@@ -12,7 +12,6 @@ describe("Slack run finalization", () => {
       lifecycleDeps: {
         loadState: async () => ({
           status: "running",
-          persistent: false,
           previewUrl: null,
         }),
         stop,
