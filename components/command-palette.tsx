@@ -66,7 +66,7 @@ const QUICK_ACTIONS: PaletteActionItem[] = [
 const NAVIGATION_ITEMS: NavigationItem[] = [
   { path: "/control", value: "go to control", label: "Control" },
   { path: "/projects/workspace", value: "go to projects workspace", label: "Workspace" },
-  { path: "/projects/repositories", value: "go to projects repositories", label: "Repositories" },
+  { path: "/settings/repositories", value: "go to repository settings sync github", label: "Repository settings" },
   {
     path: "/sandboxes",
     value: "go to sandboxes manage running previews",

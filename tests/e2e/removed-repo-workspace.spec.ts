@@ -5,6 +5,7 @@ import {
   mockActivationFlow,
   syncedRepo,
 } from "./helpers/activation-fixtures";
+import { navigateWithPalette } from "./helpers/command-palette-nav";
 
 for (const width of [1280, 390]) {
   test(`cached workspace requires restoration before reopening a removed repo (${width}px)`, async ({
@@ -101,22 +102,14 @@ for (const width of [1280, 390]) {
     await page.route("**/api/workspaces", (route) =>
       route.fulfill({ json: [] })
     );
-    const sections = page.getByRole("navigation", {
-      name: "Projects sections",
-    });
-    await sections
-      .getByRole("link", { name: "Repositories", exact: true })
-      .click();
+    await navigateWithPalette(page, "Repository settings");
     await page
-      .getByRole("button", { name: "Repo actions", exact: true })
+      .getByRole("button", { name: "Remove acme/demo-app", exact: true })
       .click();
-    await page.getByRole("menuitem", { name: "Remove", exact: true }).click();
     await expect(
       page.getByText("Repository removed", { exact: true })
     ).toBeVisible();
-    await sections
-      .getByRole("link", { name: "Workspace", exact: true })
-      .click();
+    await navigateWithPalette(page, "Workspace");
     await expect(
       page.getByRole("heading", { name: "Repository removed" })
     ).toBeVisible();

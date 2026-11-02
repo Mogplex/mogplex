@@ -33,7 +33,7 @@ test("user menu filters projects and switches the selected scope by keyboard", a
     })
   );
 
-  await page.goto(scopedPath("projects/repositories"));
+  await page.goto(scopedPath("settings/repositories"));
   await page.waitForLoadState("networkidle");
 
   await page.getByRole("button", { name: "User menu" }).click();
@@ -60,5 +60,5 @@ test("user menu filters projects and switches the selected scope by keyboard", a
 
   await search.press("ArrowDown");
   await search.press("Enter");
-  await expect(page).toHaveURL(/\/gamma\/projects\/repositories$/);
+  await expect(page).toHaveURL(/\/gamma\/settings\/repositories$/);
 });

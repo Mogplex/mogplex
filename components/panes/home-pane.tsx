@@ -186,8 +186,8 @@ export function HomePane() {
           </div>
 
           <div className="mt-6 flex flex-wrap items-center gap-2">
-            <Button size="sm" onClick={() => router.push(scopedHref(scope, "/projects/repositories"))} className="h-8 rounded-sm text-xs">
-              Open Projects
+            <Button size="sm" onClick={() => router.push(scopedHref(scope, "/control"))} className="h-8 rounded-sm text-xs">
+              Open Command Center
             </Button>
             <Button
               variant="ghost"
@@ -288,10 +288,10 @@ export function HomePane() {
               variant="ghost"
               size="sm"
               type="button"
-              onClick={() => router.push(scopedHref(scope, "/projects/repositories"))}
+              onClick={() => router.push(scopedHref(scope, "/control"))}
               className="h-8 rounded-sm text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
             >
-              Open Projects
+              Open Command Center
             </Button>
           </div>
         )}

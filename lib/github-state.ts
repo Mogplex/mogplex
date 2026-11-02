@@ -80,8 +80,8 @@ export function deriveGithubState(input: {
         "The GitHub App is installed, but no covered repositories are synced into Projects yet.";
       githubPrimaryAction = {
         kind: "open_spaces",
-        label: "Open Projects",
-        href: "/projects/repositories",
+        label: "Sync repositories",
+        href: "/settings/repositories",
       };
       break;
     case "app_installed_with_synced_repos":

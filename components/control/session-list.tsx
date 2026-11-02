@@ -24,7 +24,12 @@ import {
   ProjectRowActions,
   SessionRowActions,
   type NewSessionTarget,
+  type OpenProjectSettings,
 } from "./session-list-actions";
+import {
+  ProjectSettingsDrawer,
+  type ProjectSettingsTab,
+} from "@/components/project-settings/project-settings-drawer";
 import { SessionListOptions, type SessionGrouping, type SessionSort } from "./session-list-options";
 import { SessionArchiveList } from "./session-archive-list";
 import type { SessionArchiveControls } from "./use-session-archive";
@@ -131,6 +136,7 @@ function ProjectGroupSection({
   onNew,
   onDelete,
   archive,
+  onOpenSettings,
 }: {
   group: SessionGroup<ControlSessionSummary>;
   colorClass: string;
@@ -140,6 +146,7 @@ function ProjectGroupSection({
   onNew: (target: NewSessionTarget) => void;
   onDelete: (id: string) => Promise<boolean>;
   archive: SessionArchiveControls;
+  onOpenSettings: (repoId: string, tab: ProjectSettingsTab) => void;
 }) {
   const [open, setOpen] = useState(true);
   const [showAll, setShowAll] = useState(false);
@@ -152,6 +159,10 @@ function ProjectGroupSection({
     repoId:
       group.sessions.find((session) => session.repo_id)?.repo_id ?? null,
   };
+  const { repoId } = newSessionTarget;
+  const openSettings: OpenProjectSettings | undefined = repoId
+    ? (tab) => onOpenSettings(repoId, tab)
+    : undefined;
 
   return (
     <motion.div layout="position" className="mt-1">
@@ -160,6 +171,7 @@ function ProjectGroupSection({
         onNew={() => onNew(newSessionTarget)}
         onArchive={() => void archive.archive(group.sessions)}
         archiveDisabled={archive.busy || group.sessions.every(session => workingIds.has(session.id))}
+        onOpenSettings={openSettings}
       >
         <button
           type="button"
@@ -240,6 +252,7 @@ export function SessionList({
   const [collapsed, setCollapsed] = useState(false);
   const [sortMode, setSortMode] = useState<SortMode>("recent");
   const [grouping, setGrouping] = useState<SessionGrouping>("project");
+  const [settings, setSettings] = useState<{ repoId: string; tab: ProjectSettingsTab } | null>(null);
   const { width, resizing, panelRef, resizerProps } = usePanelWidth({
     storageKey: WIDTH_KEY,
     defaultWidth: DEFAULT_WIDTH,
@@ -399,6 +412,7 @@ export function SessionList({
               onNew={onNew}
               onDelete={onDelete}
               archive={archive}
+              onOpenSettings={(repoId, tab) => setSettings({ repoId, tab })}
             />
           ))
         )}
@@ -409,6 +423,12 @@ export function SessionList({
       </button>
       </>}
       </motion.div>
+      <ProjectSettingsDrawer
+        repoId={settings?.repoId ?? null}
+        tab={settings?.tab ?? "env"}
+        onTabChange={(tab) => setSettings((current) => current && { ...current, tab })}
+        onClose={() => setSettings(null)}
+      />
     </motion.aside>
   );
 }

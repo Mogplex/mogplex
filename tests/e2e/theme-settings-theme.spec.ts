@@ -85,10 +85,12 @@ test("theme preference persists from user menu into spaces without UI regression
     fulfillJson(route, { sandboxes: [] })
   );
 
-  await page.goto(scopedPath("projects/repositories"));
+  await page.goto(scopedPath("settings/repositories"));
   await page.waitForLoadState("networkidle");
 
-  await expect(page.getByRole("heading", { name: "Projects" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Repositories" })
+  ).toBeVisible();
   await expect
     .poll(() =>
       page.evaluate(() => document.documentElement.classList.contains("dark"))
@@ -203,8 +205,10 @@ test("global theme sync ignores stale settings reads after local theme selection
     fulfillJson(route, { sandboxes: [] })
   );
 
-  await page.goto(scopedPath("projects/repositories"));
-  await expect(page.getByRole("heading", { name: "Projects" })).toBeVisible();
+  await page.goto(scopedPath("settings/repositories"));
+  await expect(
+    page.getByRole("heading", { name: "Repositories" })
+  ).toBeVisible();
   await staleReadReady;
   await expectDocumentTheme(page, "light");
 
@@ -280,7 +284,7 @@ test("user menu theme submenu opens and persists selection", async ({
     fulfillJson(route, { sandboxes: [] })
   );
 
-  await page.goto(scopedPath("projects/repositories"));
+  await page.goto(scopedPath("settings/repositories"));
   await page.waitForLoadState("networkidle");
 
   await selectThemeFromUserMenu(page, "dark");
@@ -374,7 +378,7 @@ test("user menu theme save failures roll back only the latest selection", async 
     fulfillJson(route, { sandboxes: [] })
   );
 
-  await page.goto(scopedPath("projects/repositories"));
+  await page.goto(scopedPath("settings/repositories"));
   await page.waitForLoadState("networkidle");
 
   await expectDocumentTheme(page, "light");
@@ -474,7 +478,7 @@ test("user menu theme failures restore the last confirmed saved theme", async ({
     fulfillJson(route, { sandboxes: [] })
   );
 
-  await page.goto(scopedPath("projects/repositories"));
+  await page.goto(scopedPath("settings/repositories"));
   await page.waitForLoadState("networkidle");
 
   await expectDocumentTheme(page, "light");

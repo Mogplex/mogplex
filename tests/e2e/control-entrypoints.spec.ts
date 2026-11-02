@@ -16,14 +16,7 @@ test("opening a repository selects its most recent task without starting work", 
     )
       chats.push(request.url());
   });
-  for (const resource of ["workspaces", "agents", "assignments", "memberships"])
-    await page.route(`**/api/${resource}`, (route) =>
-      route.fulfill({ json: [] })
-    );
-  await page.goto(scopedPath("projects/repositories"));
-  await page
-    .getByRole("button", { name: "Open Workspace", exact: true })
-    .click();
+  await page.goto(scopedPath("control?repo=repo-widgets"));
   await expect(page).toHaveURL(/mission=task-two/);
   await expect(
     page.getByRole("banner").getByText("Review billing flow", { exact: true })

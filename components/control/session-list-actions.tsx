@@ -6,7 +6,14 @@ import {
   type ButtonHTMLAttributes,
   type ReactNode,
 } from "react";
-import { Archive, ChatPlusIn, MoreHoriz, Trash } from "iconoir-react";
+import {
+  Archive,
+  ChatPlusIn,
+  Key,
+  MoreHoriz,
+  Settings,
+  Trash,
+} from "iconoir-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -35,6 +42,9 @@ import type { ControlSessionSummary } from "@/lib/control/session-types";
 
 export type { NewSessionTarget } from "@/lib/control/session-project";
 
+/** Opens the project settings drawer on a tab; absent for unlinked chats. */
+export type OpenProjectSettings = (tab: "env" | "general") => void;
+
 const ActionButton = forwardRef<
   HTMLButtonElement,
   { label: string } & ButtonHTMLAttributes<HTMLButtonElement>
@@ -62,19 +72,21 @@ export function ProjectRowActions({
   onNew,
   onArchive,
   archiveDisabled,
+  onOpenSettings,
 }: {
   children: ReactNode;
   projectName: string;
   onNew: () => void;
   onArchive: () => void;
   archiveDisabled: boolean;
+  onOpenSettings?: OpenProjectSettings;
 }) {
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
         <div className="group flex min-w-0 items-center">
           {children}
-          <ProjectActionButton projectName={projectName} onNew={onNew} onArchive={onArchive} archiveDisabled={archiveDisabled} />
+          <ProjectActionButton projectName={projectName} onNew={onNew} onArchive={onArchive} archiveDisabled={archiveDisabled} onOpenSettings={onOpenSettings} />
         </div>
       </ContextMenuTrigger>
       <ContextMenuContent aria-label={`Actions for ${projectName}`}>
@@ -82,6 +94,18 @@ export function ProjectRowActions({
           <ChatPlusIn aria-hidden="true" />
           New chat
         </ContextMenuItem>
+        {onOpenSettings ? (
+          <>
+            <ContextMenuItem onSelect={() => onOpenSettings("env")}>
+              <Key aria-hidden="true" />
+              Environment variables
+            </ContextMenuItem>
+            <ContextMenuItem onSelect={() => onOpenSettings("general")}>
+              <Settings aria-hidden="true" />
+              Project settings
+            </ContextMenuItem>
+          </>
+        ) : null}
         <ContextMenuSeparator />
         <ContextMenuItem onSelect={onArchive} disabled={archiveDisabled}>
           <Archive aria-hidden="true" />
@@ -97,11 +121,13 @@ export function ProjectActionButton({
   onNew,
   onArchive,
   archiveDisabled,
+  onOpenSettings,
 }: {
   projectName: string;
   onNew: () => void;
   onArchive: () => void;
   archiveDisabled: boolean;
+  onOpenSettings?: OpenProjectSettings;
 }) {
   return (
     <DropdownMenu>
@@ -113,6 +139,18 @@ export function ProjectActionButton({
           <ChatPlusIn aria-hidden="true" />
           New chat
         </DropdownMenuItem>
+        {onOpenSettings ? (
+          <>
+            <DropdownMenuItem onSelect={() => onOpenSettings("env")}>
+              <Key aria-hidden="true" />
+              Environment variables
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => onOpenSettings("general")}>
+              <Settings aria-hidden="true" />
+              Project settings
+            </DropdownMenuItem>
+          </>
+        ) : null}
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={onArchive} disabled={archiveDisabled}>
           <Archive aria-hidden="true" />

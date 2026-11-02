@@ -116,8 +116,8 @@ test("GET /api/auth/user derives connected state from vault-backed OAuth storage
         "The GitHub App is installed, but no covered repositories are synced into Projects yet.",
       github_primary_action: {
         kind: "open_spaces",
-        label: "Open Projects",
-        href: "/projects/repositories",
+        label: "Sync repositories",
+        href: "/settings/repositories",
       },
       platform_access: {
         allowPlatformAi: true,

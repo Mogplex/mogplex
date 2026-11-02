@@ -69,63 +69,68 @@ async function dashboard(page: Page, failedIds: string[] = []) {
   await page.route("**/api/sandbox", (route) =>
     fulfillJson(route, { sandboxes: [] })
   );
-  await page.goto("/alex/projects/repositories");
+  await page.goto("/alex/settings/repositories");
   await expect(page.getByRole("button", { name: "Sync GitHub" })).toBeEnabled();
   return { repos, writes };
 }
+
+const connected = (page: Page) =>
+  page.getByRole("list", { name: "Connected repositories" });
 
 test("remove owner persists, and a removed repository can be restored", async ({
   page,
 }) => {
   const { writes } = await dashboard(page);
-  await page.getByRole("combobox").selectOption("alex");
-  await page.getByRole("button", { name: "Remove alex", exact: true }).click();
-  await expect(page.getByText("alpha", { exact: true })).toHaveCount(0);
-  await expect(page.getByText("beta", { exact: true })).toHaveCount(0);
+  await page.getByLabel("Owner", { exact: true }).selectOption("alex");
+  await page
+    .getByRole("button", { name: "Remove all from alex", exact: true })
+    .click();
+  await expect(connected(page).getByText("alex/alpha")).toHaveCount(0);
+  await expect(connected(page).getByText("alex/beta")).toHaveCount(0);
   expect(writes).toEqual([
     { id: "alpha", is_hidden: true },
     { id: "beta", is_hidden: true },
   ]);
-  await page.getByRole("button", { name: "Show removed" }).click();
-  await page
-    .getByRole("button", { name: "Repo actions", exact: true })
-    .first()
-    .click();
-  await page.getByRole("menuitem", { name: "Restore", exact: true }).click();
+  await page.getByRole("button", { name: /Show removed/ }).click();
+  await page.getByRole("button", { name: "Restore alex/alpha" }).click();
   await expect(
     page.getByText("Repository restored", { exact: true })
   ).toBeVisible();
-  await page.getByRole("button", { name: "Hide removed" }).click();
-  await expect(page.getByText("alpha", { exact: true })).toBeVisible();
+  await expect(connected(page).getByText("alex/alpha")).toBeVisible();
   await page.reload();
-  await expect(page.getByText("alpha", { exact: true })).toBeVisible();
-  await expect(page.getByText("beta", { exact: true })).toHaveCount(0);
+  await expect(connected(page).getByText("alex/alpha")).toBeVisible();
+  await expect(connected(page).getByText("alex/beta")).toHaveCount(0);
 });
 
 test("restore failures show a retryable error and leave the repository removed", async ({
   page,
 }) => {
   await dashboard(page, ["removed"]);
-  await page.getByRole("button", { name: "Show removed" }).click();
-  await page.getByPlaceholder("Search spaces...").fill("removed");
-  await page.getByRole("button", { name: "Repo actions", exact: true }).click();
-  await page.getByRole("menuitem", { name: "Restore", exact: true }).click();
+  await page.getByRole("button", { name: /Show removed/ }).click();
+  await page.getByLabel("Search repositories").fill("removed");
+  await page.getByRole("button", { name: "Restore alex/removed" }).click();
   await expect(
     page.getByText("Could not restore repository", { exact: true })
   ).toBeVisible();
   await expect(
     page.getByText("Repository restored", { exact: true })
   ).toHaveCount(0);
-  await page.getByRole("button", { name: "Hide removed" }).click();
-  await expect(page.getByText("removed", { exact: true })).toHaveCount(0);
+  await expect(connected(page).getByText("alex/removed")).toHaveCount(0);
+  await expect(
+    page
+      .getByRole("list", { name: "Removed repositories" })
+      .getByText("alex/removed")
+  ).toBeVisible();
 });
 
 test("bulk removal reports partial failures without claiming every repository was removed", async ({
   page,
 }) => {
   await dashboard(page, ["beta"]);
-  await page.getByRole("combobox").selectOption("alex");
-  await page.getByRole("button", { name: "Remove alex", exact: true }).click();
+  await page.getByLabel("Owner", { exact: true }).selectOption("alex");
+  await page
+    .getByRole("button", { name: "Remove all from alex", exact: true })
+    .click();
   await expect(
     page.getByText("Could not remove all repositories", { exact: true })
   ).toBeVisible();
@@ -137,8 +142,8 @@ test("bulk removal reports partial failures without claiming every repository wa
   await expect(
     page.getByText("Removed 2 repositories", { exact: true })
   ).toHaveCount(0);
-  await expect(page.getByText("alpha", { exact: true })).toHaveCount(0);
-  await expect(page.getByText("beta", { exact: true })).toBeVisible();
+  await expect(connected(page).getByText("alex/alpha")).toHaveCount(0);
+  await expect(connected(page).getByText("alex/beta")).toBeVisible();
 });
 
 test("network failures during removal are visible", async ({ page }) => {
@@ -148,13 +153,9 @@ test("network failures during removal are visible", async ({ page }) => {
       ? route.abort("failed")
       : route.fallback()
   );
-  await page
-    .getByRole("button", { name: "Repo actions", exact: true })
-    .first()
-    .click();
-  await page.getByRole("menuitem", { name: "Remove", exact: true }).click();
+  await page.getByRole("button", { name: "Remove alex/alpha" }).click();
   await expect(
     page.getByText("Could not remove repository", { exact: true })
   ).toBeVisible();
-  await expect(page.getByText("alpha", { exact: true })).toBeVisible();
+  await expect(connected(page).getByText("alex/alpha")).toBeVisible();
 });

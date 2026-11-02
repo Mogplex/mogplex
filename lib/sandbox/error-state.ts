@@ -54,8 +54,8 @@ export const SANDBOX_ERROR_CTA: Record<
     href: "/api/auth/vercel",
   },
   VERCEL_PROJECT_REQUIRED: {
-    label: "Open project settings",
-    href: "/projects/repositories",
+    label: "Open Command Center",
+    href: "/control",
   },
   UNKNOWN: null,
 };

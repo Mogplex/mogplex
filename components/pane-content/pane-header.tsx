@@ -9,8 +9,7 @@ import { SandboxChip } from "@/components/sandbox-chip";
  * `null` (explicit repo root) and missing/legacy values are hidden so the
  * pane title bar stays clean for the common case (whole-repo sandboxes).
  *
- * The `:` prefix matches the established repo-card convention
- * (components/repo-dashboard.tsx) so users see one path-display idiom.
+ * The `:` prefix marks a path inside the repository.
  */
 export function SandboxPathTag({ path }: { path: string | null }) {
   if (!path) return null;

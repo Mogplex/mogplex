@@ -11,7 +11,6 @@ describe("app navigation", () => {
       APP_NAV_ITEM_DEFS.map((item) => [item.id, item.label, item.path])
     ).toEqual([
       ["control", "Command Center", "/control"],
-      ["workspaces", "Repositories", "/projects/repositories"],
       ["automations", "Automations", "/automations"],
       ["sandboxes", "Sandboxes", "/sandboxes"],
       ["delivery", "Delivery", "/delivery"],
@@ -38,39 +37,27 @@ describe("app navigation", () => {
 
   it("scopes href and match paths", () => {
     const items = buildAppNavItems("acme");
-    const repositories = items.find((item) => item.id === "workspaces");
+    const control = items.find((item) => item.id === "control");
 
-    expect(repositories?.href).toBe("/acme/projects/repositories");
-    expect(repositories?.match).toEqual([
-      "/acme/projects/repositories",
+    expect(control?.href).toBe("/acme/control");
+    expect(control?.match).toEqual([
+      "/acme/control",
       "/acme/projects/workspace",
       "/acme/workspaces",
     ]);
   });
 
-  it("matches descendants except the repositories root", () => {
+  it("matches a destination and its descendants", () => {
     expect(isAppNavItemActive("/acme/settings/profile", "/acme/settings")).toBe(
       true
     );
-    expect(
-      isAppNavItemActive(
-        "/acme/projects/repositories/sandboxes",
-        "/acme/projects/repositories"
-      )
-    ).toBe(false);
-    expect(
-      isAppNavItemActive(
-        "/acme/projects/repositories",
-        "/acme/projects/repositories"
-      )
-    ).toBe(true);
+    expect(isAppNavItemActive("/acme/settingsx", "/acme/settings")).toBe(false);
   });
 
   it("selects only the destination that owns repositories or sandboxes", () => {
     const items = buildAppNavItems("acme");
     for (const [path, id] of [
-      ["/acme/projects/repositories", "workspaces"],
-      ["/acme/projects/workspace", "workspaces"],
+      ["/acme/projects/workspace", "control"],
       ["/acme/sandboxes", "sandboxes"],
       ["/acme/sandboxes/record-1", "sandboxes"],
       ["/acme/models/catalog", "models"],

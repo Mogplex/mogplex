@@ -85,8 +85,8 @@ test("presentSandboxError returns action-oriented titles and CTAs", () => {
     "Link a Vercel project to launch this preview"
   );
   assert.deepEqual(projectRequired?.cta, {
-    label: "Open project settings",
-    href: "/projects/repositories",
+    label: "Open Command Center",
+    href: "/control",
   });
 
   assert.equal(generic?.title, "Sandbox launch failed");

@@ -2,13 +2,7 @@
 
 import { useState } from "react";
 import type { Repo } from "@/lib/types";
-import {
-  DEFAULT_DEV_PORT,
-  DEFAULT_ENV_SYNC_MODE,
-  formatEnvVars,
-  resolveEffectiveEnvSyncMode,
-  parseEnvVarsText,
-} from "@/lib/repo-settings";
+import { DEFAULT_DEV_PORT } from "@/lib/repo-settings";
 import type { SandboxBillingMode } from "@/lib/sandbox/billing";
 import {
   buildRepoSandboxSettingsPayload,
@@ -22,18 +16,11 @@ import {
 interface Props {
   repo: Repo;
   onSave: (repo: Repo) => Promise<void>;
-  onClose?: () => void;
   onRestart?: (repo: Repo) => Promise<void> | void;
-  mode?: "dialog" | "page";
 }
 
-export function RepoSettingsForm({
-  repo,
-  onSave,
-  onClose,
-  onRestart,
-  mode = "dialog",
-}: Props) {
+/** General sandbox settings for one project; env vars have their own tab. */
+export function RepoSettingsForm({ repo, onSave, onRestart }: Props) {
   const [runtime, setRuntime] = useState(repo.runtime || "");
   const [defaultBranch, setDefaultBranch] = useState(
     repo.default_branch || "main"
@@ -41,9 +28,6 @@ export function RepoSettingsForm({
   const [billingModeOverride, setBillingModeOverride] = useState<
     "inherit" | SandboxBillingMode
   >(createRepoSandboxSettingsDraft(repo).billingModeOverride);
-  const [envSyncMode, setEnvSyncMode] = useState(
-    resolveEffectiveEnvSyncMode(repo.env_sync_mode || DEFAULT_ENV_SYNC_MODE)
-  );
   const [rootDirectory, setRootDirectory] = useState(repo.root_directory || "");
   const [installCommand, setInstallCommand] = useState(
     repo.install_command || ""
@@ -52,9 +36,6 @@ export function RepoSettingsForm({
   const [devPortAuto, setDevPortAuto] = useState(repo.dev_port_auto ?? true);
   const [devPort, setDevPort] = useState(
     String(repo.dev_port || DEFAULT_DEV_PORT)
-  );
-  const [envVarsText, setEnvVarsText] = useState(
-    formatEnvVars(repo.sandbox_env_vars)
   );
   const [saving, setSaving] = useState(false);
   const [restarting, setRestarting] = useState(false);
@@ -65,22 +46,18 @@ export function RepoSettingsForm({
     vercelTeamId: "",
     vercelProjectId: "",
   };
-  const buildRepo = () => {
-    const sandboxEnvVars = parseEnvVarsText(envVarsText);
-    return {
+  const buildRepo = () =>
+    ({
       ...repo,
       runtime: runtime || null,
       default_branch: defaultBranch.trim() || "main",
       ...buildRepoSandboxSettingsPayload(repo, draft),
-      env_sync_mode: envSyncMode,
       root_directory: rootDirectory.trim() || null,
       install_command: installCommand.trim() || null,
       dev_command: devCommand.trim() || null,
       dev_port: Number(devPort),
       dev_port_auto: devPortAuto,
-      sandbox_env_vars: sandboxEnvVars,
-    } satisfies Repo;
-  };
+    }) satisfies Repo;
 
   const handleSave = async () => {
     setError(null);
@@ -111,11 +88,8 @@ export function RepoSettingsForm({
     }
   };
 
-  const wrapperClass =
-    mode === "page" ? "space-y-4" : "grid gap-4 p-4 md:grid-cols-2";
-
   return (
-    <div className={wrapperClass}>
+    <div className="space-y-4 p-4">
       <label className="space-y-1">
         <div className="ui-label">Launch Branch</div>
         <input
@@ -162,24 +136,6 @@ export function RepoSettingsForm({
         <p className="text-muted-foreground text-[11px]">
           Sandboxes use Mogplex billing. User-owned Vercel compute is not yet
           available.
-        </p>
-      </label>
-
-      <label className="space-y-1">
-        <div className="ui-label">Env Mapping</div>
-        <select
-          value={envSyncMode}
-          onChange={(e) => setEnvSyncMode(e.target.value as typeof envSyncMode)}
-          className="border-border bg-input text-foreground w-full border px-2 py-1"
-        >
-          <option value="sandbox-only">Sandbox only</option>
-          <option value="sandbox-and-preview">
-            Sandbox + preview conventions
-          </option>
-        </select>
-        <p className="text-muted-foreground text-[11px]">
-          Vercel project import is unavailable with Sign in with Vercel. Add
-          sandbox variables manually below.
         </p>
       </label>
 
@@ -233,22 +189,8 @@ export function RepoSettingsForm({
         />
       </label>
 
-      <label className={`space-y-1 ${mode === "page" ? "" : "md:col-span-2"}`}>
-        <div className="ui-label">Environment Variables</div>
-        <textarea
-          value={envVarsText}
-          onChange={(e) => setEnvVarsText(e.target.value)}
-          className="border-border bg-input text-foreground min-h-40 w-full border px-2 py-1"
-          placeholder={"NODE_ENV=development\nAPI_BASE_URL=https://example.com"}
-        />
-        <p className="text-muted-foreground text-[11px]">
-          Paste `.env`-style `KEY=value` lines. Surrounding single or double
-          quotes are stripped automatically.
-        </p>
-      </label>
-
       <div
-        className={`${mode === "page" ? "" : "md:col-span-2"} text-muted-foreground text-[11px] leading-5`}
+        className="text-muted-foreground text-[11px] leading-5"
       >
         Sandboxes use the Mogplex platform project. User-owned Vercel compute
         requires a future API-capable integration and is not available.
@@ -256,23 +198,15 @@ export function RepoSettingsForm({
 
       {error && (
         <div
-          className={`${mode === "page" ? "" : "md:col-span-2"} border-destructive text-destructive border px-2 py-1.5 text-[11px]`}
+          className="border-destructive text-destructive border px-2 py-1.5 text-[11px]"
         >
           {error}
         </div>
       )}
 
       <div
-        className={`${mode === "page" ? "" : "md:col-span-2"} border-border flex items-center justify-end gap-2 border-t pt-3`}
+        className="border-border flex items-center justify-end gap-2 border-t pt-3"
       >
-        {onClose && (
-          <button
-            onClick={onClose}
-            className="border-border text-muted-foreground hover:text-foreground border px-3 py-1"
-          >
-            Cancel
-          </button>
-        )}
         {onRestart && (
           <button
             onClick={handleRestart}

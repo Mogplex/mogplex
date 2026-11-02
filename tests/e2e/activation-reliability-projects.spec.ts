@@ -10,7 +10,7 @@ import {
   oauthInstallPendingUser,
 } from "./helpers/activation-reliability-fixtures";
 
-test("projects empty state prioritizes completing the GitHub App install over importing repos", async ({
+test("repository settings prioritize completing the GitHub App install over syncing", async ({
   page,
 }) => {
   await initializeTrackedEvents(page);
@@ -22,23 +22,18 @@ test("projects empty state prioritizes completing the GitHub App install over im
     workspaces: [],
   });
 
-  await page.goto(scopedPath("projects/repositories"));
+  await page.goto(scopedPath("settings/repositories"));
   await page.waitForLoadState("networkidle");
 
   await expect(
-    page.getByText(
-      "Finish the GitHub App install, then create your first project."
-    )
-  ).toBeVisible();
-  await expect(
     page.getByRole("link", { name: "Complete GitHub App install" }).first()
   ).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Import repositories" })
-  ).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Sync GitHub" })).toHaveCount(
+    0
+  );
 });
 
-test("projects empty state allows importing repos when OAuth is connected but app install is pending", async ({
+test("repository settings allow syncing when OAuth is connected but app install is pending", async ({
   page,
 }) => {
   await initializeTrackedEvents(page);
@@ -50,20 +45,16 @@ test("projects empty state allows importing repos when OAuth is connected but ap
     workspaces: [],
   });
 
-  await page.goto(scopedPath("projects/repositories"));
+  await page.goto(scopedPath("settings/repositories"));
   await page.waitForLoadState("networkidle");
 
+  await expect(page.getByRole("button", { name: "Sync GitHub" })).toBeVisible();
   await expect(
-    page.getByText(
-      "GitHub is connected. Import repos now, then finish the GitHub App install for trigger coverage."
-    )
-  ).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Import repositories" })
+    page.getByText("No connected repositories yet. Sync GitHub to import them.")
   ).toBeVisible();
 });
 
-test("projects dashboard surfaces data-load failures instead of empty onboarding when synced spaces exist", async ({
+test("repository settings surface data-load failures instead of an empty list", async ({
   page,
 }) => {
   await initializeTrackedEvents(page);
@@ -77,7 +68,7 @@ test("projects dashboard surfaces data-load failures instead of empty onboarding
       github_state: "app_installed_with_synced_repos",
       github_status_label: "Ready",
       github_status_detail:
-        "GitHub App coverage is active and synced repos are available in Spaces.",
+        "GitHub App coverage is active and synced repos are available.",
       github_primary_action: null,
       github_installation_count: 1,
       github_synced_repo_count: 142,
@@ -91,16 +82,13 @@ test("projects dashboard surfaces data-load failures instead of empty onboarding
     },
   });
 
-  await page.goto(scopedPath("projects/repositories"));
+  await page.goto(scopedPath("settings/repositories"));
   await page.waitForLoadState("networkidle");
 
   await expect(
-    page.getByText("Failed to load projects and spaces.")
+    page.getByRole("alert").filter({ hasText: "Failed to load spaces" })
   ).toBeVisible();
-  await expect(page.getByText("Failed to load spaces")).toBeVisible();
-  await expect(page.getByText("142 synced spaces")).toBeVisible();
-  await expect(page.getByText("Create your first project.")).toHaveCount(0);
   await expect(
-    page.getByText("GitHub repo sync failed. Retry sync.")
+    page.getByText("No connected repositories yet. Sync GitHub to import them.")
   ).toHaveCount(0);
 });
