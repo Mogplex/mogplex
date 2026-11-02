@@ -133,7 +133,7 @@ const nextConfig = {
       },
       {
         source: "/spaces",
-        destination: "/projects/repositories",
+        destination: "/control",
         permanent: true,
       },
       {
@@ -149,6 +149,17 @@ const nextConfig = {
       {
         source: "/:scope/projects/repositories/sandboxes",
         destination: "/:scope/sandboxes",
+        permanent: true,
+      },
+      // The Repositories page was retired; Command Center is the repo home.
+      {
+        source: "/projects/repositories",
+        destination: "/control",
+        permanent: true,
+      },
+      {
+        source: "/:scope/projects/repositories",
+        destination: "/:scope/control",
         permanent: true,
       },
     ];

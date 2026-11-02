@@ -8,6 +8,7 @@ import {
   waitForTrackedEvent,
 } from "./helpers/activation-fixtures";
 import { capturePageErrors } from "./helpers/page-errors";
+import { navigateWithPalette } from "./helpers/command-palette-nav";
 
 const workspacePath = `/${connectedUser.username}/projects/workspace`;
 
@@ -321,15 +322,13 @@ test("terminal session survives navigation away from the workspace", async ({
     throw new Error("Terminal session host was not mounted");
   }
 
-  await page.getByTestId("app-nav-workspaces").click();
-  await expect(page).toHaveURL(
-    `/${connectedUser.username}/projects/repositories`
-  );
+  await page.getByTestId("app-nav-sandboxes").click();
+  await expect(page).toHaveURL(`/${connectedUser.username}/sandboxes`);
   expect(
     await terminalHostHandle.evaluate((element) => element.isConnected)
   ).toBe(true);
 
-  await page.getByRole("link", { name: "Workspace", exact: true }).click();
+  await navigateWithPalette(page, "Workspace");
   await expect(page).toHaveURL(workspacePath);
   await expect(terminal).toContainText("route-persistence-marker");
 

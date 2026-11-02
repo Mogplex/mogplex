@@ -20,7 +20,6 @@ import {
   Flash,
   PlugTypeA,
   NavArrowRight,
-  Repository,
   Rocket,
   Search,
   Settings,
@@ -50,7 +49,6 @@ const SETTINGS_MIN_WIDTH = 240;
 
 const NAV_ICONS = {
   control: Rocket,
-  workspaces: Repository,
   automations: Flash,
   sandboxes: Cube,
   delivery: DeliveryTruck,

@@ -228,7 +228,7 @@ export default function SandboxManagementPage() {
               Refresh
             </Button>
             <Button asChild variant="ghost" size="sm" className="h-8 rounded-sm text-xs text-muted-foreground hover:bg-accent hover:text-foreground">
-              <Link href={scopedHref(scope, "/projects/repositories")}>Back to repositories</Link>
+              <Link href={scopedHref(scope, "/control")}>Back to Command Center</Link>
             </Button>
           </div>
         </div>

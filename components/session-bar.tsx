@@ -151,14 +151,14 @@ export function SessionBar() {
         <Tooltip>
           <TooltipTrigger asChild>
             <button
-              onClick={() => router.push(scopedHref(scope, "/projects/repositories"))}
+              onClick={() => router.push(scopedHref(scope, "/control"))}
               className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-sm text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
             >
               +
             </button>
           </TooltipTrigger>
           <TooltipContent side="bottom" className="max-w-[200px] text-[10px]">
-            Open another workspace from Projects. Existing sessions stay available here.
+            Open another workspace from Command Center. Existing sessions stay available here.
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>

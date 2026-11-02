@@ -1,16 +1,10 @@
 import { expect, test } from "@playwright/test";
 import { enableScopedE2EAuth, scopedPath } from "./helpers/auth";
 import {
-  connectedUser,
   initializeTrackedEvents,
   mockActivationFlow,
-  mockProjectsDashboard,
-  syncedRepo,
 } from "./helpers/activation-fixtures";
-import {
-  buildSandboxBackedCall,
-  buildSandboxSummaries,
-} from "./helpers/sandbox-fixtures";
+import { buildSandboxBackedCall } from "./helpers/sandbox-fixtures";
 
 test("preview app errors surface recovery UI and clear live chrome", async ({
   page,
@@ -280,38 +274,4 @@ test("preview unreachable state surfaces warning UI and clears live chrome", asy
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "Open health" })).toBeVisible();
   await expect(readyBadges).toHaveCount(0);
-});
-
-test("idle-warning state stays behind a stable ready state", async ({
-  page,
-}) => {
-  await initializeTrackedEvents(page);
-  await enableScopedE2EAuth(page);
-  const sandbox = {
-    id: "sandbox-record-repo-1",
-    sandbox_id: "sandbox-runtime-repo-1",
-    repo_id: "repo-1",
-    status: "running",
-    created_at: new Date().toISOString(),
-    last_active_at: new Date().toISOString(),
-    preview_url: "http://127.0.0.1:3000/__e2e/preview/repo-1",
-    health_status: "idle_warning",
-    last_preview_http_status: 200,
-    last_preview_error: null,
-    last_boot_error: null,
-    boot_attempts: 1,
-  };
-  Object.assign(sandbox, buildSandboxSummaries(sandbox));
-
-  await mockProjectsDashboard(page, {
-    user: connectedUser,
-    repos: [syncedRepo],
-    sandboxes: [sandbox],
-  });
-
-  await page.goto(scopedPath("projects/repositories"));
-  await page.waitForLoadState("networkidle");
-
-  await expect(page.getByText("Ready", { exact: true })).toBeVisible();
-  await expect(page.getByText(/idle soon|\d+m left/i)).toHaveCount(0);
 });

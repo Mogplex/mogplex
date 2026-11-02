@@ -5,14 +5,9 @@ export const APP_NAV_ITEM_DEFS = [
     id: "control",
     label: "Command Center",
     path: "/control",
-    subpaths: ["/control"],
-    section: "primary",
-  },
-  {
-    id: "workspaces",
-    label: "Repositories",
-    path: "/projects/repositories",
-    subpaths: ["/projects/repositories", "/projects/workspace", "/workspaces"],
+    // Command Center is the only place to work on repos; the repo workspace
+    // view is part of it.
+    subpaths: ["/control", "/projects/workspace"],
     section: "primary",
   },
   {
@@ -89,9 +84,5 @@ export function buildAppNavItems(scope: string) {
 
 export function isAppNavItemActive(pathname: string, match: string | string[]) {
   const matches = Array.isArray(match) ? match : [match];
-  return matches.some((m) => {
-    // Repositories owns the dashboard root, not legacy child destinations.
-    if (m.endsWith("/projects/repositories")) return pathname === m;
-    return pathname === m || pathname.startsWith(`${m}/`);
-  });
+  return matches.some((m) => pathname === m || pathname.startsWith(`${m}/`));
 }

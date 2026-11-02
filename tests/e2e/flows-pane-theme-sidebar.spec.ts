@@ -39,7 +39,6 @@ test("app sidebar owns primary navigation and supports drag and keyboard resize"
   ).toBeVisible();
   for (const destination of [
     "control",
-    "workspaces",
     "automations",
     "delivery",
     "observe",

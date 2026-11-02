@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { enableScopedE2EAuth, scopedPath } from "./helpers/auth";
+import { navigateWithPalette } from "./helpers/command-palette-nav";
 import {
   initializeTrackedEvents,
   mockActivationFlow,
@@ -31,9 +32,6 @@ for (const width of [1280, 390]) {
     await page.route("**/api/workspaces", (route) =>
       route.fulfill({ json: [] })
     );
-    const sections = page.getByRole("navigation", {
-      name: "Projects sections",
-    });
 
     for (const action of ["Remove", "Restore"] as const) {
       let release = () => {};
@@ -51,27 +49,29 @@ for (const width of [1280, 390]) {
         await pending;
         await route.fulfill({ json: snapshot });
       });
-      await sections
-        .getByRole("link", { name: "Repositories", exact: true })
-        .click();
+      await navigateWithPalette(page, "Repository settings");
+      await page.getByRole("button", { name: "Sync GitHub" }).click();
       await started;
       if (action === "Restore")
-        await page
-          .getByRole("button", { name: "Show removed", exact: true })
-          .click();
+        await page.getByRole("button", { name: /Show removed/ }).click();
       await page
-        .getByRole("button", { name: "Repo actions", exact: true })
+        .getByRole("button", {
+          name: `${action} ${syncedRepo.full_name}`,
+          exact: true,
+        })
         .click();
-      await page.getByRole("menuitem", { name: action, exact: true }).click();
+      if (action === "Remove")
+        await page
+          .getByRole("alertdialog", { name: `Remove ${syncedRepo.full_name}?` })
+          .getByRole("button", { name: "Remove repository" })
+          .click();
       await expect(
         page.getByText(
           action === "Remove" ? "Repository removed" : "Repository restored",
           { exact: true }
         )
       ).toBeVisible();
-      await sections
-        .getByRole("link", { name: "Workspace", exact: true })
-        .click();
+      await navigateWithPalette(page, "Workspace");
       await (action === "Remove"
         ? expect(
             page.getByRole("heading", { name: "Repository removed" })

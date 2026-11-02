@@ -193,41 +193,35 @@ test("team assignments and dashboard chrome share one team repository request", 
   expect(teams).toEqual([team.id]);
 });
 
-test("showing removed team repositories reuses the synced scoped cache", async ({
+test("showing removed team repositories reuses the scoped cache", async ({
   page,
 }) => {
   const teams = await installTeamRepositories(page);
-  await page.goto("/acme/projects/repositories");
+  await page.goto("/acme/settings/repositories");
   await expect(
-    page.getByRole("button", { name: "Show removed" })
+    page.getByRole("button", { name: /Show removed/ })
   ).toBeVisible();
-  await expect(page.getByText("removed-project", { exact: true })).toHaveCount(
-    0
-  );
+  await expect(page.getByText(/removed-project/)).toHaveCount(0);
   await page.waitForLoadState("networkidle");
-  // Initial collection plus the refresh after GitHub sync. Toggling removed
-  // repositories must reuse that full collection without another request.
-  expect(teams).toEqual([team.id, team.id]);
-  await page.getByRole("button", { name: "Show removed" }).click();
-  await expect(
-    page.getByText("removed-project", { exact: true }).first()
-  ).toBeVisible();
+  // Toggling removed repositories must reuse the full scoped collection
+  // without another request.
+  expect(teams).toEqual([team.id]);
+  await page.getByRole("button", { name: /Show removed/ }).click();
+  await expect(page.getByText(/removed-project/).first()).toBeVisible();
   await expect(page.locator(".app-statusbar")).toContainText("repos: 1");
   await page.waitForLoadState("networkidle");
-  expect(teams).toEqual([team.id, team.id]);
+  expect(teams).toEqual([team.id]);
 });
 
-test("team Projects and status bar share the scoped repository cache", async ({
+test("team repository settings and status bar share the scoped repository cache", async ({
   page,
 }) => {
   const teams = await installTeamRepositories(page);
-  await page.goto("/acme/projects/repositories");
-  await expect(
-    page.getByText("team-project", { exact: true }).first()
-  ).toBeVisible();
+  await page.goto("/acme/settings/repositories");
+  await expect(page.getByText(/team-project/).first()).toBeVisible();
   await expect(page.locator(".app-statusbar")).toContainText("repos: 1");
   await page.waitForLoadState("networkidle");
-  expect(teams).toEqual([team.id, team.id]);
+  expect(teams).toEqual([team.id]);
 });
 
 test("team viewers see assignments with management disabled", async ({

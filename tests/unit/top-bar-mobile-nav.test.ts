@@ -49,7 +49,8 @@ test("mobile sheet nav omits the divider when the admin group is empty", async (
     !html.includes("border-t"),
     "no dangling divider without admin items"
   );
-  assert.ok(html.includes("/acme/projects/repositories"));
+  assert.ok(!html.includes("/acme/projects/repositories"));
+  assert.ok(html.includes("/acme/automations"));
   const controlAnchor = findAnchor(html, "/acme/control");
   assert.ok(controlAnchor);
   assert.ok(controlAnchor.includes('aria-current="page"'));

@@ -112,7 +112,7 @@ export async function mockSettingsPageData(
 }
 
 export async function readSearchInputTheme(page: Page) {
-  return page.getByPlaceholder("Search spaces...").evaluate((element) => {
+  return page.getByPlaceholder("Search repositories…").evaluate((element) => {
     const readColor = (value: string) => {
       const canvas = document.createElement("canvas");
       const context = canvas.getContext("2d");
