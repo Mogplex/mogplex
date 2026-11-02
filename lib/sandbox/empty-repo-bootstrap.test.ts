@@ -11,7 +11,7 @@ import { isNodeRuntime } from "./runtimes/types";
 import type { BootstrapSandboxOpts } from "./client-types";
 import type { SandboxBootstrapStreamEvent } from "@/lib/sandbox/events";
 
-function fakeSandbox(files: Record<string, string>) {
+function fakeSandbox(files: Record<string, string>, packages: string[] = []) {
   const commands: string[] = [];
   const sandbox = {
     readFile: async ({ path }: { path: string }) => (path in files ? {} : null),
@@ -26,7 +26,7 @@ function fakeSandbox(files: Record<string, string>) {
           args[1] === "process.versions.node"
             ? "22.11.0\n"
             : args[1]?.includes("const packages = []")
-              ? "[]"
+              ? JSON.stringify(packages)
               : "",
         stderr: async () => "",
         async *logs() {},
@@ -129,18 +129,23 @@ describe("bootstrap for a repository without package.json", () => {
   it("should skip the default install but run a configured dev command in the blocking bootstrap", async () => {
     const { sandbox, commands } = fakeSandbox({ "README.md": "# test" });
 
-    // The fake sandbox never serves the preview, so stop watching once the
-    // dev command has launched; what matters is what ran before it.
-    void bootstrapSandbox(sandbox, { devCommand: "npx serve ." }).catch(
-      () => {}
-    );
-    await vi.waitFor(() =>
+    // fetch is the preview-health boundary; a 200 lets the boot finish here.
+    vi.stubGlobal("fetch", async () => new Response("<html>ok</html>"));
+    try {
+      const result = await bootstrapSandbox(sandbox, {
+        devCommand: "npx serve .",
+      });
+
+      expect(result).toMatchObject({ installLog: "" });
+      expect(commands.some((command) => /\binstall\b/.test(command))).toBe(
+        false
+      );
       expect(commands.some((command) => command.includes("npx serve ."))).toBe(
         true
-      )
-    );
-
-    expect(commands.some((command) => /\binstall\b/.test(command))).toBe(false);
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("should restore a baseline snapshot without install or dev for a README-only repo", async () => {
@@ -173,13 +178,22 @@ describe("bootstrap for a repository without package.json", () => {
   ])(
     "should treat an %s package.json as present so the npm path still runs",
     async (_label, sandbox) => {
-      await expect(
-        readPackageDevScriptInfo(sandbox as unknown as Sandbox, null)
-      ).resolves.toEqual({
-        packageDevScript: null,
-        hasDevScript: true,
-        hasPackageJson: true,
-      });
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        await expect(
+          readPackageDevScriptInfo(sandbox as unknown as Sandbox, null)
+        ).resolves.toEqual({
+          packageDevScript: null,
+          hasDevScript: true,
+          hasPackageJson: true,
+        });
+        expect(warn).toHaveBeenCalledWith(
+          "[sandbox/bootstrap] could not read package.json dev script:",
+          expect.any(String)
+        );
+      } finally {
+        warn.mockRestore();
+      }
     }
   );
 
@@ -202,6 +216,28 @@ describe("bootstrap for a repository without package.json", () => {
 
   it("should take the npm path for an empty package.json", async () => {
     const { events } = await streamUntilInstall({ "package.json": "" });
+
+    expect(events).not.toContainEqual(noPackageJsonWarning);
+    expect(events.at(-1)).toEqual({ type: "status", status: "installing" });
+  });
+
+  it("should install a monorepo whose only package.json is in the auto-selected app", async () => {
+    const { sandbox } = fakeSandbox(
+      {
+        "README.md": "# monorepo",
+        "apps/web/package.json": JSON.stringify({
+          dependencies: { next: "16" },
+          scripts: { dev: "next dev" },
+        }),
+        "apps/web/pnpm-lock.yaml": "lockfileVersion: '9.0'",
+      },
+      ["apps/web"]
+    );
+    const events = [];
+    for await (const event of bootstrapSandboxStreaming(sandbox)) {
+      events.push(event);
+      if (event.type === "status" && event.status === "installing") break;
+    }
 
     expect(events).not.toContainEqual(noPackageJsonWarning);
     expect(events.at(-1)).toEqual({ type: "status", status: "installing" });
