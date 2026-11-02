@@ -228,7 +228,8 @@ function replacedSettings(row: SettingsRow, updates: SettingsUpdates) {
 
 /** Whether the update clears or changes a port the operator pinned. */
 function pinnedPortReplaced(row: SettingsRow, updates: SettingsUpdates) {
-  if (row.dev_port_auto !== false || row.dev_port === null) return false;
+  if (normalizeDevPortAuto(row.dev_port_auto) || row.dev_port === null)
+    return false;
   return (
     updates.dev_port_auto === true ||
     (updates.dev_port !== undefined && updates.dev_port !== row.dev_port)
