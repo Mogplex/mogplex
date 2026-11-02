@@ -21,6 +21,7 @@ import {
   hasActiveAiCall,
   hasRunningAutomation,
   hasAttachedSandboxClient,
+  resolveCompletingSandboxAiCallId,
 } from "@/lib/sandbox/auto-pause-deps";
 import { resolveSandboxWorkingDirectory } from "@/lib/sandbox/working-directory";
 import {
@@ -71,6 +72,7 @@ type SandboxStopDeps = {
   hasActiveAiCall: typeof hasActiveAiCall;
   hasRunningAutomation: typeof hasRunningAutomation;
   hasAttachedSandboxClient: typeof hasAttachedSandboxClient;
+  resolveCompletingSandboxAiCallId: typeof resolveCompletingSandboxAiCallId;
 };
 
 const defaultSandboxStopDeps: SandboxStopDeps = {
@@ -85,6 +87,7 @@ const defaultSandboxStopDeps: SandboxStopDeps = {
   hasActiveAiCall,
   hasRunningAutomation,
   hasAttachedSandboxClient,
+  resolveCompletingSandboxAiCallId,
 };
 
 type RemoteStopOutcome = {
@@ -262,14 +265,22 @@ export function createSandboxStopHandler(
       // the same durable workspace, even between their shell commands.
       if (automatic) {
         try {
+          const excludedCallId = completingAiCallId
+            ? await deps.resolveCompletingSandboxAiCallId({
+                aiCallId: completingAiCallId,
+                userId: loaded.auth.userId,
+                sandboxRecordId: id,
+                sandboxId: loaded.record.sandbox_id,
+              })
+            : undefined;
           const [activeCall, runningWorker, attachedClient] = await Promise.all(
             [
               deps.hasActiveAiCall({
                 sandboxRecordId: id,
                 sandboxId: loaded.record.sandbox_id,
-                excludeAiCallId: completingAiCallId,
+                excludeAiCallId: excludedCallId,
               }),
-              deps.hasRunningAutomation(id, completingAiCallId),
+              deps.hasRunningAutomation(id, excludedCallId),
               deps.hasAttachedSandboxClient(id),
             ]
           );
@@ -279,6 +290,7 @@ export function createSandboxStopHandler(
                 error:
                   "An agent or attached workspace is still using this sandbox.",
                 reason: "sandbox_active_work",
+                activity: { activeCall, runningWorker, attachedClient },
               },
               { status: 409 }
             );
@@ -333,13 +345,13 @@ export function createSandboxStopHandler(
           expectedSandboxId: loaded.record.sandbox_id,
           healthStatus: "stopped",
           fromStatuses: STOPPABLE_SANDBOX_STATUSES,
-          stopReason: "manual",
+          stopReason: automatic ? "auto_pause" : "manual",
         });
         if (!stopped) {
           await deps.stopSandboxRecord(id, {
             healthStatus: "stopped",
             fromStatuses: STOPPABLE_SANDBOX_STATUSES,
-            stopReason: "manual",
+            stopReason: automatic ? "auto_pause" : "manual",
           });
         }
       }

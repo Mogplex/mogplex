@@ -32,6 +32,7 @@ export type ToolApprovalResponse = {
 type Props = {
   event: TimelineEvent
   active?: boolean
+  deferPatch?: boolean
   eventIndex: number
   getWorktree: (id: string) => Worktree | undefined
   onApprove: (eventIndex: number) => void
@@ -191,7 +192,19 @@ function ToolApprovalCard({
   )
 }
 
-export function TimelineCard({ event, eventIndex, getWorktree, onApprove, onToolApprovalResponse, active = false }: Props) {
+function TimelinePatch({ patch, defer }: { patch: string; defer: boolean }) {
+  const [open, setOpen] = useState(!defer)
+  const [mounted, setMounted] = useState(!defer)
+  return <details open={open} onToggle={event => {
+    setOpen(event.currentTarget.open)
+    if (event.currentTarget.open) setMounted(true)
+  }} className="text-xs text-muted-foreground">
+    <summary className="cursor-pointer py-1 hover:text-foreground">View patch</summary>
+    {mounted && <PatchViewer patch={patch} />}
+  </details>
+}
+
+export function TimelineCard({ event, eventIndex, getWorktree, onApprove, onToolApprovalResponse, active = false, deferPatch = false }: Props) {
   const style = KIND_STYLES[event.kind] || KIND_STYLES.tool
   const inProgress = active && event.kind === "progress" && event.state === "running"
   const Icon = inProgress ? RefreshDouble : style.icon
@@ -294,7 +307,7 @@ export function TimelineCard({ event, eventIndex, getWorktree, onApprove, onTool
               </div>
             ))}
             {(event as DiffEvent).patch ? (
-              <PatchViewer patch={(event as DiffEvent).patch} />
+              <TimelinePatch patch={(event as DiffEvent).patch!} defer={deferPatch} />
             ) : null}
           </div>
         )}

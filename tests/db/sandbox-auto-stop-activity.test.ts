@@ -11,6 +11,7 @@ import {
   hasActiveAiCall,
   hasAttachedSandboxClient,
   hasRunningAutomation,
+  resolveCompletingSandboxAiCallId,
 } from "@/lib/sandbox/auto-pause-deps";
 
 const id = (n: number) =>
@@ -84,6 +85,27 @@ it("automatic cleanup protects attached clients and active teammates on the same
         [call, user, id(5), sandbox]
       );
     }
+    const completion = { ...input, aiCallId: id(6), userId: id(1) };
+    expect(await resolveCompletingSandboxAiCallId(completion)).toBe(id(6));
+    expect(
+      await resolveCompletingSandboxAiCallId({ ...completion, aiCallId: id(9) })
+    ).toBeUndefined();
+    expect(await hasActiveAiCall({ ...input, excludeAiCallId: id(9) })).toBe(
+      true
+    );
+    expect(await hasRunningAutomation(id(3), id(9))).toBe(true);
+    // Same actor, another workspace must not authorize an exclusion.
+    await db.query("update ai_calls set user_id=$1 where id=$2", [
+      id(1),
+      id(7),
+    ]);
+    expect(
+      await resolveCompletingSandboxAiCallId({ ...completion, aiCallId: id(7) })
+    ).toBeUndefined();
+    await db.query("update ai_calls set user_id=$1 where id=$2", [
+      id(2),
+      id(7),
+    ]);
     expect(await hasActiveAiCall(input)).toBe(false);
     expect(await hasRunningAutomation(id(3), id(6))).toBe(false);
     await db.query("update ai_calls set metadata=$1 where id=$2", [
@@ -94,6 +116,9 @@ it("automatic cleanup protects attached clients and active teammates on the same
       "update external_agent_runs set sandbox_record_id=$1 where id=$2",
       [id(3), id(7)]
     );
+    expect(
+      await resolveCompletingSandboxAiCallId({ ...completion, aiCallId: id(7) })
+    ).toBeUndefined();
     expect(await hasActiveAiCall(input)).toBe(true);
     expect(await hasRunningAutomation(id(3), id(6))).toBe(true);
     // The review's NULL-row concern is excluded by the migrated schema.

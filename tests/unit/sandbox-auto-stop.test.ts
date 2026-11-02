@@ -31,7 +31,9 @@ for (const active of [
             locked = false;
           },
         }),
-      hasActiveAiCall: async () => {
+      resolveCompletingSandboxAiCallId: async () => undefined,
+      hasActiveAiCall: async (input) => {
+        assert.equal(input.excludeAiCallId, undefined);
         assert.equal(locked, true);
         if (active === "unknown")
           throw new Error("Activity lookup unavailable");
@@ -58,8 +60,20 @@ for (const active of [
       buildSandboxRouteParams()
     );
     assert.equal(response.status, active === "unknown" ? 503 : 409);
+    const body = await response.json();
+    if (active !== "unknown")
+      assert.equal(
+        body.activity[
+          active === "ai_call"
+            ? "activeCall"
+            : active === "worker"
+              ? "runningWorker"
+              : "attachedClient"
+        ],
+        true
+      );
     assert.equal(
-      (await response.json()).reason,
+      body.reason,
       active === "unknown" ? "activity_unknown" : "sandbox_active_work"
     );
     assert.equal(locked, false);
@@ -79,6 +93,7 @@ test("automatic cleanup excludes its own call, stops compute, and preserves the 
       })) as never,
     resolveLoadedSandboxRouteContext: async (loaded) =>
       buildResolvedSandboxRouteContext(loaded) as never,
+    resolveCompletingSandboxAiCallId: async () => "current-call",
     hasActiveAiCall: async (input) => input.excludeAiCallId !== "current-call",
     hasRunningAutomation: async (_id, excluded) => excluded !== "current-call",
     hasAttachedSandboxClient: async () => false,
@@ -91,7 +106,10 @@ test("automatic cleanup excludes its own call, stops compute, and preserves the 
       },
       currentSession: () => ({ stoppedAt: new Date() }),
     })) as never,
-    stopSandboxRecord: async () => ({ id: "sandbox-1" }) as never,
+    stopSandboxRecord: async (_id, options) => {
+      assert.equal(options?.stopReason, "auto_pause");
+      return { id: "sandbox-1" } as never;
+    },
     updateSandboxRecord: async (_id, update) => {
       savedSnapshot = update.snapshot_id;
       return { id: "sandbox-1" } as never;

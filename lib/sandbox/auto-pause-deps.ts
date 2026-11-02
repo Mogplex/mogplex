@@ -140,6 +140,30 @@ export async function loadPresenceState(input: {
   };
 }
 
+/** Only an authenticated actor's call bound to this workspace may be excluded. */
+export async function resolveCompletingSandboxAiCallId(input: {
+  aiCallId: string;
+  userId: string;
+  sandboxRecordId: string;
+  sandboxId: string;
+}) {
+  const { data, error } = await supabaseAdmin
+    .from("ai_calls")
+    .select("id")
+    .eq("id", input.aiCallId)
+    .eq("user_id", input.userId)
+    .or(
+      buildActiveAiCallSandboxMetadataFilter(
+        input.sandboxRecordId,
+        input.sandboxId
+      )
+    )
+    .maybeSingle();
+  if (error)
+    throw new Error(`Failed to validate completing ai_call: ${error.message}`);
+  return data?.id as string | undefined;
+}
+
 export async function hasActiveAiCall(input: {
   sandboxRecordId: string;
   sandboxId: string;
@@ -192,6 +216,8 @@ export async function hasRunningAutomation(
 }
 
 export async function hasAttachedSandboxClient(sandboxRecordId: string) {
+  // Presence has no heartbeat: age alone cannot distinguish a live tab from a
+  // crashed one. Release events and the existing idle reaper own stale cleanup.
   const { count, error } = await supabaseAdmin
     .from("sandbox_client_sessions")
     .select("id", { count: "exact", head: true })

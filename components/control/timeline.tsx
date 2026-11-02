@@ -38,6 +38,7 @@ export function Timeline({ events, getWorktree, onApprove, onToolApprovalRespons
   const renderEvent = (event: TimelineEvent, idx: number) => <TimelineCard
     key={event.id ?? `activity-${idx}`}
     event={event}
+    deferPatch={recordedRun || requestCount === 0 || idx < latestRequest}
     active={pending && (recordedRun || (event.messageId ? event.messageId === activeMessageId : idx >= latestRequest))}
     eventIndex={idx}
     getWorktree={getWorktree}
