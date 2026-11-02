@@ -21,6 +21,7 @@ const ToastViewport = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <ToastPrimitives.Viewport
     ref={ref}
+    data-slot="toast-viewport"
     className={cn(
       'pointer-events-none fixed inset-x-0 top-[calc(env(safe-area-inset-top)+4rem)] z-[100] flex max-h-[50dvh] w-full flex-col gap-2 overflow-y-auto overscroll-y-contain p-3 sm:left-auto sm:right-3 sm:w-[390px] sm:p-0',
       className,

@@ -1,10 +1,41 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type CDPSession, type Page } from "@playwright/test";
 import { loadStatusToastFixture } from "./helpers/status-toast-fixture";
+
+async function dragTouch(
+  client: CDPSession,
+  page: Page,
+  start: { x: number; y: number },
+  end: { x: number; y: number }
+) {
+  await client.send("Input.dispatchTouchEvent", {
+    type: "touchStart",
+    touchPoints: [start],
+  });
+  for (const progress of [0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1]) {
+    await client.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: [
+        {
+          x: Math.round(start.x + (end.x - start.x) * progress),
+          y: Math.round(start.y + (end.y - start.y) * progress),
+        },
+      ],
+    });
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+    );
+  }
+  await client.send("Input.dispatchTouchEvent", {
+    type: "touchEnd",
+    touchPoints: [],
+  });
+}
 
 for (const theme of ["light", "dark"] as const) {
   test(`status cards in ${theme} have real tints, readable icons, and visible controls`, async ({
     page,
-  }) => {
+  }, testInfo) => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await loadStatusToastFixture(page, theme);
     await page
@@ -88,9 +119,14 @@ for (const theme of ["light", "dark"] as const) {
       icons.push(measured.iconMarkup);
     }
     expect(new Set(icons).size).toBe(4);
+    const screenshot = testInfo.outputPath(`toasts-${theme}.png`);
     await page
-      .locator("ol")
-      .screenshot({ path: `/tmp/mogplex-711-toasts-${theme}.png` });
+      .locator('[data-slot="toast-viewport"]')
+      .screenshot({ path: screenshot });
+    await testInfo.attach(`toasts-${theme}`, {
+      path: screenshot,
+      contentType: "image/png",
+    });
   });
 }
 
@@ -157,7 +193,7 @@ test("notifications keep steering and stop controls available and can be dismiss
   await expect(page.locator("[data-variant]")).toHaveCount(12);
   expect(
     await page
-      .locator("ol")
+      .locator('[data-slot="toast-viewport"]')
       .evaluate((viewport) => viewport.scrollHeight > viewport.clientHeight)
   ).toBe(true);
   await page.getByRole("button", { name: "Stop agent", exact: true }).click();
@@ -166,7 +202,7 @@ test("notifications keep steering and stop controls available and can be dismiss
 
 test("toast actions and keyboard dismissal work on mobile with reduced motion", async ({
   page,
-}) => {
+}, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.emulateMedia({ reducedMotion: "reduce" });
   await loadStatusToastFixture(page, "light");
@@ -196,7 +232,12 @@ test("toast actions and keyboard dismissal work on mobile with reduced motion", 
   await page
     .getByRole("button", { name: "Show statuses", exact: true })
     .click();
-  await page.screenshot({ path: "/tmp/mogplex-711-toasts-mobile.png" });
+  const screenshot = testInfo.outputPath("toasts-mobile.png");
+  await page.screenshot({ path: screenshot });
+  await testInfo.attach("toasts-mobile", {
+    path: screenshot,
+    contentType: "image/png",
+  });
 });
 
 test("hover pauses expiry until the user leaves the notification", async ({
@@ -245,24 +286,62 @@ test.describe("touch notifications", () => {
     const first = page.locator("[data-variant]").first();
     await expect(first).toHaveCSS("touch-action", "pan-y");
     await expect(first).toHaveCSS("opacity", "1");
-    const viewport = page.locator("ol");
-    const bounds = await viewport.boundingBox();
-    expect(bounds).not.toBeNull();
-    const scrollCard = await page
-      .locator("[data-variant]")
-      .nth(2)
-      .boundingBox();
+    const viewport = page.locator('[data-slot="toast-viewport"]');
+    const scrollTarget = page.locator("[data-variant]").nth(2);
+    const scrollCard = await scrollTarget.boundingBox();
     expect(scrollCard).not.toBeNull();
     const client = await page.context().newCDPSession(page);
-    await client.send("Input.synthesizeScrollGesture", {
-      x: Math.round(bounds!.x + bounds!.width / 2),
+    const scrollStart = {
+      x: Math.round(scrollCard!.x + scrollCard!.width / 2),
       y: Math.round(scrollCard!.y + scrollCard!.height / 2),
-      yDistance: -120,
-      gestureSourceType: "touch",
+    };
+    expect(
+      await scrollTarget.evaluate(
+        (element, point) =>
+          element.contains(document.elementFromPoint(point.x, point.y)),
+        scrollStart
+      )
+    ).toBe(true);
+    await viewport.evaluate((element) => {
+      for (const name of ["touchstart", "touchmove", "pointercancel"])
+        element.addEventListener(
+          name,
+          () => {
+            const attribute = `data-test-${name}`;
+            element.setAttribute(
+              attribute,
+              String(Number(element.getAttribute(attribute) ?? 0) + 1)
+            );
+          },
+          { passive: true }
+        );
     });
-    await expect
-      .poll(() => viewport.evaluate((element) => element.scrollTop))
-      .toBeGreaterThan(0);
+    await dragTouch(client, page, scrollStart, {
+      x: scrollStart.x,
+      y: scrollStart.y - 120,
+    });
+    try {
+      await expect
+        .poll(() => viewport.evaluate((element) => element.scrollTop))
+        .toBeGreaterThan(0);
+    } finally {
+      const evidence = await viewport.evaluate((element) => ({
+        scrollTop: element.scrollTop,
+        scrollHeight: element.scrollHeight,
+        clientHeight: element.clientHeight,
+        pointerEvents: getComputedStyle(element).pointerEvents,
+        overflowY: getComputedStyle(element).overflowY,
+        touchStart: element.getAttribute("data-test-touchstart"),
+        touchMove: element.getAttribute("data-test-touchmove"),
+        pointerCancel: element.getAttribute("data-test-pointercancel"),
+        scale: visualViewport?.scale,
+        pageScrollY: scrollY,
+      }));
+      await test.info().attach("touch-scroll-evidence", {
+        body: JSON.stringify(evidence, null, 2),
+        contentType: "application/json",
+      });
+    }
     await page.keyboard.press("F8");
     await page.keyboard.press("Home");
     await expect
@@ -274,20 +353,7 @@ test.describe("touch notifications", () => {
       x: Math.round(toast!.x + 48),
       y: Math.round(toast!.y + 28),
     };
-    await client.send("Input.dispatchTouchEvent", {
-      type: "touchStart",
-      touchPoints: [start],
-    });
-    for (const distance of [40, 90, 160, 210]) {
-      await client.send("Input.dispatchTouchEvent", {
-        type: "touchMove",
-        touchPoints: [{ x: start.x + distance, y: start.y }],
-      });
-    }
-    await client.send("Input.dispatchTouchEvent", {
-      type: "touchEnd",
-      touchPoints: [],
-    });
+    await dragTouch(client, page, start, { x: start.x + 210, y: start.y });
     await expect(page.locator("[data-variant]")).toHaveCount(11);
     await page.getByRole("button", { name: "Stop agent", exact: true }).click();
     await expect(page.getByTestId("stop-count")).toHaveText("1");
