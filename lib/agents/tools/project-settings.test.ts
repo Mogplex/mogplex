@@ -129,7 +129,9 @@ describe("project settings tools", () => {
 
     expect(settings).toMatchObject({
       runtime: "node22",
-      devPort: 3000,
+      // Detection is on, so the stored port is not the one boots use.
+      devPort: null,
+      devPortAuto: true,
       envVarNames: ["DATABASE_URL"],
     });
     expect(JSON.stringify(settings)).not.toContain("postgres://");
@@ -280,6 +282,10 @@ describe("project settings tools", () => {
       "NODE_OPTIONS",
       "LD_PRELOAD",
       "DYLD_INSERT_LIBRARIES",
+      "JAVA_TOOL_OPTIONS",
+      "npm_config_registry",
+      "http_proxy",
+      "GIT_CONFIG_COUNT",
       "path",
       "BASH_ENV",
     ]) {
@@ -342,5 +348,58 @@ describe("project settings tools", () => {
     expect(
       await tools().project_settings_update.execute({ devCommand: "make dev" })
     ).toEqual({ error: "Project not found." });
+  });
+
+  it("should report a pinned dev port as the one boots use", async () => {
+    installRepo({ dev_port: 8000, dev_port_auto: false });
+
+    expect(await tools().project_settings.execute({})).toMatchObject({
+      devPort: 8000,
+      devPortAuto: false,
+    });
+  });
+
+  it("should not replace a stored value unless asked to", async () => {
+    const { row, writes } = installRepo();
+
+    expect(
+      await tools().project_env_set.execute({
+        name: "DATABASE_URL",
+        value: "placeholder",
+      })
+    ).toEqual({
+      error:
+        "DATABASE_URL is already set and its value may be a secret. Ask the operator before changing it, then call again with replace: true.",
+    });
+    expect(writes).toEqual([]);
+    expect(row.sandbox_env_vars).toEqual({
+      DATABASE_URL: "postgres://owner@db/app",
+    });
+  });
+
+  it("should say so when it replaces a stored value", async () => {
+    const { row } = installRepo({ sandbox_env_vars: { PORT: "3000" } });
+
+    expect(
+      await tools().project_env_set.execute({
+        name: "PORT",
+        value: "8000",
+        replace: true,
+      })
+    ).toMatchObject({ ok: true, replaced: true });
+    expect(row.sandbox_env_vars).toEqual({ PORT: "8000" });
+  });
+
+  it("should save a runtime for future boots", async () => {
+    const { writes } = installRepo();
+
+    expect(
+      await tools().project_settings_update.execute({ runtime: "python3.13" })
+    ).toMatchObject({ ok: true, settings: { runtime: "python3.13" } });
+    expect(writes).toEqual([{ runtime: "python3.13" }]);
+    expect(
+      tools().project_settings_update.inputSchema.safeParse({ runtime: "ruby" })
+        .success
+    ).toBe(false);
   });
 });

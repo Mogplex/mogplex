@@ -15,7 +15,7 @@ export function buildEnvironmentSetupBlock(
     !ctx.availableToolNames ||
     ctx.availableToolNames.includes("project_settings_update");
   const saveGuidance = canSave
-    ? "- Check project_settings first. Once install and dev commands work, or the app lives in a subdirectory, save them with project_settings_update so future boots work. Save non-secret variables (NODE_ENV, PORT, public URLs) with project_env_set."
+    ? "- Check project_settings first. Once install and dev commands work, or the app lives in a subdirectory or needs a different runtime, save them with project_settings_update so future boots work. Save non-secret variables (NODE_ENV, PORT, public URLs) with project_env_set."
     : "- When you find working install and dev commands, or the app lives in a subdirectory, say so briefly so the operator can save them in Project settings > General for future boots.";
   return `
 <environment_setup>

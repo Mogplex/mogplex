@@ -5,6 +5,7 @@ import {
   type RepoEnvVars,
 } from "@/lib/repo-settings";
 import { getRepoForScope } from "@/lib/repos";
+import { SUPPORTED_RUNTIMES } from "@/lib/sandbox/runtimes/types";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import {
   hasCapability,
@@ -35,10 +36,22 @@ const ENV_NAME = /^[A-Za-z_]\w*$/;
 // Names that change how every program in the sandbox starts. A value saved
 // here re-arms on each boot, so only the operator may set these.
 const LOADER_ENV_NAMES = new Set([
+  "ALL_PROXY",
   "BASH_ENV",
+  "CDPATH",
+  "EDITOR",
   "ENV",
+  "GIT_ASKPASS",
+  "GIT_SSH_COMMAND",
+  "GOFLAGS",
+  "HTTPS_PROXY",
+  "HTTP_PROXY",
+  "JAVA_TOOL_OPTIONS",
+  "JDK_JAVA_OPTIONS",
+  "MAKEFLAGS",
   "NODE_OPTIONS",
   "NODE_PATH",
+  "PAGER",
   "PATH",
   "PERL5OPT",
   "PROMPT_COMMAND",
@@ -46,8 +59,12 @@ const LOADER_ENV_NAMES = new Set([
   "PYTHONSTARTUP",
   "RUBYOPT",
   "SHELL",
+  "SSH_ASKPASS",
+  "VISUAL",
+  "_JAVA_OPTIONS",
 ]);
-const LOADER_ENV_PREFIXES = ["LD_", "DYLD_"];
+// Names compare upper-cased, so npm_config_* and http_proxy match too.
+const LOADER_ENV_PREFIXES = ["LD_", "DYLD_", "NPM_CONFIG_", "GIT_CONFIG_"];
 
 function isLoaderEnvName(name: string) {
   const upper = name.toUpperCase();
@@ -139,8 +156,8 @@ function describeSettings(row: SettingsRow) {
     rootDirectory: row.root_directory,
     installCommand: row.install_command,
     devCommand: row.dev_command,
-    devPort: row.dev_port,
-    // When true, boots detect the port and ignore devPort.
+    // The port boots use; null while they detect it.
+    devPort: row.dev_port_auto === false ? row.dev_port : null,
     devPortAuto: row.dev_port_auto !== false,
     envVarScope: row.env_sync_mode,
     envVarNames: Object.keys(row.sandbox_env_vars ?? {}).sort(),
@@ -148,6 +165,13 @@ function describeSettings(row: SettingsRow) {
 }
 
 const updateParams = z.object({
+  runtime: z
+    .enum(SUPPORTED_RUNTIMES)
+    .nullable()
+    .optional()
+    .describe(
+      "Sandbox image for future boots (takes effect on the next sandbox, not this one); null restores detection."
+    ),
   installCommand: z
     .string()
     .nullable()
@@ -177,6 +201,12 @@ const updateParams = z.object({
 
 const envParams = z.object({
   name: z.string().describe("Variable name, e.g. NODE_ENV."),
+  replace: z
+    .boolean()
+    .optional()
+    .describe(
+      "Required to change a variable that is already set. Use it only for a variable you set earlier in this conversation or one the operator asked you to change; you cannot see stored values, which may be secrets."
+    ),
   value: z
     .string()
     .nullable()
@@ -224,11 +254,12 @@ export function createProjectSettingsTools(
     }),
     project_settings_update: defineTool({
       description:
-        "Save install command, dev command, dev port, or root directory for the selected project so future sandbox boots use them. Save only commands you ran successfully in the sandbox.",
+        "Save runtime, install command, dev command, dev port, or root directory for the selected project so future sandbox boots use them. Save only commands you ran successfully in the sandbox.",
       inputSchema: updateParams,
       execute: async (input: z.infer<typeof updateParams>) =>
         withScope("write", async (scope) => {
           const updates = normalizeRepoSettingsPatch({
+            ...(input.runtime === undefined ? {} : { runtime: input.runtime }),
             ...(input.installCommand === undefined
               ? {}
               : { install_command: input.installCommand }),
@@ -269,7 +300,7 @@ export function createProjectSettingsTools(
       description:
         "Save one NON-SECRET environment variable (for example NODE_ENV, PORT, or a public URL) on the selected project, or delete one with value null. Never use it for passwords, API keys, tokens, or connection strings: ask the operator to add those in Project settings instead.",
       inputSchema: envParams,
-      execute: async ({ name, value }: z.infer<typeof envParams>) => {
+      execute: async ({ name, value, replace }: z.infer<typeof envParams>) => {
         const key = name.trim();
         if (!ENV_NAME.test(key) || key === "__proto__") {
           return { error: `${key || "That"} is not a valid variable name.` };
@@ -282,12 +313,19 @@ export function createProjectSettingsTools(
         return withRow("write", async (row, scope) => {
           const previous = row.sandbox_env_vars;
           const next = normalizeEnvVars(previous);
+          let replaced = false;
           if (value === null) {
             if (!Object.hasOwn(next, key)) {
               return { ok: true, name: key, note: "The variable was not set." };
             }
             delete next[key];
           } else {
+            if (Object.hasOwn(next, key) && !replace) {
+              return {
+                error: `${key} is already set and its value may be a secret. Ask the operator before changing it, then call again with replace: true.`,
+              };
+            }
+            replaced = Object.hasOwn(next, key);
             next[key] = value;
           }
           let query = supabaseAdmin
@@ -314,6 +352,7 @@ export function createProjectSettingsTools(
             ok: true,
             name: key,
             ...(value === null ? { deleted: true } : {}),
+            ...(replaced ? { replaced: true } : {}),
             note: "New sandbox boots and new commands see the change; restart a running dev server to pick it up.",
           };
         });
