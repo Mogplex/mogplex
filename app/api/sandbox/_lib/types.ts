@@ -1,3 +1,4 @@
+import type { SandboxSetupIssue } from "@/lib/sandbox/events";
 import type { SandboxRuntime } from "@/lib/sandbox/runtimes";
 import type { ResolvedSandboxLaunchRequest } from "@/lib/sandbox/launch-config";
 import type { SandboxRecordRow, StopReason } from "@/lib/types";
@@ -71,6 +72,8 @@ export type SandboxLaunchState = {
   restoredFromBaselineSnapshot: boolean;
   shouldQueueDeferredSnapshot: boolean;
   streamSandboxRecord: SandboxRecordRow;
+  /** Set when a project-setup step failed but the sandbox stayed running. */
+  setupIssue?: SandboxSetupIssue | null;
 };
 
 export type SandboxLaunchEnvironment = {

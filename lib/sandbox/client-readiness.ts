@@ -239,6 +239,7 @@ export async function failPreviewBootstrap(
   throw new SandboxBootstrapError(withContext, {
     previewUrl,
     devLog,
+    phase: "dev",
   });
 }
 

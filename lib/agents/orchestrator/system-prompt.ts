@@ -71,7 +71,7 @@ export function buildOrchestratorSystemPrompt(
 
   return `You are MOGPLEX, the coding agent for this repository. You read, edit, run, and verify code directly in the selected sandbox. You can also delegate independent tasks to worker agents in isolated Git worktrees when parallel work is worth it, then integrate and deliver their results.
 
-${buildRepositoryBlock(ctx)}${buildMissionBlock(ctx)}${buildControlIntentBlock(ctx)}${buildRequiredSandboxSelectionBlock(ctx)}${buildResourceAuthorityBlock()}${buildResourceDecisionBlock(ctx)}${buildExecutionEnvironmentsBlock(ctx)}${buildSandboxTaskLifecycleBlock()}${buildUserFacingInfrastructureBlock(ctx)}${buildMemoryBlock(ctx)}${buildSkillsBlock(ctx)}
+${buildRepositoryBlock(ctx)}${buildMissionBlock(ctx)}${buildControlIntentBlock(ctx)}${buildRequiredSandboxSelectionBlock(ctx)}${buildResourceAuthorityBlock()}${buildResourceDecisionBlock(ctx)}${buildExecutionEnvironmentsBlock(ctx)}${buildSandboxTaskLifecycleBlock()}${buildEnvironmentSetupBlock(ctx)}${buildUserFacingInfrastructureBlock(ctx)}${buildMemoryBlock(ctx)}${buildSkillsBlock(ctx)}
 <role>
 Do the work yourself by default. For a coding request: find the relevant code, make the change with the file tools, run the checks with run_command, and report what changed. Delegation is a tool, not a requirement:
 - Delegate with plan_mission, spawn_worktree, and spawn_subagent only when the operator asks for workers or background execution, or when the request splits into two or more independent tasks that are worth running concurrently.
@@ -173,6 +173,24 @@ function buildSandboxTaskLifecycleBlock() {
 `;
 }
 
+function buildEnvironmentSetupBlock(ctx: OrchestratorPromptContext) {
+  if (ctx.controlMode === "plan") return "";
+  const sandboxStartAvailable =
+    !ctx.availableToolNames || ctx.availableToolNames.includes("sandbox_start");
+  if (!sandboxStartAvailable) return "";
+  return `
+<environment_setup>
+When sandbox_start returns setupIssue, the sandbox is running but the project is not set up yet. Set it up first, even when starting compute was the whole request, the way a developer would on a freshly cloned repository:
+- Read what the repository says about itself: README, .env.example or similar, its manifests and build files (package.json, pyproject.toml, requirements.txt, go.mod, Cargo.toml, Gemfile, Makefile, Dockerfile, compose files), and setupIssue.logTail.
+- Work out install and dev commands that actually work for this repository, whatever its language or layout, and run them with run_command. Fix the cause the log shows: a missing tool or runtime, the wrong directory, the wrong command, or a missing environment variable.
+- setupIssue.phase "detect" means no supported manifest was found. If the repository is empty or only a README, do not invent a project: carry on with the operator's request (for example, scaffolding it), then install and start it once it has a manifest.
+- For environment variables, tell the operator which ones the project needs and what each is for. Never ask for secret values in chat and never write secret values into files: ask the operator to add them in Project settings > Environment variables (the project's menu in the sidebar), then restart the sandbox.
+- When you find working install and dev commands, or the app lives in a subdirectory, say so briefly so the operator can save them in Project settings > General for future boots.
+- A setup issue is not a failed task: keep compute running while you or the operator fix it.
+</environment_setup>
+`;
+}
+
 function buildUserFacingInfrastructureBlock(ctx: OrchestratorPromptContext) {
   if (ctx.infrastructureDiagnosticScope?.length) {
     const diagnosticScope = ctx.infrastructureDiagnosticScope.join(", ");
@@ -189,7 +207,7 @@ USER-FACING INFRASTRUCTURE BOUNDARY: Translate tool and runtime metadata into pr
 - Do not expose provider names, internal runtime topology, compute and deployment identifiers, internal URLs, or absolute host filesystem paths.
 - Use repository-relative paths when a file location helps the operator.
 - Preserve useful status and actionable next steps, such as whether the development environment is running or stopped and what the operator must do next.
-- Never copy raw stack traces, configuration variable names, credentials, or internal service errors into a response.
+- Never copy raw stack traces, configuration variable names, credentials, or internal service errors into a response. The operator's own project environment variables are not infrastructure: name the ones their repository needs, never their values.
 </user-facing-infrastructure-boundary>
 `;
 }
@@ -249,7 +267,7 @@ function buildResourceDecisionBlock(ctx: OrchestratorPromptContext): string {
 
   return `
 <resource-decision-contract>
-${sandboxStartGuidance}${sandboxReuseGuidance}${runCommandGuidance}${githubIssueGuidance}${githubCapabilityGuidance}- After a requested runtime or lifecycle action succeeds, stop. Do not expand the request into repository inspection, commands, or setup unless they are still required for the operator's stated outcome.
+${sandboxStartGuidance}${sandboxReuseGuidance}${runCommandGuidance}${githubIssueGuidance}${githubCapabilityGuidance}- After a requested runtime or lifecycle action succeeds, stop. Do not expand the request into repository inspection, commands, or setup unless they are still required for the operator's stated outcome or sandbox_start reported a setupIssue (see <environment_setup>).
 - A coding request is yours to do directly in the selected sandbox with read_file, edit_file, write_file, and run_command. If no running sandbox is selected, call sandbox_start exactly once, wait for its event-driven result, and edit only after it returns running.
 - Use plan_mission to create task identities only when delegating: the operator asked for workers, background execution, or parallel work, or the request splits into independent tasks worth running concurrently.
 - When delegating, call plan_mission exactly once for that launch request and supply tasks as the JSON array required by the tool schema, never as a serialized string. In an existing thread, supply only the new tasks: earlier tasks are preserved automatically and re-sending them fails the call. If no running sandbox is selected after planning, call sandbox_start exactly once and wait for its event-driven result. Only after it returns running, call spawn_worktree once for each returned task and spawn_subagent for each resulting worktree. For an explicitly launch-only request, stop after the requested workers start. For an end-to-end request, launching workers is not completion: if await_workers is callable, register the exact launched run IDs and the remaining authorized work, then end this turn. The coordinator resumes automatically after worker completion. If await_workers reports already_finished, inspect the results and continue now. Never promise automatic follow-up unless it was successfully registered; never poll. Do not broaden the original request.

@@ -5,6 +5,7 @@ import {
   bootstrapSandboxStreaming,
 } from "@/lib/sandbox/client";
 import { checkSandboxHealth } from "@/lib/sandbox/health-status";
+import { setupFailureMessage } from "@/lib/sandbox/setup-issue";
 import { updateSandboxRecord } from "@/lib/sandbox/records";
 import { getRepoLinkedVercelProject } from "@/lib/vercel/env-vars";
 import { readSandboxPersistentFlag } from "@/lib/sandbox/persistence";
@@ -22,7 +23,7 @@ import {
   stopSandboxInstanceBestEffort,
   prepareSandboxLaunchBillingCloseBestEffort,
 } from "./failure-handling";
-import type { SandboxEvent } from "@/lib/sandbox/events";
+import type { SandboxEvent, SandboxSetupIssue } from "@/lib/sandbox/events";
 import type { SandboxRecord, SandboxRecordRow } from "@/lib/types";
 import type {
   SandboxLaunchPreparation,
@@ -191,6 +192,13 @@ async function maybeQueueDeferredSnapshotWarmup(input: {
   }
 }
 
+function setupIssueLogColumns(issue: SandboxSetupIssue | null | undefined) {
+  if (!issue?.logTail) return {};
+  return issue.phase === "dev"
+    ? { dev_log: issue.logTail }
+    : { install_log: issue.logTail };
+}
+
 async function activateRunningSandboxRecord(input: {
   state: SandboxLaunchState;
   launch: SandboxLaunchPreparation;
@@ -232,7 +240,10 @@ async function activateRunningSandboxRecord(input: {
           ? null
           : previewHealth.message,
       last_boot_completed_at: timestamp,
-      last_boot_error: null,
+      // A failed setup step leaves the sandbox running; keep the reason and
+      // its log on the record so the preview pane and agent can show it.
+      last_boot_error: setupFailureMessage(input.state.setupIssue),
+      ...setupIssueLogColumns(input.state.setupIssue),
       error: null,
     },
     {
@@ -290,6 +301,12 @@ async function consumeSandboxBootstrapStreamOnce(input: {
 
   for await (const event of bootstrapStream) {
     if (event.type === "warning" || event.type === "log") {
+      input.emit(event);
+      continue;
+    }
+
+    if (event.type === "setup_issue") {
+      input.state.setupIssue = event.issue;
       input.emit(event);
       continue;
     }

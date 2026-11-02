@@ -74,20 +74,30 @@ export function resolvePersistentSandboxOptions(opts: {
   };
 }
 
+/** Boot step a project-setup failure came from. */
+export type SandboxSetupPhase = "prerequisite" | "install" | "dev";
+
 export class SandboxBootstrapError extends Error {
   installLog?: string;
   devLog?: string;
   previewUrl?: string;
+  phase?: SandboxSetupPhase;
 
   constructor(
     message: string,
-    details?: { installLog?: string; devLog?: string; previewUrl?: string }
+    details?: {
+      installLog?: string;
+      devLog?: string;
+      previewUrl?: string;
+      phase?: SandboxSetupPhase;
+    }
   ) {
     super(message);
     this.name = "SandboxBootstrapError";
     this.installLog = details?.installLog;
     this.devLog = details?.devLog;
     this.previewUrl = details?.previewUrl;
+    this.phase = details?.phase;
   }
 }
 

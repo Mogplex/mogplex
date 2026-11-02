@@ -16,6 +16,7 @@ import type {
 import { withTimeout, BOOTSTRAP_STEP_TIMEOUT_MS } from "./client-validation";
 import { buildShellCommand, buildWithBunOnPathCommand } from "./client-shell";
 import { resolveBootstrapContext } from "./client-bootstrap-context";
+import { handOffSetupFailures } from "./setup-issue";
 import {
   launchDetachedDevCommand,
   streamRuntimePrerequisitePhase,
@@ -185,7 +186,14 @@ async function* runBaselineDevPhase(
  * checkout, or post-checkout install raise `BaselineSnapshotRestoreError`
  * so the launch route can fall back to the git-clone path.
  */
-export async function* bootstrapFromBaselineSnapshotStreaming(
+export function bootstrapFromBaselineSnapshotStreaming(
+  sandbox: Sandbox,
+  opts: BaselineSnapshotBootstrapOpts
+): AsyncGenerator<SandboxBootstrapStreamEvent> {
+  return handOffSetupFailures(baselineBootstrapPhases(sandbox, opts));
+}
+
+async function* baselineBootstrapPhases(
   sandbox: Sandbox,
   opts: BaselineSnapshotBootstrapOpts
 ): AsyncGenerator<SandboxBootstrapStreamEvent> {

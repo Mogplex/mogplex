@@ -25,16 +25,26 @@ import {
   buildNoDevScriptBootstrapResult,
 } from "./client-bootstrap-phases";
 
+import { handOffSetupFailures } from "./setup-issue";
+
 // Re-export baseline bootstrap from its module
 export { bootstrapFromBaselineSnapshotStreaming } from "./client-bootstrap-baseline";
 
 /**
  * Lighter bootstrap for snapshot-restored sandboxes.
- * Deps are already installed — only starts the dev server.
+ * Deps are already installed — only starts the dev server. A failed setup
+ * step leaves the sandbox running with a `setup_issue` event.
  */
-export async function* bootstrapFromSnapshotStreaming(
+export function bootstrapFromSnapshotStreaming(
   sandbox: Sandbox,
   opts: BootstrapSandboxOpts = {}
+): AsyncGenerator<SandboxBootstrapStreamEvent> {
+  return handOffSetupFailures(snapshotBootstrapPhases(sandbox, opts));
+}
+
+async function* snapshotBootstrapPhases(
+  sandbox: Sandbox,
+  opts: BootstrapSandboxOpts
 ): AsyncGenerator<SandboxBootstrapStreamEvent> {
   const context = await resolveBootstrapContext(sandbox, opts);
   if (context.monorepoAutoTargetMessage) {
@@ -159,11 +169,20 @@ export async function bootstrapSandbox(
  * Streaming variant of bootstrapSandbox. Uses `detached: true` + `command.logs()`
  * to yield real-time log output as SandboxEvents instead of blocking until completion.
  *
- * The existing `bootstrapSandbox()` is kept for backward compat (workflows/cron).
+ * The existing `bootstrapSandbox()` is kept for backward compat (workflows/cron)
+ * and still throws on a failed setup step; this variant leaves the sandbox
+ * running and reports the failure as a `setup_issue` event.
  */
-export async function* bootstrapSandboxStreaming(
+export function bootstrapSandboxStreaming(
   sandbox: Sandbox,
   opts: BootstrapSandboxOpts = {}
+): AsyncGenerator<SandboxBootstrapStreamEvent> {
+  return handOffSetupFailures(freshBootstrapPhases(sandbox, opts));
+}
+
+async function* freshBootstrapPhases(
+  sandbox: Sandbox,
+  opts: BootstrapSandboxOpts
 ): AsyncGenerator<SandboxBootstrapStreamEvent> {
   // packageDevScript must participate in port resolution — for monorepos
   // where `apps/web/package.json` pins the port via "next dev -p 3003",
@@ -281,6 +300,7 @@ async function* streamSetupPhases(
       {
         previewUrl: context.previewUrl,
         installLog,
+        phase: "install",
       }
     );
   }

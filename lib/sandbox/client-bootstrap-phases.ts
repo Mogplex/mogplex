@@ -92,6 +92,7 @@ export async function runInstallPhase(
     throw new SandboxBootstrapError(`Install failed (${installCommand})`, {
       installLog,
       previewUrl,
+      phase: "install",
     });
   }
 
@@ -193,6 +194,7 @@ export async function runRuntimePrerequisitePhase(
     throw new SandboxBootstrapError("Runtime prerequisite failed (bun)", {
       installLog,
       previewUrl,
+      phase: "prerequisite",
     });
   }
 
@@ -367,6 +369,15 @@ export async function* streamNoDevServerReady(
     yield {
       type: "warning",
       message: manifestWarning(context),
+    };
+    yield {
+      type: "setup_issue",
+      issue: {
+        phase: "detect",
+        message: manifestWarning(context),
+        logTail: "",
+        envVarHint: null,
+      },
     };
   }
   yield {

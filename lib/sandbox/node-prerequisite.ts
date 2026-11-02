@@ -93,7 +93,7 @@ ${target} --version`;
   if (installed.exitCode !== 0 || !stdout.trim().endsWith(`v${version}`)) {
     throw new SandboxBootstrapError(
       `Runtime prerequisite failed (Node.js ${version})`,
-      { installLog, previewUrl }
+      { installLog, previewUrl, phase: "prerequisite" }
     );
   }
   return installLog;

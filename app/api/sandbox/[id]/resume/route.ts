@@ -10,7 +10,8 @@ import {
   type SandboxLifecycleConflictEvent,
 } from "@/lib/sandbox/lifecycle-conflict";
 import { NextResponse } from "next/server";
-import type { SandboxEvent } from "@/lib/sandbox/events";
+import type { SandboxEvent, SandboxSetupIssue } from "@/lib/sandbox/events";
+import { setupFailureMessage } from "@/lib/sandbox/setup-issue";
 import type { SandboxRuntime } from "@/lib/sandbox/runtimes";
 import { presentSandboxBillingAdmissionError } from "@/lib/billing/sandbox-usage";
 
@@ -274,6 +275,7 @@ export function createSandboxResumeHandler(
         }
 
         let finalPreviewUrl: string | null = record.preview_url;
+        let setupIssue: SandboxSetupIssue | null = null;
 
         try {
           for await (const bevent of deps.bootstrapFromSnapshotStreaming(
@@ -306,6 +308,12 @@ export function createSandboxResumeHandler(
             switch (bevent.type) {
               case "warning": {
                 emit({ type: "warning", message: bevent.message });
+
+                break;
+              }
+              case "setup_issue": {
+                setupIssue = bevent.issue;
+                emit({ type: "setup_issue", issue: bevent.issue });
 
                 break;
               }
@@ -365,10 +373,13 @@ export function createSandboxResumeHandler(
                     record.id,
                     {
                       status: "running",
-                      health_status: "running",
+                      health_status: setupFailureMessage(setupIssue)
+                        ? "app_error"
+                        : "running",
                       preview_url: finalPreviewUrl,
                       last_active_at: new Date().toISOString(),
                       last_boot_completed_at: new Date().toISOString(),
+                      last_boot_error: setupFailureMessage(setupIssue),
                     },
                     {
                       expectedSandboxId: record.sandbox_id,
@@ -394,7 +405,9 @@ export function createSandboxResumeHandler(
                   }
                   const readyRecord = buildClientSnapshot(runningRecord, {
                     status: "running",
-                    health_status: "running",
+                    health_status: setupFailureMessage(setupIssue)
+                      ? "app_error"
+                      : "running",
                     preview_url: finalPreviewUrl,
                   });
                   emit({

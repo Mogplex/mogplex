@@ -1,3 +1,5 @@
+import type { SandboxSetupIssue } from "@/lib/sandbox/events";
+import { parseSetupIssue } from "./sandbox-setup-issue";
 import { buildInternalApiHeaders } from "@/lib/internal-api-auth";
 import { isRepoId } from "@/lib/repos";
 import { SANDBOX_READINESS_WAIT_HEADER } from "@/lib/sandbox/readiness-contract";
@@ -12,6 +14,8 @@ export type SandboxResolution = {
   source: SandboxResolutionSource;
   recoveredFromCleanup?: boolean;
   cleanupWaitMs?: number;
+  /** Project setup failed during this boot; the sandbox is still running. */
+  setupIssue?: SandboxSetupIssue;
 };
 
 export type SandboxResolutionFailure = {
@@ -173,6 +177,7 @@ async function readReusedSandboxResponse(
 
 type SandboxCreationStreamEvent =
   | { kind: "ready"; resolution: SandboxResolution }
+  | { kind: "setup_issue"; issue: SandboxSetupIssue }
   | { kind: "pending"; sandboxRecordId: string }
   | { kind: "cleanup_recovered"; elapsedMs: number }
   | { kind: "failed"; failure: SandboxResolutionFailure };
@@ -194,11 +199,17 @@ function readSandboxCreationEvent(
     recordId?: string;
     phase?: string;
     elapsedMs?: number;
+    issue?: unknown;
   };
   try {
     event = JSON.parse(line.slice(6));
   } catch {
     return null;
+  }
+
+  if (event.type === "setup_issue") {
+    const issue = parseSetupIssue(event.issue);
+    return issue ? { kind: "setup_issue", issue } : null;
   }
 
   if (event.type === "ready" && event.sandbox) {
@@ -267,6 +278,7 @@ async function consumeSandboxCreationStream(
   let buffer = "";
   let pendingSandboxRecordId: string | null = null;
   let cleanupWaitMs: number | null = null;
+  let setupIssue: SandboxSetupIssue | null = null;
 
   try {
     while (true) {
@@ -286,10 +298,15 @@ async function consumeSandboxCreationStream(
           cleanupWaitMs = settled.elapsedMs;
           continue;
         }
+        if (settled.kind === "setup_issue") {
+          setupIssue = settled.issue;
+          continue;
+        }
         await reader.cancel().catch(() => {});
         return settled.kind === "ready"
           ? {
               ...settled.resolution,
+              ...(setupIssue ? { setupIssue } : {}),
               ...(cleanupWaitMs === null
                 ? {}
                 : {
