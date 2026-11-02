@@ -81,23 +81,24 @@ export class SandboxBootstrapError extends Error {
   installLog?: string;
   devLog?: string;
   previewUrl?: string;
-  phase?: SandboxSetupPhase;
+  phase: SandboxSetupPhase;
 
   constructor(
     message: string,
-    details?: {
+    details: {
       installLog?: string;
       devLog?: string;
       previewUrl?: string;
-      phase?: SandboxSetupPhase;
+      /** Required so a new throw site cannot be misfiled as a dev failure. */
+      phase: SandboxSetupPhase;
     }
   ) {
     super(message);
     this.name = "SandboxBootstrapError";
-    this.installLog = details?.installLog;
-    this.devLog = details?.devLog;
-    this.previewUrl = details?.previewUrl;
-    this.phase = details?.phase;
+    this.installLog = details.installLog;
+    this.devLog = details.devLog;
+    this.previewUrl = details.previewUrl;
+    this.phase = details.phase;
   }
 }
 

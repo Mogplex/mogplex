@@ -58,6 +58,13 @@ export function getSandboxStartMessage(sandbox: SandboxResolution) {
       "user's task: see setupIssue and follow <environment_setup>."
     );
   }
+  if (sandbox.lastBootError) {
+    return (
+      "Sandbox is already running, but its last boot did not finish project " +
+      `setup: ${sandbox.lastBootError}. If the project still is not set up, ` +
+      "follow <environment_setup>."
+    );
+  }
   if (sandbox.recoveredFromCleanup) {
     return "Previous sandbox cleanup finished automatically. Sandbox is ready to use.";
   }
@@ -130,6 +137,7 @@ async function startSandbox(
         }
       : {}),
     ...(sandbox.setupIssue ? { setupIssue: sandbox.setupIssue } : {}),
+    ...(sandbox.lastBootError ? { lastBootError: sandbox.lastBootError } : {}),
     message: getSandboxStartMessage(sandbox),
   };
 }

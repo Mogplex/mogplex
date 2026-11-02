@@ -225,16 +225,23 @@ async function activateRunningSandboxRecord(input: {
   const sandboxStatus =
     previewHealth.status === "stopped" ? "stopped" : "running";
 
+  // After a failed setup step the preview probe only restates that nothing
+  // serves yet; report the step as the error, like restart and resume do.
+  const setupFailure = setupFailureMessage(input.state.setupIssue);
   const activated = await updateSandboxRecord(
     input.state.streamSandboxRecord.id,
     {
       status: sandboxStatus,
       preview_url: input.state.previewUrl,
-      health_status: previewHealth.status,
+      health_status:
+        setupFailure && sandboxStatus === "running"
+          ? "app_error"
+          : previewHealth.status,
       last_health_check_at: timestamp,
       last_active_at: timestamp,
       last_preview_http_status: previewHealth.statusCode ?? null,
       last_preview_error:
+        setupFailure ||
         previewHealth.status === "running" ||
         previewHealth.status === "idle_warning"
           ? null
@@ -242,7 +249,7 @@ async function activateRunningSandboxRecord(input: {
       last_boot_completed_at: timestamp,
       // A failed setup step leaves the sandbox running; keep the reason and
       // its log on the record so the preview pane and agent can show it.
-      last_boot_error: setupFailureMessage(input.state.setupIssue),
+      last_boot_error: setupFailure,
       ...setupIssueLogColumns(input.state.setupIssue),
       error: null,
     },

@@ -19,7 +19,7 @@ export function setupIssueFromError(
 ): SandboxSetupIssue {
   const log = error.devLog || error.installLog || "";
   return {
-    phase: error.phase ?? "dev",
+    phase: error.phase,
     message: error.message.split("\n")[0] ?? error.message,
     logTail: extractDevLogTail(log),
     envVarHint: detectMissingEnvVarHint(`${error.message}\n${log}`),

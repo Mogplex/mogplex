@@ -62,3 +62,51 @@ describe("sandbox_start with a project setup issue", () => {
     expect(result.message).toBe("Sandbox is ready to use.");
   });
 });
+
+describe("sandbox_start reusing a sandbox whose setup failed", () => {
+  it("should tell the agent about the last boot's setup failure", async () => {
+    installSandboxRows([
+      { id: "sandbox-running", last_boot_error: "Install failed (npm ci)" },
+    ]);
+    const tool = createStartSandbox("user-1") as unknown as {
+      execute: (input: { repoId: string }) => Promise<Record<string, unknown>>;
+    };
+
+    const result = await tool.execute({ repoId: OWNED_REPO_ID });
+
+    expect(result).toMatchObject({
+      sandboxId: "sandbox-running",
+      sandboxResolution: "reused_running",
+      lastBootError: "Install failed (npm ci)",
+    });
+    expect(result.message).toContain(
+      "its last boot did not finish project setup: Install failed (npm ci)"
+    );
+  });
+
+  it("should keep a setup issue streamed before a reattach", async () => {
+    const issue = {
+      phase: "dev",
+      message: "Dev server exited",
+      logTail: "Error: listen EADDRINUSE",
+      envVarHint: null,
+    };
+    const responses = [
+      sseResponse([
+        { type: "sandbox_created", recordId: "sandbox-new" },
+        { type: "setup_issue", issue },
+      ]),
+      sseResponse([
+        { type: "ready", sandbox: { id: "sandbox-new", status: "running" } },
+      ]),
+    ];
+    global.fetch = async () => responses.shift() ?? new Response(null);
+
+    const result = await startSandbox();
+
+    expect(result).toMatchObject({
+      sandboxId: "sandbox-new",
+      setupIssue: issue,
+    });
+  });
+});
