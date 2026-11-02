@@ -103,6 +103,9 @@ describe("project_env_set", () => {
 
     expect(schema.safeParse({ name: "PORT", value: "" }).success).toBe(false);
     expect(schema.safeParse({ name: "PORT", value: null }).success).toBe(true);
+    expect(
+      schema.safeParse({ name: "API_URL", value: "[redacted]" }).success
+    ).toBe(false);
   });
 
   it("should refuse names that change how every sandbox program starts", async () => {

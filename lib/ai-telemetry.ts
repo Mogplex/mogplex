@@ -2,7 +2,7 @@ const DEFAULT_MAX_STRING_LENGTH = 40_000;
 const DEFAULT_MAX_ITEMS = 50;
 const DEFAULT_MAX_DEPTH = 4;
 const MAX_REDACTION_DEPTH = 20;
-const REDACTED_VALUE = "[redacted]";
+export const REDACTED_VALUE = "[redacted]";
 
 const SENSITIVE_KEY_TERMS = [
   "authorization",

@@ -7,7 +7,7 @@ import {
   resolveEffectiveEnvSyncMode,
   type RepoEnvVars,
 } from "@/lib/repo-settings";
-import { redactSecretsInText } from "@/lib/ai-telemetry";
+import { REDACTED_VALUE, redactSecretsInText } from "@/lib/ai-telemetry";
 import { getRepoForScope } from "@/lib/repos";
 import { isValidSandboxRootDirectory } from "@/lib/sandbox/launch-config";
 import { SUPPORTED_RUNTIMES } from "@/lib/sandbox/runtimes/types";
@@ -143,6 +143,14 @@ function describeSettings(row: SettingsRow) {
   };
 }
 
+// Commands read back through project_settings have credentials replaced by
+// the redaction marker; saving one back would break every later boot.
+const REDACTED_MARKER_MESSAGE = `Contains ${REDACTED_VALUE} from a read-back value. Omit the field, or write the command out in full.`;
+const notRedacted = (value: string) => !value.includes(REDACTED_VALUE);
+const savedCommand = z
+  .string()
+  .refine(notRedacted, { message: REDACTED_MARKER_MESSAGE });
+
 const updateParams = z.object({
   runtime: z
     .enum(SUPPORTED_RUNTIMES)
@@ -151,13 +159,11 @@ const updateParams = z.object({
     .describe(
       "Sandbox image for future boots (takes effect on the next sandbox, not this one); null restores detection."
     ),
-  installCommand: z
-    .string()
+  installCommand: savedCommand
     .nullable()
     .optional()
     .describe("Command that installs dependencies; null restores detection."),
-  devCommand: z
-    .string()
+  devCommand: savedCommand
     .nullable()
     .optional()
     .describe("Command that starts the dev server; null restores detection."),
@@ -230,6 +236,9 @@ function pinnedPortReplaced(row: SettingsRow, updates: SettingsUpdates) {
  * root directory are closed, validated choices that setup itself has to
  * correct, so changing them only shows up in `replaced`.
  *
+ * Filling an empty command is not guarded at all: getting a new project to
+ * boot is what these tools exist for, and asking first would stall setup.
+ *
  * `replace` is the model's assertion, not an enforced operator approval, for
  * these settings and for changing or deleting a stored variable alike. That
  * is a product decision: Control's project saves run without an approval
@@ -250,6 +259,7 @@ const envParams = z.object({
   value: z
     .string()
     .min(1)
+    .refine(notRedacted, { message: REDACTED_MARKER_MESSAGE })
     .nullable()
     .describe(
       "Non-secret value for the variable; null deletes it. An empty string is not accepted."

@@ -96,13 +96,31 @@ function settingsSaveBody(
     replaced.length > 0
       ? `Replaced saved project settings: ${replaced.join(", ")}`
       : "Project settings saved";
+  return [heading, ...commandLines(input)].join(" · ");
+}
+
+/** The install and dev commands a settings save carries, redacted. */
+function commandLines(input: unknown) {
   const saved = asRecord(input) ?? {};
-  const commands = SHOWN_COMMANDS.flatMap((key) =>
+  return SHOWN_COMMANDS.flatMap((key) =>
     typeof saved[key] === "string"
       ? [`${SETTING_NAMES[key]}: ${shownCommandText(saved[key])}`]
       : []
   );
-  return [heading, ...commands].join(" · ");
+}
+
+/** A refused settings save still shows the commands it proposed. */
+function failureBody(
+  toolName: string,
+  output: Record<string, unknown> | null,
+  input: unknown
+) {
+  const body = toolFailureBody(toolName, output);
+  if (toolName !== "project_settings_update") return body;
+  const proposed = commandLines(input);
+  return proposed.length > 0
+    ? `${body} · proposed ${proposed.join(" · ")}`
+    : body;
 }
 
 function envSaveBody(output: Record<string, unknown> | null) {
@@ -302,7 +320,7 @@ export function buildCombinedTimeline(
               kind: "fail",
               label,
               time: "now",
-              body: toolFailureBody(toolName, output),
+              body: failureBody(toolName, output, toolInput),
               log: sanitizeAgentUserFacingError(
                 controlToolFailureDetail(output)
               ),

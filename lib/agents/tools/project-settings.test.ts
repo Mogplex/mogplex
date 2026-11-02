@@ -187,6 +187,20 @@ describe("project settings tools", () => {
     expect(JSON.stringify([settings, refused])).not.toContain("opaque-npm");
   });
 
+  it("should refuse to save a command carrying the redaction marker", () => {
+    const schema = tools().project_settings_update.inputSchema;
+
+    expect(
+      schema.safeParse({ installCommand: "npm ci && API_TOKEN=[redacted]" })
+        .success
+    ).toBe(false);
+    expect(
+      schema.safeParse({ devCommand: "API_TOKEN=[redacted] npm run dev" })
+        .success
+    ).toBe(false);
+    expect(schema.safeParse({ installCommand: "npm ci" }).success).toBe(true);
+  });
+
   it("should report a pinned dev port as the one boots use", async () => {
     installRepo({ dev_port: 8000, dev_port_auto: false });
 
