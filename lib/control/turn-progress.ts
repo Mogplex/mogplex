@@ -23,6 +23,7 @@ const TOOL_LABELS: Record<string, string> = {
   project_settings: "Reading project settings",
   project_settings_update: "Saving project settings",
   project_env_set: "Saving variable",
+  project_env_request: "Requesting variables",
 };
 
 export function toolActivityLabel(name: string): string {

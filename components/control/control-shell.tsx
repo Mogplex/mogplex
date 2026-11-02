@@ -32,6 +32,7 @@ import { TaskWorkspace } from "./task-workspace";
 import { WorkspaceMotion } from "./workspace-motion";
 import { useTaskTools } from "./use-task-tools";
 import { SessionList } from "./session-list";
+import { ControlProjectSettingsDrawer } from "./control-project-settings-drawer";
 import { MobileSessionList } from "./mobile-session-list";
 import { ExternalRunConversation } from "./external-run-conversation";
 import type { ExternalRunWorkspaceRenderer } from "@/components/pane-content/agent-pane/external-run-pane";
@@ -468,6 +469,7 @@ export function ControlShell(props: ControlShellProps) {
   return (
     <SandboxLaunchProvider>
       <WorkspaceMotion><ControlShellInner {...props} /></WorkspaceMotion>
+      <ControlProjectSettingsDrawer />
     </SandboxLaunchProvider>
   );
 }

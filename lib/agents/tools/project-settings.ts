@@ -23,6 +23,7 @@ import {
   resolveProductResourceScopeForTeam,
   type ProductResourceScope,
 } from "@/lib/team-resource-scope";
+import { createProjectEnvRequestTool } from "./project-env-request";
 import { storedEnvMap } from "./project-env-names";
 import {
   comparedSettingColumns,
@@ -388,6 +389,9 @@ export function createProjectSettingsTools(
       execute: async () =>
         withRow("read", async (row) => describeSettings(row)),
     }),
+    project_env_request: createProjectEnvRequestTool(target.repoId, (run) =>
+      withRow("read", (row) => run(storedEnvMap(row.sandbox_env_vars)))
+    ),
     project_settings_update: defineTool({
       description:
         "Save runtime, install command, dev command, dev port, or root directory for the selected project so future sandbox boots use them. Save only commands you ran successfully in the sandbox. Filling an empty setting, or changing the runtime or root directory, needs no confirmation; changing a saved install or dev command, or a pinned dev port, needs replace: true, which you pass only once the operator agrees.",
@@ -462,7 +466,7 @@ export function createProjectSettingsTools(
     }),
     project_env_set: defineTool({
       description:
-        "Save one NON-SECRET environment variable (for example NODE_ENV, PORT, or a public URL) on the selected project, or delete one with value null. Never use it for passwords, API keys, tokens, or connection strings: ask the operator to add those in Project settings instead. Set one variable per call and wait for its result before the next.",
+        "Save one NON-SECRET environment variable (for example NODE_ENV, PORT, or a public URL) on the selected project, or delete one with value null. Never use it for passwords, API keys, tokens, or connection strings: call project_env_request with their names instead, so the operator gets a Set variables button. Set one variable per call and wait for its result before the next.",
       inputSchema: envParams,
       execute: async ({ name, value, replace }: z.infer<typeof envParams>) => {
         const key = name.trim();

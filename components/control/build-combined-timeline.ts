@@ -219,6 +219,7 @@ const FAILURE_LABELS: Partial<Record<string, string>> = {
   spawn_worktree: "Worktree creation failed",
   spawn_subagent: "Worker start failed",
   plan_mission: "Plan could not be saved",
+  project_env_request: "Variable request failed",
   project_env_set: "Variable save failed",
   project_settings_update: "Project settings save failed",
 };
@@ -237,6 +238,42 @@ function toolFailureBody(
     return "Sandbox startup failed.";
   }
   return FAILURE_LABELS[toolName] ?? `${toolName} failed`;
+}
+
+function stringList(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
+/** A finished project_env_request becomes a "Set variables" card. */
+function envRequestEvent(
+  toolName: string,
+  state: string,
+  output: Record<string, unknown> | null
+): TimelineEvent | null {
+  if (toolName !== "project_env_request" || state !== "output-available")
+    return null;
+  if (output?.ok !== true || typeof output.repoId !== "string") return null;
+  const names = stringList(output.requested);
+  if (names.length === 0) return null;
+  const missing = stringList(output.missing);
+  // Model-written prose: redact credentials like other model text here.
+  const reason =
+    typeof output.reason === "string" ? redactSecretsInText(output.reason) : "";
+  return {
+    kind: "env_request",
+    label: "VARIABLES",
+    time: "now",
+    body:
+      reason ||
+      (missing.length > 0
+        ? "This project needs environment variables only you can set."
+        : "These environment variables are already set."),
+    repoId: output.repoId,
+    names,
+    missing,
+  };
 }
 
 function toolDetails(toolName: string, input: unknown) {
@@ -370,6 +407,12 @@ export function buildCombinedTimeline(
               body: failureBody(toolName, output, toolInput),
               log: sanitizeAgentUserFacingError(failureLog(toolName, output)),
             });
+            continue;
+          }
+
+          const envRequest = envRequestEvent(toolName, state, output);
+          if (envRequest) {
+            result.push(envRequest);
             continue;
           }
 

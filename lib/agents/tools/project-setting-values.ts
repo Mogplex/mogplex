@@ -63,7 +63,7 @@ export function envValueProblem(name: string, value: string | null) {
   if (isSecretEnvName(name)) {
     return value === null
       ? `${name} may hold a secret. Ask the operator to remove it in Project settings.`
-      : `${name} looks like a secret. Ask the operator to add it in Project settings.`;
+      : `${name} looks like a secret. Call project_env_request with its name so the operator gets a Set variables button.`;
   }
   if (value === null) return null;
   // Check the value as it will be stored: one quote pair stripped, escapes
@@ -73,7 +73,7 @@ export function envValueProblem(name: string, value: string | null) {
     return "The value is empty or only spaces once its surrounding quotes are removed. Use value: null to delete a variable.";
   }
   if (redactSecretsInText(stored) !== stored) {
-    return `${name} looks like a secret. Ask the operator to add it in Project settings.`;
+    return `${name} looks like a secret. Call project_env_request with its name so the operator gets a Set variables button.`;
   }
   return null;
 }
@@ -84,7 +84,7 @@ export function envWriteProblem(name: string, value: string | null) {
     return `${name || "That"} is not a valid variable name.`;
   }
   if (isLoaderEnvName(name)) {
-    return `${name} changes how every program in the sandbox starts. Ask the operator to set it in Project settings.`;
+    return `${name} changes how every program in the sandbox starts. Call project_env_request with its name so the operator can set it.`;
   }
   return envValueProblem(name, value);
 }

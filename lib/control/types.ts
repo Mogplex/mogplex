@@ -123,7 +123,8 @@ export type TimelineEventKind =
   | "git"
   | "deploy"
   | "question"
-  | "done";
+  | "done"
+  | "env_request";
 
 export type PlanStep = {
   n: string;
@@ -229,6 +230,14 @@ export type DoneEvent = BaseTimelineEvent & {
   kind: "done";
 };
 
+/** Control asked the operator to fill in project environment variables. */
+export type EnvRequestEvent = BaseTimelineEvent & {
+  kind: "env_request";
+  repoId: string;
+  names: string[];
+  missing: string[];
+};
+
 export type TimelineEvent =
   | UserEvent
   | AssistantEvent
@@ -244,7 +253,8 @@ export type TimelineEvent =
   | GitEvent
   | DeployEvent
   | QuestionEvent
-  | DoneEvent;
+  | DoneEvent
+  | EnvRequestEvent;
 
 // Workspace for context
 export type Workspace = {

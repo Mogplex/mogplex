@@ -280,6 +280,7 @@ function buildToolForDef(
   if (
     def.name === "project_settings" ||
     def.name === "project_settings_update" ||
+    def.name === "project_env_request" ||
     def.name === "project_env_set"
   ) {
     return projectSettingsToolsFor(ctx)?.[def.name] ?? null;

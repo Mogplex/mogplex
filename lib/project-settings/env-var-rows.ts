@@ -1,6 +1,12 @@
 import { parseEnvVarsText, type RepoEnvVars } from "@/lib/repo-settings";
 
-export type EnvVarRow = { id: string; key: string; value: string };
+export type EnvVarRow = {
+  id: string;
+  key: string;
+  value: string;
+  /** Added because Control asked for this name; skipped on save while empty. */
+  requested?: boolean;
+};
 
 let nextRowId = 0;
 
@@ -20,6 +26,32 @@ export function rowsFromEnvVars(vars: RepoEnvVars | null | undefined) {
     .map(([key, value]) => createEnvVarRow(key, value));
 }
 
+/** Append an empty, requested row for each name the table does not have. */
+/**
+ * Names that still need a value. A name stored with an empty or blank value
+ * counts as missing: a credential that is present but empty is not set.
+ */
+export function missingEnvNames(
+  stored: RepoEnvVars | null | undefined,
+  names: readonly string[]
+) {
+  return names.filter((name) => {
+    const value = stored && Object.hasOwn(stored, name) ? stored[name] : "";
+    return String(value ?? "").trim() === "";
+  });
+}
+
+export function withRequestedNames(
+  rows: EnvVarRow[],
+  names: readonly string[] = []
+) {
+  const present = new Set(rows.map((row) => row.key.trim()));
+  const added = [...new Set(names.map((name) => name.trim()))]
+    .filter((name) => !present.has(name))
+    .map((name) => ({ ...createEnvVarRow(name), requested: true }));
+  return added.length > 0 ? [...rows, ...added] : rows;
+}
+
 /**
  * Collapse table rows back into the stored map. Blank rows are dropped; a
  * value without a key or a key used twice is an error the user must fix.
@@ -32,6 +64,8 @@ export function envVarsFromRows(
   for (const row of rows) {
     const key = row.key.trim();
     if (!key && !row.value) continue;
+    // A requested name the operator has not filled in yet is not saved empty.
+    if (row.requested && !row.value) continue;
     if (!key) return { ok: false, error: "Every value needs a variable name." };
     // The server stores variables on a plain object, where this name is lost.
     if (key === "__proto__") {

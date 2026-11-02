@@ -46,9 +46,12 @@ export function ProjectSettingsDrawer({
   tab,
   onTabChange,
   onClose,
+  requestedEnvNames,
 }: {
   repoId: string | null;
   tab: ProjectSettingsTab;
+  /** Variable names Control asked the operator to fill in. */
+  requestedEnvNames?: readonly string[];
   onTabChange: (tab: ProjectSettingsTab) => void;
   onClose: () => void;
 }) {
@@ -89,7 +92,12 @@ export function ProjectSettingsDrawer({
                 forceMount
                 className="data-[state=inactive]:hidden"
               >
-                <EnvVarsPanel key={repo.id} repo={repo} onSave={saveRepo} />
+                <EnvVarsPanel
+                  key={repo.id}
+                  repo={repo}
+                  onSave={saveRepo}
+                  requestedNames={requestedEnvNames}
+                />
               </TabsContent>
               <TabsContent
                 value="general"

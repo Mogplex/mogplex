@@ -142,7 +142,10 @@ describe("project_env_set", () => {
     ]) {
       expect(
         await tools().project_env_set.execute({ name, value })
-      ).toHaveProperty("error", expect.stringContaining("looks like a secret"));
+      ).toHaveProperty(
+        "error",
+        expect.stringContaining("looks like a secret. Call project_env_request")
+      );
     }
     expect(writes).toEqual([]);
 
@@ -218,7 +221,7 @@ describe("project_env_set", () => {
       expect(
         await tools().project_env_set.execute({ name, value: "x" })
       ).toEqual({
-        error: `${name} changes how every program in the sandbox starts. Ask the operator to set it in Project settings.`,
+        error: `${name} changes how every program in the sandbox starts. Call project_env_request with its name so the operator can set it.`,
       });
     }
     expect(writes).toEqual([]);

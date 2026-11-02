@@ -16,6 +16,7 @@ import {
   envVarsFromRows,
   mergePastedEnv,
   rowsFromEnvVars,
+  withRequestedNames,
   type EnvVarRow,
 } from "@/lib/project-settings/env-var-rows";
 import type { Repo } from "@/lib/types";
@@ -32,11 +33,16 @@ const SCOPE_OPTIONS: { value: EnvSyncMode; label: string }[] = [
 export function EnvVarsPanel({
   repo,
   onSave,
+  requestedNames,
 }: {
   repo: Repo;
   onSave: (repo: Repo) => Promise<void>;
+  /** Names Control asked for; each missing one gets an empty row. */
+  requestedNames?: readonly string[];
 }) {
-  const [rows, setRows] = useState(() => rowsFromEnvVars(repo.sandbox_env_vars));
+  const seedRows = () =>
+    withRequestedNames(rowsFromEnvVars(repo.sandbox_env_vars), requestedNames);
+  const [rows, setRows] = useState(seedRows);
   const [scope, setScope] = useState<EnvSyncMode>(() =>
     resolveEffectiveEnvSyncMode(repo.env_sync_mode || DEFAULT_ENV_SYNC_MODE)
   );
@@ -50,13 +56,24 @@ export function EnvVarsPanel({
   const [dirty, setDirty] = useState(false);
   if (savedKey !== seededKey && !dirty) {
     setSeededKey(savedKey);
-    setRows(rowsFromEnvVars(repo.sandbox_env_vars));
+    setRows(seedRows());
     setScope(
       resolveEffectiveEnvSyncMode(repo.env_sync_mode || DEFAULT_ENV_SYNC_MODE)
     );
   }
+  // A new request from Control adds its names to the open draft rather than
+  // replacing it, so unsaved edits survive.
+  const requestedKey = requestedNames?.join(",") ?? "";
+  const [seededRequest, setSeededRequest] = useState(requestedKey);
+  if (requestedKey !== seededRequest) {
+    setSeededRequest(requestedKey);
+    setRows((current) => withRequestedNames(current, requestedNames));
+  }
+  // Requested names left empty on the last save; they were not stored.
+  const [skipped, setSkipped] = useState<string[]>([]);
   const editRows: typeof setRows = (next) => {
     setDirty(true);
+    setSkipped([]);
     setRows(next);
   };
   const [pasteOpen, setPasteOpen] = useState(false);
@@ -92,6 +109,7 @@ export function EnvVarsPanel({
       return;
     }
     setError(null);
+    setSkipped([]);
     setSaving(true);
     try {
       await onSave({
@@ -100,6 +118,11 @@ export function EnvVarsPanel({
         sandbox_env_vars: result.vars,
       });
       setDirty(false);
+      setSkipped(
+        rows
+          .filter((row) => row.requested && !row.value && row.key.trim())
+          .map((row) => row.key.trim())
+      );
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to save environment variables"
@@ -154,7 +177,7 @@ export function EnvVarsPanel({
               onChange={(event) =>
                 updateRow(row.id, { value: event.target.value })
               }
-              placeholder="value"
+              placeholder={row.requested ? "Needed by Control" : "value"}
               autoComplete="off"
               data-1p-ignore
               data-lpignore="true"
@@ -229,6 +252,13 @@ export function EnvVarsPanel({
       {error ? (
         <p role="alert" className="text-destructive text-xs">
           {error}
+        </p>
+      ) : null}
+
+      {skipped.length > 0 ? (
+        <p role="status" className="text-muted-foreground text-xs">
+          Still empty, not saved: {skipped.join(", ")}. Control needs these to
+          continue.
         </p>
       ) : null}
 

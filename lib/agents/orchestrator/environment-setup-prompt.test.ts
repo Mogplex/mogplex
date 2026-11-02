@@ -18,6 +18,21 @@ describe("orchestrator environment setup prompt", () => {
     );
   });
 
+  it("should have Control request secrets through project_env_request when it is callable", () => {
+    const withTool = buildOrchestratorSystemPrompt({
+      repoFullName: "acme/demo",
+      availableToolNames: ["sandbox_start", "project_env_request"],
+    });
+    const withoutTool = buildOrchestratorSystemPrompt({
+      repoFullName: "acme/demo",
+      availableToolNames: ["sandbox_start"],
+    });
+
+    expect(withTool).toContain("call project_env_request with the names");
+    expect(withoutTool).not.toContain("project_env_request");
+    expect(withoutTool).toContain("Project settings > Environment variables");
+  });
+
   it("should only mention project_env_set when that tool is callable", () => {
     const prompt = buildOrchestratorSystemPrompt({
       repoFullName: "acme/demo",
