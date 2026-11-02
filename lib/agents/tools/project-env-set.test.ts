@@ -142,7 +142,10 @@ describe("project_env_set", () => {
     ]) {
       expect(
         await tools().project_env_set.execute({ name, value })
-      ).toHaveProperty("error", expect.stringContaining("looks like a secret"));
+      ).toHaveProperty(
+        "error",
+        expect.stringContaining("looks like a secret. Call project_env_request")
+      );
     }
     expect(writes).toEqual([]);
 

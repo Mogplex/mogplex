@@ -45,6 +45,14 @@ export const INFRASTRUCTURE_TOOLS: OrchestratorToolDef[] = [
     implemented: true,
   },
   {
+    name: "project_env_request",
+    category: "infrastructure",
+    description:
+      "Ask the operator to fill in secret environment variables in Project settings",
+    access: "read",
+    implemented: true,
+  },
+  {
     name: "project_env_set",
     category: "infrastructure",
     description: "Save one non-secret environment variable on the project",

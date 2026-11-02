@@ -26,10 +26,8 @@ import {
   type NewSessionTarget,
   type OpenProjectSettings,
 } from "./session-list-actions";
-import {
-  ProjectSettingsDrawer,
-  type ProjectSettingsTab,
-} from "@/components/project-settings/project-settings-drawer";
+import type { ProjectSettingsTab } from "@/components/project-settings/project-settings-drawer";
+import { useProjectSettingsDrawer } from "@/hooks/use-project-settings-drawer";
 import { SessionListOptions, type SessionGrouping, type SessionSort } from "./session-list-options";
 import { SessionArchiveList } from "./session-archive-list";
 import type { SessionArchiveControls } from "./use-session-archive";
@@ -252,7 +250,7 @@ export function SessionList({
   const [collapsed, setCollapsed] = useState(false);
   const [sortMode, setSortMode] = useState<SortMode>("recent");
   const [grouping, setGrouping] = useState<SessionGrouping>("project");
-  const [settings, setSettings] = useState<{ repoId: string; tab: ProjectSettingsTab } | null>(null);
+  const openProjectSettings = useProjectSettingsDrawer((state) => state.open);
   const { width, resizing, panelRef, resizerProps } = usePanelWidth({
     storageKey: WIDTH_KEY,
     defaultWidth: DEFAULT_WIDTH,
@@ -412,7 +410,7 @@ export function SessionList({
               onNew={onNew}
               onDelete={onDelete}
               archive={archive}
-              onOpenSettings={(repoId, tab) => setSettings({ repoId, tab })}
+              onOpenSettings={(repoId, tab) => openProjectSettings({ repoId, tab })}
             />
           ))
         )}
@@ -423,12 +421,6 @@ export function SessionList({
       </button>
       </>}
       </motion.div>
-      <ProjectSettingsDrawer
-        repoId={settings?.repoId ?? null}
-        tab={settings?.tab ?? "env"}
-        onTabChange={(tab) => setSettings((current) => current && { ...current, tab })}
-        onClose={() => setSettings(null)}
-      />
     </motion.aside>
   );
 }

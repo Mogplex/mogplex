@@ -23,6 +23,7 @@ import {
   resolveProductResourceScopeForTeam,
   type ProductResourceScope,
 } from "@/lib/team-resource-scope";
+import { createProjectEnvRequestTool } from "./project-env-request";
 import { storedEnvMap } from "./project-env-names";
 import {
   comparedSettingColumns,
@@ -388,6 +389,9 @@ export function createProjectSettingsTools(
       execute: async () =>
         withRow("read", async (row) => describeSettings(row)),
     }),
+    project_env_request: createProjectEnvRequestTool(target.repoId, (run) =>
+      withRow("read", (row) => run(storedEnvMap(row.sandbox_env_vars)))
+    ),
     project_settings_update: defineTool({
       description:
         "Save runtime, install command, dev command, dev port, or root directory for the selected project so future sandbox boots use them. Save only commands you ran successfully in the sandbox. Filling an empty setting, or changing the runtime or root directory, needs no confirmation; changing a saved install or dev command, or a pinned dev port, needs replace: true, which you pass only once the operator agrees.",

@@ -16,6 +16,7 @@ import {
   envVarsFromRows,
   mergePastedEnv,
   rowsFromEnvVars,
+  withRequestedNames,
   type EnvVarRow,
 } from "@/lib/project-settings/env-var-rows";
 import type { Repo } from "@/lib/types";
@@ -32,11 +33,16 @@ const SCOPE_OPTIONS: { value: EnvSyncMode; label: string }[] = [
 export function EnvVarsPanel({
   repo,
   onSave,
+  requestedNames,
 }: {
   repo: Repo;
   onSave: (repo: Repo) => Promise<void>;
+  /** Names Control asked for; each missing one gets an empty row. */
+  requestedNames?: readonly string[];
 }) {
-  const [rows, setRows] = useState(() => rowsFromEnvVars(repo.sandbox_env_vars));
+  const seedRows = () =>
+    withRequestedNames(rowsFromEnvVars(repo.sandbox_env_vars), requestedNames);
+  const [rows, setRows] = useState(seedRows);
   const [scope, setScope] = useState<EnvSyncMode>(() =>
     resolveEffectiveEnvSyncMode(repo.env_sync_mode || DEFAULT_ENV_SYNC_MODE)
   );
@@ -50,7 +56,7 @@ export function EnvVarsPanel({
   const [dirty, setDirty] = useState(false);
   if (savedKey !== seededKey && !dirty) {
     setSeededKey(savedKey);
-    setRows(rowsFromEnvVars(repo.sandbox_env_vars));
+    setRows(seedRows());
     setScope(
       resolveEffectiveEnvSyncMode(repo.env_sync_mode || DEFAULT_ENV_SYNC_MODE)
     );
@@ -154,7 +160,7 @@ export function EnvVarsPanel({
               onChange={(event) =>
                 updateRow(row.id, { value: event.target.value })
               }
-              placeholder="value"
+              placeholder={row.requested ? "Needed by Control" : "value"}
               autoComplete="off"
               data-1p-ignore
               data-lpignore="true"

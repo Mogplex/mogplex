@@ -17,8 +17,10 @@ import {
   HelpCircle,
   Check,
   RefreshDouble,
+  Key,
 } from "iconoir-react"
 import type { TimelineEvent, Worktree, PlanEvent, DelegateEvent, DiffEvent, FailEvent, CompareEvent, ApprovalEvent } from "@/lib/control/types"
+import { EnvRequestCard } from "./env-request-card"
 
 export type ToolApprovalResponse = {
   approvalId: string
@@ -52,6 +54,7 @@ const KIND_STYLES: Record<string, { icon: typeof User; bg: string; fg: string; l
   deploy: { icon: Rocket, bg: "bg-ink-800", fg: "text-ink-300", labelColor: "text-ink-300" },
   question: { icon: HelpCircle, bg: "bg-accent-amber/10", fg: "text-accent-amber", labelColor: "text-accent-amber" },
   done: { icon: Check, bg: "bg-ink-800", fg: "text-ink-300", labelColor: "text-ink-300" },
+  env_request: { icon: Key, bg: "bg-accent-amber/10", fg: "text-accent-amber", labelColor: "text-accent-amber" },
 }
 
 const STATE_COLORS: Record<string, string> = {
@@ -340,6 +343,8 @@ export function TimelineCard({ event, eventIndex, getWorktree, onApprove, onTool
             })}
           </div>
         )}
+
+        {event.kind === "env_request" && <EnvRequestCard event={event} />}
 
         {/* Approval */}
         {event.kind === "approval" && (

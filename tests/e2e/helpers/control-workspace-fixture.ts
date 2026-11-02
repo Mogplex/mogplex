@@ -9,7 +9,8 @@ import { buildSandboxFixture } from "./sandbox-fixtures";
 
 export async function mockControlWorkspace(
   page: Page,
-  theme: "light" | "dark" = "dark"
+  theme: "light" | "dark" = "dark",
+  options: { assistantParts?: UIMessage["parts"] } = {}
 ) {
   await enableScopedE2EAuth(page);
   await mockBaseChrome(page);
@@ -60,6 +61,7 @@ export async function mockControlWorkspace(
             stderr: "",
           },
         },
+        ...(options.assistantParts ?? []),
         { type: "text", text: "The welcome page is ready for review." },
       ],
     },

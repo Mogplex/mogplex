@@ -239,6 +239,40 @@ function toolFailureBody(
   return FAILURE_LABELS[toolName] ?? `${toolName} failed`;
 }
 
+function stringList(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
+/** A finished project_env_request becomes a "Set variables" card. */
+function envRequestEvent(
+  toolName: string,
+  state: string,
+  output: Record<string, unknown> | null
+): TimelineEvent | null {
+  if (toolName !== "project_env_request" || state !== "output-available")
+    return null;
+  if (output?.ok !== true || typeof output.repoId !== "string") return null;
+  const names = stringList(output.requested);
+  if (names.length === 0) return null;
+  const missing = stringList(output.missing);
+  const reason = typeof output.reason === "string" ? output.reason : "";
+  return {
+    kind: "env_request",
+    label: "VARIABLES",
+    time: "now",
+    body:
+      reason ||
+      (missing.length > 0
+        ? "This project needs environment variables only you can set."
+        : "These environment variables are already set."),
+    repoId: output.repoId,
+    names,
+    missing,
+  };
+}
+
 function toolDetails(toolName: string, input: unknown) {
   const argumentNames = Object.keys(asRecord(input) ?? {});
   return argumentNames.length > 0
@@ -370,6 +404,12 @@ export function buildCombinedTimeline(
               body: failureBody(toolName, output, toolInput),
               log: sanitizeAgentUserFacingError(failureLog(toolName, output)),
             });
+            continue;
+          }
+
+          const envRequest = envRequestEvent(toolName, state, output);
+          if (envRequest) {
+            result.push(envRequest);
             continue;
           }
 

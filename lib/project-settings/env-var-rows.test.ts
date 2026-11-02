@@ -4,6 +4,7 @@ import {
   envVarsFromRows,
   mergePastedEnv,
   rowsFromEnvVars,
+  withRequestedNames,
 } from "./env-var-rows";
 
 const pairs = (rows: { key: string; value: string }[]) =>
@@ -90,5 +91,34 @@ describe("env var rows", () => {
     expect(() => mergePastedEnv([], "NOT_A_PAIR")).toThrow(
       /Invalid env var line/
     );
+  });
+
+  it("should add an empty row for each requested name the table lacks", () => {
+    const rows = withRequestedNames(rowsFromEnvVars({ NODE_ENV: "dev" }), [
+      "API_KEY",
+      "NODE_ENV",
+      "API_KEY",
+    ]);
+
+    expect(pairs(rows)).toEqual([
+      ["NODE_ENV", "dev"],
+      ["API_KEY", ""],
+    ]);
+    expect(rows.at(-1)?.requested).toBe(true);
+  });
+
+  it("should not save a requested name left empty", () => {
+    const rows = withRequestedNames(rowsFromEnvVars({ NODE_ENV: "dev" }), [
+      "API_KEY",
+      "DATABASE_URL",
+    ]);
+    const filled = rows.map((row) =>
+      row.key === "API_KEY" ? { ...row, value: "abc" } : row
+    );
+
+    expect(envVarsFromRows(filled)).toEqual({
+      ok: true,
+      vars: { NODE_ENV: "dev", API_KEY: "abc" },
+    });
   });
 });
