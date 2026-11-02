@@ -32,6 +32,7 @@ test("terminal_exec refuses to guess when multiple repo sandboxes are running", 
               error:
                 "Multiple running sandboxes are available for this repository. Call start_sandbox with one of the listed sandboxId values. Use the branch and directory to identify the intended workspace; ask the user if it is unclear. Keep the other sandboxes running.",
               reason: "multiple_sandboxes",
+              commandStarted: false,
               sandboxes: [
                 { id: "sandbox-record-1" },
                 { id: "sandbox-record-2" },

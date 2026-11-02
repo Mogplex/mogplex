@@ -9,6 +9,7 @@ export function currentTurnMessages(messages: UIMessage[]): UIMessage[] {
 
 const TOOL_LABELS: Record<string, string> = {
   run_command: "Running command",
+  run_checks: "Running repository checks",
   read_file: "Reading file",
   list_files: "Exploring files",
   search_repo: "Searching repository",
@@ -38,6 +39,15 @@ export function toolActivityDetail(input: unknown): string | null {
   return typeof value === "string"
     ? redactSecretsInText(value).slice(0, 180)
     : null;
+}
+
+export function toolInvocationDetail(toolName: string, input: unknown) {
+  const record =
+    input && typeof input === "object" && !Array.isArray(input) ? input : {};
+  const argumentNames = Object.keys(record);
+  return argumentNames.length > 0
+    ? `${toolName}(${argumentNames.join(", ")})`
+    : toolName;
 }
 
 export function presentTurnProgress(messages: UIMessage[], status: string) {

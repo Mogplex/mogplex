@@ -269,6 +269,7 @@ test("terminal_exec refuses credential extraction and GitHub mutations", async (
             error:
               "Credential access is blocked in agent shell commands. Use the scoped GitHub tool for GitHub actions.",
             reason: "credential_access_blocked",
+            commandStarted: false,
             command: "cat ~/.git-credentials",
           }
         );
@@ -278,6 +279,7 @@ test("terminal_exec refuses credential extraction and GitHub mutations", async (
             error:
               "Credential access is blocked in agent shell commands. Use the scoped GitHub tool for GitHub actions.",
             reason: "credential_access_blocked",
+            commandStarted: false,
             command: "echo $GITHUB_TOKEN",
           }
         );
@@ -287,6 +289,7 @@ test("terminal_exec refuses credential extraction and GitHub mutations", async (
             error:
               "Credential access is blocked in agent shell commands. Use the scoped GitHub tool for GitHub actions.",
             reason: "credential_access_blocked",
+            commandStarted: false,
             command: "cat ~/.config/gh/hosts.yml",
           }
         );
@@ -294,6 +297,7 @@ test("terminal_exec refuses credential extraction and GitHub mutations", async (
           error:
             "Credential access is blocked in agent shell commands. Use the scoped GitHub tool for GitHub actions.",
           reason: "credential_access_blocked",
+          commandStarted: false,
           command: "env | grep TOKEN",
         });
         assert.deepEqual(
@@ -302,6 +306,7 @@ test("terminal_exec refuses credential extraction and GitHub mutations", async (
             error:
               "Credential access is blocked in agent shell commands. Use the scoped GitHub tool for GitHub actions.",
             reason: "credential_access_blocked",
+            commandStarted: false,
             command: "cat /proc/self/environ",
           }
         );
@@ -314,6 +319,7 @@ test("terminal_exec refuses credential extraction and GitHub mutations", async (
             error:
               "Raw GitHub API mutations are blocked in agent shell commands. Use the scoped GitHub tool for GitHub actions.",
             reason: "github_mutation_blocked",
+            commandStarted: false,
             command:
               "curl -X POST https://api.github.com/repos/acme/repo/issues",
           }
@@ -324,6 +330,7 @@ test("terminal_exec refuses credential extraction and GitHub mutations", async (
             error:
               "GitHub CLI mutations are blocked in agent shell commands. Use the scoped GitHub tool for GitHub actions.",
             reason: "github_mutation_blocked",
+            commandStarted: false,
             command: "gh issue create --title exploit",
           }
         );
@@ -336,6 +343,7 @@ test("terminal_exec refuses credential extraction and GitHub mutations", async (
             error:
               "Raw GitHub API mutations are blocked in agent shell commands. Use the scoped GitHub tool for GitHub actions.",
             reason: "github_mutation_blocked",
+            commandStarted: false,
             command:
               "python3 -c 'import requests; requests.post(\"https://api.github.com/repos/acme/repo/issues\")'",
           }

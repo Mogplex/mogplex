@@ -343,6 +343,7 @@ export function wrapWithPolicy(
 
   return defineTool({
     description: originalDescription ?? def.description,
+    toModelOutput: originalTool.toModelOutput,
     inputSchema: originalInputSchema,
     ...(mayRequireApproval ? { needsApproval } : {}),
     execute: async (input: unknown, options?: { toolCallId?: string }) => {

@@ -5,6 +5,8 @@
  * by types from lib/orchestrations once missions are DB-backed.
  */
 
+import type { RepositoryVerificationSummary } from "@/lib/agents/orchestrator/checks/receipt";
+
 export type MissionStatus = "active" | "attention" | "completed" | "archived";
 
 export type MissionPermissions = "Skip Permissions" | "Approve Edits";
@@ -124,6 +126,7 @@ export type TimelineEventKind =
   | "deploy"
   | "question"
   | "done"
+  | "verification"
   | "env_request";
 
 export type PlanStep = {
@@ -155,6 +158,11 @@ type BaseTimelineEvent = {
 };
 
 // Kind-specific payloads
+export type VerificationEvent = BaseTimelineEvent & {
+  kind: "verification";
+  verification: RepositoryVerificationSummary;
+};
+
 export type UserEvent = BaseTimelineEvent & {
   kind: "user";
 };
@@ -241,6 +249,7 @@ export type EnvRequestEvent = BaseTimelineEvent & {
 };
 
 export type TimelineEvent =
+  | VerificationEvent
   | UserEvent
   | AssistantEvent
   | ProgressEvent

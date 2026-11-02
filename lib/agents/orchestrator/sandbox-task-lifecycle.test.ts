@@ -41,6 +41,24 @@ function createLifecycle(overrides?: {
 }
 
 describe("sandbox task lifecycle", () => {
+  it("waits for a full repository-check tool and pauses its compute afterward", async () => {
+    const { lifecycle, stop } = createLifecycle();
+    lifecycle.onToolStart({ toolCall: { toolName: "run_checks" } });
+    const cleanup = lifecycle.cleanup();
+    await Promise.resolve();
+    expect(stop).not.toHaveBeenCalled();
+    lifecycle.onToolFinish({
+      toolCall: { toolName: "run_checks" },
+      output: { sandboxId: "sandbox-1", ok: true },
+      success: true,
+    });
+    await expect(cleanup).resolves.toEqual({
+      state: "stopped",
+      sandboxIds: ["sandbox-1"],
+    });
+    expect(stop).toHaveBeenCalledOnce();
+  });
+
   it.each([
     ["keep the sandbox running", true],
     ["don't keep it running", false],

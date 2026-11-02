@@ -3,7 +3,7 @@ import { durableControlTools } from "@/lib/control/execution-tools";
 import { createWorkspaceCheckpoint } from "@/lib/control/workspace-checkpoint";
 import { createControlStepCheckpoint } from "@/lib/control/step-checkpoint";
 import { streamText, convertToModelMessages } from "ai";
-import { controlMessageMetadata } from "@/lib/control/context-usage";
+import { verificationMessageMetadata } from "./verification-metadata";
 import { controlMessagesForModel } from "@/lib/control/request-history";
 import { prepareControlWorkerHandoff } from "./worker-handoff";
 import { prepareControlExecutionHistory } from "./execution-history";
@@ -212,7 +212,9 @@ export async function executeControlChatRequest(input: {
     const tools = durableControlTools(
       built.tools,
       { userId: input.userId, aiCallId: activeCall.id },
-      createWorkspaceCheckpoint(activeCall, sandboxBinding, teamId)
+      built.verification.checkpoint(
+        createWorkspaceCheckpoint(activeCall, sandboxBinding, teamId)
+      )
     );
     const checkpointStep = createControlStepCheckpoint(activeCall);
 
@@ -253,6 +255,7 @@ export async function executeControlChatRequest(input: {
       activeCall.metadata = {
         ...activeCall.metadata,
         sandbox_id: sandboxBinding.sandboxId,
+        repository_verification: built.verification.metadata(),
       };
     };
 
@@ -341,18 +344,16 @@ export async function executeControlChatRequest(input: {
         controlMessagesForModel(modelMessages, claimedApprovalIds),
         {
           ignoreIncompleteToolCalls: true,
+          tools,
         }
       ),
       abortSignal: input.req.signal,
       tools,
       stopWhen: ORCHESTRATOR_STOP_WHEN,
       allowSystemInMessages: true,
-      prepareStep: input.background
-        ? async () => {
-            await input.background!.assertCurrent();
-            return {};
-          }
-        : undefined,
+      prepareStep: built.verification.prepareStep(
+        input.background?.assertCurrent
+      ),
       experimental_transform: createAgentUserFacingOutputTransform({
         diagnosticScope: input.infrastructureDiagnosticScope,
         repoName: input.body.repoName,
@@ -369,6 +370,7 @@ export async function executeControlChatRequest(input: {
       },
       onToolExecutionEnd(sdkEvent) {
         const event = toolCompletionEvent(sdkEvent);
+        built.verification.onToolEnd(event);
         sandboxTaskLifecycle.onToolFinish(event);
         terminalFailure = updateSandboxStartTerminalFailure(
           terminalFailure,
@@ -431,21 +433,11 @@ export async function executeControlChatRequest(input: {
     });
 
     const uiStream = result.toUIMessageStream({
-      messageMetadata: ({ part }) => {
-        const metadata = controlMessageMetadata(
-          activeCall.id,
-          input.resolvedModel,
-          part
-        );
-        return metadata
-          ? {
-              ...metadata,
-              workspace_changes: activeCall.metadata.workspace_changes,
-              workspace_snapshot_error:
-                activeCall.metadata.workspace_snapshot_error,
-            }
-          : undefined;
-      },
+      messageMetadata: verificationMessageMetadata({
+        call: activeCall,
+        model: input.resolvedModel,
+        verification: built.verification,
+      }),
       onError: (error) =>
         sanitizeAgentUserFacingError(
           error instanceof Error ? error.message : "The request failed.",

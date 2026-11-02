@@ -52,6 +52,7 @@ import { PLANNING_TOOLS } from "./tools/planning";
 import { FILESYSTEM_TOOLS } from "./tools/filesystem";
 import { GIT_TOOLS } from "./tools/git";
 import { EXECUTION_TOOLS } from "./tools/execution";
+import { createRunChecksTool } from "./checks/tool";
 import { controlDecisionScope } from "./decision-scope";
 import { createProjectSettingsTools } from "@/lib/agents/tools/project-settings";
 import { MCP_TOOLS } from "./tools/mcp";
@@ -201,6 +202,9 @@ function buildToolForDef(
       ctx.sandboxExecution,
       { ...controlDecisionScope(ctx), riskGate: false }
     );
+  }
+  if (def.name === "run_checks") {
+    return ctx.sandboxSelectionRequired ? null : createRunChecksTool(ctx);
   }
   if (def.name === "sandbox_start") {
     if (ctx.sandboxSelectionRequired) return null;
