@@ -272,7 +272,9 @@ const envParams = z.object({
   value: z
     .string()
     .min(1)
-    .refine(notRedacted, { message: REDACTED_MARKER_MESSAGE })
+    .refine(notRedacted, {
+      message: `Contains ${REDACTED_VALUE}, which is not a real value. Pass the value again in full.`,
+    })
     .nullable()
     .describe(
       "Non-secret value for the variable; null deletes it. An empty string is not accepted."

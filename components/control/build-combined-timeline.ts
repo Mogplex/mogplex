@@ -74,8 +74,22 @@ const SETTING_NAMES: Partial<Record<string, string>> = {
   runtime: "runtime",
 };
 
-const SHOWN_COMMANDS = ["installCommand", "devCommand"] as const;
+const SHOWN_SETTINGS = [
+  "runtime",
+  "rootDirectory",
+  "installCommand",
+  "devCommand",
+  "devPort",
+] as const;
 const SHOWN_COMMAND_LENGTH = 180;
+// What a null in each setting means on the next boot.
+const NULL_SETTING: Record<(typeof SHOWN_SETTINGS)[number], string> = {
+  runtime: "detected",
+  rootDirectory: "repo root",
+  installCommand: "detected",
+  devCommand: "detected",
+  devPort: "detected",
+};
 
 /** Redacted command text; a cut-off command ends with an ellipsis. */
 function shownCommandText(command: string) {
@@ -96,20 +110,22 @@ function settingsSaveBody(
     replaced.length > 0
       ? `Replaced saved project settings: ${replaced.join(", ")}`
       : "Project settings saved";
-  return [heading, ...commandLines(input)].join(" · ");
+  return [heading, ...settingLines(input)].join(" · ");
 }
 
-/** The install and dev commands a settings save carries, redacted. */
-function commandLines(input: unknown) {
-  const saved = asRecord(input) ?? {};
-  return SHOWN_COMMANDS.flatMap((key) =>
-    typeof saved[key] === "string"
-      ? [`${SETTING_NAMES[key]}: ${shownCommandText(saved[key])}`]
-      : []
-  );
+/** Each setting a save carries, with command text redacted. */
+function settingLines(values: unknown) {
+  const record = asRecord(values) ?? {};
+  return SHOWN_SETTINGS.flatMap((key) => {
+    const value = record[key];
+    if (value === undefined) return [];
+    const shown =
+      value === null ? NULL_SETTING[key] : shownCommandText(String(value));
+    return [`${SETTING_NAMES[key]}: ${shown}`];
+  });
 }
 
-/** A refused settings save still shows the commands it proposed. */
+/** A refused settings save shows what it proposed and what is saved. */
 function failureBody(
   toolName: string,
   output: Record<string, unknown> | null,
@@ -117,10 +133,13 @@ function failureBody(
 ) {
   const body = toolFailureBody(toolName, output);
   if (toolName !== "project_settings_update") return body;
-  const proposed = commandLines(input);
-  return proposed.length > 0
-    ? `${body} · proposed ${proposed.join(" · ")}`
-    : body;
+  const proposed = settingLines(input);
+  const saved = settingLines(output?.saved);
+  return [
+    body,
+    ...(proposed.length > 0 ? [`proposed ${proposed.join(" · ")}`] : []),
+    ...(saved.length > 0 ? [`saved ${saved.join(" · ")}`] : []),
+  ].join(" · ");
 }
 
 function envSaveBody(output: Record<string, unknown> | null) {
