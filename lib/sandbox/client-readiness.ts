@@ -9,11 +9,70 @@ import type {
   SandboxRuntime,
 } from "./client-types";
 import { SandboxBootstrapError } from "./client-validation";
+import { isNodeRuntime, RUNTIME_LABELS } from "./runtimes/types";
 
 export const DEV_SERVER_SIGNAL_TIMEOUT_MS = 90_000;
 
 export const NO_DEV_SCRIPT_MESSAGE =
   "No dev script found in package.json — sandbox ready for terminal and file access.";
+
+export const EMPTY_PROJECT_MESSAGE =
+  "No project manifest for this runtime — skipped install and dev server. Sandbox ready for terminal and file access.";
+
+export const NO_PROJECT_MANIFEST_MESSAGE =
+  "No project manifest for this runtime — no dev server started. Sandbox ready for terminal and file access.";
+
+type NoDevServerContext = {
+  skipDefaultInstall: boolean;
+  noProjectManifest: boolean;
+};
+
+/** Log line for a boot that ends without starting a dev server. */
+export function noDevServerMessage(
+  context: NoDevServerContext,
+  boot: "fresh" | "snapshot"
+) {
+  if (boot === "snapshot") {
+    return context.noProjectManifest
+      ? "Snapshot restored — no project manifest for this runtime. Ready for terminal and file access."
+      : "Snapshot restored — no dev script found. Ready for terminal and file access.";
+  }
+  if (context.skipDefaultInstall) return EMPTY_PROJECT_MESSAGE;
+  return context.noProjectManifest
+    ? NO_PROJECT_MANIFEST_MESSAGE
+    : NO_DEV_SCRIPT_MESSAGE;
+}
+
+/**
+ * Warning for a boot that found no project manifest: the sandbox reports
+ * running but nothing serves the preview. That is expected for a fresh or
+ * non-JS/Python repo, and a misconfiguration for an app in a subdirectory.
+ */
+export function noProjectManifestWarning(
+  rootDirectory: string | null,
+  skippedDefaultInstall: boolean,
+  mismatch: { runtime: SandboxRuntime; found: SandboxRuntime } | null = null
+) {
+  const location = rootDirectory ? ` in ${rootDirectory}` : "";
+  // A configured install command still ran; only say "skipped" when it did not.
+  const outcome = skippedDefaultInstall
+    ? "so Mogplex skipped the default install and started no dev server"
+    : "so after your install command no dev server was started";
+  if (mismatch) {
+    const found = isNodeRuntime(mismatch.found) ? "Node.js" : "Python";
+    return (
+      `The runtime is set to ${RUNTIME_LABELS[mismatch.runtime]}, but the ` +
+      `project${location} is a ${found} project, ${outcome}. Change the ` +
+      "runtime in Project settings, or set a dev command there."
+    );
+  }
+  return (
+    `No package.json, pyproject.toml or requirements.txt found${location}, ` +
+    `${outcome}. Set ${skippedDefaultInstall ? "install and dev commands" : "a dev command"} ` +
+    "in Project settings, or ask the agent to set up the environment. If the " +
+    "app lives in a subdirectory, set its root directory there."
+  );
+}
 
 const PREVIEW_READY_PATTERNS = [
   /\blocal:\s*https?:\/\//i,

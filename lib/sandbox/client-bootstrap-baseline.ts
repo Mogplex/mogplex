@@ -20,6 +20,7 @@ import {
   launchDetachedDevCommand,
   streamRuntimePrerequisitePhase,
   streamCommandPhase,
+  streamNoDevServerReady,
   streamPreviewSignal,
 } from "./client-bootstrap-phases";
 
@@ -106,6 +107,9 @@ async function* runBaselineConditionalInstallPhase(
   context: ResolvedBootstrapContext,
   expectedLockfileHash: string
 ): AsyncGenerator<SandboxBootstrapStreamEvent> {
+  // No recognized manifest means the default install has nothing to do,
+  // even if a stray lockfile changed.
+  if (context.skipDefaultInstall) return;
   const postCheckoutHash = await computeLockfileHashFromSandbox(
     sandbox,
     context.normalizedRoot
@@ -148,14 +152,8 @@ async function* runBaselineDevPhase(
   sandbox: Sandbox,
   context: ResolvedBootstrapContext
 ): AsyncGenerator<SandboxBootstrapStreamEvent> {
-  if (!context.hasDevScript) {
-    yield {
-      type: "log",
-      phase: "dev",
-      data: "Snapshot restored — no dev script found. Ready for terminal and file access.\n",
-    };
-    yield { type: "preview_url", url: context.previewUrl };
-    yield { type: "status", status: "running" };
+  if (!context.startsDevServer) {
+    yield* streamNoDevServerReady(context, "snapshot");
     return;
   }
 

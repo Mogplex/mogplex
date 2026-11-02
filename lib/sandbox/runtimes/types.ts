@@ -9,6 +9,17 @@ export const SUPPORTED_RUNTIMES: readonly SandboxRuntime[] = [
   "python3.13",
 ] as const;
 
+const NODE_RUNTIMES: ReadonlySet<SandboxRuntime> = new Set([
+  "node22",
+  "node24",
+  "node26",
+]);
+
+/** True for Node runtimes; new runtime families must opt in explicitly. */
+export function isNodeRuntime(runtime: SandboxRuntime) {
+  return NODE_RUNTIMES.has(runtime);
+}
+
 export type DetectionResult = {
   runtime: SandboxRuntime;
   packageManager: string;

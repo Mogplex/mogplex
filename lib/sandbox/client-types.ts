@@ -1,9 +1,9 @@
 import type { Sandbox, NetworkPolicy } from "@vercel/sandbox";
 import type { SandboxHealthStatus } from "@/lib/sandbox/health-status";
 import type {
+  DetectionResult,
   SandboxRuntime,
   getStrategy,
-  detectRuntime,
 } from "@/lib/sandbox/runtimes";
 import type {
   EnvSyncMode,
@@ -71,7 +71,7 @@ export type BootstrapSandboxOpts = {
   runtime?: SandboxRuntime | null;
 };
 
-export type BootstrapDetection = Awaited<ReturnType<typeof detectRuntime>>;
+export type BootstrapDetection = DetectionResult;
 export type BootstrapStrategy = ReturnType<typeof getStrategy>;
 
 export type PreviewReadyResult = {
@@ -97,7 +97,19 @@ export type ResolvedBootstrapContext = {
   framework: BootstrapDetection["framework"];
   frameworkEntry: BootstrapDetection["frameworkEntry"];
   packageDevScript: string | null;
-  hasDevScript: boolean;
+  /** Whether bootstrap starts a dev server: a dev command override, the
+   * package.json dev script on Node, or another runtime's own command when
+   * it recognized the project. */
+  startsDevServer: boolean;
+  /** No recognized manifest and no install override: the runtime's default
+   * install has nothing to install and would only fail or leave debris. */
+  skipDefaultInstall: boolean;
+  /** No manifest the effective runtime recognizes at the effective root,
+   * whether or not an override applies. Drives the "no manifest" notices. */
+  noProjectManifest: boolean;
+  /** A manifest for another runtime family exists, but the pinned runtime
+   * cannot use it (e.g. Python pinned on a Node repo). */
+  foreignManifestRuntime: SandboxRuntime | null;
   readiness: PreviewReadinessOptions;
   previewUrl: string;
   runtimeEnv: ReturnType<typeof buildRuntimeSandboxEnv>;

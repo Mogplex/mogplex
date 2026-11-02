@@ -8,7 +8,12 @@ import {
   resolveSandboxPath,
 } from "@/lib/repo-settings";
 import { prepareSandboxVercelLink } from "@/lib/vercel/env-vars";
-import { detectRuntime, getStrategy } from "@/lib/sandbox/runtimes";
+import {
+  DEFAULT_DETECTION,
+  detectProjectRuntime,
+  getStrategy,
+} from "@/lib/sandbox/runtimes";
+import { isNodeRuntime } from "@/lib/sandbox/runtimes/types";
 import {
   detectWorkspaceDependencies,
   resolveMonorepoWebTarget,
@@ -27,10 +32,7 @@ import {
   buildDetectBunUsageScript,
   commandRequiresBun,
 } from "./client-shell";
-import {
-  buildPreviewReadinessOptions,
-  readSandboxTextFile,
-} from "./client-readiness";
+import { buildPreviewReadinessOptions } from "./client-readiness";
 
 export async function resolveBootstrapDetection(
   sandbox: Sandbox,
@@ -40,37 +42,58 @@ export async function resolveBootstrapDetection(
   effectiveRuntime: SandboxRuntime;
   strategy: BootstrapStrategy;
   effectiveDetection: BootstrapDetection;
+  hasProjectManifest: boolean;
+  /** Runtime of a manifest the effective (pinned) runtime does not use. */
+  foreignManifestRuntime: SandboxRuntime | null;
 }> {
-  const detection = await detectRuntime(sandbox, normalizedRoot);
-  const effectiveRuntime: SandboxRuntime = runtimeOverride || detection.runtime;
+  const detection = await detectProjectRuntime(sandbox, normalizedRoot);
+  const effectiveRuntime: SandboxRuntime =
+    runtimeOverride || detection?.runtime || "node22";
   const strategy = getStrategy(effectiveRuntime);
-  const effectiveDetection =
-    runtimeOverride && runtimeOverride !== detection.runtime
-      ? (await strategy.detect(sandbox, normalizedRoot)) || detection
+  // The manifest that counts is the one the effective runtime understands:
+  // a package.json does not give a Python sandbox anything to pip install.
+  // Every strategy already ran when nothing was detected, and a pin within
+  // the detected family (node24 on a Node repo) reuses that detection.
+  const runtimeDetection =
+    detection &&
+    runtimeOverride &&
+    isNodeRuntime(runtimeOverride) !== isNodeRuntime(detection.runtime)
+      ? await strategy.detect(sandbox, normalizedRoot)
       : detection;
+  const effectiveDetection = runtimeDetection ?? detection ?? DEFAULT_DETECTION;
 
   return {
     effectiveRuntime,
     strategy,
     effectiveDetection,
+    hasProjectManifest: runtimeDetection !== null,
+    foreignManifestRuntime:
+      runtimeDetection === null && detection ? detection.runtime : null,
   };
 }
 
+/**
+ * Read the dev script from package.json. A missing file reports no dev
+ * script; an empty, unreadable or malformed one counts as having one, so
+ * the npm path runs and fails loudly.
+ */
 export async function readPackageDevScriptInfo(
   sandbox: Sandbox,
   normalizedRoot: string | null
 ) {
   try {
     const pkgPath = resolveSandboxPath(normalizedRoot, "package.json");
-    const pkgText = await readSandboxTextFile(sandbox, pkgPath);
-    if (!pkgText) {
+    const buffer = await sandbox.readFileToBuffer({ path: pkgPath });
+    if (!buffer) {
       return {
         packageDevScript: null,
-        hasDevScript: true,
+        hasDevScript: false,
       };
     }
 
-    const pkg = JSON.parse(pkgText) as { scripts?: Record<string, string> };
+    const pkg = JSON.parse(buffer.toString("utf-8")) as {
+      scripts?: Record<string, string>;
+    };
     const packageDevScript =
       typeof pkg.scripts?.dev === "string" ? pkg.scripts.dev.trim() : null;
 
@@ -78,7 +101,13 @@ export async function readPackageDevScriptInfo(
       packageDevScript,
       hasDevScript: Boolean(packageDevScript),
     };
-  } catch {
+  } catch (error) {
+    // Unreadable or malformed package.json: keep the npm path so the dev
+    // server's own error surfaces, but say why the empty-repo skip didn't apply.
+    console.warn(
+      "[sandbox/bootstrap] could not read package.json dev script:",
+      error instanceof Error ? error.message : error
+    );
     return {
       packageDevScript: null,
       hasDevScript: true,
@@ -164,13 +193,31 @@ export async function resolveBootstrapContext(
       (autoTarget.framework ? ` (${autoTarget.framework})` : "") +
       ". Set a root directory in repo settings to override."
     : null;
-  const { effectiveRuntime, strategy, effectiveDetection } =
-    await resolveBootstrapDetection(sandbox, normalizedRoot, opts.runtime);
+  const {
+    effectiveRuntime,
+    strategy,
+    effectiveDetection,
+    hasProjectManifest,
+    foreignManifestRuntime,
+  } = await resolveBootstrapDetection(sandbox, normalizedRoot, opts.runtime);
   const { packageManager, framework, frameworkEntry } = effectiveDetection;
-  const { packageDevScript, hasDevScript } = await readPackageDevScriptInfo(
-    sandbox,
-    normalizedRoot
-  );
+  const packageInfo = await readPackageDevScriptInfo(sandbox, normalizedRoot);
+  const { packageDevScript } = packageInfo;
+  // A repo no runtime strategy recognizes (README-only, Go, Rust, a static
+  // site, ...) has nothing the default install understands: `npm install`
+  // writes a stray lockfile and `pip install -r requirements.txt` exits, and
+  // either failure would end the boot before the agent can set anything up.
+  // Install and dev are separate decisions: a configured install command
+  // still runs, and a configured dev command always starts.
+  const noProjectManifest = !hasProjectManifest;
+  const skipDefaultInstall = noProjectManifest && !opts.installCommand;
+  // Node starts the package.json dev script; other runtimes start their
+  // strategy's command when they recognized the project.
+  const startsDevServer =
+    Boolean(opts.devCommand) ||
+    (isNodeRuntime(effectiveRuntime)
+      ? packageInfo.hasDevScript
+      : hasProjectManifest);
   const workspaceBuildCommand = await resolveWorkspaceBuildCommand(
     sandbox,
     normalizedRoot,
@@ -238,7 +285,10 @@ export async function resolveBootstrapContext(
     framework,
     frameworkEntry,
     packageDevScript,
-    hasDevScript,
+    startsDevServer,
+    skipDefaultInstall,
+    noProjectManifest,
+    foreignManifestRuntime,
     readiness,
     previewUrl,
     runtimeEnv,

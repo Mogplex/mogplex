@@ -28,14 +28,14 @@ export function getStrategy(runtime?: SandboxRuntime | null): RuntimeStrategy {
 }
 
 /**
- * Auto-detect runtime by inspecting sandbox files.
- * Tries each strategy's detect() in priority order.
- * Falls back to node22 if nothing matches.
+ * Detect the project's runtime from its manifest files, trying each
+ * strategy's detect() in priority order. Null when no strategy recognizes
+ * the checkout (README-only repos, Go, Rust, static sites, ...).
  */
-export async function detectRuntime(
+export async function detectProjectRuntime(
   sandbox: Sandbox,
   rootDir?: string | null
-): Promise<DetectionResult> {
+): Promise<DetectionResult | null> {
   // The VM runtime was selected before creation; detect package tooling here.
   const order: RuntimeStrategy[] = [nodeStrategy, pythonStrategy];
 
@@ -43,10 +43,14 @@ export async function detectRuntime(
     const result = await strategy.detect(sandbox, rootDir);
     if (result) return result;
   }
-
-  // Default fallback
-  return { runtime: "node22", packageManager: "npm" };
+  return null;
 }
+
+/** Tooling assumed when no strategy recognizes the checkout. */
+export const DEFAULT_DETECTION: DetectionResult = {
+  runtime: "node22",
+  packageManager: "npm",
+};
 
 /**
  * Pre-detect runtime via GitHub API before creating the sandbox VM.

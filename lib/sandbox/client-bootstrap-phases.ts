@@ -22,7 +22,8 @@ import {
   buildWithBunOnPathCommand,
 } from "./client-shell";
 import {
-  NO_DEV_SCRIPT_MESSAGE,
+  noDevServerMessage,
+  noProjectManifestWarning,
   logSignalsPreviewReady,
   extractBoundPortFromLog,
   replacePortInSandboxDomain,
@@ -330,26 +331,77 @@ export async function* streamPreviewSignal(
   }
 }
 
+type NoDevServerBootContext = Pick<
+  ResolvedBootstrapContext,
+  | "previewUrl"
+  | "normalizedRoot"
+  | "skipDefaultInstall"
+  | "noProjectManifest"
+  | "foreignManifestRuntime"
+  | "effectiveRuntime"
+>;
+
+/**
+ * Finish a streaming boot that starts no dev server: warn when there is no
+ * project manifest, log why, and report the sandbox running for terminal and
+ * file access.
+ */
+function manifestWarning(context: NoDevServerBootContext) {
+  return noProjectManifestWarning(
+    context.normalizedRoot,
+    context.skipDefaultInstall,
+    context.foreignManifestRuntime
+      ? {
+          runtime: context.effectiveRuntime,
+          found: context.foreignManifestRuntime,
+        }
+      : null
+  );
+}
+
+export async function* streamNoDevServerReady(
+  context: NoDevServerBootContext,
+  boot: "fresh" | "snapshot"
+): AsyncGenerator<SandboxBootstrapStreamEvent> {
+  if (context.noProjectManifest) {
+    yield {
+      type: "warning",
+      message: manifestWarning(context),
+    };
+  }
+  yield {
+    type: "log",
+    phase: "dev",
+    data: `${noDevServerMessage(context, boot)}\n`,
+  };
+  yield { type: "preview_url", url: context.previewUrl };
+  yield { type: "status", status: "running" };
+}
+
 export function buildNoDevScriptBootstrapResult(
-  context: Pick<
-    ResolvedBootstrapContext,
-    | "previewUrl"
-    | "effectiveRuntime"
-    | "packageManager"
-    | "framework"
-    | "installCommand"
-  >,
+  context: NoDevServerBootContext &
+    Pick<
+      ResolvedBootstrapContext,
+      "effectiveRuntime" | "packageManager" | "framework" | "installCommand"
+    >,
   installLog: string
 ) {
+  if (context.noProjectManifest) {
+    console.warn("[sandbox/bootstrap]", manifestWarning(context));
+  }
   return {
     previewUrl: context.previewUrl,
     runtime: context.effectiveRuntime,
     packageManager: context.packageManager,
     framework: context.framework,
-    installCommand: context.installCommand,
+    // "(none)" is a display value for logs and the launch result; nothing
+    // stores it back as a configured command.
+    installCommand: context.skipDefaultInstall
+      ? "(none)"
+      : context.installCommand,
     devCommand: "(none)",
     installLog,
-    devLog: NO_DEV_SCRIPT_MESSAGE,
+    devLog: noDevServerMessage(context, "fresh"),
     healthStatus: "running" as const,
     readiness: { ready: true as const },
   };
