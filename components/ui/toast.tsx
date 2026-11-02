@@ -91,8 +91,8 @@ const Toast = React.forwardRef<
   return (
     <ToastPrimitives.Root
       ref={ref}
-      // Failures and warnings interrupt assistive tech; routine feedback waits.
-      type={type ?? (variant === 'destructive' || variant === 'warning' ? 'foreground' : 'background')}
+      // Failures interrupt assistive tech; routine updates and warnings wait.
+      type={type ?? (variant === 'destructive' ? 'foreground' : 'background')}
       data-variant={variant ?? 'default'}
       className={cn(toastVariants({ variant }), className)}
       // Let stacked cards scroll vertically while Radix handles horizontal swipes.
@@ -143,6 +143,7 @@ const ToastTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <ToastPrimitives.Title
     ref={ref}
+    data-slot="toast-title"
     className={cn('text-sm font-semibold leading-5 [overflow-wrap:anywhere]', className)}
     {...props}
   />
@@ -155,6 +156,7 @@ const ToastDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <ToastPrimitives.Description
     ref={ref}
+    data-slot="toast-description"
     className={cn('text-sm leading-5 text-popover-foreground/80 [overflow-wrap:anywhere]', className)}
     {...props}
   />

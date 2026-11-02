@@ -53,14 +53,12 @@ for (const theme of ["light", "dark"] as const) {
           return (values[1] + 0.05) / (values[0] + 0.05);
         };
         const icon = element.querySelector("svg")!;
-        const title =
-          element.querySelector("[data-radix-toast-title]") ??
-          element.querySelector("div > div")!;
+        const title = element.querySelector('[data-slot="toast-title"]')!;
         const close = element.querySelector(
           'button[aria-label="Dismiss notification"]'
         )!;
         const description = element.querySelector(
-          '[class~="text-popover-foreground/80"]:not(button)'
+          '[data-slot="toast-description"]'
         )!;
         const neutral = document.createElement("span");
         neutral.hidden = true;
@@ -95,6 +93,25 @@ for (const theme of ["light", "dark"] as const) {
       .screenshot({ path: `/tmp/mogplex-711-toasts-${theme}.png` });
   });
 }
+
+test("routine warnings announce politely while failures interrupt", async ({
+  page,
+}) => {
+  await loadStatusToastFixture(page, "light");
+  await page
+    .getByRole("button", { name: "Show statuses", exact: true })
+    .click();
+  await expect(
+    page
+      .locator('[role="status"][aria-live="polite"]')
+      .filter({ hasText: "Checks need attention" })
+  ).toHaveCount(1);
+  await expect(
+    page
+      .locator('[role="status"][aria-live="assertive"]')
+      .filter({ hasText: "Build failed" })
+  ).toHaveCount(1);
+});
 
 test("notifications keep steering and stop controls available and can be dismissed individually", async ({
   page,

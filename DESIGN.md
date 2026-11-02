@@ -122,7 +122,9 @@ shows a distinct, high-contrast icon with a screen-reader label.
 Notifications stay above the conversation controls, never take focus when
 they appear, and keep a visible dismiss button. Bursts preserve every message
 in a scrollable stack. Respect reduced motion, and let users pause expiry by
-hovering or focusing a notification.
+hovering or focusing a notification. Routine updates, including warnings, use
+polite screen-reader announcements; failures interrupt by default. Override
+the announcement type only when a specific message requires urgency.
 
 ## Typography
 
