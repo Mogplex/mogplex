@@ -1,13 +1,20 @@
+import { posix } from "node:path";
 import type { CheckKind, PlannedRepositoryCheck } from "./plan";
 
 /** Attest only an unmodified full project script in the inspected directory. */
 export function matchRepositoryCheckCommand(
   command: string,
   cwd: string | undefined,
-  plan: PlannedRepositoryCheck[]
+  plan: PlannedRepositoryCheck[],
+  projectDirectory?: string
 ): CheckKind | null {
-  if (!["", ".", "./"].includes(cwd?.trim() ?? "") || /[\r\n]/.test(command))
-    return null;
+  const sameDirectory =
+    ["", ".", "./"].includes(cwd ?? "") ||
+    (cwd?.startsWith("/") &&
+      projectDirectory?.startsWith("/") &&
+      posix.resolve(projectDirectory, cwd ?? ".") ===
+        posix.resolve(projectDirectory));
+  if (!sameDirectory || /[\r\n]/.test(command)) return null;
   const canonical = command.trim().replace(/[ \t]+/g, " ");
   for (const check of plan) {
     const match = /^CI=1 (npm|pnpm|yarn|bun) run ([\w:-]+)$/.exec(

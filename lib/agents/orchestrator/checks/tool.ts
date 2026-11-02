@@ -1,4 +1,3 @@
-import { z } from "zod";
 import type { Tool } from "ai";
 import { defineTool } from "@/lib/agents/tools/shared";
 import {
@@ -18,6 +17,7 @@ import {
 import { runRepositoryChecks } from "./runner";
 import { repositoryChecksModelOutput } from "./model-output";
 import type { RepositoryCheckReceipt } from "./receipt";
+import { runChecksSchema } from "../tools/execution";
 
 export type { RepositoryCheckReceipt } from "./receipt";
 
@@ -114,15 +114,7 @@ export function createRunChecksTool(context: OrchestratorToolContext) {
     toModelOutput: repositoryChecksModelOutput,
     description:
       "Run the repository's full typecheck, lint, build, and test scripts in the selected workspace. Discovers the package manager and CI scripts, records each command's exit evidence, and verifies that source contents stayed unchanged. Missing, interrupted, failed, or skipped checks never count as full verification. Use skip only when the operator explicitly limits checks, and include their reason so every omission stays visible.",
-    inputSchema: z
-      .object({
-        skip: z.array(z.enum(CHECK_KINDS)).optional(),
-        reason: z.string().trim().min(1).optional(),
-      })
-      .refine(
-        (input) => !input.skip?.length || Boolean(input.reason),
-        "Explain the operator's explicit request to skip checks."
-      ),
+    inputSchema: runChecksSchema,
     execute: async (
       input: { skip?: CheckKind[]; reason?: string },
       options: ExecutionOptions

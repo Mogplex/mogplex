@@ -46,6 +46,7 @@ function fixture() {
       ok: true,
       sandboxId: "workspace-1",
       revision: revision(source),
+      directory: "/workspace/project",
       manifest: {
         available: true,
         packageManager: "pnpm@10.12.4",
@@ -113,6 +114,9 @@ function fixture() {
     effects,
     inspections,
     paths,
+    setSource: (value: string) => {
+      source = value;
+    },
     setObservation: (value: typeof observation) => {
       observation = value;
     },
@@ -307,4 +311,26 @@ it("a late SDK callback cannot verify contents changed after its check call", as
     output: receipt("b"),
   });
   expect(f.gate.summary()).toMatchObject({ required: true, verified: false });
+});
+
+it("accepts a fresh completed check after an external edit predates its first probe", async () => {
+  const f = fixture();
+  await f.run("write_file", { path: "index.ts" });
+  await f.run("run_command", { command: "inspect" });
+  f.setSource("c");
+  await f.run("run_checks");
+  expect(f.gate.summary()).toMatchObject({ required: false, verified: true });
+});
+
+it("attests full manual checks in the canonical selected project directory", async () => {
+  const f = fixture();
+  await f.run("write_file", { path: "index.ts" });
+  for (const command of [
+    "pnpm typecheck",
+    "pnpm lint",
+    "pnpm build",
+    "pnpm test",
+  ])
+    await f.run("run_command", { command, cwd: "/workspace/project" });
+  expect(f.gate.summary()).toMatchObject({ required: false, verified: true });
 });

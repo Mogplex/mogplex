@@ -5,6 +5,7 @@ import { REPOSITORY_CHECK_LOCKFILES } from "./plan";
 
 export const repositoryCheckProbeSchema = z.object({
   revision: z.string().regex(/^[a-f0-9]{64}$/),
+  directory: z.string().optional(),
   manifest: z.object({
     available: z.boolean(),
     packageManager: z.unknown().optional(),
@@ -14,8 +15,10 @@ export const repositoryCheckProbeSchema = z.object({
 });
 export type RepositoryCheckProbe = z.infer<typeof repositoryCheckProbeSchema>;
 
-/** Hash working source rather than HEAD, so committing verified contents does
- * not invalidate results. Explicitly edited ignored files participate too.
+/** Hash tracked and nonignored working source rather than HEAD, so committing
+ * verified contents does not invalidate results. Ignored paths participate only
+ * when registered by file tools; arbitrary shell edits cannot discover them.
+ * Read scripts in the selected launch project; hash the Git root for shared inputs.
  * File bytes stay in the sandbox; only a digest and script availability leave. */
 export function buildCheckProbeCommand(paths: string[] = []) {
   if (!paths.every(isSafeRepoPath)) throw new Error("Invalid workspace path.");
@@ -50,7 +53,7 @@ const pathLib = require("node:path");
   const available = fs.existsSync("package.json");
   const pkg = available ? JSON.parse(fs.readFileSync("package.json", "utf8")) : {};
   const scripts = Object.fromEntries(Object.entries(pkg.scripts || {}).filter(([, value]) => typeof value === "string" && value.trim()).map(([name]) => [name, "defined"]));
-  console.log(JSON.stringify({revision: hash.digest("hex"), manifest: {
+  console.log(JSON.stringify({revision: hash.digest("hex"), directory: cwd, manifest: {
     available,
     packageManager: pkg.packageManager,
     scripts,

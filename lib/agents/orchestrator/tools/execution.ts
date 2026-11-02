@@ -3,6 +3,7 @@
  */
 import { z } from "zod";
 import type { OrchestratorToolDef } from "../types";
+import { CHECK_KINDS } from "../checks/plan";
 
 // --- Tool definitions ---
 
@@ -54,9 +55,15 @@ export const EXECUTION_TOOLS: OrchestratorToolDef[] = [
 
 // --- Schemas ---
 
-export const runChecksSchema = z.object({
-  commands: z.array(z.string()).optional().describe("Specific check commands"),
-});
+export const runChecksSchema = z
+  .object({
+    skip: z.array(z.enum(CHECK_KINDS)).optional(),
+    reason: z.string().trim().min(1).optional(),
+  })
+  .refine(
+    (input) => !input.skip?.length || Boolean(input.reason),
+    "Explain the operator's explicit request to skip checks."
+  );
 
 export const runBenchSchema = z.object({
   benchmark: z.string().describe("Benchmark name or path"),

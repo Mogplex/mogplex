@@ -83,6 +83,9 @@ export function createControlVerificationGate(
     options.abortSignal?.throwIfAborted();
     if (uncertainCommand) return block(UNCONFIRMED, true);
     if (name === "run_checks") {
+      // Fresh checks bind to their own first probe, including external edits
+      // made after an earlier command was observed.
+      state.invalidate();
       try {
         const output = await execute(input, options);
         options.abortSignal?.throwIfAborted();
@@ -169,7 +172,8 @@ export function createControlVerificationGate(
       const kind = matchRepositoryCheckCommand(
         args.command,
         typeof args.cwd === "string" ? args.cwd : undefined,
-        buildRepositoryCheckPlan(before.manifest)
+        buildRepositoryCheckPlan(before.manifest),
+        before.directory
       );
       if (kind) {
         const formatted = await runRepositoryChecks(

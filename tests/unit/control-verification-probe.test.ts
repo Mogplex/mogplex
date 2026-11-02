@@ -9,6 +9,7 @@ import {
   existsSync,
   statSync,
   utimesSync,
+  realpathSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -23,6 +24,7 @@ function withRepository(
       cwd?: string
     ) => {
       revision: string;
+      directory: string;
       manifest: {
         packageManager: string;
         scripts: Record<string, string>;
@@ -172,7 +174,9 @@ test("a configured subproject's receipt covers shared repository source and its 
 test("content proof detects same-size edits even when a tool restores the file timestamp", () => {
   withRepository(({ root, probe }) => {
     const source = join(root, "index.ts");
-    const before = probe().revision;
+    const observed = probe();
+    assert.equal(observed.directory, realpathSync(root));
+    const before = observed.revision;
     const stat = statSync(source);
     writeFileSync(source, "export const value = 2;\n");
     utimesSync(source, stat.atime, stat.mtime);

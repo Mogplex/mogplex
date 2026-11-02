@@ -7,6 +7,8 @@ import {
   type RepositoryCheckReceipt,
 } from "../../lib/agents/orchestrator/checks/tool";
 
+import { runChecksSchema } from "../../lib/agents/orchestrator/tools/execution";
+
 const options = { context: {}, toolCallId: "checks", messages: [] };
 async function withChecks(
   input: {
@@ -164,5 +166,27 @@ for (const input of [{ invalidProbe: true }, { deniedProbe: true }]) {
       assert.ok(receipt.checks.every((check) => check.status === "blocked"));
       assert.equal(receipt.workspaceRevisionBefore, null);
     });
+  });
+}
+
+for (const schemaName of ["catalog", "callable"] as const) {
+  test(`the ${schemaName} check contract validates explicit omissions`, () => {
+    const callable = createRunChecksTool({ userId: "user-1" });
+    const schema = (
+      schemaName === "catalog" ? runChecksSchema : callable.inputSchema
+    ) as { safeParse: (value: unknown) => { success: boolean } };
+    assert.equal(schema.safeParse({}).success, true);
+    assert.equal(
+      schema.safeParse({
+        skip: ["build"],
+        reason: "Operator requested no build.",
+      }).success,
+      true
+    );
+    assert.equal(schema.safeParse({ skip: ["build"] }).success, false);
+    assert.equal(
+      schema.safeParse({ skip: ["invented"], reason: "Unknown kind" }).success,
+      false
+    );
   });
 }

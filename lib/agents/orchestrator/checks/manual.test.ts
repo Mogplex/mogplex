@@ -71,3 +71,38 @@ it.each(["npm", "yarn", "bun"])(
     ).toBeNull();
   }
 );
+
+it("accepts canonical absolute cwd only when it identifies the inspected project", () => {
+  expect(
+    matchRepositoryCheckCommand(
+      "pnpm lint",
+      "/workspace/project",
+      plan,
+      "/workspace/project"
+    )
+  ).toBe("lint");
+  expect(
+    matchRepositoryCheckCommand(
+      "pnpm lint",
+      "/workspace/project/../project",
+      plan,
+      "/workspace/project"
+    )
+  ).toBe("lint");
+  expect(
+    matchRepositoryCheckCommand(
+      "pnpm lint",
+      "/workspace",
+      plan,
+      "/workspace/project"
+    )
+  ).toBeNull();
+  expect(
+    matchRepositoryCheckCommand(
+      "pnpm lint",
+      "/workspace/project ",
+      plan,
+      "/workspace/project"
+    )
+  ).toBeNull();
+});
