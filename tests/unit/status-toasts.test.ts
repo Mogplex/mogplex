@@ -50,8 +50,10 @@ test("each status renders a tinted surface, icon, and screen-reader label", asyn
       classes.includes(`var(--${token})`),
       `${variant} has tinted surface`
     );
-    // Group class lets ToastAction pick up the status color.
-    assert.ok(classes.split(" ").includes(variant), `${variant} group class`);
+    assert.ok(
+      !classes.split(" ").includes(variant),
+      `${variant} uses data attributes`
+    );
 
     const html = renderToStaticMarkup(
       createElement(ToastIcon, {
