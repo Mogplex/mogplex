@@ -71,7 +71,9 @@ export function ProjectCombobox({
       focusOption(optionValues.length - 1);
     } else if (event.key === "Enter" && optionValues.length > 0) {
       event.preventDefault();
-      selectProject(matchingRepos[0]?.id ?? optionValues[0]);
+      const enterTarget =
+        matchingRepos[0]?.id ?? (showNewProject ? newProjectValue : null);
+      if (enterTarget) selectProject(enterTarget);
     } else if (event.key === "Escape") {
       event.preventDefault();
       handleOpenChange(false);
@@ -145,7 +147,7 @@ export function ProjectCombobox({
           role="listbox"
         >
           {showNewProject ? (
-            <div aria-label="New project" className="border-b border-border p-1" role="group">
+            <div aria-label="Create" className="border-b border-border p-1" role="group">
               <button
                 aria-selected={value === newProjectValue}
                 className="hover:bg-accent flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs outline-none focus-visible:bg-accent"
