@@ -25,7 +25,7 @@ const ToastViewport = React.forwardRef<
     className={cn(
       // Clear the app header, workspace actions, and task toolbar. Reserve the
       // bottom composer as well when a short viewport needs a smaller stack.
-      'pointer-events-none fixed inset-x-0 top-[calc(env(safe-area-inset-top)+11rem)] z-[100] flex max-h-[min(50dvh,calc(100dvh-22rem))] w-full flex-col gap-2 overflow-y-auto overscroll-y-contain p-3 sm:left-auto sm:right-3 sm:w-[390px] sm:p-0',
+      'pointer-events-none fixed inset-x-0 top-[calc(env(safe-area-inset-top)+11rem)] z-[100] flex max-h-[max(0px,min(50dvh,calc(100dvh-19.5rem)))] w-full flex-col gap-2 overflow-y-auto overscroll-y-contain p-3 sm:left-auto sm:right-3 sm:w-[390px] sm:p-0',
       className,
     )}
     {...props}
@@ -129,7 +129,7 @@ const ToastClose = React.forwardRef<
     ref={ref}
     aria-label="Dismiss notification"
     className={cn(
-      'absolute right-1.5 top-1.5 inline-flex size-9 items-center justify-center rounded-md text-popover-foreground/80 transition-colors hover:bg-popover-foreground/10 hover:text-popover-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-popover-foreground max-sm:size-11 motion-reduce:transition-none',
+      'absolute right-1.5 top-1.5 inline-flex size-11 items-center justify-center rounded-md text-popover-foreground/80 transition-colors hover:bg-popover-foreground/10 hover:text-popover-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-popover-foreground motion-reduce:transition-none',
       className,
     )}
     toast-close=""

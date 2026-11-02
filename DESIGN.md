@@ -121,8 +121,9 @@ failed actions. Each variant tints the surface, adds an accent bar, and
 shows a distinct, high-contrast icon with a screen-reader label.
 Notifications sit below the app and workspace toolbars, with room reserved for
 the conversation controls on short screens. They never take focus when they
-appear and keep a visible dismiss button. Bursts preserve every message
-in a scrollable stack. Respect reduced motion, and let users pause expiry by
+appear and keep a visible 44px dismiss button, including in landscape. Ordinary
+bursts preserve every message in a scrollable stack; an excessive producer
+backlog retains the newest 100 notifications. Respect reduced motion, and let users pause expiry by
 hovering or focusing a notification. Routine updates, including warnings, use
 polite screen-reader announcements; failures interrupt by default. Override
 the announcement type only when a specific message requires urgency.

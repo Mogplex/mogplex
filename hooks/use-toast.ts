@@ -6,6 +6,8 @@ import * as React from "react";
 import type { ToastActionElement, ToastProps } from "@/components/ui/toast";
 
 const TOAST_REMOVE_DELAY = 10000;
+// Preserve normal bursts without retaining an unlimited producer backlog.
+const TOAST_LIMIT = 100;
 
 type ToasterToast = ToastProps & {
   id: string;
@@ -72,11 +74,17 @@ const addToRemoveQueue = (toastId: string) => {
 
 export const reducer = (state: State, action: Action): State => {
   switch (action.type) {
-    case "ADD_TOAST":
+    case "ADD_TOAST": {
+      const toasts = [action.toast, ...state.toasts];
+      for (const dropped of toasts.slice(TOAST_LIMIT)) {
+        clearTimeout(toastTimeouts.get(dropped.id));
+        toastTimeouts.delete(dropped.id);
+      }
       return {
         ...state,
-        toasts: [action.toast, ...state.toasts],
+        toasts: toasts.slice(0, TOAST_LIMIT),
       };
+    }
 
     case "UPDATE_TOAST":
       return {
@@ -91,9 +99,9 @@ export const reducer = (state: State, action: Action): State => {
 
       // ! Side effects ! - This could be extracted into a dismissToast() action,
       // but I'll keep it here for simplicity
-      if (toastId) {
+      if (toastId && state.toasts.some((toast) => toast.id === toastId)) {
         addToRemoveQueue(toastId);
-      } else {
+      } else if (toastId === undefined) {
         for (const toast of state.toasts) {
           addToRemoveQueue(toast.id);
         }

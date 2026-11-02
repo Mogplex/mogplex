@@ -46,6 +46,28 @@ test("an operation can update its existing notification without supplying or cha
   assert.equal(matches[0].variant, "success");
 });
 
+test("an excessive burst retains the 100 newest notifications with stable identities", () => {
+  let state: Parameters<typeof reducer>[0] = { toasts: [] };
+  for (let index = 0; index < 250; index += 1) {
+    state = reducer(state, {
+      type: "ADD_TOAST",
+      toast: { id: `burst-${index}`, title: `Result ${index}`, open: true },
+    });
+  }
+  assert.equal(state.toasts.length, 100);
+  assert.equal(state.toasts[0].id, "burst-249");
+  assert.equal(state.toasts.at(-1)?.id, "burst-150");
+  state = reducer(state, {
+    type: "UPDATE_TOAST",
+    toast: { id: "burst-0", open: true },
+  });
+  assert.equal(state.toasts.length, 100);
+  assert.equal(
+    state.toasts.some((item) => item.id === "burst-0"),
+    false
+  );
+});
+
 test("dismissing one notification preserves the others and its removal is final", (context) => {
   context.mock.timers.enable({ apis: ["setTimeout"] });
   const first = toast.error({ title: "Build failed" });
