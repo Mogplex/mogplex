@@ -17,6 +17,7 @@ import {
   applyResourceOwnerScope,
   type ProductResourceScope,
 } from "@/lib/team-resource-scope";
+import { ENV_NAME, isLoaderEnvName } from "./project-env-names";
 import { defineTool } from "./shared";
 
 /** The server-selected project a Control turn may configure. */
@@ -33,56 +34,6 @@ type ProjectSettingsDeps = {
 // Typed as string so the query builder does not parse the column list.
 const SETTINGS_COLUMNS =
   "id,runtime,root_directory,install_command,dev_command,dev_port,dev_port_auto,env_sync_mode,sandbox_env_vars";
-const ENV_NAME = /^[A-Za-z_]\w*$/;
-// Names that change how every program in the sandbox starts. A value saved
-// here re-arms on each boot, so only the operator may set these. The sandbox
-// itself is the trust boundary (Control can run any command there); this list
-// keeps an accidental or injected hook from persisting past the session.
-const LOADER_ENV_NAMES = new Set([
-  "ALL_PROXY",
-  "BASH_ENV",
-  "CDPATH",
-  "EDITOR",
-  "ENV",
-  "GIT_ASKPASS",
-  "GIT_SSH_COMMAND",
-  "GOFLAGS",
-  "HOME",
-  "HTTPS_PROXY",
-  "HTTP_PROXY",
-  "IFS",
-  "JAVA_TOOL_OPTIONS",
-  "JDK_JAVA_OPTIONS",
-  "MAKEFLAGS",
-  "NODE_OPTIONS",
-  "NODE_EXTRA_CA_CERTS",
-  "NODE_PATH",
-  "NODE_TLS_REJECT_UNAUTHORIZED",
-  "PAGER",
-  "PATH",
-  "PERL5OPT",
-  "PIP_EXTRA_INDEX_URL",
-  "PIP_INDEX_URL",
-  "PROMPT_COMMAND",
-  "PYTHONPATH",
-  "PYTHONSTARTUP",
-  "RUBYOPT",
-  "SHELL",
-  "SSH_ASKPASS",
-  "TAR_OPTIONS",
-  "VISUAL",
-  "_JAVA_OPTIONS",
-]);
-// Names compare upper-cased, so npm_config_* and http_proxy match too.
-const LOADER_ENV_PREFIXES = ["LD_", "DYLD_", "NPM_CONFIG_", "GIT_CONFIG_"];
-
-function isLoaderEnvName(name: string) {
-  const upper = name.toUpperCase();
-  return (
-    LOADER_ENV_NAMES.has(upper) ||
-    LOADER_ENV_PREFIXES.some((prefix) => upper.startsWith(prefix))
-  );
-}
 
 function logWriteError(action: string, repoId: string, error: unknown) {
   // Database messages can quote the row being written, which may hold
@@ -279,9 +230,77 @@ const envParams = z.object({
     ),
   value: z
     .string()
+    .min(1)
     .nullable()
-    .describe("Non-secret value for the variable; null deletes it."),
+    .describe(
+      "Non-secret value for the variable; null deletes it. An empty string is not accepted."
+    ),
 });
+
+// A sibling call in the same step can win the compare-and-swap; each retry
+// re-reads the row, so the guards run again and nothing is overwritten.
+const ENV_SAVE_ATTEMPTS = 3;
+const ENV_CONFLICT = Symbol("env-conflict");
+
+type EnvWrite = { key: string; value: string | null; replace?: boolean };
+
+/** One read-modify-write of the variable map, guarded by compare-and-swap. */
+async function writeEnvVar(
+  target: ProjectSettingsTarget,
+  row: SettingsRow,
+  scope: ProductResourceScope,
+  { key, value, replace }: EnvWrite
+) {
+  const previous = row.sandbox_env_vars;
+  // Copy stored values verbatim; only the key being written changes.
+  const next: RepoEnvVars =
+    previous && typeof previous === "object" && !Array.isArray(previous)
+      ? { ...previous }
+      : {};
+  const exists = Object.hasOwn(next, key);
+  if (value === null && !exists) {
+    return {
+      ok: true,
+      name: key,
+      unchanged: true,
+      note: "The variable was not set.",
+    };
+  }
+  // Control cannot see stored values, so changing or deleting one that
+  // exists needs the operator's say-so.
+  if (exists && !replace) {
+    return {
+      error: `${key} is already set and its value may be a secret. Ask the operator before ${value === null ? "deleting" : "changing"} it, then call again with replace: true.`,
+    };
+  }
+  if (value === null) delete next[key];
+  // Store it the way the operator's editor does (one surrounding quote pair
+  // stripped), so later rewrites leave it unchanged.
+  else next[key] = normalizeEnvVars({ [key]: value })[key];
+  let query = supabaseAdmin
+    .from("repos")
+    .update({ sandbox_env_vars: next })
+    .eq("id", target.repoId);
+  query = applyResourceOwnerScope(query, scope);
+  // Never overwrite an edit saved after our read.
+  query =
+    previous === null
+      ? query.is("sandbox_env_vars", null)
+      : query.eq("sandbox_env_vars", JSON.stringify(previous));
+  const { data, error } = await query.select("id").maybeSingle();
+  if (error) {
+    logWriteError("env var save", target.repoId, error);
+    return { error: "Could not save the variable." };
+  }
+  if (!data) return ENV_CONFLICT;
+  return {
+    ok: true,
+    name: key,
+    ...(value === null ? { deleted: true } : {}),
+    ...(exists && value !== null ? { replaced: true } : {}),
+    note: "New sandbox boots and new commands see the change; restart a running dev server to pick it up.",
+  };
+}
 
 /**
  * Control tools that read and save the selected project's setup, so an
@@ -395,7 +414,7 @@ export function createProjectSettingsTools(
     }),
     project_env_set: defineTool({
       description:
-        "Save one NON-SECRET environment variable (for example NODE_ENV, PORT, or a public URL) on the selected project, or delete one with value null. Never use it for passwords, API keys, tokens, or connection strings: ask the operator to add those in Project settings instead.",
+        "Save one NON-SECRET environment variable (for example NODE_ENV, PORT, or a public URL) on the selected project, or delete one with value null. Never use it for passwords, API keys, tokens, or connection strings: ask the operator to add those in Project settings instead. Set one variable per call and wait for its result before the next.",
       inputSchema: envParams,
       execute: async ({ name, value, replace }: z.infer<typeof envParams>) => {
         const key = name.trim();
@@ -407,65 +426,22 @@ export function createProjectSettingsTools(
             error: `${key} changes how every program in the sandbox starts. Ask the operator to set it in Project settings.`,
           };
         }
-        return withRow("write", async (row, scope) => {
-          const previous = row.sandbox_env_vars;
-          // Copy stored values verbatim; only the key being written changes.
-          const next: RepoEnvVars =
-            previous && typeof previous === "object" && !Array.isArray(previous)
-              ? { ...previous }
-              : {};
-          let replaced = false;
-          const exists = Object.hasOwn(next, key);
-          if (value === null && !exists) {
-            return {
-              ok: true,
-              name: key,
-              unchanged: true,
-              note: "The variable was not set.",
-            };
+        return withScope("write", async (scope) => {
+          for (let attempt = 1; ; attempt += 1) {
+            const row = await loadSettings(target, scope);
+            if ("error" in row) return row;
+            const result = await writeEnvVar(target, row, scope, {
+              key,
+              value,
+              replace,
+            });
+            if (result !== ENV_CONFLICT) return result;
+            if (attempt === ENV_SAVE_ATTEMPTS) {
+              return {
+                error: "Project variables changed while saving. Try again.",
+              };
+            }
           }
-          // Control cannot see stored values, so changing or deleting one
-          // that exists needs the operator's say-so.
-          if (exists && !replace) {
-            return {
-              error: `${key} is already set and its value may be a secret. Ask the operator before ${value === null ? "deleting" : "changing"} it, then call again with replace: true.`,
-            };
-          }
-          if (value === null) {
-            delete next[key];
-          } else {
-            replaced = exists;
-            // Store it the way the operator's editor does (one surrounding
-            // quote pair stripped), so later rewrites leave it unchanged.
-            next[key] = normalizeEnvVars({ [key]: value })[key];
-          }
-          let query = supabaseAdmin
-            .from("repos")
-            .update({ sandbox_env_vars: next })
-            .eq("id", target.repoId);
-          query = applyResourceOwnerScope(query, scope);
-          // Never overwrite an edit the operator saved after our read.
-          query =
-            previous === null
-              ? query.is("sandbox_env_vars", null)
-              : query.eq("sandbox_env_vars", JSON.stringify(previous));
-          const { data, error } = await query.select("id").maybeSingle();
-          if (error) {
-            logWriteError("env var save", target.repoId, error);
-            return { error: "Could not save the variable." };
-          }
-          if (!data) {
-            return {
-              error: "Project variables changed while saving. Try again.",
-            };
-          }
-          return {
-            ok: true,
-            name: key,
-            ...(value === null ? { deleted: true } : {}),
-            ...(replaced ? { replaced: true } : {}),
-            note: "New sandbox boots and new commands see the change; restart a running dev server to pick it up.",
-          };
         });
       },
     }),

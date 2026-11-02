@@ -125,3 +125,14 @@ it("redacts sensitive command details and never turns arbitrary tool arguments i
   expect(toolActivityDetail({ query: "find tests" })).toBe("find tests");
   expect(toolActivityLabel("inspect_repository")).toBe("inspect repository");
 });
+
+it("names the project setup tools while they run", async () => {
+  const { toolActivityLabel } = await import("./turn-progress");
+  expect(toolActivityLabel("project_settings")).toBe(
+    "Reading project settings"
+  );
+  expect(toolActivityLabel("project_settings_update")).toBe(
+    "Saving project settings"
+  );
+  expect(toolActivityLabel("project_env_set")).toBe("Saving variable");
+});

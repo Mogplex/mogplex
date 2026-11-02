@@ -40,15 +40,58 @@ describe("project_env_set", () => {
     expect(row.sandbox_env_vars).toEqual({ PORT: "8000" });
   });
 
-  it("should not overwrite variables the operator saved after the read", async () => {
+  it("should keep a variable the operator saved after the read and retry on top of it", async () => {
+    let conflicts = 0;
     const { row } = installRepo({}, (current) => {
-      current.sandbox_env_vars = { OPERATOR_KEY: "saved-meanwhile" };
+      if (conflicts > 0) return;
+      conflicts += 1;
+      current.sandbox_env_vars = {
+        ...(current.sandbox_env_vars as object),
+        OPERATOR_KEY: "saved-meanwhile",
+      };
+    });
+
+    expect(
+      await tools().project_env_set.execute({ name: "PORT", value: "8000" })
+    ).toMatchObject({ ok: true, name: "PORT" });
+    expect(row.sandbox_env_vars).toEqual({
+      DATABASE_URL: "postgres://owner@db/app",
+      OPERATOR_KEY: "saved-meanwhile",
+      PORT: "8000",
+    });
+  });
+
+  it("should give up without writing when every attempt loses the race", async () => {
+    let saves = 0;
+    const { row, writes } = installRepo({}, (current) => {
+      saves += 1;
+      current.sandbox_env_vars = { OPERATOR_KEY: `save-${saves}` };
     });
 
     expect(
       await tools().project_env_set.execute({ name: "PORT", value: "8000" })
     ).toEqual({ error: "Project variables changed while saving. Try again." });
-    expect(row.sandbox_env_vars).toEqual({ OPERATOR_KEY: "saved-meanwhile" });
+    expect(writes).toEqual([]);
+    expect(row.sandbox_env_vars).toEqual({ OPERATOR_KEY: `save-${saves}` });
+  });
+
+  it("should check replace again when the operator set the same name meanwhile", async () => {
+    const { row, writes } = installRepo({}, (current) => {
+      current.sandbox_env_vars = { PORT: "3000" };
+    });
+
+    expect(
+      await tools().project_env_set.execute({ name: "PORT", value: "8000" })
+    ).toHaveProperty("error", expect.stringContaining("replace: true"));
+    expect(writes).toEqual([]);
+    expect(row.sandbox_env_vars).toEqual({ PORT: "3000" });
+  });
+
+  it("should reject an empty value instead of saving an empty variable", () => {
+    const schema = tools().project_env_set.inputSchema;
+
+    expect(schema.safeParse({ name: "PORT", value: "" }).success).toBe(false);
+    expect(schema.safeParse({ name: "PORT", value: null }).success).toBe(true);
   });
 
   it("should refuse names that change how every sandbox program starts", async () => {
@@ -69,6 +112,10 @@ describe("project_env_set", () => {
       "pip_extra_index_url",
       "HOME",
       "IFS",
+      "SSL_CERT_FILE",
+      "ssl_cert_dir",
+      "CURL_CA_BUNDLE",
+      "REQUESTS_CA_BUNDLE",
     ]) {
       expect(
         await tools().project_env_set.execute({ name, value: "x" })

@@ -20,6 +20,9 @@ const TOOL_LABELS: Record<string, string> = {
   spawn_subagent: "Starting worker",
   list_worktrees: "Checking workers",
   await_workers: "Checking worker handoff",
+  project_settings: "Reading project settings",
+  project_settings_update: "Saving project settings",
+  project_env_set: "Saving variable",
 };
 
 export function toolActivityLabel(name: string): string {

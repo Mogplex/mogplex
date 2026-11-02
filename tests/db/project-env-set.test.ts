@@ -101,7 +101,7 @@ test("project_env_set compare-and-swap matches a stored jsonb map with several v
   });
 });
 
-test("project_env_set does not overwrite a change saved after its read", async () => {
+test("project_env_set keeps a change saved after its read and retries on top of it", async () => {
   // The operator saves between the tool's read and its write.
   beforeRepoUpdate = () =>
     db.query(
@@ -109,13 +109,23 @@ test("project_env_set does not overwrite a change saved after its read", async (
       [repoId]
     );
 
-  expect(await envSet().execute({ name: "LATE", value: "1" })).toEqual({
-    error: "Project variables changed while saving. Try again.",
+  expect(await envSet().execute({ name: "LATE", value: "1" })).toMatchObject({
+    ok: true,
+    name: "LATE",
   });
   expect(beforeRepoUpdate).toBeNull();
-  const stored = await storedVars();
-  expect(stored).toMatchObject({ OPERATOR: "x" });
-  expect(stored).not.toHaveProperty("LATE");
+  expect(await storedVars()).toMatchObject({ OPERATOR: "x", LATE: "1" });
+});
+
+test("project_env_set calls made in the same step both land", async () => {
+  const [first, second] = await Promise.all([
+    envSet().execute({ name: "SIBLING_A", value: "a" }),
+    envSet().execute({ name: "SIBLING_B", value: "b" }),
+  ]);
+
+  expect(first).toMatchObject({ ok: true });
+  expect(second).toMatchObject({ ok: true });
+  expect(await storedVars()).toMatchObject({ SIBLING_A: "a", SIBLING_B: "b" });
 });
 
 test("project_settings_update matches its read through the real shim and catches a concurrent save", async () => {
