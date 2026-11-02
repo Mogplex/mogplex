@@ -8,6 +8,7 @@ import {
   sanitizeAgentUserFacingError,
   sanitizeAgentUserFacingText,
 } from "@/lib/agents/user-facing-output";
+import { redactSecretsInText } from "@/lib/ai-telemetry";
 import type { TimelineEvent } from "@/lib/control/types";
 import {
   toolActivityLabel,
@@ -61,7 +62,9 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 
 /**
  * Saves to the project's stored setup outlive the session, so the timeline
- * names what changed, and a deleted or replaced value is spelled out.
+ * names what changed and says when a saved value was deleted or replaced.
+ * Saved commands run on every later boot, so their text is shown too
+ * (secrets redacted); variable values never are.
  */
 const SETTING_NAMES: Partial<Record<string, string>> = {
   devCommand: "dev command",
@@ -71,13 +74,28 @@ const SETTING_NAMES: Partial<Record<string, string>> = {
   runtime: "runtime",
 };
 
-function settingsSaveBody(output: Record<string, unknown> | null) {
+const SHOWN_COMMANDS = ["installCommand", "devCommand"] as const;
+
+function settingsSaveBody(
+  output: Record<string, unknown> | null,
+  input: unknown
+) {
   const replaced = Object.keys(asRecord(output?.replaced) ?? {}).map(
     (key) => SETTING_NAMES[key] ?? key
   );
-  return replaced.length > 0
-    ? `Replaced saved project settings: ${replaced.join(", ")}`
-    : "Project settings saved";
+  const heading =
+    replaced.length > 0
+      ? `Replaced saved project settings: ${replaced.join(", ")}`
+      : "Project settings saved";
+  const saved = asRecord(input) ?? {};
+  const commands = SHOWN_COMMANDS.flatMap((key) =>
+    typeof saved[key] === "string"
+      ? [
+          `${SETTING_NAMES[key]}: ${redactSecretsInText(saved[key]).slice(0, 180)}`,
+        ]
+      : []
+  );
+  return [heading, ...commands].join(" · ");
 }
 
 function envSaveBody(output: Record<string, unknown> | null) {
@@ -89,7 +107,10 @@ function envSaveBody(output: Record<string, unknown> | null) {
 }
 
 const PROJECT_SAVE_BODIES: Partial<
-  Record<string, (output: Record<string, unknown> | null) => string>
+  Record<
+    string,
+    (output: Record<string, unknown> | null, input: unknown) => string
+  >
 > = {
   project_env_set: envSaveBody,
   project_settings_update: settingsSaveBody,
@@ -98,12 +119,13 @@ const PROJECT_SAVE_BODIES: Partial<
 function toolProgressBody(
   toolName: string,
   state: string,
-  output: Record<string, unknown> | null
+  output: Record<string, unknown> | null,
+  input?: unknown
 ) {
   const complete = state === "output-available";
   const projectSave = PROJECT_SAVE_BODIES[toolName];
   if (projectSave)
-    return complete ? projectSave(output) : "Saving project setup";
+    return complete ? projectSave(output, input) : "Saving project setup";
   if (toolName === "plan_mission")
     return complete ? "Plan saved" : "Saving plan";
   if (toolName === "sandbox_start") {
@@ -281,7 +303,12 @@ export function buildCombinedTimeline(
             continue;
           }
 
-          const progressBody = toolProgressBody(toolName, state, output);
+          const progressBody = toolProgressBody(
+            toolName,
+            state,
+            output,
+            toolInput
+          );
           result.push(
             progressBody
               ? {

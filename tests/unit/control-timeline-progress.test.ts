@@ -136,6 +136,32 @@ test("control timeline spells out saves to the project's stored setup", () => {
   assert.doesNotMatch(JSON.stringify(events), /private value|make serve/);
 });
 
+test("control timeline shows the command a settings save will run on every boot", () => {
+  const events = buildCombinedTimeline(undefined, [
+    assistant([
+      {
+        type: "tool-project_settings_update",
+        toolCallId: "settings-1",
+        state: "output-available",
+        input: {
+          installCommand: "pip install -e .",
+          devCommand: "API_TOKEN=sk-secretvalue uvicorn app:app",
+          devPort: 8000,
+          replace: true,
+        },
+        output: { ok: true, replaced: { devCommand: "make serve" } },
+      },
+    ]),
+  ]);
+
+  const [event] = events;
+  assert.match(
+    event?.body ?? "",
+    /^Replaced saved project settings: dev command · install command: pip install -e \. · dev command: API_TOKEN=.* uvicorn app:app$/
+  );
+  assert.doesNotMatch(JSON.stringify(events), /sk-secretvalue|make serve/);
+});
+
 test("control timeline surfaces structured tool failures as failures", () => {
   const events = buildCombinedTimeline(undefined, [
     assistant([
