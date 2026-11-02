@@ -98,17 +98,18 @@ export type ResolvedBootstrapContext = {
   frameworkEntry: BootstrapDetection["frameworkEntry"];
   packageDevScript: string | null;
   /** Whether bootstrap starts a dev server: a dev command override, the
-   * package.json dev script, or a non-Node strategy's own command. */
+   * package.json dev script on Node, or another runtime's own command when
+   * it recognized the project. */
   startsDevServer: boolean;
-  /** Node runtime, no package.json, no install/dev override: skip install
-   * and dev so a fresh repo boots ready for the agent to scaffold into. */
-  emptyNodeProject: boolean;
-  /** Node runtime with no package.json and no install override: the default
-   * package-manager install would only write a stray lockfile. */
+  /** No manifest the runtime recognizes and no install/dev override: skip
+   * install and dev so any repo boots ready for the agent to set up. */
+  emptyProject: boolean;
+  /** No recognized manifest and no install override: the runtime's default
+   * install has nothing to install and would only fail or leave debris. */
   skipDefaultInstall: boolean;
-  /** Node runtime with no package.json at the effective root, whether or not
-   * an install or dev override applies. Drives the "no package.json" notices. */
-  nodeWithoutPackageJson: boolean;
+  /** No manifest the effective runtime recognizes at the effective root,
+   * whether or not an override applies. Drives the "no manifest" notices. */
+  noProjectManifest: boolean;
   readiness: PreviewReadinessOptions;
   previewUrl: string;
   runtimeEnv: ReturnType<typeof buildRuntimeSandboxEnv>;

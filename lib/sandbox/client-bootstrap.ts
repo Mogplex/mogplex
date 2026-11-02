@@ -108,7 +108,7 @@ export async function bootstrapSandbox(
     context
   );
 
-  if (context.emptyNodeProject) {
+  if (context.emptyProject) {
     return buildNoDevScriptBootstrapResult(context, "");
   }
 
@@ -191,7 +191,7 @@ export async function* bootstrapSandboxStreaming(
     context
   );
 
-  if (context.emptyNodeProject) {
+  if (context.emptyProject) {
     yield* streamNoDevServerReady(context, "fresh");
     return;
   }
@@ -200,7 +200,7 @@ export async function* bootstrapSandboxStreaming(
     yield {
       type: "log",
       phase: "install",
-      data: "No package.json found — skipped install.\n",
+      data: "No project manifest found — skipped install.\n",
     };
   } else {
     yield* streamSetupPhases(sandbox, context, opts);

@@ -8,7 +8,7 @@ import {
   resolveSandboxPath,
 } from "@/lib/repo-settings";
 import { prepareSandboxVercelLink } from "@/lib/vercel/env-vars";
-import { detectRuntime, getStrategy } from "@/lib/sandbox/runtimes";
+import { detectProjectRuntime, getStrategy } from "@/lib/sandbox/runtimes";
 import { isNodeRuntime } from "@/lib/sandbox/runtimes/types";
 import {
   detectWorkspaceDependencies,
@@ -38,19 +38,26 @@ export async function resolveBootstrapDetection(
   effectiveRuntime: SandboxRuntime;
   strategy: BootstrapStrategy;
   effectiveDetection: BootstrapDetection;
+  hasProjectManifest: boolean;
 }> {
-  const detection = await detectRuntime(sandbox, normalizedRoot);
-  const effectiveRuntime: SandboxRuntime = runtimeOverride || detection.runtime;
+  const detection = await detectProjectRuntime(sandbox, normalizedRoot);
+  const effectiveRuntime: SandboxRuntime =
+    runtimeOverride || detection?.runtime || "node22";
   const strategy = getStrategy(effectiveRuntime);
-  const effectiveDetection =
-    runtimeOverride && runtimeOverride !== detection.runtime
-      ? (await strategy.detect(sandbox, normalizedRoot)) || detection
+  // The manifest that counts is the one the effective runtime understands:
+  // a package.json does not give a Python sandbox anything to pip install.
+  const runtimeDetection =
+    runtimeOverride && runtimeOverride !== detection?.runtime
+      ? await strategy.detect(sandbox, normalizedRoot)
       : detection;
+  const effectiveDetection = runtimeDetection ??
+    detection ?? { runtime: "node22", packageManager: "npm" };
 
   return {
     effectiveRuntime,
     strategy,
     effectiveDetection,
+    hasProjectManifest: runtimeDetection !== null,
   };
 }
 
@@ -178,29 +185,27 @@ export async function resolveBootstrapContext(
       (autoTarget.framework ? ` (${autoTarget.framework})` : "") +
       ". Set a root directory in repo settings to override."
     : null;
-  const { effectiveRuntime, strategy, effectiveDetection } =
+  const { effectiveRuntime, strategy, effectiveDetection, hasProjectManifest } =
     await resolveBootstrapDetection(sandbox, normalizedRoot, opts.runtime);
   const { packageManager, framework, frameworkEntry } = effectiveDetection;
   const packageInfo = await readPackageDevScriptInfo(sandbox, normalizedRoot);
   const { packageDevScript } = packageInfo;
-  // A README-only Node repo has nothing to install or start; running the
-  // default `npm install` there writes a stray lockfile and `npm run dev`
-  // exits, failing the whole boot before the agent can scaffold anything.
+  // A repo no runtime strategy recognizes (README-only, Go, Rust, a static
+  // site, ...) has nothing the default install understands: `npm install`
+  // writes a stray lockfile and `pip install -r requirements.txt` exits, and
+  // either failure would end the boot before the agent can set anything up.
   // Install and dev are separate decisions: a configured install command
   // still runs, and a configured dev command always starts.
-  const nodeWithoutPackageJson =
-    !packageInfo.hasPackageJson && isNodeRuntime(effectiveRuntime);
-  const skipDefaultInstall = nodeWithoutPackageJson && !opts.installCommand;
-  // A Python repo without package.json keeps its strategy's dev command.
-  // A Python repo that carries a package.json (for tooling) follows its
-  // dev script, as before; only a missing manifest falls back to the
-  // strategy's own command.
+  const noProjectManifest = !hasProjectManifest;
+  const skipDefaultInstall = noProjectManifest && !opts.installCommand;
+  // Node starts the package.json dev script; other runtimes start their
+  // strategy's command when they recognized the project.
   const startsDevServer =
     Boolean(opts.devCommand) ||
-    (packageInfo.hasPackageJson
+    (isNodeRuntime(effectiveRuntime)
       ? packageInfo.hasDevScript
-      : !isNodeRuntime(effectiveRuntime));
-  const emptyNodeProject = skipDefaultInstall && !startsDevServer;
+      : hasProjectManifest);
+  const emptyProject = skipDefaultInstall && !startsDevServer;
   const workspaceBuildCommand = await resolveWorkspaceBuildCommand(
     sandbox,
     normalizedRoot,
@@ -269,9 +274,9 @@ export async function resolveBootstrapContext(
     frameworkEntry,
     packageDevScript,
     startsDevServer,
-    emptyNodeProject,
+    emptyProject,
     skipDefaultInstall,
-    nodeWithoutPackageJson,
+    noProjectManifest,
     readiness,
     previewUrl,
     runtimeEnv,

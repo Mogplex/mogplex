@@ -23,7 +23,7 @@ import {
 } from "./client-shell";
 import {
   noDevServerMessage,
-  noPackageJsonWarning,
+  noProjectManifestWarning,
   logSignalsPreviewReady,
   extractBoundPortFromLog,
   replacePortInSandboxDomain,
@@ -335,24 +335,24 @@ type NoDevServerBootContext = Pick<
   ResolvedBootstrapContext,
   | "previewUrl"
   | "normalizedRoot"
-  | "emptyNodeProject"
+  | "emptyProject"
   | "skipDefaultInstall"
-  | "nodeWithoutPackageJson"
+  | "noProjectManifest"
 >;
 
 /**
  * Finish a streaming boot that starts no dev server: warn when there is no
- * package.json, log why, and report the sandbox running for terminal and
+ * project manifest, log why, and report the sandbox running for terminal and
  * file access.
  */
 export async function* streamNoDevServerReady(
   context: NoDevServerBootContext,
   boot: "fresh" | "snapshot"
 ): AsyncGenerator<SandboxBootstrapStreamEvent> {
-  if (context.nodeWithoutPackageJson) {
+  if (context.noProjectManifest) {
     yield {
       type: "warning",
-      message: noPackageJsonWarning(context.normalizedRoot),
+      message: noProjectManifestWarning(context.normalizedRoot),
     };
   }
   yield {
@@ -372,10 +372,10 @@ export function buildNoDevScriptBootstrapResult(
     >,
   installLog: string
 ) {
-  if (context.nodeWithoutPackageJson) {
+  if (context.noProjectManifest) {
     console.warn(
       "[sandbox/bootstrap]",
-      noPackageJsonWarning(context.normalizedRoot)
+      noProjectManifestWarning(context.normalizedRoot)
     );
   }
   return {

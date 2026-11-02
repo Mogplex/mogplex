@@ -47,9 +47,9 @@ async function collect(stream: AsyncGenerator<SandboxBootstrapStreamEvent>) {
   return events;
 }
 
-const noPackageJsonWarning = expect.objectContaining({
+const noManifestWarning = expect.objectContaining({
   type: "warning",
-  message: expect.stringContaining("no dev server is running"),
+  message: expect.stringContaining("skipped the default install"),
 });
 
 async function streamUntilInstall(
@@ -65,7 +65,7 @@ async function streamUntilInstall(
   return { events, commands };
 }
 
-describe("bootstrap for a repository without package.json", () => {
+describe("bootstrap for a repository without a project manifest", () => {
   it("should come up ready without install or dev when a Node repo has only a README", async () => {
     const { events, commands } = await streamUntilInstall({
       "README.md": "# test",
@@ -73,7 +73,7 @@ describe("bootstrap for a repository without package.json", () => {
 
     expect(ranProjectSetup(commands)).toBe(false);
     expect(events.at(-1)).toEqual({ type: "status", status: "running" });
-    expect(events).toContainEqual(noPackageJsonWarning);
+    expect(events).toContainEqual(noManifestWarning);
     expect(events).toContainEqual(
       expect.objectContaining({
         type: "log",
@@ -92,7 +92,7 @@ describe("bootstrap for a repository without package.json", () => {
       installCommand: "(none)",
       devCommand: "(none)",
       healthStatus: "running",
-      devLog: expect.stringContaining("No package.json found"),
+      devLog: expect.stringContaining("No project manifest found"),
     });
   });
 
@@ -105,7 +105,7 @@ describe("bootstrap for a repository without package.json", () => {
     expect(events).toContainEqual(
       expect.objectContaining({
         type: "log",
-        data: expect.stringContaining("no package.json found"),
+        data: expect.stringContaining("no project manifest found"),
       })
     );
   });
@@ -122,7 +122,7 @@ describe("bootstrap for a repository without package.json", () => {
     expect(result).toMatchObject({
       installCommand: "npm install --global serve",
       devCommand: "(none)",
-      devLog: expect.stringContaining("No package.json found"),
+      devLog: expect.stringContaining("No project manifest found"),
     });
   });
 
@@ -162,7 +162,7 @@ describe("bootstrap for a repository without package.json", () => {
 
     expect(ranProjectSetup(commands)).toBe(false);
     expect(events.at(-1)).toEqual({ type: "status", status: "running" });
-    expect(events).toContainEqual(noPackageJsonWarning);
+    expect(events).toContainEqual(noManifestWarning);
   });
 
   it.each([
@@ -197,14 +197,14 @@ describe("bootstrap for a repository without package.json", () => {
     }
   );
 
-  it("should finish without the package.json warning when package.json has no dev script", async () => {
+  it("should finish without the manifest warning when package.json has no dev script", async () => {
     const { sandbox } = fakeSandbox({
       "package.json": JSON.stringify({ scripts: { build: "tsc" } }),
     });
 
     const events = await collect(bootstrapSandboxStreaming(sandbox));
 
-    expect(events).not.toContainEqual(noPackageJsonWarning);
+    expect(events).not.toContainEqual(noManifestWarning);
     expect(events).toContainEqual(
       expect.objectContaining({
         type: "log",
@@ -217,7 +217,7 @@ describe("bootstrap for a repository without package.json", () => {
   it("should take the npm path for an empty package.json", async () => {
     const { events } = await streamUntilInstall({ "package.json": "" });
 
-    expect(events).not.toContainEqual(noPackageJsonWarning);
+    expect(events).not.toContainEqual(noManifestWarning);
     expect(events.at(-1)).toEqual({ type: "status", status: "installing" });
   });
 
@@ -239,7 +239,7 @@ describe("bootstrap for a repository without package.json", () => {
       if (event.type === "status" && event.status === "installing") break;
     }
 
-    expect(events).not.toContainEqual(noPackageJsonWarning);
+    expect(events).not.toContainEqual(noManifestWarning);
     expect(events.at(-1)).toEqual({ type: "status", status: "installing" });
   });
 
@@ -248,8 +248,38 @@ describe("bootstrap for a repository without package.json", () => {
       "requirements.txt": "fastapi\n",
     });
 
-    expect(events).not.toContainEqual(noPackageJsonWarning);
+    expect(events).not.toContainEqual(noManifestWarning);
     expect(events.at(-1)).toEqual({ type: "status", status: "installing" });
+  });
+
+  it.each([
+    ["a Go module", { "go.mod": "module example.com/app\n", "main.go": "" }],
+    ["a Python-runtime repo with only a README", { "README.md": "# test" }],
+  ])("should come up ready without install for %s", async (_, files) => {
+    const { sandbox, commands } = fakeSandbox(files);
+    const events = await collect(
+      bootstrapSandboxStreaming(sandbox, {
+        runtime: "README.md" in files ? "python3.13" : undefined,
+      })
+    );
+
+    expect(commands.some((command) => /\binstall\b/.test(command))).toBe(false);
+    expect(events).toContainEqual(noManifestWarning);
+    expect(events.at(-1)).toEqual({ type: "status", status: "running" });
+  });
+
+  it("should start the Python dev server when the repo also carries a package.json without a dev script", async () => {
+    const { sandbox, commands } = fakeSandbox({
+      "requirements.txt": "fastapi\n",
+      "package.json": JSON.stringify({ scripts: { lint: "eslint ." } }),
+    });
+    for await (const event of bootstrapSandboxStreaming(sandbox, {
+      runtime: "python3.13",
+    })) {
+      if (event.type === "preview_url") break;
+    }
+
+    expect(commands.some((command) => command.includes("uvicorn"))).toBe(true);
   });
 
   it("should skip the default install but launch a configured dev command for a README-only repo", async () => {
