@@ -136,7 +136,11 @@ describe("bootstrap for a repository without a project manifest", () => {
         devCommand: "npx serve .",
       });
 
-      expect(result).toMatchObject({ installLog: "" });
+      expect(result).toMatchObject({
+        installCommand: "(none)",
+        devCommand: "npx serve .",
+        installLog: "",
+      });
       expect(commands.some((command) => /\binstall\b/.test(command))).toBe(
         false
       );
@@ -165,6 +169,22 @@ describe("bootstrap for a repository without a project manifest", () => {
     expect(events).toContainEqual(noManifestWarning);
   });
 
+  it("should not reinstall on lockfile drift when the baseline repo has no manifest", async () => {
+    const { sandbox, commands } = fakeSandbox({ "package-lock.json": "{}" });
+
+    const events = await collect(
+      bootstrapFromBaselineSnapshotStreaming(sandbox, {
+        baseBranch: "main",
+        workingBranch: "main",
+        createBranch: false,
+        expectedLockfileHash: "baseline-hash",
+      })
+    );
+
+    expect(ranProjectSetup(commands)).toBe(false);
+    expect(events.at(-1)).toEqual({ type: "status", status: "running" });
+  });
+
   it.each([
     [
       "unreadable",
@@ -185,7 +205,6 @@ describe("bootstrap for a repository without a project manifest", () => {
         ).resolves.toEqual({
           packageDevScript: null,
           hasDevScript: true,
-          hasPackageJson: true,
         });
         expect(warn).toHaveBeenCalledWith(
           "[sandbox/bootstrap] could not read package.json dev script:",
@@ -267,6 +286,24 @@ describe("bootstrap for a repository without a project manifest", () => {
     expect(events).toContainEqual(noManifestWarning);
     expect(events.at(-1)).toEqual({ type: "status", status: "running" });
   });
+
+  it.each([
+    ["node22", { "requirements.txt": "fastapi\n" }],
+    ["python3.13", { "package.json": JSON.stringify({ name: "app" }) }],
+  ] as const)(
+    "should skip install when the pinned %s runtime does not recognize the repo's manifest",
+    async (runtime, files) => {
+      const { sandbox, commands } = fakeSandbox(files);
+      const result = await bootstrapSandbox(sandbox, { runtime });
+
+      expect(ranProjectSetup(commands)).toBe(false);
+      expect(result).toMatchObject({
+        runtime,
+        installCommand: "(none)",
+        devCommand: "(none)",
+      });
+    }
+  );
 
   it("should start the Python dev server when the repo also carries a package.json without a dev script", async () => {
     const { sandbox, commands } = fakeSandbox({

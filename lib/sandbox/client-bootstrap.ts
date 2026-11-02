@@ -108,10 +108,6 @@ export async function bootstrapSandbox(
     context
   );
 
-  if (context.emptyProject) {
-    return buildNoDevScriptBootstrapResult(context, "");
-  }
-
   const installLog = context.skipDefaultInstall
     ? ""
     : await runBlockingSetupPhases(sandbox, context, opts);
@@ -148,7 +144,9 @@ export async function bootstrapSandbox(
     runtime: context.effectiveRuntime,
     packageManager: context.packageManager,
     framework: context.framework,
-    installCommand: context.installCommand,
+    installCommand: context.skipDefaultInstall
+      ? "(none)"
+      : context.installCommand,
     devCommand: context.devCommand,
     installLog,
     devLog,
@@ -190,11 +188,6 @@ export async function* bootstrapSandboxStreaming(
     context.previewUrl,
     context
   );
-
-  if (context.emptyProject) {
-    yield* streamNoDevServerReady(context, "fresh");
-    return;
-  }
 
   if (context.skipDefaultInstall) {
     yield {

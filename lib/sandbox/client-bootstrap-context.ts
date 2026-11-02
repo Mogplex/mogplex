@@ -63,8 +63,8 @@ export async function resolveBootstrapDetection(
 
 /**
  * Read the dev script from package.json. A missing file reports no dev
- * script and no manifest; an empty, unreadable or malformed one counts as
- * present with a dev script, so the npm path runs and fails loudly.
+ * script; an empty, unreadable or malformed one counts as having one, so
+ * the npm path runs and fails loudly.
  */
 export async function readPackageDevScriptInfo(
   sandbox: Sandbox,
@@ -77,7 +77,6 @@ export async function readPackageDevScriptInfo(
       return {
         packageDevScript: null,
         hasDevScript: false,
-        hasPackageJson: false,
       };
     }
 
@@ -90,7 +89,6 @@ export async function readPackageDevScriptInfo(
     return {
       packageDevScript,
       hasDevScript: Boolean(packageDevScript),
-      hasPackageJson: true,
     };
   } catch (error) {
     // Unreadable or malformed package.json: keep the npm path so the dev
@@ -102,7 +100,6 @@ export async function readPackageDevScriptInfo(
     return {
       packageDevScript: null,
       hasDevScript: true,
-      hasPackageJson: true,
     };
   }
 }
@@ -205,7 +202,6 @@ export async function resolveBootstrapContext(
     (isNodeRuntime(effectiveRuntime)
       ? packageInfo.hasDevScript
       : hasProjectManifest);
-  const emptyProject = skipDefaultInstall && !startsDevServer;
   const workspaceBuildCommand = await resolveWorkspaceBuildCommand(
     sandbox,
     normalizedRoot,
@@ -274,7 +270,6 @@ export async function resolveBootstrapContext(
     frameworkEntry,
     packageDevScript,
     startsDevServer,
-    emptyProject,
     skipDefaultInstall,
     noProjectManifest,
     readiness,

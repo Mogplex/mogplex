@@ -101,9 +101,6 @@ export type ResolvedBootstrapContext = {
    * package.json dev script on Node, or another runtime's own command when
    * it recognized the project. */
   startsDevServer: boolean;
-  /** No manifest the runtime recognizes and no install/dev override: skip
-   * install and dev so any repo boots ready for the agent to set up. */
-  emptyProject: boolean;
   /** No recognized manifest and no install override: the runtime's default
    * install has nothing to install and would only fail or leave debris. */
   skipDefaultInstall: boolean;

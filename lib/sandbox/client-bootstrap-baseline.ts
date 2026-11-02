@@ -107,6 +107,9 @@ async function* runBaselineConditionalInstallPhase(
   context: ResolvedBootstrapContext,
   expectedLockfileHash: string
 ): AsyncGenerator<SandboxBootstrapStreamEvent> {
+  // No recognized manifest means the default install has nothing to do,
+  // even if a stray lockfile changed.
+  if (context.skipDefaultInstall) return;
   const postCheckoutHash = await computeLockfileHashFromSandbox(
     sandbox,
     context.normalizedRoot

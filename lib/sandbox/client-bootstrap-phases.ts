@@ -333,11 +333,7 @@ export async function* streamPreviewSignal(
 
 type NoDevServerBootContext = Pick<
   ResolvedBootstrapContext,
-  | "previewUrl"
-  | "normalizedRoot"
-  | "emptyProject"
-  | "skipDefaultInstall"
-  | "noProjectManifest"
+  "previewUrl" | "normalizedRoot" | "skipDefaultInstall" | "noProjectManifest"
 >;
 
 /**

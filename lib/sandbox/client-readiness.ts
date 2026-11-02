@@ -22,7 +22,7 @@ export const NO_PROJECT_MANIFEST_MESSAGE =
   "No project manifest found — no dev server started. Sandbox ready for terminal and file access.";
 
 type NoDevServerContext = {
-  emptyProject: boolean;
+  skipDefaultInstall: boolean;
   noProjectManifest: boolean;
 };
 
@@ -36,7 +36,7 @@ export function noDevServerMessage(
       ? "Snapshot restored — no project manifest found. Ready for terminal and file access."
       : "Snapshot restored — no dev script found. Ready for terminal and file access.";
   }
-  if (context.emptyProject) return EMPTY_PROJECT_MESSAGE;
+  if (context.skipDefaultInstall) return EMPTY_PROJECT_MESSAGE;
   return context.noProjectManifest
     ? NO_PROJECT_MANIFEST_MESSAGE
     : NO_DEV_SCRIPT_MESSAGE;
