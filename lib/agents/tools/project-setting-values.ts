@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { REDACTED_VALUE, redactSecretsInText } from "@/lib/ai-telemetry";
 import { normalizeEnvVars } from "@/lib/repo-settings";
+import { ENV_NAME, isLoaderEnvName } from "./project-env-names";
 
 /**
  * How Control's project tools show saved values and validate new ones.
@@ -65,15 +66,27 @@ export function envValueProblem(name: string, value: string | null) {
       : `${name} looks like a secret. Ask the operator to add it in Project settings.`;
   }
   if (value === null) return null;
-  // Quotes are stripped on save, so '""' would store an empty variable; a
-  // spaces-only value is refused the same way a spaces-only command is.
-  if (!normalizeEnvVars({ [name]: value })[name]?.trim()) {
+  // Check the value as it will be stored: one quote pair stripped, escapes
+  // expanded. A spaces-only value is refused like a spaces-only command.
+  const stored = normalizeEnvVars({ [name]: value })[name] ?? "";
+  if (!stored.trim()) {
     return "The value is empty or only spaces once its surrounding quotes are removed. Use value: null to delete a variable.";
   }
-  if (redactSecretsInText(value) !== value) {
+  if (redactSecretsInText(stored) !== stored) {
     return `${name} looks like a secret. Ask the operator to add it in Project settings.`;
   }
   return null;
+}
+
+/** Why Control can't write this variable name and value, or null. */
+export function envWriteProblem(name: string, value: string | null) {
+  if (!ENV_NAME.test(name) || name === "__proto__") {
+    return `${name || "That"} is not a valid variable name.`;
+  }
+  if (isLoaderEnvName(name)) {
+    return `${name} changes how every program in the sandbox starts. Ask the operator to set it in Project settings.`;
+  }
+  return envValueProblem(name, value);
 }
 
 /**

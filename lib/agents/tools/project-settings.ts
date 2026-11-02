@@ -23,10 +23,10 @@ import {
   resolveProductResourceScopeForTeam,
   type ProductResourceScope,
 } from "@/lib/team-resource-scope";
-import { ENV_NAME, isLoaderEnvName, storedEnvMap } from "./project-env-names";
+import { storedEnvMap } from "./project-env-names";
 import {
   comparedSettingColumns,
-  envValueProblem,
+  envWriteProblem,
   notRedacted,
   savedCommand,
   shownCommand,
@@ -466,17 +466,10 @@ export function createProjectSettingsTools(
       inputSchema: envParams,
       execute: async ({ name, value, replace }: z.infer<typeof envParams>) => {
         const key = name.trim();
-        if (!ENV_NAME.test(key) || key === "__proto__") {
-          return { error: `${key || "That"} is not a valid variable name.` };
-        }
-        if (isLoaderEnvName(key)) {
-          return {
-            error: `${key} changes how every program in the sandbox starts. Ask the operator to set it in Project settings.`,
-          };
-        }
-        const valueProblem = envValueProblem(key, value);
-        if (valueProblem) return { error: valueProblem };
+        // Authorize first, so every tool answers a missing permission alike.
         return withScope("write", async (scope) => {
+          const problem = envWriteProblem(key, value);
+          if (problem) return { error: problem };
           for (let attempt = 1; ; attempt += 1) {
             const row = await loadSettings(target, scope);
             if ("error" in row) return row;

@@ -20,6 +20,22 @@ describe("project_env_set", () => {
     });
   });
 
+  it("should answer a missing permission before judging the name", async () => {
+    const { writes } = installRepo({
+      owner_type: "team",
+      owner_user_id: null,
+      product_team_id: "team-1",
+    });
+
+    expect(
+      await tools("team-1", "viewer").project_env_set.execute({
+        name: "1BAD",
+        value: "x",
+      })
+    ).toEqual({ error: "You do not have permission to change this project." });
+    expect(writes).toEqual([]);
+  });
+
   it("should reject names a shell or the stored object cannot hold", async () => {
     const { writes } = installRepo();
 
