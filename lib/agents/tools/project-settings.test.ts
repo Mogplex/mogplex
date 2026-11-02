@@ -307,7 +307,11 @@ describe("project settings tools", () => {
     });
 
     expect(
-      await tools().project_env_set.execute({ name: "PORT", value: null })
+      await tools().project_env_set.execute({
+        name: "PORT",
+        value: null,
+        replace: true,
+      })
     ).toMatchObject({ ok: true, name: "PORT", deleted: true });
     expect(row.sandbox_env_vars).toEqual({
       DATABASE_URL: "postgres://owner@db/app",
@@ -401,5 +405,34 @@ describe("project settings tools", () => {
       tools().project_settings_update.inputSchema.safeParse({ runtime: "ruby" })
         .success
     ).toBe(false);
+  });
+
+  it("should not delete a stored value unless asked to", async () => {
+    const { row, writes } = installRepo();
+
+    expect(
+      await tools().project_env_set.execute({
+        name: "DATABASE_URL",
+        value: null,
+      })
+    ).toEqual({
+      error:
+        "DATABASE_URL is already set and its value may be a secret. Ask the operator before deleting it, then call again with replace: true.",
+    });
+    expect(writes).toEqual([]);
+    expect(row.sandbox_env_vars).toEqual({
+      DATABASE_URL: "postgres://owner@db/app",
+    });
+  });
+
+  it("should store a quoted value the way the operator's editor does", async () => {
+    const { row } = installRepo({ sandbox_env_vars: null });
+
+    await tools().project_env_set.execute({
+      name: "NODE_ENV",
+      value: '"production"',
+    });
+
+    expect(row.sandbox_env_vars).toEqual({ NODE_ENV: "production" });
   });
 });

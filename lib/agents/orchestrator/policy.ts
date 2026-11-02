@@ -323,7 +323,10 @@ export function wrapWithPolicy(
         userId: ctx.userId,
         toolName,
         toolCallId: options.toolCallId,
-        toolInput: sanitizeInputForAudit(input) as Record<string, unknown>,
+        toolInput: sanitizeToolInputForAudit(toolName, input) as Record<
+          string,
+          unknown
+        >,
         summary,
         runId: ctx.missionId ?? null,
         aiCallId: ctx.aiCallId ?? null,
@@ -358,7 +361,7 @@ export function wrapWithPolicy(
         input:
           def.access === "approval"
             ? "[redacted for approval tools]"
-            : sanitizeInputForAudit(input),
+            : sanitizeToolInputForAudit(toolName, input),
       };
       logAuditEntry(auditEntry);
 
@@ -412,6 +415,26 @@ export function wrapWithPolicy(
  * Sanitize tool input for audit logging.
  * Removes potentially sensitive fields.
  */
+/**
+ * Inputs whose ordinary field names carry values that may be secrets, so the
+ * key-name pattern in sanitizeInputForAudit cannot catch them.
+ */
+const AUDIT_REDACTED_FIELDS: Readonly<Record<string, readonly string[]>> = {
+  project_env_set: ["value"],
+};
+
+/** Audit-safe copy of one tool's input. */
+export function sanitizeToolInputForAudit(toolName: string, input: unknown) {
+  const sanitized = sanitizeInputForAudit(input);
+  const fields = AUDIT_REDACTED_FIELDS[toolName];
+  if (!fields || !sanitized || typeof sanitized !== "object") return sanitized;
+  const redacted = { ...(sanitized as Record<string, unknown>) };
+  for (const field of fields) {
+    if (field in redacted) redacted[field] = "[redacted]";
+  }
+  return redacted;
+}
+
 export function sanitizeInputForAudit(input: unknown): unknown {
   if (!input || typeof input !== "object") return input;
   if (Array.isArray(input)) return input.map(sanitizeInputForAudit);

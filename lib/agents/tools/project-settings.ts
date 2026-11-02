@@ -205,7 +205,7 @@ const envParams = z.object({
     .boolean()
     .optional()
     .describe(
-      "Required to change a variable that is already set. Use it only for a variable you set earlier in this conversation or one the operator asked you to change; you cannot see stored values, which may be secrets."
+      "Required to change or delete a variable that is already set. Use it only for a variable you set earlier in this conversation or one the operator asked you to change; you cannot see stored values, which may be secrets."
     ),
   value: z
     .string()
@@ -314,19 +314,24 @@ export function createProjectSettingsTools(
           const previous = row.sandbox_env_vars;
           const next = normalizeEnvVars(previous);
           let replaced = false;
+          const exists = Object.hasOwn(next, key);
+          if (value === null && !exists) {
+            return { ok: true, name: key, note: "The variable was not set." };
+          }
+          // Control cannot see stored values, so changing or deleting one
+          // that exists needs the operator's say-so.
+          if (exists && !replace) {
+            return {
+              error: `${key} is already set and its value may be a secret. Ask the operator before ${value === null ? "deleting" : "changing"} it, then call again with replace: true.`,
+            };
+          }
           if (value === null) {
-            if (!Object.hasOwn(next, key)) {
-              return { ok: true, name: key, note: "The variable was not set." };
-            }
             delete next[key];
           } else {
-            if (Object.hasOwn(next, key) && !replace) {
-              return {
-                error: `${key} is already set and its value may be a secret. Ask the operator before changing it, then call again with replace: true.`,
-              };
-            }
-            replaced = Object.hasOwn(next, key);
-            next[key] = value;
+            replaced = exists;
+            // Store it the way the operator's editor does (one surrounding
+            // quote pair stripped), so later rewrites leave it unchanged.
+            next[key] = normalizeEnvVars({ [key]: value })[key] ?? value;
           }
           let query = supabaseAdmin
             .from("repos")

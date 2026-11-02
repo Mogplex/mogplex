@@ -18,6 +18,21 @@ describe("orchestrator environment setup prompt", () => {
     );
   });
 
+  it("should only mention project_env_set when that tool is callable", () => {
+    const prompt = buildOrchestratorSystemPrompt({
+      repoFullName: "acme/demo",
+      availableToolNames: [
+        "sandbox_start",
+        "run_command",
+        "project_settings",
+        "project_settings_update",
+      ],
+    });
+
+    expect(prompt).toContain("save them with project_settings_update");
+    expect(prompt).not.toContain("project_env_set");
+  });
+
   it("should have Control save working setup when the project tools are callable", () => {
     const withTools = buildOrchestratorSystemPrompt({
       repoFullName: "acme/demo",

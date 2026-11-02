@@ -11,12 +11,15 @@ export function buildEnvironmentSetupBlock(
   const sandboxStartAvailable =
     !ctx.availableToolNames || ctx.availableToolNames.includes("sandbox_start");
   if (!sandboxStartAvailable) return "";
-  const canSave =
-    !ctx.availableToolNames ||
-    ctx.availableToolNames.includes("project_settings_update");
-  const saveGuidance = canSave
-    ? "- Check project_settings first. Once install and dev commands work, or the app lives in a subdirectory or needs a different runtime, save them with project_settings_update so future boots work. Save non-secret variables (NODE_ENV, PORT, public URLs) with project_env_set."
+  const has = (name: string) =>
+    !ctx.availableToolNames || ctx.availableToolNames.includes(name);
+  const settingsGuidance = has("project_settings_update")
+    ? "- Check project_settings first. Once install and dev commands work, or the app lives in a subdirectory or needs a different runtime, save them with project_settings_update so future boots work."
     : "- When you find working install and dev commands, or the app lives in a subdirectory, say so briefly so the operator can save them in Project settings > General for future boots.";
+  const envGuidance = has("project_env_set")
+    ? "\n- Save non-secret variables (NODE_ENV, PORT, public URLs) with project_env_set."
+    : "";
+  const saveGuidance = `${settingsGuidance}${envGuidance}`;
   return `
 <environment_setup>
 When sandbox_start returns setupIssue, the sandbox is running but the project is not set up yet. Set it up first, even when starting compute was the whole request, the way a developer would on a freshly cloned repository:
