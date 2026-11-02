@@ -317,6 +317,22 @@ describe("project settings tools", () => {
     expect(writes).toEqual([]);
   });
 
+  it("should not count a normalization-only difference as a replacement", async () => {
+    const { writes } = installRepo({
+      install_command: "npm ci ",
+      root_directory: "apps/web/",
+    });
+
+    const result = await tools().project_settings_update.execute({
+      installCommand: "npm ci",
+      rootDirectory: "apps/web",
+    });
+
+    expect(result).toMatchObject({ ok: true });
+    expect(result).not.toHaveProperty("replaced");
+    expect(writes).toHaveLength(1);
+  });
+
   it("should treat saving the same value again as no replacement", async () => {
     installRepo({ dev_command: "make serve" });
 

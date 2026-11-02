@@ -220,9 +220,11 @@ function replacedSettings(row: SettingsRow, updates: SettingsUpdates) {
   ] as const;
   for (const [column, name] of fields) {
     if (!(column in updates)) continue;
-    const saved = row[column];
-    if (saved !== null && saved !== "" && saved !== updates[column])
-      replaced[name] = shownCommand(saved);
+    // Normalize the stored value the way the update was, so "npm ci " or
+    // "apps/web/" saved by another path doesn't count as a change.
+    const saved = normalizeRepoSettingsPatch({ [column]: row[column] })[column];
+    if (saved != null && saved !== updates[column])
+      replaced[name] = shownCommand(row[column]);
   }
   if (pinnedPortReplaced(row, updates)) replaced.devPort = row.dev_port;
   return replaced;

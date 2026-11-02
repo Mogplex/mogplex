@@ -26,6 +26,9 @@ export const savedCommand = z
     message: `Contains ${REDACTED_VALUE} from a read-back value. Omit the field, or write the command out in full.`,
   });
 
+// Narrower than SENSITIVE_KEY_TERMS in lib/ai-telemetry.ts on purpose: the
+// redactor hides anything that might be a secret in free text, while this
+// decides which setup variables Control may not save at all.
 // Name segments that mark a variable as a secret, matched as whole
 // `_`-separated parts so SESSION_TTL or MAX_TOKENS stay ordinary. These mark
 // a secret anywhere (SECRET_KEY_BASE); TOKEN and KEY only as the last part
