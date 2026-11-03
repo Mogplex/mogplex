@@ -119,10 +119,12 @@ accessible indicator. Confirm text and focus contrast in both themes.
 something that needs attention, and `toast.error()` (variant `destructive`) for
 failed actions. Each variant tints the surface, adds an accent bar, and
 shows a distinct, high-contrast icon with a screen-reader label.
-Notifications sit below the app and workspace toolbars, with room reserved for
-the conversation controls on short screens. They never take focus when they
-appear and keep a visible dismiss button. Bursts preserve every message
-in a scrollable stack. Respect reduced motion, and let users pause expiry by
+Notifications use the measured space between workspace tools and the composer.
+When that space is short, a compact row keeps text scrollable and actions fixed
+at 44px. Stop remains above the footer on short landscape screens.
+They never take focus when they appear. Bursts preserve every open message and action in a scrollable stack; newly
+added messages release already-dismissed cards and their removal timers.
+Respect reduced motion, and let users pause expiry by
 hovering or focusing a notification. Routine updates, including warnings, use
 polite screen-reader announcements; failures interrupt by default. Override
 the announcement type only when a specific message requires urgency.

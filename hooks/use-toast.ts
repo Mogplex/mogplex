@@ -72,11 +72,18 @@ const addToRemoveQueue = (toastId: string) => {
 
 export const reducer = (state: State, action: Action): State => {
   switch (action.type) {
-    case "ADD_TOAST":
+    case "ADD_TOAST": {
+      const toasts = [action.toast, ...state.toasts];
+      // Closed cards have no remaining action; a new card can release them.
+      for (const dropped of toasts.filter((toast) => toast.open === false)) {
+        clearTimeout(toastTimeouts.get(dropped.id));
+        toastTimeouts.delete(dropped.id);
+      }
       return {
         ...state,
-        toasts: [action.toast, ...state.toasts],
+        toasts: toasts.filter((toast) => toast.open !== false),
       };
+    }
 
     case "UPDATE_TOAST":
       return {
@@ -91,9 +98,9 @@ export const reducer = (state: State, action: Action): State => {
 
       // ! Side effects ! - This could be extracted into a dismissToast() action,
       // but I'll keep it here for simplicity
-      if (toastId) {
+      if (toastId && state.toasts.some((toast) => toast.id === toastId)) {
         addToRemoveQueue(toastId);
-      } else {
+      } else if (toastId === undefined) {
         for (const toast of state.toasts) {
           addToRemoveQueue(toast.id);
         }

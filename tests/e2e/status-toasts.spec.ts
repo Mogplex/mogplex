@@ -223,6 +223,39 @@ test("short screens keep the toast stack clear of toolbars and the composer", as
   await expect(page.getByTestId("stop-count")).toHaveText("1");
 });
 
+for (const height of [390, 320]) {
+  test(`landscape notifications stay bounded and leave control available at ${height}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 844, height });
+    await loadStatusToastFixture(page, "dark");
+    await page.getByRole("button", { name: "Show burst", exact: true }).click();
+    const viewport = page.locator('[data-slot="toast-viewport"]');
+    const stack = await viewport.boundingBox();
+    const composer = page.getByRole("textbox", { name: "Steer agent" });
+    const input = await composer.boundingBox();
+    expect(stack!.y + stack!.height).toBeLessThan(input!.y);
+    expect(
+      await viewport.evaluate((element) => getComputedStyle(element).maxHeight)
+    ).not.toBe("none");
+    if (height === 390) {
+      const newest = page.locator("[data-variant]").first();
+      const card = await newest.boundingBox();
+      expect(stack!.height).toBeGreaterThanOrEqual(card!.height);
+      const close = newest.getByRole("button", {
+        name: "Dismiss notification",
+      });
+      const closeBox = await close.boundingBox();
+      expect(closeBox!.height).toBeGreaterThanOrEqual(44);
+      await close.click();
+      await expect(page.locator("[data-variant]")).toHaveCount(11);
+    }
+    await composer.fill("Keep control in landscape.");
+    await page.getByRole("button", { name: "Stop agent", exact: true }).click();
+    await expect(page.getByTestId("stop-count")).toHaveText("1");
+  });
+}
+
 test("toast actions and keyboard dismissal work on mobile with reduced motion", async ({
   page,
 }, testInfo) => {
