@@ -63,7 +63,7 @@ export function createControlVerificationGate(
     toolCall: { toolName: string; toolCallId?: string };
     output?: unknown;
   }) => {
-    if (event.toolCall.toolName !== "run_checks") return;
+    if (event.toolCall.toolName !== "run_checks" || uncertainCommand) return;
     const id = event.toolCall.toolCallId;
     if (id && recordedCheckCalls.has(id)) return;
     if (id) recordedCheckCalls.add(id);
@@ -84,7 +84,12 @@ export function createControlVerificationGate(
     options: ExecuteOptions
   ) => {
     options.abortSignal?.throwIfAborted();
-    if (uncertainCommand) return block(UNCONFIRMED, true);
+    if (uncertainCommand)
+      return {
+        ok: false,
+        error: UNCONFIRMED,
+        reason: "verification_unconfirmed",
+      };
     if (name === "run_checks") {
       // Fresh checks bind to their own first probe, including external edits
       // made after an earlier command was observed.
@@ -211,7 +216,8 @@ export function createControlVerificationGate(
               ...current,
               execute: async (input: unknown, options: ExecuteOptions) => {
                 const observesSource =
-                  SOURCE_TOOLS.has(name) || name === "run_checks";
+                  !uncertainCommand &&
+                  (SOURCE_TOOLS.has(name) || name === "run_checks");
                 if (observesSource) inFlight++;
                 try {
                   return await executeObserved(name, execute, input, options);

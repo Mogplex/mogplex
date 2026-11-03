@@ -176,4 +176,58 @@ it("does not verify a receipt that reports unknown command completion", () => {
   state.observe(revision("original"));
   state.recordReceipt({ ...receipt("original"), commandCompletion: "unknown" });
   expect(state.summary().verified).toBe(false);
+  expect(
+    state
+      .summary()
+      .checks.every((row) => row.status === "blocked" && row.exitCode === 0)
+  ).toBe(true);
+});
+
+it("retains confirmed failed exits when a later check loses observation", () => {
+  const state = createRepositoryVerificationState();
+  state.observe(revision("original"));
+  const interrupted = receipt("original");
+  interrupted.commandCompletion = "unknown";
+  interrupted.workspaceRevisionAfter = null;
+  interrupted.checks = interrupted.checks.map((row, index) => ({
+    ...row,
+    status: index === 3 ? "blocked" : "failed",
+    exitCode: index === 3 ? null : [134, 137, 137][index],
+    stderr: index === 3 ? undefined : "Resource failure",
+  }));
+  state.recordReceipt(interrupted);
+  expect(state.summary()).toMatchObject({ required: false, verified: false });
+  expect(state.summary().checks).toEqual(interrupted.checks);
+  state.observe(revision("recovered"));
+  expect(state.summary()).toMatchObject({ required: true, verified: false });
+  expect(state.summary().checks.every((row) => row.status === "not_run")).toBe(
+    true
+  );
+});
+
+it("does not attribute interrupted evidence to a different workspace or source revision", () => {
+  for (const change of [
+    { sandboxId: "another-workspace" },
+    { workspaceRevisionBefore: "older" },
+  ]) {
+    const state = createRepositoryVerificationState();
+    state.observe(revision("original"));
+    const interrupted = {
+      ...receipt("original"),
+      ...change,
+      commandCompletion: "unknown" as const,
+    };
+    interrupted.checks[0] = {
+      ...interrupted.checks[0],
+      status: "failed",
+      exitCode: 137,
+    };
+    state.recordReceipt(interrupted);
+    expect(state.summary().verified).toBe(false);
+    expect(
+      state
+        .summary()
+        .checks.every((row) => row.status === "blocked" && row.command === null)
+    ).toBe(true);
+  }
 });
