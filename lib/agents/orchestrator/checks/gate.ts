@@ -1,4 +1,4 @@
-import type { Tool, ToolSet } from "ai";
+import type { Instructions, Tool, ToolSet } from "ai";
 import { isSafeRepoPath } from "@/lib/sandbox/changes";
 import { controlToolOutcome } from "@/lib/control/tool-outcome";
 import type { OrchestratorToolContext } from "../types";
@@ -19,6 +19,9 @@ const SOURCE_TOOLS = new Set([
 const DELIVERY_TOOLS = new Set(["open_pr", "git_push", "deploy"]);
 const UNCONFIRMED =
   "Command completion could not be confirmed. Inspect its status before starting another command.";
+const PENDING_PROMPT = `<repository_verification_pending>
+Checks are pending for the current workspace contents. A final answer or an unrelated/no-op command does not record check results. Finish any necessary source edits first, then call run_checks before ending this turn. Report the recorded outcomes honestly. Only use skip with the operator's explicit scope limit and reason.
+</repository_verification_pending>`;
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -221,12 +224,39 @@ export function createControlVerificationGate(
         })
       );
     },
-    prepareStep: (assertCurrent?: () => Promise<void>) => async () => {
-      await assertCurrent?.();
-      return state.summary().required
-        ? { toolChoice: "required" as const }
-        : {};
-    },
+    prepareStep:
+      (assertCurrent?: () => Promise<void>) =>
+      async (step?: {
+        initialInstructions?: Instructions;
+        instructions?: Instructions;
+      }) => {
+        await assertCurrent?.();
+        const required = state.summary().required;
+        // Instructions are leading system content on every provider. Build
+        // from the original instructions because SDK overrides carry forward.
+        const original = step?.initialInstructions;
+        const instructions =
+          typeof original === "string"
+            ? [{ role: "system" as const, content: original }]
+            : Array.isArray(original)
+              ? original
+              : original
+                ? [original]
+                : [];
+        return {
+          ...(step
+            ? {
+                instructions: required
+                  ? [
+                      ...instructions,
+                      { role: "system" as const, content: PENDING_PROMPT },
+                    ]
+                  : instructions,
+              }
+            : {}),
+          ...(required ? { toolChoice: "required" as const } : {}),
+        };
+      },
     onToolEnd,
     interrupt() {
       if (inFlight > 0)

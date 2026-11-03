@@ -231,7 +231,9 @@ async function exercise(
   });
   const result = streamText({
     model,
+    instructions: built.systemPrompt,
     prompt: "Update the file and finish the authorized work.",
+    allowSystemInMessages: true,
     tools: built.tools,
     prepareStep: built.verification.prepareStep(),
     stopWhen: () => false,
@@ -304,6 +306,33 @@ async function exercise(
     summary: built.verification.summary(),
   };
 }
+
+it("tells the model checks are pending after each edit and removes that instruction after verification", async () => {
+  const result = await exercise("later_edit");
+  const prompts = result.modelPrompts.map(
+    (prompt) => JSON.parse(prompt) as Array<{ role: string; content: unknown }>
+  );
+  for (const index of [1, 3]) {
+    const systems = prompts[index].filter(
+      (message) => message.role === "system"
+    );
+    const reminder = systems.at(-1);
+    expect(reminder?.content).toContain("<repository_verification_pending>");
+    expect(reminder?.content).toContain("run_checks");
+    expect(
+      prompts[index].findLastIndex((message) => message.role === "system")
+    ).toBeLessThan(
+      prompts[index].findIndex((message) => message.role !== "system")
+    );
+    expect(result.modelPrompts[index]).toContain(
+      "Update the file and finish the authorized work."
+    );
+  }
+  for (const index of [0, 2, 4])
+    expect(result.modelPrompts[index]).not.toContain(
+      "<repository_verification_pending>"
+    );
+});
 
 it("the real Control tool registry forces all four full scripts before model completion", async () => {
   const result = await exercise("full");
