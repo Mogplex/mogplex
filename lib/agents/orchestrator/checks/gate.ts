@@ -63,7 +63,7 @@ export function createControlVerificationGate(
     toolCall: { toolName: string; toolCallId?: string };
     output?: unknown;
   }) => {
-    if (event.toolCall.toolName !== "run_checks") return;
+    if (event.toolCall.toolName !== "run_checks" || uncertainCommand) return;
     const id = event.toolCall.toolCallId;
     if (id && recordedCheckCalls.has(id)) return;
     if (id) recordedCheckCalls.add(id);
@@ -216,7 +216,8 @@ export function createControlVerificationGate(
               ...current,
               execute: async (input: unknown, options: ExecuteOptions) => {
                 const observesSource =
-                  SOURCE_TOOLS.has(name) || name === "run_checks";
+                  !uncertainCommand &&
+                  (SOURCE_TOOLS.has(name) || name === "run_checks");
                 if (observesSource) inFlight++;
                 try {
                   return await executeObserved(name, execute, input, options);

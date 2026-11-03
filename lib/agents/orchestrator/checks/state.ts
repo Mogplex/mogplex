@@ -65,7 +65,17 @@ export function createRepositoryVerificationState() {
     },
     recordReceipt(receipt: RepositoryCheckReceipt) {
       if (receipt.commandCompletion === "unknown") {
+        const interruptedSource =
+          receipt.sandboxId && receipt.workspaceRevisionBefore
+            ? {
+                sandboxId: receipt.sandboxId,
+                revision: receipt.workspaceRevisionBefore,
+              }
+            : null;
+        const retain =
+          interruptedSource && (!current || same(current, interruptedSource));
         block(receipt.error ?? "Command completion could not be confirmed.");
+        if (!retain) return;
         // Preserve observed failures and output. Successful exits cannot prove
         // the final source contents when the sequence lost observation.
         for (const row of receipt.checks)

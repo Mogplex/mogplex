@@ -204,3 +204,30 @@ it("retains confirmed failed exits when a later check loses observation", () => 
     true
   );
 });
+
+it("does not attribute interrupted evidence to a different workspace or source revision", () => {
+  for (const change of [
+    { sandboxId: "another-workspace" },
+    { workspaceRevisionBefore: "older" },
+  ]) {
+    const state = createRepositoryVerificationState();
+    state.observe(revision("original"));
+    const interrupted = {
+      ...receipt("original"),
+      ...change,
+      commandCompletion: "unknown" as const,
+    };
+    interrupted.checks[0] = {
+      ...interrupted.checks[0],
+      status: "failed",
+      exitCode: 137,
+    };
+    state.recordReceipt(interrupted);
+    expect(state.summary().verified).toBe(false);
+    expect(
+      state
+        .summary()
+        .checks.every((row) => row.status === "blocked" && row.command === null)
+    ).toBe(true);
+  }
+});

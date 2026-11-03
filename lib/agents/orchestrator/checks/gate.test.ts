@@ -383,6 +383,15 @@ it("keeps recorded failed exits visible while refusing work after an interrupted
   await f.run("run_command", { command: "rewrite" });
   await f.run("write_file", { path: "index.ts" });
   await f.run("open_pr");
+  const refusal = await f.run("run_checks", {}, "retry-call");
+  f.gate.onToolEnd({
+    toolCall: { toolName: "run_checks", toolCallId: "retry-call" },
+    output: refusal,
+  });
+  expect(f.gate.summary().checks).toEqual(interrupted.checks);
+  const refusing = f.run("run_command", { command: "rewrite" });
+  f.gate.interrupt();
+  await refusing;
   expect(f.effects).toEqual([]);
   expect(f.gate.summary().checks).toEqual(interrupted.checks);
   expect(f.gate.metadata()).toMatchObject({ required: false, verified: false });
