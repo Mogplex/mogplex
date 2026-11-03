@@ -7,6 +7,7 @@ import {
   mockControlSessionBootstrap,
 } from "./helpers/automation-control-plane-fixtures";
 import { captureRecoveryEvents } from "./helpers/control-recovery-fixtures";
+import { createRepositoryVerificationState } from "../../lib/agents/orchestrator/checks/state";
 import { CHECK_KINDS } from "../../lib/agents/orchestrator/checks/plan";
 import type { RepositoryVerificationSummary } from "../../lib/agents/orchestrator/checks/receipt";
 
@@ -184,4 +185,44 @@ test("mobile check results distinguish failed, unconfirmed, and skipped work", a
   await card.screenshot({
     path: testInfo.outputPath("workspace-checks-mobile.png"),
   });
+});
+
+test("an interrupted check keeps earlier failed commands visible without declaring verification", async ({
+  page,
+}) => {
+  const state = createRepositoryVerificationState();
+  state.recordReceipt({
+    ok: false,
+    verified: false,
+    receiptVersion: 1,
+    commandCompletion: "unknown",
+    sandboxId: "workspace-1",
+    workspaceRevisionBefore: "source-one",
+    workspaceRevisionAfter: null,
+    checks: CHECK_KINDS.map((kind, index) => ({
+      kind,
+      command: `CI=1 pnpm run ${kind}`,
+      status: index === 3 ? "blocked" : "failed",
+      exitCode: index === 3 ? null : [134, 137, 137][index],
+      stderr: index === 3 ? undefined : "Resource failure",
+    })),
+  });
+  await setup(page, { version: 1, ...state.summary() });
+  const card = page.getByTestId("repository-checks");
+  await expect(
+    card.getByRole("heading", { name: "Workspace checks need attention" })
+  ).toBeVisible();
+  await expect(card).toContainText(
+    "Command completion could not be confirmed."
+  );
+  await expect(card.locator("summary")).toHaveText([
+    /Typecheck\s*Failed/,
+    /Lint\s*Failed/,
+    /Build\s*Failed/,
+    /Tests\s*Unconfirmed/,
+  ]);
+  await card.locator("summary").first().click();
+  await expect(card).toContainText("CI=1 pnpm run typecheck");
+  await expect(card).toContainText("Exit code: 134");
+  await expect(card).toContainText("Resource failure");
 });

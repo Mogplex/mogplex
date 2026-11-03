@@ -84,7 +84,12 @@ export function createControlVerificationGate(
     options: ExecuteOptions
   ) => {
     options.abortSignal?.throwIfAborted();
-    if (uncertainCommand) return block(UNCONFIRMED, true);
+    if (uncertainCommand)
+      return {
+        ok: false,
+        error: UNCONFIRMED,
+        reason: "verification_unconfirmed",
+      };
     if (name === "run_checks") {
       // Fresh checks bind to their own first probe, including external edits
       // made after an earlier command was observed.

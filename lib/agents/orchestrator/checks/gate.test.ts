@@ -365,3 +365,25 @@ it("replaces a carried pending instruction without changing the conversation and
   const finalStep = { ...step, instructions: second.instructions };
   expect((await prepare(finalStep)).instructions).toEqual(initialInstructions);
 });
+
+it("keeps recorded failed exits visible while refusing work after an interrupted check", async () => {
+  const f = fixture();
+  const interrupted = receipt("a");
+  interrupted.commandCompletion = "unknown";
+  interrupted.workspaceRevisionAfter = null;
+  interrupted.checks = interrupted.checks.map((row, index) => ({
+    ...row,
+    status: index === 3 ? "blocked" : "failed",
+    exitCode: index === 3 ? null : 137,
+    stderr: "Resource failure",
+  }));
+  f.setReceipt(interrupted);
+  await f.run("run_checks");
+  expect(f.gate.summary().checks).toEqual(interrupted.checks);
+  await f.run("run_command", { command: "rewrite" });
+  await f.run("write_file", { path: "index.ts" });
+  await f.run("open_pr");
+  expect(f.effects).toEqual([]);
+  expect(f.gate.summary().checks).toEqual(interrupted.checks);
+  expect(f.gate.metadata()).toMatchObject({ required: false, verified: false });
+});
