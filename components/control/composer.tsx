@@ -333,7 +333,7 @@ export function Composer({
           <span className="text-[12px] text-ink-400">
             <McpStatusButton />
           </span>
-          <div className="ml-auto flex items-center gap-3">
+          <div className={`ml-auto flex items-center gap-3 ${pending ? "[@media(max-height:360px)]:fixed [@media(max-height:360px)]:right-[calc(env(safe-area-inset-right)+1.5rem)] [@media(max-height:360px)]:bottom-[calc(env(safe-area-inset-bottom)+3rem)] [@media(max-height:360px)]:z-50" : ""}`}>
             <ContextRing
               usageTokens={contextUsage?.model === modelId ? contextUsage.inputTokens + contextUsage.outputTokens : null}
               contextLimit={modelId ? contextLimits[modelId] : undefined}
@@ -344,7 +344,7 @@ export function Composer({
                 aria-label="Stop"
                 onClick={onStop}
                 title="Stop the current response"
-                className="flex h-9 items-center justify-center gap-2 rounded-md border border-border bg-muted px-3 text-sm text-foreground hover:bg-accent"
+                className="flex h-9 items-center justify-center gap-2 rounded-md border border-border bg-muted px-3 text-sm text-foreground hover:bg-accent [@media(max-height:360px)]:h-11 [@media(max-height:360px)]:min-w-11"
               >
                 <Square className="size-3 fill-current" />
                 Stop

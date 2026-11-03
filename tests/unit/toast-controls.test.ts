@@ -46,6 +46,19 @@ test("an operation can update its existing notification without supplying or cha
   assert.equal(matches[0].variant, "success");
 });
 
+test("a large burst preserves every open notification and its action", () => {
+  let state: Parameters<typeof reducer>[0] = { toasts: [] };
+  for (let index = 0; index < 250; index += 1) {
+    state = reducer(state, {
+      type: "ADD_TOAST",
+      toast: { id: `burst-${index}`, title: `Result ${index}`, open: true },
+    });
+  }
+  assert.equal(state.toasts.length, 250);
+  assert.equal(state.toasts[0].id, "burst-249");
+  assert.equal(state.toasts.at(-1)?.id, "burst-0");
+});
+
 test("dismissing one notification preserves the others and its removal is final", (context) => {
   context.mock.timers.enable({ apis: ["setTimeout"] });
   const first = toast.error({ title: "Build failed" });
@@ -63,6 +76,26 @@ test("dismissing one notification preserves the others and its removal is final"
     readToasts().some((item) => item.id === first.id),
     false
   );
+});
+
+test("releasing closed notifications cancels their timers and stale handles schedule no removal", (context) => {
+  context.mock.timers.enable({ apis: ["setTimeout"] });
+  const scheduled = context.mock.method(globalThis, "setTimeout");
+  const cleared = context.mock.method(globalThis, "clearTimeout");
+  const old = toast.info({ title: "Old operation" });
+  old.dismiss();
+  const timer = scheduled.mock.calls.at(-1)?.result;
+  assert.notEqual(timer, undefined);
+  toast.info({ title: "New operation" });
+  assert.ok(cleared.mock.calls.some((call) => call.arguments[0] === timer));
+  const before = readToasts();
+  const calls = scheduled.mock.callCount();
+  old.dismiss();
+  assert.equal(scheduled.mock.callCount(), calls);
+  context.mock.timers.runAll();
+  assert.deepEqual(readToasts(), before);
+  old.update({ title: "Late completion", open: true });
+  assert.deepEqual(readToasts(), before);
 });
 
 test("status surfaces have a single background rule and no generic global marker classes", () => {

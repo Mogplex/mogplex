@@ -14,6 +14,85 @@ async function archiveSelected(page: Page) {
   await page.getByRole("menuitem", { name: "Archive", exact: true }).click();
 }
 
+for (const height of [390, 320]) {
+  test(`landscape notifications leave the real composer and Stop usable at ${height}px`, async ({
+    page,
+  }, testInfo) => {
+    const held = deferred();
+    const { sidebar } = await setupControlSidebar(page);
+    await page.route("**/api/control/chat", async (route) => {
+      await held.promise;
+      await route
+        .fulfill({
+          status: 200,
+          headers: {
+            "content-type": "text/event-stream",
+            "x-vercel-ai-ui-message-stream": "v1",
+          },
+          body: 'data: {"type":"start"}\n\ndata: {"type":"finish"}\n\ndata: [DONE]\n\n',
+        })
+        .catch(() => undefined);
+    });
+    try {
+      await sidebar
+        .getByRole("button", { name: "Actions for acme/other", exact: true })
+        .click();
+      await page
+        .getByRole("menuitem", { name: "Archive chats", exact: true })
+        .click();
+      const notification = page
+        .locator('[data-variant="info"]')
+        .filter({ hasText: "1 chat archived" });
+      await expect(notification).toBeVisible();
+      await page.setViewportSize({ width: 844, height });
+      const composer = page.locator("#control-composer");
+      await composer.fill("Keep the real controls available.");
+      await composer.press("Enter");
+      const stop = page.getByRole("button", { name: "Stop", exact: true });
+      await expect(stop).toBeVisible();
+      await expect(
+        page.locator('[data-slot="toast-viewport"]')
+      ).toHaveAttribute("data-compact", "");
+      await page.screenshot({
+        path: testInfo.outputPath(`real-controls-${height}.png`),
+      });
+      const viewport = await page
+        .locator('[data-slot="toast-viewport"]')
+        .boundingBox();
+      const close = await notification
+        .getByRole("button", { name: "Dismiss notification" })
+        .boundingBox();
+      const input = await composer.boundingBox();
+      const stopBox = await stop.boundingBox();
+      const context = await page
+        .getByLabel("Context usage", { exact: true })
+        .boundingBox();
+      expect(context!.x + context!.width).toBeLessThanOrEqual(stopBox!.x);
+      expect(context!.y + context!.height).toBeLessThanOrEqual(height);
+      expect(close!.height).toBeGreaterThanOrEqual(44);
+      expect(close!.y).toBeGreaterThanOrEqual(viewport!.y);
+      expect(close!.y + close!.height).toBeLessThanOrEqual(
+        viewport!.y + viewport!.height
+      );
+      expect(viewport!.y + viewport!.height).toBeLessThan(input!.y);
+      expect(
+        await stop.evaluate((button) => {
+          const box = button.getBoundingClientRect();
+          return button.contains(
+            document.elementFromPoint(
+              box.x + box.width / 2,
+              box.y + box.height / 2
+            )
+          );
+        })
+      ).toBe(true);
+      await stop.click();
+    } finally {
+      held.resolve();
+    }
+  });
+}
+
 test("a failed archive releases the composer and preserves its draft", async ({
   page,
 }) => {
