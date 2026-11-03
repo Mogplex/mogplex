@@ -52,7 +52,7 @@ for (const height of [390, 320]) {
       await expect(stop).toBeVisible();
       await expect(
         page.locator('[data-slot="toast-viewport"]')
-      ).toHaveJSProperty("clientHeight", 44);
+      ).toHaveAttribute("data-compact", "");
       await page.screenshot({
         path: testInfo.outputPath(`real-controls-${height}.png`),
       });
@@ -63,6 +63,13 @@ for (const height of [390, 320]) {
         .getByRole("button", { name: "Dismiss notification" })
         .boundingBox();
       const input = await composer.boundingBox();
+      const stopBox = await stop.boundingBox();
+      const context = await page
+        .getByLabel("Context usage", { exact: true })
+        .boundingBox();
+      expect(context!.x + context!.width).toBeLessThanOrEqual(stopBox!.x);
+      expect(context!.y + context!.height).toBeLessThanOrEqual(height);
+      expect(close!.height).toBeGreaterThanOrEqual(44);
       expect(close!.y).toBeGreaterThanOrEqual(viewport!.y);
       expect(close!.y + close!.height).toBeLessThanOrEqual(
         viewport!.y + viewport!.height

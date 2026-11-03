@@ -16,6 +16,7 @@ export function useToastViewport(active: boolean) {
     }
     let composer: HTMLElement | null = null;
     let toolbar: HTMLElement | null = null;
+    let controls: HTMLElement | null = null;
     let cleanupPosition: (() => void) | undefined;
     const measure = () => {
       if (!composer || !toolbar) {
@@ -59,6 +60,7 @@ export function useToastViewport(active: boolean) {
       cleanupPosition?.();
       cleanupPosition = undefined;
       composer = nextComposer;
+      controls = composer?.closest("fieldset") ?? null;
       toolbar = nextToolbar;
       if (composer && toolbar)
         cleanupPosition = autoUpdate(composer, toolbar, measure, {
@@ -66,7 +68,16 @@ export function useToastViewport(active: boolean) {
         });
       else measure();
     };
-    const mutations = new MutationObserver(bind);
+    const mutations = new MutationObserver((records) => {
+      bind();
+      if (
+        records.some(
+          ({ target }) =>
+            controls?.contains(target) || toolbar?.contains(target)
+        )
+      )
+        measure();
+    });
     mutations.observe(document.body, { childList: true, subtree: true });
     bind();
     return () => {
