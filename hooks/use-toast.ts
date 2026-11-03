@@ -6,8 +6,6 @@ import * as React from "react";
 import type { ToastActionElement, ToastProps } from "@/components/ui/toast";
 
 const TOAST_REMOVE_DELAY = 10000;
-// Preserve normal bursts without retaining an unlimited producer backlog.
-const TOAST_LIMIT = 100;
 
 type ToasterToast = ToastProps & {
   id: string;
@@ -76,13 +74,14 @@ export const reducer = (state: State, action: Action): State => {
   switch (action.type) {
     case "ADD_TOAST": {
       const toasts = [action.toast, ...state.toasts];
-      for (const dropped of toasts.slice(TOAST_LIMIT)) {
+      // Closed cards have no remaining action; a new card can release them.
+      for (const dropped of toasts.filter((toast) => toast.open === false)) {
         clearTimeout(toastTimeouts.get(dropped.id));
         toastTimeouts.delete(dropped.id);
       }
       return {
         ...state,
-        toasts: toasts.slice(0, TOAST_LIMIT),
+        toasts: toasts.filter((toast) => toast.open !== false),
       };
     }
 

@@ -25,7 +25,7 @@ const ToastViewport = React.forwardRef<
     className={cn(
       // Clear the app header, workspace actions, and task toolbar. Reserve the
       // bottom composer as well when a short viewport needs a smaller stack.
-      'pointer-events-none fixed inset-x-0 top-[calc(env(safe-area-inset-top)+11rem)] z-[100] flex max-h-[max(0px,min(50dvh,calc(100dvh-19.5rem)))] w-full flex-col gap-2 overflow-y-auto overscroll-y-contain p-3 sm:left-auto sm:right-3 sm:w-[390px] sm:p-0',
+      'group/viewport pointer-events-none fixed inset-x-0 top-[calc(env(safe-area-inset-top)+11rem)] z-[100] flex max-h-[max(0px,min(50dvh,calc(100dvh-22.25rem)))] w-full flex-col gap-2 overflow-y-auto overscroll-y-contain p-3 sm:left-auto sm:right-3 sm:w-[390px] sm:p-0 data-[compact]:left-auto data-[compact]:right-3 data-[compact]:w-[min(390px,calc(100vw-24px))] data-[compact]:p-0',
       className,
     )}
     {...props}
@@ -97,7 +97,7 @@ const Toast = React.forwardRef<
       // Failures interrupt assistive tech; routine updates and warnings wait.
       type={type ?? (variant === 'destructive' ? 'foreground' : 'background')}
       data-variant={variant ?? 'default'}
-      className={cn(toastVariants({ variant }), className)}
+      className={cn(toastVariants({ variant }), 'group-data-[compact]/viewport:min-h-11 group-data-[compact]/viewport:items-center group-data-[compact]/viewport:border-y-0 group-data-[compact]/viewport:py-0', className)}
       // Let stacked cards scroll vertically while Radix handles horizontal swipes.
       style={{ touchAction: 'pan-y', ...style }}
       {...props}
@@ -113,7 +113,7 @@ const ToastAction = React.forwardRef<
   <ToastPrimitives.Action
     ref={ref}
     className={cn(
-      'inline-flex h-8 shrink-0 items-center justify-center self-center rounded-md border border-border bg-background/60 px-3 text-sm font-medium ring-offset-background transition-colors hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 max-sm:h-11 max-sm:min-w-11 group-data-[variant=success]:border-accent-green/50 group-data-[variant=info]:border-accent-blue/50 group-data-[variant=warning]:border-accent-amber/60 group-data-[variant=destructive]:border-destructive/50 group-data-[variant=destructive]:focus:ring-destructive',
+      'inline-flex h-8 shrink-0 items-center justify-center self-center rounded-md border border-border bg-background/60 px-3 text-sm font-medium ring-offset-background transition-colors hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 max-sm:h-11 max-sm:min-w-11 group-data-[compact]/viewport:h-11 group-data-[compact]/viewport:min-w-11 group-data-[variant=success]:border-accent-green/50 group-data-[variant=info]:border-accent-blue/50 group-data-[variant=warning]:border-accent-amber/60 group-data-[variant=destructive]:border-destructive/50 group-data-[variant=destructive]:focus:ring-destructive',
       className,
     )}
     {...props}
@@ -129,7 +129,7 @@ const ToastClose = React.forwardRef<
     ref={ref}
     aria-label="Dismiss notification"
     className={cn(
-      'absolute right-1.5 top-1.5 inline-flex size-11 items-center justify-center rounded-md text-popover-foreground/80 transition-colors hover:bg-popover-foreground/10 hover:text-popover-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-popover-foreground motion-reduce:transition-none',
+      'absolute right-1.5 top-1.5 inline-flex size-11 items-center justify-center rounded-md text-popover-foreground/80 transition-colors hover:bg-popover-foreground/10 hover:text-popover-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-popover-foreground motion-reduce:transition-none group-data-[compact]/viewport:top-0',
       className,
     )}
     toast-close=""

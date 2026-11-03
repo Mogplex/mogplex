@@ -19,7 +19,7 @@ function Showcase() {
       <header style={{ height: 56, borderBottom: "1px solid var(--border)", padding: "16px 24px", fontWeight: 600 }}>Mogplex · Toast interaction fixture</header>
       <main style={{ padding: 24 }}>
         <h1 style={{ fontSize: 20, fontWeight: 600 }}>Keep control while shipping</h1>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginTop: 24 }}>
+        <div className="task-workspace-toolbar" style={{ display: "flex", flexWrap: "wrap", gap: 12, marginTop: 24 }}>
           <button onClick={showStatuses}>Show statuses</button>
           <button onClick={() => { showStatuses(); showStatuses(); showStatuses(); }}>Show burst</button>
           <button onClick={() => toast.info({ title: "Chat archived", description: "Bring it back whenever you need.", duration: Infinity, onOpenChange: (open) => { if (!open) setClosedCount((value) => value + 1); }, action: <ToastAction altText="Undo archiving this chat" onClick={() => setUndoCount((value) => value + 1)}>Undo</ToastAction> })}>Show action</button>
@@ -30,7 +30,7 @@ function Showcase() {
         <p className="sr-only">Undo count: <output data-testid="undo-count">{undoCount}</output></p>
       </main>
       <section style={{ position: "fixed", bottom: 16, left: "50%", transform: "translateX(-50%)", width: "min(640px, calc(100vw - 32px))", border: "1px solid var(--border)", borderRadius: 12, background: "var(--popover)", padding: 12 }}>
-        <textarea aria-label="Steer agent" placeholder="Steer the agent…" style={{ display: "block", width: "100%", minHeight: 48, resize: "none", outlineOffset: 3 }} />
+        <textarea id="control-composer" aria-label="Steer agent" placeholder="Steer the agent…" style={{ display: "block", width: "100%", minHeight: 48, resize: "none", outlineOffset: 3 }} />
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
           <span>Stop count: <output data-testid="stop-count">{stopCount}</output></span>
           <button onClick={() => setStopCount((value) => value + 1)}>Stop agent</button>
