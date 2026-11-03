@@ -339,15 +339,29 @@ it("replaces a carried pending instruction without changing the conversation and
   const f = fixture();
   await f.run("write_file", { path: "index.ts" });
   const messages = [{ role: "user" as const, content: "Finish the change." }];
+  const initialInstructions = [
+    {
+      role: "system" as const,
+      content: "Original instructions",
+      providerOptions: { test: { keep: true } },
+    },
+  ];
+  const step = { messages, initialInstructions };
   const prepare = f.gate.prepareStep();
-  const first = await prepare({ messages });
-  const second = await prepare({ messages: first.messages! });
+  const first = await prepare(step);
+  const nextStep = { ...step, instructions: first.instructions };
+  const second = await prepare(nextStep);
   expect(messages).toHaveLength(1);
-  expect(
-    second.messages!.filter((message) => message.role === "system")
-  ).toHaveLength(1);
+  expect(initialInstructions).toHaveLength(1);
+  expect(first).not.toHaveProperty("messages");
+  expect(second.instructions).toEqual([
+    ...initialInstructions,
+    {
+      role: "system",
+      content: expect.stringContaining("<repository_verification_pending>"),
+    },
+  ]);
   await f.run("run_checks");
-  expect((await prepare({ messages: second.messages! })).messages).toEqual(
-    messages
-  );
+  const finalStep = { ...step, instructions: second.instructions };
+  expect((await prepare(finalStep)).instructions).toEqual(initialInstructions);
 });

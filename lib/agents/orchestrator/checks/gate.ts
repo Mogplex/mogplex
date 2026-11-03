@@ -1,4 +1,4 @@
-import type { ModelMessage, Tool, ToolSet } from "ai";
+import type { Instructions, Tool, ToolSet } from "ai";
 import { isSafeRepoPath } from "@/lib/sandbox/changes";
 import { controlToolOutcome } from "@/lib/control/tool-outcome";
 import type { OrchestratorToolContext } from "../types";
@@ -226,21 +226,34 @@ export function createControlVerificationGate(
     },
     prepareStep:
       (assertCurrent?: () => Promise<void>) =>
-      async (step?: { messages: ModelMessage[] }) => {
+      async (step?: {
+        initialInstructions?: Instructions;
+        instructions?: Instructions;
+      }) => {
         await assertCurrent?.();
-        // SDK message overrides carry forward. Replace the runtime reminder,
-        // and remove it after checks so it cannot require stale work again.
-        const messages = step?.messages.filter(
-          (message) =>
-            message.role !== "system" ||
-            typeof message.content !== "string" ||
-            !message.content.startsWith("<repository_verification_pending>")
-        );
         const required = state.summary().required;
-        if (required && messages)
-          messages.push({ role: "system", content: PENDING_PROMPT });
+        // Instructions are leading system content on every provider. Build
+        // from the original instructions because SDK overrides carry forward.
+        const original = step?.initialInstructions;
+        const instructions =
+          typeof original === "string"
+            ? [{ role: "system" as const, content: original }]
+            : Array.isArray(original)
+              ? original
+              : original
+                ? [original]
+                : [];
         return {
-          ...(messages ? { messages } : {}),
+          ...(step
+            ? {
+                instructions: required
+                  ? [
+                      ...instructions,
+                      { role: "system" as const, content: PENDING_PROMPT },
+                    ]
+                  : instructions,
+              }
+            : {}),
           ...(required ? { toolChoice: "required" as const } : {}),
         };
       },

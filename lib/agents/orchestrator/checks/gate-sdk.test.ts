@@ -313,12 +313,17 @@ it("tells the model checks are pending after each edit and removes that instruct
     (prompt) => JSON.parse(prompt) as Array<{ role: string; content: unknown }>
   );
   for (const index of [1, 3]) {
-    const reminder = prompts[index].at(-1);
-    expect(reminder).toMatchObject({
-      role: "system",
-      content: expect.stringContaining("<repository_verification_pending>"),
-    });
+    const systems = prompts[index].filter(
+      (message) => message.role === "system"
+    );
+    const reminder = systems.at(-1);
+    expect(reminder?.content).toContain("<repository_verification_pending>");
     expect(reminder?.content).toContain("run_checks");
+    expect(
+      prompts[index].findLastIndex((message) => message.role === "system")
+    ).toBeLessThan(
+      prompts[index].findIndex((message) => message.role !== "system")
+    );
     expect(result.modelPrompts[index]).toContain(
       "Update the file and finish the authorized work."
     );
