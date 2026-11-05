@@ -51,10 +51,21 @@ jobs:
         run: |
           set -uo pipefail
           verified=false
-          run_id=$(gh api \
+          # The merge queue fast-forwards main to the exact merge-group head it
+          # tested, so a queued merge lands with the SHA of its merge_group run
+          # (checked on the last five main commits, Nov 2026). A merge that
+          # bypasses the queue, a direct push, or a change of queue settings
+          # that rewrites the commit simply finds no run and runs everything.
+          # A lookup failure (API outage, token without actions:read, missing
+          # gh) also runs everything, but is surfaced as a warning so a
+          # permanently broken lookup does not pass as "no run found".
+          if ! run_id=$(gh api \
             "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${GITHUB_SHA}&event=merge_group&status=success&per_page=20" \
             --jq '[.workflow_runs[] | select(.path == ".github/workflows/ci.yml" and .conclusion == "success") | .id] | first // empty' \
-            2>/dev/null) || run_id=""
+            2>"${RUNNER_TEMP}/scope-lookup.err"); then
+            echo "::warning title=scope lookup failed::$(tr '\n' ' ' <"${RUNNER_TEMP}/scope-lookup.err") -- running every suite."
+            run_id=""
+          fi
           if [ -n "$run_id" ]; then
             verified=true
             echo "Merge-group run ${run_id} already passed on ${GITHUB_SHA}; the suites are not repeated."
@@ -257,6 +268,9 @@ jobs:
     name: neon-branch
     needs: [scope]
     if: ${{ !cancelled() && needs.scope.outputs.verified != 'true' }}
+    # 2 vCPU is enough: the whole job took 24 s on this runner size (13 s of
+    # it the uncached pnpm install) in PR #718, and 19 s median / 101 s max
+    # over 611 runs on 4 vCPU. The 10-minute timeout leaves 25x headroom.
     runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 10
     outputs:
@@ -479,8 +493,10 @@ jobs:
     name: neon-branch-cleanup
     runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 5
-    needs: [neon-branch, e2e-shard]
-    if: always() && needs.neon-branch.outputs.branch_id != ''
+    needs: [scope, neon-branch, e2e-shard]
+    if: >-
+      always() && needs.scope.outputs.verified != 'true' &&
+      needs.neon-branch.outputs.branch_id != ''
     env:
       NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
       NEON_PROJECT_ID: ${{ vars.NEON_PROJECT_ID }}

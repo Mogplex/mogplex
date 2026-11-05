@@ -3,6 +3,13 @@
 // (60 minutes). This lint makes the rule structural instead of tribal: any
 // workflow that triggers on pull_request must also trigger on merge_group,
 // unless it is explicitly allowlisted below with a reason.
+//
+// It also guards the cost rule in ci.yml: on a push to main the `scope` job
+// decides whether the merge queue already passed this exact commit, and every
+// other job must hang off that decision. A job that never reaches `scope`
+// through `needs`, or that overrides skip propagation (`always()`,
+// `!cancelled()`, `failure()`) without checking the verdict itself, would run
+// the full suite on every push again, which is invisible except on the bill.
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -26,6 +33,102 @@ export const ALLOWED_WITHOUT_MERGE_GROUP = {
   "self-host-smoke.yml":
     "advisory path-filtered check; not required by the ruleset",
 };
+
+// Jobs in ci.yml that may run on a main push even when the merge queue has
+// already passed the commit. Every entry needs a reason; none exist today.
+/** @type {Record<string, string>} */
+export const ALWAYS_RUN_JOBS = {};
+
+const SCOPE_JOB = "scope";
+const VERIFIED_GATE = "needs.scope.outputs.verified != 'true'";
+const STATUS_OVERRIDE = /always\(\)|cancelled\(\)|failure\(\)/;
+
+function needsOf(job) {
+  const needs = job?.needs;
+  if (typeof needs === "string") return [needs];
+  return Array.isArray(needs) ? needs : [];
+}
+
+function reachesScope(jobs, name, seen = new Set()) {
+  if (name === SCOPE_JOB) return true;
+  if (seen.has(name)) return false;
+  seen.add(name);
+  return needsOf(jobs[name]).some((dependency) =>
+    reachesScope(jobs, dependency, seen)
+  );
+}
+
+function jobsOf(source) {
+  const doc = parse(source);
+  const jobs = doc && typeof doc === "object" ? doc.jobs : undefined;
+  return jobs && typeof jobs === "object" ? jobs : {};
+}
+
+function scopeGateViolation(jobs, name) {
+  if (!reachesScope(jobs, name)) {
+    return {
+      job: name,
+      reason:
+        "does not depend on `scope`, so it runs on every push to main even " +
+        "when the merge queue already passed the commit. Add " +
+        "`needs: [scope]` with `if: ${{ !cancelled() && " +
+        `${VERIFIED_GATE} }}\`, or allowlist it in ALWAYS_RUN_JOBS with a reason.`,
+    };
+  }
+  const job = jobs[name];
+  const condition = typeof job?.if === "string" ? job.if : "";
+  const directlyNeedsScope = needsOf(job).includes(SCOPE_JOB);
+  if (directlyNeedsScope && condition.includes(VERIFIED_GATE)) return null;
+  if (directlyNeedsScope) {
+    return {
+      job: name,
+      reason:
+        `needs \`scope\` but its \`if\` lacks \`${VERIFIED_GATE}\`, so it ` +
+        "runs on every push to main even when the merge queue already " +
+        "passed the commit.",
+    };
+  }
+  if (STATUS_OVERRIDE.test(condition)) {
+    return {
+      job: name,
+      reason:
+        "uses a status function in its `if`, which runs it even when the " +
+        "jobs it needs were skipped on a verified push; list `scope` in " +
+        `its \`needs\` and add \`${VERIFIED_GATE}\` to the condition.`,
+    };
+  }
+  return null;
+}
+
+export function findScopeGateViolations(source, alwaysRun = ALWAYS_RUN_JOBS) {
+  const jobs = jobsOf(source);
+  if (!Object.hasOwn(jobs, SCOPE_JOB)) {
+    return [
+      {
+        job: SCOPE_JOB,
+        reason:
+          "is missing from ci.yml; it decides on each push to main whether " +
+          "the merge queue already passed the commit, and every other job " +
+          "must depend on it.",
+      },
+    ];
+  }
+  const gated = Object.keys(jobs).filter(
+    (name) => name !== SCOPE_JOB && !Object.hasOwn(alwaysRun, name)
+  );
+  const stale = Object.keys(alwaysRun)
+    .filter((name) => !Object.hasOwn(jobs, name))
+    .map((name) => ({
+      job: name,
+      reason:
+        "is allowlisted in ALWAYS_RUN_JOBS but does not exist in ci.yml; " +
+        "remove the stale allowlist entry.",
+    }));
+  return [
+    ...gated.map((name) => scopeGateViolation(jobs, name)).filter(Boolean),
+    ...stale,
+  ];
+}
 
 function extractTriggers(source) {
   const doc = parse(source);
@@ -112,14 +215,19 @@ async function loadWorkflows() {
 async function main() {
   const workflows = await loadWorkflows();
   const violations = findMergeGroupViolations(workflows);
-  if (violations.length === 0) {
+  const ci = workflows.find((workflow) => workflow.file === "ci.yml");
+  const scopeViolations = ci ? findScopeGateViolations(ci.source) : [];
+  if (violations.length === 0 && scopeViolations.length === 0) {
     process.stdout.write(
-      `OK: ${workflows.length} workflows checked; every pull_request workflow also triggers on merge_group.\n`
+      `OK: ${workflows.length} workflows checked; every pull_request workflow also triggers on merge_group, and every ci.yml job is gated by scope.\n`
     );
     return 0;
   }
   for (const violation of violations) {
     process.stderr.write(`${violation.file}: ${violation.reason}\n`);
+  }
+  for (const violation of scopeViolations) {
+    process.stderr.write(`ci.yml job ${violation.job}: ${violation.reason}\n`);
   }
   return 1;
 }

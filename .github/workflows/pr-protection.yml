@@ -75,10 +75,14 @@ jobs:
     # up with each change instead of demanding a backfill. Promote to a
     # required check via the ruleset once it has run quietly for a while;
     # merge_group is already in the trigger list above, and on merge_group
-    # this job skips (a skipped job satisfies a required check). A PR body
-    # edit changes no line, so it does not re-run the coverage tiers either.
+    # this job skips (a skipped job satisfies a required check). A title or
+    # body edit changes no line, so it does not re-run the coverage tiers
+    # either; retargeting the base branch does change the diff, and
+    # `github.event.changes.base` is set exactly on that kind of edit.
     name: diff-coverage
-    if: github.event_name == 'pull_request' && github.event.action != 'edited'
+    if: >-
+      github.event_name == 'pull_request' &&
+      (github.event.action != 'edited' || github.event.changes.base != null)
     runs-on: blacksmith-4vcpu-ubuntu-2404
     concurrency:
       group: pr-protection-coverage-${{ github.ref }}

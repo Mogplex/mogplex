@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { findMergeGroupViolations } from "../../scripts/check-merge-group-triggers.mjs";
+import {
+  findMergeGroupViolations,
+  findScopeGateViolations,
+} from "../../scripts/check-merge-group-triggers.mjs";
 
 const COMPLIANT_WORKFLOW = `name: ci
 on:
@@ -88,4 +91,111 @@ test("flags stale allowlist entries so the exemption list cannot rot", () => {
   for (const violation of violations) {
     assert.match(violation.reason, /allowlist/i);
   }
+});
+
+const GATED_CI = `name: ci
+on:
+  push:
+    branches: [main]
+jobs:
+  scope:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps: []
+  lint:
+    needs: [scope]
+    if: \${{ !cancelled() && needs.scope.outputs.verified != 'true' }}
+    runs-on: ubuntu-latest
+    steps: []
+  shard:
+    needs: [scope, lint]
+    if: >-
+      \${{ !cancelled() && needs.lint.result == 'success' &&
+      needs.scope.outputs.verified != 'true' }}
+    runs-on: ubuntu-latest
+    steps: []
+  cleanup:
+    needs: [lint, shard]
+    runs-on: ubuntu-latest
+    steps: []
+  fan-in:
+    needs: [scope, shard]
+    if: always() && needs.scope.outputs.verified != 'true'
+    runs-on: ubuntu-latest
+    steps: []
+`;
+
+function withJob(extra: string) {
+  return `${GATED_CI}${extra}`;
+}
+
+test("accepts a ci.yml where every job hangs off scope and checks its verdict", () => {
+  assert.deepEqual(findScopeGateViolations(GATED_CI, {}), []);
+});
+
+test("flags a job that never depends on scope", () => {
+  const violations = findScopeGateViolations(
+    withJob(`  loose:
+    runs-on: ubuntu-latest
+    steps: []
+`),
+    {}
+  );
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0].job, "loose");
+  assert.match(violations[0].reason, /does not depend on `scope`/);
+});
+
+test("flags a job that needs scope but drops the verified check", () => {
+  const violations = findScopeGateViolations(
+    withJob(`  typecheck:
+    needs: [scope]
+    if: \${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps: []
+`),
+    {}
+  );
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0].job, "typecheck");
+  assert.match(violations[0].reason, /verified != 'true'/);
+});
+
+test("flags a downstream job whose always() would outlive a skipped parent", () => {
+  const violations = findScopeGateViolations(
+    withJob(`  report:
+    needs: [shard]
+    if: always()
+    runs-on: ubuntu-latest
+    steps: []
+`),
+    {}
+  );
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0].job, "report");
+  assert.match(violations[0].reason, /status function/);
+});
+
+test("lets an allowlisted job run on verified pushes and flags stale entries", () => {
+  const source = withJob(`  notify:
+    runs-on: ubuntu-latest
+    steps: []
+`);
+  assert.deepEqual(
+    findScopeGateViolations(source, { notify: "posts the deploy summary" }),
+    []
+  );
+  const stale = findScopeGateViolations(source, {
+    notify: "posts the deploy summary",
+    gone: "no such job",
+  });
+  assert.equal(stale.length, 1);
+  assert.equal(stale[0].job, "gone");
+  assert.match(stale[0].reason, /allowlist/i);
+});
+
+test("reports a ci.yml without a scope job", () => {
+  const violations = findScopeGateViolations(COMPLIANT_WORKFLOW, {});
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0].job, "scope");
 });
