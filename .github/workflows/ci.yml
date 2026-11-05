@@ -27,8 +27,57 @@ env:
   SUPABASE_SERVICE_ROLE_KEY: test-service-role-key
 
 jobs:
+  scope:
+    # Every commit on main arrives through the merge queue, which already ran
+    # this workflow on the exact same SHA as a merge group. When that run
+    # passed, the push run repeats nothing: the suites below are skipped and
+    # the run still concludes success. Any doubt (no such run, an API error)
+    # runs everything. Pull request and merge group runs skip this job, so
+    # `needs.scope.outputs.verified` is empty there and every suite runs.
+    name: scope
+    if: github.event_name == 'push'
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      verified: ${{ steps.verify.outputs.verified }}
+    steps:
+      - name: Look for a passed merge-group run of this commit
+        id: verify
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          verified=false
+          # The merge queue fast-forwards main to the exact merge-group head it
+          # tested, so a queued merge lands with the SHA of its merge_group run
+          # (checked on the last five main commits, Nov 2026). A merge that
+          # bypasses the queue, a direct push, or a change of queue settings
+          # that rewrites the commit simply finds no run and runs everything.
+          # A lookup failure (API outage, token without actions:read, missing
+          # gh) also runs everything, but is surfaced as a warning so a
+          # permanently broken lookup does not pass as "no run found".
+          if ! run_id=$(gh api \
+            "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${GITHUB_SHA}&event=merge_group&status=success&per_page=20" \
+            --jq '[.workflow_runs[] | select(.path == ".github/workflows/ci.yml" and .conclusion == "success") | .id] | first // empty' \
+            2>"${RUNNER_TEMP}/scope-lookup.err"); then
+            echo "::warning title=scope lookup failed::$(tr '\n' ' ' <"${RUNNER_TEMP}/scope-lookup.err") -- running every suite."
+            run_id=""
+          fi
+          if [ -n "$run_id" ]; then
+            verified=true
+            echo "Merge-group run ${run_id} already passed on ${GITHUB_SHA}; the suites are not repeated."
+          else
+            echo "No passed merge-group run found for ${GITHUB_SHA}; running everything."
+          fi
+          echo "verified=${verified}" >> "$GITHUB_OUTPUT"
+
   lint:
     name: lint
+    needs: [scope]
+    if: ${{ !cancelled() && needs.scope.outputs.verified != 'true' }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 20
     steps:
@@ -71,6 +120,8 @@ jobs:
 
   typecheck:
     name: typecheck
+    needs: [scope]
+    if: ${{ !cancelled() && needs.scope.outputs.verified != 'true' }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 20
     steps:
@@ -107,6 +158,8 @@ jobs:
 
   test:
     name: test
+    needs: [scope]
+    if: ${{ !cancelled() && needs.scope.outputs.verified != 'true' }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 20
     env:
@@ -165,6 +218,8 @@ jobs:
 
   build:
     name: build
+    needs: [scope]
+    if: ${{ !cancelled() && needs.scope.outputs.verified != 'true' }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 25
     steps:
@@ -211,7 +266,12 @@ jobs:
     # configured. Branches are named ci-run-<run_id>-<attempt>; if the
     # cleanup job ever misses one, sweep branches with that prefix manually.
     name: neon-branch
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    needs: [scope]
+    if: ${{ !cancelled() && needs.scope.outputs.verified != 'true' }}
+    # 2 vCPU is enough: the whole job took 24 s on this runner size (13 s of
+    # it the uncached pnpm install) in PR #718, and 19 s median / 101 s max
+    # over 611 runs on 4 vCPU. The 10-minute timeout leaves 25x headroom.
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 10
     outputs:
       branch_id: ${{ steps.create.outputs.branch_id }}
@@ -322,7 +382,10 @@ jobs:
       run:
         shell: bash
     timeout-minutes: 30
-    needs: neon-branch
+    needs: [scope, neon-branch]
+    if: >-
+      ${{ !cancelled() && needs.neon-branch.result == 'success' &&
+      needs.scope.outputs.verified != 'true' }}
     strategy:
       fail-fast: false
       matrix:
@@ -428,10 +491,12 @@ jobs:
     # cancelled. NOT a required check — if this ever misses (runner death),
     # the only cost is a stale ci-run-* branch to sweep manually.
     name: neon-branch-cleanup
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 5
-    needs: [neon-branch, e2e-shard]
-    if: always() && needs.neon-branch.outputs.branch_id != ''
+    needs: [scope, neon-branch, e2e-shard]
+    if: >-
+      always() && needs.scope.outputs.verified != 'true' &&
+      needs.neon-branch.outputs.branch_id != ''
     env:
       NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
       NEON_PROJECT_ID: ${{ vars.NEON_PROJECT_ID }}
@@ -450,11 +515,12 @@ jobs:
     # "e2e"; matrix jobs report as "e2e-shard (n/4)", so this job carries the
     # required context. `if: always()` makes it report even when shards fail —
     # a required check that never reports would block the merge queue forever.
+    # On a verified main push the shards did not run, and neither does this.
     name: e2e
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 5
-    needs: e2e-shard
-    if: always()
+    needs: [scope, e2e-shard]
+    if: always() && needs.scope.outputs.verified != 'true'
     steps:
       - name: Check shard results
         env:

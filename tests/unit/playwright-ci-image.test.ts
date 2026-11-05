@@ -57,7 +57,30 @@ test("candidate migrations finish on the isolated database before any e2e shard 
   // Never migrate the shared/production fallback when branch creation is unavailable.
   assert.equal(steps[migrateIndex].if, "steps.create.outputs.branch_id != ''");
   assert.equal(steps[resolveIndex].if, "steps.create.outputs.branch_id != ''");
-  assert.equal(workflow.jobs["e2e-shard"].needs, "neon-branch");
+  const shard = workflow.jobs["e2e-shard"];
+  assert.ok(shard.needs.includes("neon-branch"));
+  assert.match(shard.if, /needs\.neon-branch\.result == 'success'/);
   assert.ok(workflow.jobs["neon-branch-cleanup"].needs.includes("neon-branch"));
   assert.match(workflow.jobs["neon-branch-cleanup"].if, /always\(\)/);
+});
+
+test("a push to main that the merge queue already passed skips every suite", () => {
+  const scope = workflow.jobs.scope;
+  assert.equal(scope.if, "github.event_name == 'push'");
+  assert.match(scope.steps[0].run, /event=merge_group&status=success/);
+  const gate = "needs.scope.outputs.verified != 'true'";
+  for (const name of [
+    "lint",
+    "typecheck",
+    "test",
+    "build",
+    "neon-branch",
+    "e2e-shard",
+    "e2e",
+    "neon-branch-cleanup",
+  ]) {
+    const job = workflow.jobs[name];
+    assert.ok(job.needs.includes("scope"), `${name} must need scope`);
+    assert.ok(job.if.includes(gate), `${name} must check the scope verdict`);
+  }
 });
