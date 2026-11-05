@@ -113,21 +113,24 @@ export function findScopeGateViolations(source, alwaysRun = ALWAYS_RUN_JOBS) {
       },
     ];
   }
-  const gated = Object.keys(jobs).filter(
-    (name) => name !== SCOPE_JOB && !Object.hasOwn(alwaysRun, name)
-  );
-  const stale = Object.keys(alwaysRun)
-    .filter((name) => !Object.hasOwn(jobs, name))
-    .map((name) => ({
-      job: name,
-      reason:
-        "is allowlisted in ALWAYS_RUN_JOBS but does not exist in ci.yml; " +
-        "remove the stale allowlist entry.",
-    }));
-  return [
-    ...gated.map((name) => scopeGateViolation(jobs, name)).filter(Boolean),
-    ...stale,
-  ];
+  /** @type {{ job: string, reason: string }[]} */
+  const violations = [];
+  for (const name of Object.keys(jobs)) {
+    const exempt = name === SCOPE_JOB || Object.hasOwn(alwaysRun, name);
+    const violation = exempt ? null : scopeGateViolation(jobs, name);
+    if (violation) violations.push(violation);
+  }
+  for (const name of Object.keys(alwaysRun)) {
+    if (!Object.hasOwn(jobs, name)) {
+      violations.push({
+        job: name,
+        reason:
+          "is allowlisted in ALWAYS_RUN_JOBS but does not exist in ci.yml; " +
+          "remove the stale allowlist entry.",
+      });
+    }
+  }
+  return violations;
 }
 
 function extractTriggers(source) {
