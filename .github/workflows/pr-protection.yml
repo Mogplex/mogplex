@@ -15,15 +15,17 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: pr-protection-${{ github.ref }}
-  cancel-in-progress: true
-
+# Concurrency is per job, not per workflow: an `edited` event skips
+# diff-coverage, and a workflow-level group would cancel the coverage run of
+# the push just before it without replacing it.
 jobs:
   tests-accompany-features:
     name: tests-accompany-features
     if: github.event_name == 'pull_request'
     runs-on: blacksmith-2vcpu-ubuntu-2404
+    concurrency:
+      group: pr-protection-tests-${{ github.ref }}
+      cancel-in-progress: true
     timeout-minutes: 5
     steps:
       - name: Check out repository
@@ -78,6 +80,9 @@ jobs:
     name: diff-coverage
     if: github.event_name == 'pull_request' && github.event.action != 'edited'
     runs-on: blacksmith-4vcpu-ubuntu-2404
+    concurrency:
+      group: pr-protection-coverage-${{ github.ref }}
+      cancel-in-progress: true
     # All three coverage tiers run sequentially and take about 15 minutes.
     # Leave time for installing the reporter and combining their results.
     timeout-minutes: 20
