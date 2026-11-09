@@ -12,7 +12,8 @@
 -- that carries settings the user set (favorite, env vars, commands, runtime,
 -- Vercel link, snapshot, ...) is kept too. default_branch is not checked:
 -- sync copies it from GitHub, so it says nothing about the user. Keeping a
--- row is always safe; deleting one that is still in use is not.
+-- row is always safe; deleting one that is still in use is not. Hidden
+-- (removed) rows are deleted on purpose: they are the bulk of the legacy set.
 --
 -- Expand only: a new function, no change to any table.
 create or replace function public.prune_unconnected_repos(p_user_id uuid)
@@ -28,10 +29,15 @@ begin
     return 0;
   end if;
 
-  -- Lock the candidates first. A writer adding a reference holds a key-share
-  -- lock on the repo row, so this waits for it to commit, and the delete
-  -- below (a new statement, so a new snapshot) sees that reference. Later
-  -- writers wait for this transaction and then fail their foreign key check.
+  -- Lock the candidates first. This only orders writers that go through a
+  -- foreign key: they hold a key-share lock on the repo row, so this waits
+  -- for them to commit and the delete below (a new statement, so a new
+  -- snapshot) sees their reference; later ones wait for this transaction and
+  -- then fail their foreign key check. The hand-written guards
+  -- (control_sessions.repo_id and project, orchestration_*.repo_id,
+  -- job_runs.metadata, review_findings.repo_full_name) take no such lock and
+  -- are best effort. App deployments hide these rows everywhere, so nothing
+  -- should be writing new references to them; the window is theoretical.
   perform 1
   from public.repos r
   where r.owner_type = 'user'
@@ -39,6 +45,11 @@ begin
     and r.product_team_id is null
     and r.github_installation_id is null
   for update;
+
+  -- Routine syncs have no candidates; skip the guard's table scans.
+  if not found then
+    return 0;
+  end if;
 
   delete from public.repos r
   where r.owner_type = 'user'

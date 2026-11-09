@@ -182,21 +182,86 @@ it("deletes only the user's unreferenced personal repositories without a GitHub 
   ).toHaveLength(1);
 });
 
-it("guards every foreign key into repos", async () => {
-  const { rows } = await db.query<{ table_name: string }>(
-    `select distinct conrelid::regclass::text as table_name
-       from pg_constraint
-      where contype = 'f' and confrelid = 'public.repos'::regclass`
-  );
+it("returns before evaluating the guard when the user has no candidate rows", async () => {
+  const idle = crypto.randomUUID();
+  // With the guard's tables unreachable, evaluating it would fail; returning
+  // early for a user with nothing to prune must not touch them.
+  await db.exec("begin; alter table public.job_runs rename to job_runs_moved");
+  try {
+    const { rows } = await db.query<{ deleted: number }>(
+      "select public.prune_unconnected_repos($1) as deleted",
+      [idle]
+    );
+    expect(rows[0].deleted).toBe(0);
+  } finally {
+    await db.exec("rollback");
+  }
+});
+
+/** Each `not exists (select 1 from public.<table> x where ...)` guard, by table. */
+async function guardsByTable() {
   const definition = (
     await db.query<{ def: string }>(
       "select pg_get_functiondef('public.prune_unconnected_repos(uuid)'::regprocedure) as def"
     )
   ).rows[0].def;
-  const unguarded = rows
-    .map((row) => row.table_name.replace(/^public\./, ""))
-    .filter((table) => !definition.includes(`public.${table} x`));
-  expect(unguarded).toEqual([]);
+  const guards = new Map<string, string>();
+  for (const match of definition.matchAll(
+    /select 1 from public\.(\w+) x\s+where ([^)]*)\)/g
+  )) {
+    guards.set(match[1], `${guards.get(match[1]) ?? ""} ${match[2]}`);
+  }
+  return guards;
+}
+
+function unguarded(
+  columns: Array<{ table_name: string; column_name: string }>,
+  guards: Map<string, string>
+) {
+  return columns
+    .map(({ table_name, column_name }) => ({
+      table: table_name.replace(/^public\./, ""),
+      column: column_name,
+    }))
+    .filter(
+      ({ table, column }) => !guards.get(table)?.includes(`x.${column} = r.id`)
+    )
+    .map(({ table, column }) => `${table}.${column}`);
+}
+
+it("guards every foreign key into repos by its own column", async () => {
+  const { rows } = await db.query<{ table_name: string; column_name: string }>(
+    `select k.conrelid::regclass::text as table_name, a.attname as column_name
+       from pg_constraint k
+       join pg_attribute a on a.attrelid = k.conrelid and a.attnum = any (k.conkey)
+      where k.contype = 'f' and k.confrelid = 'public.repos'::regclass`
+  );
+  expect(rows.length).toBeGreaterThan(0);
+  expect(unguarded(rows, await guardsByTable())).toEqual([]);
+});
+
+it("guards every repo_id column that has no foreign key", async () => {
+  const { rows } = await db.query<{ table_name: string; column_name: string }>(
+    `select c.table_name, c.column_name
+       from information_schema.columns c
+       join information_schema.tables t using (table_schema, table_name)
+      where c.table_schema = 'public'
+        and t.table_type = 'BASE TABLE'
+        and c.column_name like '%repo_id%'
+        and not exists (
+          select 1
+            from pg_constraint k
+            join pg_attribute a on a.attrelid = k.conrelid and a.attnum = any (k.conkey)
+           where k.contype = 'f'
+             and k.confrelid = 'public.repos'::regclass
+             and k.conrelid = format('public.%I', c.table_name)::regclass
+             and a.attname = c.column_name
+        )`
+  );
+  expect(rows.map((row) => row.table_name).sort()).toContain(
+    "control_sessions"
+  );
+  expect(unguarded(rows, await guardsByTable())).toEqual([]);
 });
 
 it("is not executable by the API roles", async () => {
