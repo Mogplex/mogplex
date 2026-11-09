@@ -1,5 +1,9 @@
 import { createHash, randomBytes } from "node:crypto";
-import { assertSafeOutboundHttpUrlWithDns } from "@/lib/security/outbound-url";
+import {
+  UnsafeOutboundUrlError,
+  assertSafeOutboundHttpUrl,
+  assertSafeOutboundHttpUrlWithDns,
+} from "@/lib/security/outbound-url";
 
 export type OAuthMetadata = {
   authorization_endpoint: string;
@@ -73,6 +77,24 @@ async function discoverProtectedResourceMetadata(mcpServerUrl: string) {
   }
 }
 
+/**
+ * Endpoints a server advertises get the checks user-entered OAuth URLs get,
+ * and must use https: the authorize endpoint becomes a browser redirect.
+ */
+function assertDiscoveredEndpoint(value: unknown, fieldName: string): string {
+  const url = assertSafeOutboundHttpUrl(
+    typeof value === "string" ? value : "",
+    fieldName
+  );
+  if (new URL(url).protocol !== "https:") {
+    throw new UnsafeOutboundUrlError(
+      `${fieldName} must use https`,
+      "INVALID_URL"
+    );
+  }
+  return url;
+}
+
 export async function discoverOAuthMetadata(
   mcpServerUrl: string
 ): Promise<OAuthMetadata> {
@@ -104,8 +126,14 @@ export async function discoverOAuthMetadata(
   }
 
   return {
-    authorization_endpoint: metadata.authorization_endpoint,
-    token_endpoint: metadata.token_endpoint,
+    authorization_endpoint: assertDiscoveredEndpoint(
+      metadata.authorization_endpoint,
+      "authorization_endpoint"
+    ),
+    token_endpoint: assertDiscoveredEndpoint(
+      metadata.token_endpoint,
+      "token_endpoint"
+    ),
     registration_endpoint: metadata.registration_endpoint,
   };
 }

@@ -316,7 +316,7 @@ test("settings manual add preserves input and surfaces API errors", async ({
   await expect(page.getByPlaceholder("token")).toHaveValue("bb_live_123");
 });
 
-test("settings manual add surfaces network failures and keeps oauth hidden", async ({
+test("settings manual add surfaces network failures and offers OAuth only for MCP servers", async ({
   page,
 }) => {
   await enableScopedE2EAuth(page);
@@ -349,13 +349,14 @@ test("settings manual add surfaces network failures and keeps oauth hidden", asy
     .locator("select")
     .filter({ has: page.locator('option[value="mcp_server"]') })
     .last();
-  await connectionTypeSelect.selectOption("mcp_server");
-
   const authSelect = page
     .locator("select")
     .filter({ has: page.locator('option[value="bearer"]') })
     .last();
   await expect(authSelect.locator('option[value="oauth"]')).toHaveCount(0);
+
+  await connectionTypeSelect.selectOption("mcp_server");
+  await expect(authSelect.locator('option[value="oauth"]')).toHaveCount(1);
 
   await page.getByPlaceholder("name").fill("Network Error MCP");
   await page

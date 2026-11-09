@@ -276,3 +276,61 @@ test("should treat a stdio row as runnable only while its preset defines the lau
     true
   );
 });
+
+test("should accept a custom MCP OAuth connection with only its server URL", () => {
+  const input = normalizeConnectionCreateInput({
+    name: "Artifacts",
+    type: "mcp_server",
+    mcp_url: "https://mcp.sentry.dev/mcp",
+    mcp_transport: "http",
+    auth_type: "oauth",
+  });
+
+  assert.equal(input.auth_type, "oauth");
+  assert.equal(input.oauth_client_id, undefined);
+  assert.equal(input.oauth_authorize_url, undefined);
+  assert.equal(input.credentials, undefined);
+  assert.equal(
+    isConnectionMisconfigured({
+      type: "mcp_server",
+      auth_type: "oauth",
+      base_url: null,
+      mcp_url: "https://mcp.sentry.dev/mcp",
+      mcp_transport: "http",
+      oauth_client_id: null,
+      oauth_authorized_at: null,
+      oauth_authorize_url: null,
+      oauth_token_url: null,
+      source_preset: null,
+    }),
+    false
+  );
+});
+
+test("should still validate OAuth endpoints a custom MCP connection supplies", () => {
+  assert.throws(
+    () =>
+      normalizeConnectionCreateInput({
+        name: "Artifacts",
+        type: "mcp_server",
+        mcp_url: "https://mcp.sentry.dev/mcp",
+        auth_type: "oauth",
+        oauth_authorize_url: "http://127.0.0.1/authorize",
+      }),
+    ConnectionValidationError
+  );
+});
+
+test("should keep requiring client settings for REST OAuth connections", () => {
+  assert.throws(
+    () =>
+      normalizeConnectionCreateInput({
+        name: "REST OAuth",
+        type: "rest_api",
+        base_url: "https://api.sentry.io",
+        auth_type: "oauth",
+        credentials: "secret",
+      }),
+    /oauth_client_id is required/
+  );
+});

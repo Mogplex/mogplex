@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { toast } from "@/hooks/use-toast"
 import { PasswordInput } from "@/components/ui/password-input"
+import { getConnectionAuthorizationPath } from "@/lib/connections/presets"
 
 const AUTH_OPTIONS = [
   { value: "none", label: "None" },
@@ -26,6 +27,9 @@ export function InlineAddForm({ repoId, onCreated, onCancel }: {
   const [mcpUrl, setMcpUrl] = useState("")
   const [mcpTransport, setMcpTransport] = useState<"http" | "sse">("http")
   const [credentials, setCredentials] = useState("")
+  // Separate from `credentials` so a token typed for another auth type is
+  // never sent as the OAuth client secret.
+  const [clientSecret, setClientSecret] = useState("")
   const [oauthClientId, setOauthClientId] = useState("")
   const [oauthAuthorizeUrl, setOauthAuthorizeUrl] = useState("")
   const [oauthTokenUrl, setOauthTokenUrl] = useState("")
@@ -57,8 +61,8 @@ export function InlineAddForm({ repoId, onCreated, onCancel }: {
         body.oauth_authorize_url = oauthAuthorizeUrl
         body.oauth_token_url = oauthTokenUrl
         body.oauth_scopes = oauthScopes || undefined
-        if (credentials) {
-          body.credentials = JSON.stringify({ client_secret: credentials })
+        if (clientSecret) {
+          body.credentials = JSON.stringify({ client_secret: clientSecret })
         }
       } else if (authType !== "none" && credentials) {
         body.credentials = credentials
@@ -72,6 +76,17 @@ export function InlineAddForm({ repoId, onCreated, onCancel }: {
       if (!res.ok) {
         const data = await res.json()
         throw new Error(data.error || "Failed to create connection")
+      }
+      if (type === "mcp_server" && authType === "oauth") {
+        const { connection } = (await res.json().catch(() => ({}))) as {
+          connection?: { id?: string }
+        }
+        if (connection?.id) {
+          window.location.href = getConnectionAuthorizationPath({
+            connectionId: connection.id,
+          })
+          return
+        }
       }
       toast({ variant: "success", title: "Connection created" })
       onCreated()
@@ -163,10 +178,10 @@ export function InlineAddForm({ repoId, onCreated, onCancel }: {
 
       {authType === "oauth" ? (
         <>
-          <input value={oauthClientId} onChange={(e) => setOauthClientId(e.target.value)} placeholder="Client ID" className="w-full px-2 py-1 bg-input border border-border text-[11px] text-foreground rounded" />
-          <PasswordInput label={`${name.trim() || "Connection"} client secret`} value={credentials} onChange={(e) => setCredentials(e.target.value)} placeholder="Client Secret" type="password" className="h-auto w-full px-2 py-1 bg-input border border-border text-[11px] md:text-[11px] text-foreground rounded" />
-          <input value={oauthAuthorizeUrl} onChange={(e) => setOauthAuthorizeUrl(e.target.value)} placeholder="Authorize URL" className="w-full px-2 py-1 bg-input border border-border text-[11px] text-foreground rounded" />
-          <input value={oauthTokenUrl} onChange={(e) => setOauthTokenUrl(e.target.value)} placeholder="Token URL" className="w-full px-2 py-1 bg-input border border-border text-[11px] text-foreground rounded" />
+          <input value={oauthClientId} onChange={(e) => setOauthClientId(e.target.value)} placeholder={type === "mcp_server" ? "Client ID (optional, registered automatically)" : "Client ID"} className="w-full px-2 py-1 bg-input border border-border text-[11px] text-foreground rounded" />
+          <PasswordInput label={`${name.trim() || "Connection"} client secret`} value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} placeholder={type === "mcp_server" ? "Client Secret (optional)" : "Client Secret"} type="password" className="h-auto w-full px-2 py-1 bg-input border border-border text-[11px] md:text-[11px] text-foreground rounded" />
+          <input value={oauthAuthorizeUrl} onChange={(e) => setOauthAuthorizeUrl(e.target.value)} placeholder={type === "mcp_server" ? "Authorize URL (optional, discovered)" : "Authorize URL"} className="w-full px-2 py-1 bg-input border border-border text-[11px] text-foreground rounded" />
+          <input value={oauthTokenUrl} onChange={(e) => setOauthTokenUrl(e.target.value)} placeholder={type === "mcp_server" ? "Token URL (optional, discovered)" : "Token URL"} className="w-full px-2 py-1 bg-input border border-border text-[11px] text-foreground rounded" />
           <input value={oauthScopes} onChange={(e) => setOauthScopes(e.target.value)} placeholder="Scopes (space-separated, optional)" className="w-full px-2 py-1 bg-input border border-border text-[11px] text-foreground rounded" />
         </>
       ) : authType !== "none" ? (

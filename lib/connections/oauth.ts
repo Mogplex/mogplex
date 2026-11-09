@@ -1,8 +1,14 @@
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { assertSafeOutboundHttpUrlWithDns } from "@/lib/security/outbound-url";
-import { encrypt, decrypt } from "./encryption";
+import { encrypt } from "./encryption";
+import {
+  type OAuthCredentials,
+  parseCredentials,
+  parseCredentialsSafely,
+} from "./oauth-credentials";
 import { updateConnection } from "./service";
 import { getConnectionPreset } from "./presets";
+import { getOAuthProfile } from "./oauth-profile";
 import {
   discoverOAuthMetadata,
   registerOAuthClient,
@@ -18,16 +24,12 @@ export {
   discoverOAuthMetadata,
 } from "./oauth-discovery";
 
-type OAuthCredentials = {
-  client_secret?: string;
-  access_token?: string;
-  refresh_token?: string;
-};
-
 export type OAuthTokenResponse = {
   access_token: string;
   refresh_token?: string;
   expires_in?: number;
+  /** Set by the code exchange only: whether it named a resource. */
+  resource_indicator?: boolean;
 };
 
 export type StoredOAuthConnectionState = {
@@ -36,43 +38,6 @@ export type StoredOAuthConnectionState = {
   oauth_authorized_at: string | null;
   oauth_token_expires_at: string | null;
 };
-
-function parseCredentials(encrypted: string): OAuthCredentials {
-  const raw = decrypt(encrypted);
-  try {
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    // Only native OAuth fields are recognized. Unknown legacy broker payloads
-    // intentionally parse without a token and must fail closed until reconnect.
-    return {
-      client_secret:
-        typeof parsed.client_secret === "string"
-          ? parsed.client_secret
-          : undefined,
-      access_token:
-        typeof parsed.access_token === "string"
-          ? parsed.access_token
-          : undefined,
-      refresh_token:
-        typeof parsed.refresh_token === "string"
-          ? parsed.refresh_token
-          : undefined,
-    };
-  } catch {
-    throw new Error("Invalid OAuth credentials format");
-  }
-}
-
-function parseCredentialsSafely(encrypted: string | null): OAuthCredentials {
-  if (!encrypted) {
-    return {};
-  }
-
-  try {
-    return parseCredentials(encrypted);
-  } catch {
-    return {};
-  }
-}
 
 async function getStoredOAuthConnectionState(
   connectionId: string
@@ -107,11 +72,17 @@ export function canPrepareOAuthConnection(connection: Connection): boolean {
 }
 
 export function getOAuthResourceIndicator(
-  connection: Connection
+  connection: Connection,
+  refresh?: { resourceBound: boolean }
 ): string | undefined {
-  const preset = getConnectionPreset(connection.source_preset);
-  return preset?.oauth_config?.use_resource_indicator &&
-    connection.type === "mcp_server"
+  // Refresh names the resource when the code exchange did or a preset declares
+  // it. Tokens from exchanges that predate the marker refresh without it.
+  const sendsResource = refresh
+    ? refresh.resourceBound ||
+      getConnectionPreset(connection.source_preset)?.oauth_config
+        ?.use_resource_indicator
+    : getOAuthProfile(connection)?.use_resource_indicator;
+  return sendsResource && connection.type === "mcp_server"
     ? (connection.mcp_url ?? undefined)
     : undefined;
 }
@@ -124,19 +95,19 @@ export async function prepareOAuthConnection(
   }
 ): Promise<{ connection: Connection; codeVerifier: string | null }> {
   const preset = getConnectionPreset(connection.source_preset);
-  if (!preset?.oauth_config) {
+  const profile = getOAuthProfile(connection);
+  if (!profile) {
     return { connection, codeVerifier: null };
   }
 
   let nextConnection = { ...connection };
   let metadata: OAuthMetadata | null = null;
-  const oauthScopes =
-    preset.oauth_config.scopes?.join(" ") ?? nextConnection.oauth_scopes;
+  const oauthScopes = profile.scopes?.join(" ") ?? nextConnection.oauth_scopes;
 
   // Older preset rows may predate the pinned MCP URL. Restore the trusted
   // preset endpoint before discovery instead of sending users into a generic
   // OAuth setup failure that can only be fixed by recreating the connection.
-  if (!nextConnection.mcp_url && preset.mcp_url) {
+  if (!nextConnection.mcp_url && preset?.mcp_url) {
     await updateConnection(nextConnection.id, {
       mcp_url: preset.mcp_url,
       mcp_transport: preset.mcp_transport,
@@ -176,14 +147,17 @@ export async function prepareOAuthConnection(
       {
         clientName: "Mogplex",
         clientUri: options.origin,
-        tokenEndpointAuthMethod: preset.oauth_config.token_endpoint_auth_method,
-        scopes: preset.oauth_config.scopes,
+        tokenEndpointAuthMethod: profile.token_endpoint_auth_method,
+        scopes: oauthScopes?.split(" ").filter(Boolean),
       }
     );
 
-    const credentials = registration.client_secret
-      ? JSON.stringify({ client_secret: registration.client_secret })
-      : undefined;
+    // A custom row's registered client replaces any secret saved for another
+    // client. Preset rows keep theirs until the token write completes migration.
+    const credentials =
+      registration.client_secret || !preset
+        ? JSON.stringify({ client_secret: registration.client_secret })
+        : undefined;
 
     await updateConnection(nextConnection.id, {
       oauth_client_id: registration.client_id,
@@ -216,7 +190,7 @@ export async function prepareOAuthConnection(
 
   return {
     connection: nextConnection,
-    codeVerifier: preset.oauth_config.use_pkce ? generatePkceVerifier() : null,
+    codeVerifier: profile.use_pkce ? generatePkceVerifier() : null,
   };
 }
 
@@ -229,6 +203,10 @@ async function compareAndSwapOAuthConnectionState(
     ...parseCredentialsSafely(current.encrypted_credentials),
     access_token: tokens.access_token,
     ...(tokens.refresh_token ? { refresh_token: tokens.refresh_token } : {}),
+    // A code exchange records whether it named the resource; refreshes keep it.
+    ...(tokens.resource_indicator === undefined
+      ? {}
+      : { resource_indicator: tokens.resource_indicator || undefined }),
   };
 
   const update: Record<string, unknown> = {
@@ -375,6 +353,7 @@ export async function exchangeCodeForTokens(
       typeof json.refresh_token === "string" ? json.refresh_token : undefined,
     expires_in:
       typeof json.expires_in === "number" ? json.expires_in : undefined,
+    resource_indicator: Boolean(resource),
   };
 }
 
@@ -397,7 +376,9 @@ export async function refreshOAuthToken(
     connection.oauth_token_url!,
     "oauth_token_url"
   );
-  const resource = getOAuthResourceIndicator(connection);
+  const resource = getOAuthResourceIndicator(connection, {
+    resourceBound: creds.resource_indicator === true,
+  });
   const res = await fetch(tokenUrl, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },

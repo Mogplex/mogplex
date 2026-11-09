@@ -2,8 +2,10 @@
 
 import { useState, useCallback } from "react"
 import { PasswordInput } from "@/components/ui/password-input"
+import { getConnectionAuthorizationPath } from "@/lib/connections/presets"
 import {
   CONNECTION_AUTH_OPTIONS,
+  MCP_CONNECTION_AUTH_OPTIONS,
   INITIAL_CONNECTION_FORM,
   getDefaultAuthHeader,
   type ConnectionForm,
@@ -30,15 +32,30 @@ export function AddConnectionForm({
     setConnectionSaving(true)
     setConnectionError(null)
     try {
+      // A credential typed under another auth type stays in form state; OAuth
+      // sign-in must never send it on as a client secret.
+      const { credentials: _credentials, ...withoutCredentials } = newConn
       const res = await fetch("/api/connections", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newConn),
+        body: JSON.stringify(
+          newConn.auth_type === "oauth" ? withoutCredentials : newConn
+        ),
       })
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
         setConnectionError(data.error || "Failed to add connection")
+        return
+      }
+
+      const { connection } = await res.json().catch(() => ({})) as {
+        connection?: { id?: string }
+      }
+      if (newConn.auth_type === "oauth" && connection?.id) {
+        window.location.href = getConnectionAuthorizationPath({
+          connectionId: connection.id,
+        })
         return
       }
 
@@ -66,7 +83,9 @@ export function AddConnectionForm({
             const nextType = e.target.value as "rest_api" | "mcp_server"
             const nextAuthType = nextType === "mcp_server" && p.auth_type === "none"
               ? "bearer"
-              : p.auth_type
+              : nextType === "rest_api" && p.auth_type === "oauth"
+                ? "none"
+                : p.auth_type
 
             return {
               ...p,
@@ -130,11 +149,11 @@ export function AddConnectionForm({
               }))}
               className="border border-border bg-input px-3 py-2 text-sm text-foreground"
             >
-              {CONNECTION_AUTH_OPTIONS.map((option) => (
+              {MCP_CONNECTION_AUTH_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>{option.label}</option>
               ))}
             </select>
-            {newConn.auth_type !== "none" && (
+            {newConn.auth_type !== "none" && newConn.auth_type !== "oauth" && (
               <PasswordInput label={`${newConn.name.trim() || "Connection"} credential`} containerClassName="flex-1" value={newConn.credentials} onChange={e => setNewConn(p => ({ ...p, credentials: e.target.value }))} placeholder={newConn.auth_type === "api_key" ? "API key" : newConn.auth_type === "basic" ? "base64 user:pass" : "token"} type="password" className="h-auto border border-border bg-input px-3 py-2 text-sm text-foreground" />
             )}
           </div>
@@ -153,7 +172,11 @@ export function AddConnectionForm({
         disabled={connectionSaving}
         className="border border-border px-3 py-2 text-sm text-foreground hover:bg-secondary disabled:opacity-50"
       >
-        {connectionSaving ? "Adding..." : "Add Connection"}
+        {connectionSaving
+          ? "Adding..."
+          : newConn.type === "mcp_server" && newConn.auth_type === "oauth"
+            ? "Add and sign in"
+            : "Add Connection"}
       </button>
     </div>
   )
