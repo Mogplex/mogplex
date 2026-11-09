@@ -92,3 +92,28 @@ export function groupRepositoriesByOwner<
         a.owner.localeCompare(b.owner)
     );
 }
+
+export type NotConnectedReason = "not_selected" | "not_installed";
+
+/**
+ * Why each repository is not covered by the GitHub App. An owner the App is
+ * installed for (an installation account, or an owner with any covered
+ * repository, removed ones included) left these out of the installation's
+ * repository selection; otherwise the App is not installed for that owner.
+ */
+export function notConnectedReasons<
+  T extends Pick<Repo, "owner" | "full_name" | "github_app_covered">,
+>(notConnected: T[], all: T[], installationOwners: readonly string[] = []) {
+  const installedOwners = new Set([
+    ...installationOwners.map((login) => login.toLowerCase()),
+    ...all
+      .filter((repo) => repo.github_app_covered)
+      .map((repo) => repoOwner(repo).toLowerCase()),
+  ]);
+  return notConnected.map((repo) => ({
+    repo,
+    reason: (installedOwners.has(repoOwner(repo).toLowerCase())
+      ? "not_selected"
+      : "not_installed") as NotConnectedReason,
+  }));
+}

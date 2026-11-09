@@ -17,14 +17,21 @@ import {
   activeOwnerRepos,
   filterRepositories,
   groupRepositoriesByOwner,
+  notConnectedReasons,
   repoOwner,
   splitByAppConnection,
 } from "@/lib/settings/repository-filter";
+import {
+  automationsForOwner,
+  installationForOwner,
+} from "@/lib/settings/owner-automations";
+import { timeAgo } from "@/lib/observability/formatters";
 import type { Repo } from "@/lib/types";
 import { NotConnectedRepositories } from "./not-connected-repositories";
 import { ConfirmRemoveButton, RepositoryRow } from "./repository-row";
 import { RepositoryOwnerGroup } from "./repository-owner-group";
 import { useRepositoryAdmin } from "./use-repository-admin";
+import { useRepositoryContext } from "./use-repository-context";
 
 /**
  * Settings home for connected repositories: GitHub sync, project settings,
@@ -62,6 +69,32 @@ export function RepositoriesSection() {
     () => groupRepositoriesByOwner(connected, selfLogin),
     [connected, selfLogin]
   );
+  const context = useRepositoryContext();
+  const groupDetails = useMemo(
+    () =>
+      groups.map((group) => {
+        // Judge the owner by all its connected repositories, not the search.
+        const ownerAll = activeOwnerRepos(inventory, group.owner);
+        const installation = installationForOwner(
+          group.owner,
+          ownerAll,
+          context.installationsById
+        );
+        return {
+          ...group,
+          manageUrl: installation?.manage_url ?? null,
+          automations: installation
+            ? automationsForOwner(
+                context.automations,
+                ownerAll,
+                // Same fallback as the access link's scope label.
+                installation.target_type || installation.account_type
+              )
+            : [],
+        };
+      }),
+    [groups, inventory, context]
+  );
   const notConnectedRepos = notConnected.filter((repo) => !repo.is_hidden);
   const { removalProgress } = admin;
   const removingLabel = removalProgress
@@ -92,7 +125,12 @@ export function RepositoriesSection() {
             variant="outline"
             size="sm"
             disabled={admin.syncing}
-            onClick={() => void admin.sync()}
+            onClick={() =>
+              void admin
+                .sync()
+                .then(() => context.refreshInstallations())
+                .catch(() => undefined)
+            }
           >
             {admin.syncing ? "Syncing…" : "Sync GitHub"}
           </Button>
@@ -117,6 +155,14 @@ export function RepositoriesSection() {
         <Button asChild variant="ghost" size="sm">
           <Link href={scopedHref(scope, "/sandboxes")}>Manage sandboxes</Link>
         </Button>
+        {context.lastSyncedAt ? (
+          <span
+            className="text-muted-foreground text-xs"
+            title={new Date(context.lastSyncedAt).toLocaleString()}
+          >
+            Last synced {timeAgo(context.lastSyncedAt)}
+          </span>
+        ) : null}
       </div>
       {admin.syncError ? (
         <p role="alert" className="text-destructive text-xs">
@@ -189,12 +235,15 @@ export function RepositoriesSection() {
           </p>
         ) : (
           <div aria-label="Connected repositories" role="region" className="space-y-4">
-            {groups.map(
+            {groupDetails.map(
               (group) => (
                 <RepositoryOwnerGroup
                   key={group.owner}
                   owner={group.owner}
                   count={group.repos.length}
+                  manageUrl={group.manageUrl}
+                  automations={group.automations}
+                  automationsHref={scopedHref(scope, "/automations")}
                 >
                   {group.repos.map((repo) =>
                     renderRow(repo, repo.name || repo.full_name)
@@ -214,7 +263,11 @@ export function RepositoriesSection() {
       owner === "all" &&
       notConnectedRepos.length > 0 ? (
         <NotConnectedRepositories
-          repos={notConnectedRepos}
+          repos={notConnectedReasons(
+            notConnectedRepos,
+            admin.repos,
+            context.installedOwners
+          )}
           removing={admin.removingOwner}
           removingLabel={removingLabel}
           onRemoveAll={() =>

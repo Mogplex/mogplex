@@ -40,6 +40,10 @@ export async function mockSettingsShell(page: Page) {
   await page.route("**/api/models/new-arrivals", (route) =>
     fulfillJson(route, { models: [], autoEnable: true })
   );
+  // Settings → Repositories lists the automations that run on each owner.
+  await page.route("**/api/flows?view=triggers", (route) =>
+    fulfillJson(route, [])
+  );
   await page.route("**/api/models", (route) =>
     fulfillJson(route, { models: [], catalog: [], default_model: null })
   );

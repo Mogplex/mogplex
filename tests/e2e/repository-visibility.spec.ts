@@ -1,134 +1,9 @@
-import { expect, test, type Page } from "@playwright/test";
-import { enableScopedE2EAuth } from "./helpers/auth";
+import { expect, test } from "@playwright/test";
 import {
-  connectedUser,
-  fulfillJson,
-  mockBaseChrome,
-} from "./helpers/automation-control-plane-fixtures";
-
-async function dashboard(
-  page: Page,
-  failedIds: string[] = [],
-  githubUsername?: string
-) {
-  await enableScopedE2EAuth(page);
-  await mockBaseChrome(page);
-  if (githubUsername) {
-    await page.route("**/api/auth/user", (route) =>
-      fulfillJson(route, {
-        user: { ...connectedUser, github_username: githubUsername },
-      })
-    );
-  }
-  // The repos API marks App coverage per repository; the legacy rows came
-  // from the old OAuth sync and have no installation.
-  const app = {
-    github_app_covered: true,
-    github_prefer_installation_coverage: true,
-  };
-  const legacy = {
-    github_app_covered: false,
-    github_prefer_installation_coverage: true,
-  };
-  const repos = [
-    {
-      id: "alpha",
-      name: "alpha",
-      full_name: "alex/alpha",
-      owner: "alex",
-      is_hidden: false,
-      ...app,
-    },
-    {
-      id: "beta",
-      name: "beta",
-      full_name: "alex/beta",
-      owner: "alex",
-      is_hidden: false,
-      ...app,
-    },
-    {
-      id: "removed",
-      name: "removed",
-      full_name: "alex/removed",
-      owner: "alex",
-      is_hidden: true,
-      ...app,
-    },
-    {
-      id: "acme-app",
-      name: "app",
-      full_name: "acme/app",
-      owner: "acme",
-      is_hidden: false,
-      ...app,
-    },
-    {
-      id: "other",
-      name: "other",
-      full_name: "team/other",
-      owner: "team",
-      is_hidden: false,
-      ...app,
-    },
-    {
-      id: "fork",
-      name: "docs",
-      full_name: "skhard99/docs",
-      owner: "skhard99",
-      is_hidden: false,
-      ...legacy,
-    },
-    {
-      id: "old-fork",
-      name: "docs",
-      full_name: "blackboxaicode/docs",
-      owner: "blackboxaicode",
-      is_hidden: true,
-      ...legacy,
-    },
-  ];
-  const writes: { id: string; is_hidden: boolean }[] = [];
-  await page.route("**/api/repos**", async (route) => {
-    if (route.request().method() === "PATCH") {
-      const body = route.request().postDataJSON() as {
-        id: string;
-        is_hidden: boolean;
-      };
-      writes.push(body);
-      if (failedIds.includes(body.id))
-        return fulfillJson(route, { error: "Database unavailable" }, 500);
-      const repo = repos.find((row) => row.id === body.id)!;
-      repo.is_hidden = body.is_hidden;
-      return fulfillJson(route, repo);
-    }
-    return fulfillJson(route, repos);
-  });
-  await page.route("**/api/github/repos", (route) =>
-    fulfillJson(
-      route,
-      repos.filter((repo) => !repo.is_hidden)
-    )
-  );
-  for (const name of ["workspaces", "agents", "assignments", "memberships"]) {
-    await page.route(`**/api/${name}`, (route) => fulfillJson(route, []));
-  }
-  await page.route("**/api/connections", (route) =>
-    fulfillJson(route, { connections: [] })
-  );
-  await page.route("**/api/sandbox", (route) =>
-    fulfillJson(route, { sandboxes: [] })
-  );
-  await page.goto("/alex/settings/repositories");
-  await expect(page.getByRole("button", { name: "Sync GitHub" })).toBeEnabled();
-  return { repos, writes };
-}
-
-const connected = (page: Page) =>
-  page.getByRole("region", { name: "Connected repositories", exact: true });
-
-const repoLink = (page: Page, fullName: string) =>
-  connected(page).getByRole("link", { name: `Open ${fullName} on GitHub` });
+  connected,
+  dashboard,
+  repoLink,
+} from "./helpers/repository-settings-fixtures";
 
 test("connected repositories are grouped by GitHub owner and open on GitHub in a new tab", async ({
   page,
@@ -172,21 +47,31 @@ test("repositories without the GitHub App stay out of the list and can be remove
   const notice = page.getByRole("region", {
     name: "Not connected repositories",
   });
-  await expect(notice.getByText("1 repository not connected")).toBeVisible();
-  await notice.getByText("Show repository").click();
-  await expect(notice.getByText("skhard99/docs")).toBeVisible();
+  await expect(notice.getByText("2 repositories not connected")).toBeVisible();
+  await notice.getByText("Show repositories").click();
+  // An owner with the App installed is told the repository isn't selected,
+  // not that the App is missing.
+  await expect(
+    notice.getByRole("listitem").filter({ hasText: "alex/legacy" })
+  ).toContainText("not selected in the GitHub App's repository access");
+  await expect(
+    notice.getByRole("listitem").filter({ hasText: "skhard99/docs" })
+  ).toContainText("GitHub App not installed for this owner");
   await notice
     .getByRole("button", { name: "Remove all not-connected repositories" })
     .click();
   const dialog = page.getByRole("alertdialog", {
-    name: "Remove 1 not-connected repository?",
+    name: "Remove 2 not-connected repositories?",
   });
   await expect(dialog).toContainText(
-    "if you later install the GitHub App for these owners and sync"
+    "add them to an existing installation's repository access"
   );
-  await dialog.getByRole("button", { name: "Remove 1 repository" }).click();
+  await dialog.getByRole("button", { name: "Remove 2 repositories" }).click();
   await expect(notice).toHaveCount(0);
-  expect(writes).toEqual([{ id: "fork", is_hidden: true }]);
+  expect(writes).toEqual([
+    { id: "alex-legacy", is_hidden: true },
+    { id: "fork", is_hidden: true },
+  ]);
 });
 
 test("remove owner persists, and a removed repository can be restored", async ({
@@ -411,14 +296,14 @@ test("the not-connected card waits for filters to clear and shows removal progre
     .getByRole("button", { name: "Remove all not-connected repositories" })
     .click();
   await page
-    .getByRole("alertdialog", { name: "Remove 1 not-connected repository?" })
-    .getByRole("button", { name: "Remove 1 repository" })
+    .getByRole("alertdialog", { name: "Remove 2 not-connected repositories?" })
+    .getByRole("button", { name: "Remove 2 repositories" })
     .click();
   await expect(
     notice.getByRole("button", {
       name: "Remove all not-connected repositories",
     })
-  ).toHaveText("Removing 0/1…");
+  ).toHaveText("Removing 0/2…");
   release();
   await expect(notice).toHaveCount(0);
 });

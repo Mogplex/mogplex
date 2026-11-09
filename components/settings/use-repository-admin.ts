@@ -21,12 +21,14 @@ function errorMessage(err: unknown) {
     : "Could not update repository visibility. Try again.";
 }
 
+/** Repository visibility writes in flight at once during a bulk removal. */
+const WRITE_WAVE = 6;
+
 /**
  * Repository admin for Settings: GitHub sync plus remove/restore of
  * connected repositories, against the shared repos cache. `pendingIds` holds
  * repositories with a visibility write in flight so rows can't double-submit.
  */
-const WRITE_WAVE = 6;
 
 export function useRepositoryAdmin() {
   const activeTeamId = useActiveTeamId();

@@ -3,6 +3,7 @@ import {
   activeOwnerRepos,
   filterRepositories,
   groupRepositoriesByOwner,
+  notConnectedReasons,
   repoOwner,
   splitByAppConnection,
 } from "./repository-filter";
@@ -125,5 +126,39 @@ describe("groupRepositoriesByOwner", () => {
     const groups = groupRepositoriesByOwner([row("zed/a"), row("acme/x")]);
 
     expect(groups.map((g) => g.owner)).toEqual(["acme", "zed"]);
+  });
+});
+
+describe("notConnectedReasons", () => {
+  const row = (full_name: string, github_app_covered: boolean) => ({
+    full_name,
+    owner: "",
+    github_app_covered,
+  });
+
+  it("should tell a repository left out of an installation from one whose owner has no installation", () => {
+    const all = [
+      row("acme/app", true),
+      row("acme/legacy", false),
+      row("skhard99/docs", false),
+    ];
+
+    expect(
+      notConnectedReasons([all[1], all[2]], all).map(({ repo, reason }) => [
+        repo.full_name,
+        reason,
+      ])
+    ).toEqual([
+      ["acme/legacy", "not_selected"],
+      ["skhard99/docs", "not_installed"],
+    ]);
+  });
+
+  it("should count an installation with no selected repositories as installed", () => {
+    const all = [row("Empty-Org/site", false), row("skhard99/docs", false)];
+
+    expect(
+      notConnectedReasons(all, all, ["empty-org"]).map(({ reason }) => reason)
+    ).toEqual(["not_selected", "not_installed"]);
   });
 });
