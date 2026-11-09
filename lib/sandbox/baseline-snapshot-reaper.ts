@@ -71,6 +71,7 @@ type DeleteSnapshotFn = (input: {
 export type BaselineReaperSummary = {
   processed: number;
   reaped: number;
+  failed: number;
   message: string;
   reasons: Record<BaselineReaperDecision["reason"], number>;
 };
@@ -98,20 +99,21 @@ export async function runBaselineSnapshotReaper(
     missing_timestamp: 0,
   };
   let reaped = 0;
+  let failed = 0;
   const now = deps.now();
 
   for (const repo of candidates) {
-    const decision = shouldReapBaselineSnapshot(repo, {
-      maxAgeDays: config.maxAgeDays,
-      idleDays: config.idleDays,
-      now,
-    });
-    reasons[decision.reason] += 1;
-    if (!decision.reap) continue;
+    try {
+      const decision = shouldReapBaselineSnapshot(repo, {
+        maxAgeDays: config.maxAgeDays,
+        idleDays: config.idleDays,
+        now,
+      });
+      reasons[decision.reason] += 1;
+      if (!decision.reap) continue;
 
-    const snapshotId = repo.snapshot_id;
-    if (!snapshotId) continue;
-    {
+      const snapshotId = repo.snapshot_id;
+      if (!snapshotId) continue;
       const creds = await deps.resolveSnapshotCredentials(repo);
       if (!creds) continue;
       await deps.deleteSnapshot({
@@ -119,15 +121,23 @@ export async function runBaselineSnapshotReaper(
         token: creds.token,
         teamId: creds.teamId,
       });
+      await deps.clearRepoSnapshot(repo.id, snapshotId);
+      reaped += 1;
+    } catch (error) {
+      failed += 1;
+      console.error("[baseline-snapshot-reaper] failed to reap snapshot", {
+        repoId: repo.id,
+        snapshotId: repo.snapshot_id,
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
     }
-    await deps.clearRepoSnapshot(repo.id, snapshotId);
-    reaped += 1;
   }
 
   return {
     processed: candidates.length,
     reaped,
-    message: `Baseline snapshot reaper processed ${candidates.length} repo(s); reaped ${reaped}.`,
+    failed,
+    message: `Baseline snapshot reaper processed ${candidates.length} repo(s); reaped ${reaped}; failed ${failed}.`,
     reasons,
   };
 }

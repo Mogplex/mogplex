@@ -45,6 +45,7 @@ export async function runScheduledBaselineSnapshotReaper() {
 
   metadata.set("processed", summary.processed);
   metadata.set("reaped", summary.reaped);
+  metadata.set("failed", summary.failed);
   logger.log(summary.message, summary);
   return summary;
 }

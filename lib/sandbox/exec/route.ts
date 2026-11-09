@@ -491,5 +491,3 @@ export function createSandboxExecPostHandler(
     }
   };
 }
-
-export const POST = createSandboxExecPostHandler();

@@ -57,6 +57,26 @@ async function resetSessionsStore() {
   return useSessionsStore;
 }
 
+test("useSplitPanes falls back to a home layout when sessions are empty", async () => {
+  const useSessionsStore = await resetSessionsStore();
+  const { installControlHookDom } = await import("../support/control-hook-dom");
+  const cleanup = installControlHookDom();
+  const { renderHook, act } = await import("@testing-library/react");
+  const { useSplitPanes } = await import("../../hooks/use-split-panes");
+  useSessionsStore.setState({ sessions: [], activeSessionId: "missing" });
+  const view = renderHook(() => useSplitPanes());
+
+  try {
+    assert.equal(view.result.current.root.id, "p-home");
+    assert.equal(view.result.current.activeId, "p-home");
+    await act(async () => view.result.current.setActiveId("p-other"));
+    assert.deepEqual(useSessionsStore.getState().sessions, []);
+  } finally {
+    view.unmount();
+    cleanup();
+  }
+});
+
 test("getPreferredWorkspaceSession falls back to the first workspace session when the active session is blank", async () => {
   const { getPreferredWorkspaceSession } =
     await import("../../hooks/use-sessions");
@@ -201,6 +221,7 @@ test("updatePaneTree can flush a specific inactive workspace session", async () 
 test("updatePaneTree ignores an identical tree and active id", async () => {
   const useSessionsStore = await resetSessionsStore();
   const current = useSessionsStore.getState().getActiveSession();
+  assert.ok(current);
   let notifications = 0;
   const unsubscribe = useSessionsStore.subscribe(() => {
     notifications += 1;

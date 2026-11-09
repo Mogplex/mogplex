@@ -3,6 +3,7 @@
 import { useCallback } from "react";
 import { useSessionsStore } from "./use-sessions";
 import {
+  createDefaultTree,
   createPaneNode,
   getPaneSandboxBinding,
   getTerminalSessionKey,
@@ -79,19 +80,24 @@ export {
 
 type TreeUpdate = { root: TreeNode; activeId: string };
 
+const FALLBACK_TREE = createDefaultTree();
+
 function updateActiveSessionTree(
   update: (root: TreeNode, activeId: string) => TreeUpdate
 ) {
   const state = useSessionsStore.getState();
   const session = state.getActiveSession();
+  if (!session) return;
   const next = update(session.paneTree, session.activeId);
   state.updatePaneTree(next.root, next.activeId, { sessionId: session.id });
 }
 
 export function useSplitPanes() {
-  const root = useSessionsStore((state) => state.getActiveSession().paneTree);
+  const root = useSessionsStore(
+    (state) => state.getActiveSession()?.paneTree ?? FALLBACK_TREE
+  );
   const activeId = useSessionsStore(
-    (state) => state.getActiveSession().activeId
+    (state) => state.getActiveSession()?.activeId ?? FALLBACK_TREE.id
   );
 
   const setActiveId = useCallback((id: string) => {

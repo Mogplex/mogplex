@@ -1,1 +1,3 @@
-export * from "@/lib/harness/route";
+import { createSandboxHarnessPostHandler } from "@/lib/harness/route";
+
+export const POST = createSandboxHarnessPostHandler();

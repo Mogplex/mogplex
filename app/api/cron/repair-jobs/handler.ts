@@ -55,6 +55,8 @@ export function createRepairJobsGetHandler(
           );
         }
 
+        // Legacy assignment and trigger-backed rows are not restartable: the
+        // executor rejects them as MISSING_CONFIG instead of repairing them.
         const repairableJobs = (jobs || []).filter(
           (job) =>
             isExecutableJobRunSource(job) && deps.isRepairablePendingJob(job)

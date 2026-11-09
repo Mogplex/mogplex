@@ -488,5 +488,3 @@ export function createSandboxHarnessPostHandler(
     }
   };
 }
-
-export const POST = createSandboxHarnessPostHandler();

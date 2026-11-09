@@ -160,26 +160,41 @@ test("runBaselineSnapshotReaper keeps the snapshot reference when credentials ar
   assert.equal(cleared, false);
 });
 
-test("runBaselineSnapshotReaper propagates deletion failures without clearing the reference", async () => {
+test("runBaselineSnapshotReaper continues after a deletion failure without clearing its reference", async () => {
   const { runBaselineSnapshotReaper } = await loadReaper();
-  let cleared = false;
+  const candidates = [
+    makeRepo({
+      id: "r1",
+      snapshot_id: "broken-snapshot",
+      snapshot_created_at: new Date(now.getTime() - 100 * DAY_MS).toISOString(),
+    }),
+    makeRepo({
+      id: "r2",
+      snapshot_id: "next-snapshot",
+      snapshot_created_at: new Date(now.getTime() - 100 * DAY_MS).toISOString(),
+    }),
+  ];
+  const deletedSnapshots: string[] = [];
+  const clearedRepos: string[] = [];
+  const logged: unknown[][] = [];
+  const originalConsoleError = console.error;
+  console.error = (...args: unknown[]) => {
+    logged.push(args);
+  };
 
-  await assert.rejects(
-    runBaselineSnapshotReaper(
+  try {
+    const summary = await runBaselineSnapshotReaper(
       { maxAgeDays: 14, idleDays: 30 },
       {
-        loadCandidates: async () => [
-          makeRepo({
-            snapshot_created_at: new Date(
-              now.getTime() - 100 * DAY_MS
-            ).toISOString(),
-          }),
-        ],
-        clearRepoSnapshot: async () => {
-          cleared = true;
+        loadCandidates: async () => candidates,
+        clearRepoSnapshot: async (repoId) => {
+          clearedRepos.push(repoId);
         },
-        deleteSnapshot: async () => {
-          throw new Error("provider unavailable");
+        deleteSnapshot: async ({ snapshotId }) => {
+          deletedSnapshots.push(snapshotId);
+          if (snapshotId === "broken-snapshot") {
+            throw new Error("provider unavailable");
+          }
         },
         resolveSnapshotCredentials: async () => ({
           token: "tok",
@@ -187,10 +202,26 @@ test("runBaselineSnapshotReaper propagates deletion failures without clearing th
         }),
         now: () => now,
       }
-    ),
-    /provider unavailable/
-  );
-  assert.equal(cleared, false);
+    );
+
+    assert.equal(summary.processed, 2);
+    assert.equal(summary.reaped, 1);
+    assert.equal(summary.failed, 1);
+    assert.deepEqual(deletedSnapshots, ["broken-snapshot", "next-snapshot"]);
+    assert.deepEqual(clearedRepos, ["r2"]);
+    assert.deepEqual(logged, [
+      [
+        "[baseline-snapshot-reaper] failed to reap snapshot",
+        {
+          repoId: "r1",
+          snapshotId: "broken-snapshot",
+          error: "provider unavailable",
+        },
+      ],
+    ]);
+  } finally {
+    console.error = originalConsoleError;
+  }
 });
 
 test("runBaselineSnapshotReaper clears the original snapshot id after deletion", async () => {

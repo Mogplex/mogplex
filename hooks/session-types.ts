@@ -69,7 +69,7 @@ export type SessionsState = {
     activeId: string,
     options?: { sessionId?: string }
   ) => void;
-  getActiveSession: () => Session;
+  getActiveSession: () => Session | undefined;
 };
 
 export type PersistedSessionsState = {
