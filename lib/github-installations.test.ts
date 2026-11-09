@@ -45,8 +45,12 @@ function fixture({
     findInstallation: vi.fn(
       async (account: string) => installations[account] ?? null
     ),
-    verifyMember: vi.fn(async (installation: GithubInstallation) =>
-      members.has(installation.account?.login ?? "")
+    verifyMember: vi.fn(
+      async (installation: GithubInstallation, _login?: string | null) =>
+        members.has(installation.account?.login ?? "")
+    ),
+    fetchLogin: vi.fn(async (token: string | null | undefined) =>
+      token ? "member" : null
     ),
     syncRepos: vi.fn(async () => undefined) as never,
   };
@@ -94,17 +98,31 @@ it("should skip accounts that are already attached even when other installations
   expect(upserts).toEqual([]);
 });
 
-it("should not attach anything without a GitHub login", async () => {
+it("should not attach anything without an identity token", async () => {
   const { deps } = fixture();
   expect(
     await reconcileGithubInstallationsForUser(
       "fixture-user",
+      "member",
       null,
-      "identity-fixture",
       deps
     )
   ).toEqual({ discovered: 0 });
   expect(deps.request).not.toHaveBeenCalled();
+  expect(deps.findInstallation).not.toHaveBeenCalled();
+});
+
+it("should check membership for the login the token reports, not a stored one", async () => {
+  const { deps } = fixture();
+  await reconcileGithubInstallationsForUser(
+    "fixture-user",
+    "stale-login",
+    "identity-fixture",
+    deps
+  );
+  expect(deps.findInstallation).not.toHaveBeenCalledWith("stale-login");
+  for (const [, login] of deps.verifyMember.mock.calls)
+    expect(login).toBe("member");
 });
 
 it("should not guess grants after a failed database lookup", async () => {

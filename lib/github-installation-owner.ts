@@ -9,6 +9,34 @@ const defaultDeps = {
 };
 
 /**
+ * The login GitHub reports for the identity token right now. A stored login
+ * can go stale after a rename, and GitHub may hand the old name to someone
+ * else, so authorization never trusts it.
+ */
+export async function fetchGithubIdentityLogin(
+  identityToken: string | null | undefined,
+  request: typeof fetch = (input, init) => fetch(input, init)
+): Promise<string | null> {
+  if (!identityToken) return null;
+  const response = await request("https://api.github.com/user", {
+    headers: {
+      Authorization: `Bearer ${identityToken}`,
+      Accept: "application/vnd.github+json",
+    },
+    cache: "no-store",
+    signal: AbortSignal.timeout(15_000),
+  });
+  if ([401, 403, 404].includes(response.status)) return null;
+  if (!response.ok)
+    throw new Error(
+      `GitHub identity could not be verified (${response.status})`
+    );
+  const identity: unknown = await response.json();
+  const login = (identity as { login?: unknown } | null)?.login;
+  return typeof login === "string" && login.trim() ? login : null;
+}
+
+/**
  * A user may attach an installation when it is on their own account or on an
  * org they belong to. Which members see which repos is the org's call: it
  * picks the installation's repository set. Membership is checked with the

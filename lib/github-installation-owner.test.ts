@@ -1,5 +1,8 @@
 import { expect, it, vi } from "vitest";
-import { verifyGithubInstallationMember } from "./github-installation-owner";
+import {
+  fetchGithubIdentityLogin,
+  verifyGithubInstallationMember,
+} from "./github-installation-owner";
 
 const org = {
   id: 7,
@@ -80,4 +83,41 @@ it("should keep provider outages distinct from a verified non-member", async () 
   await expect(
     verifyGithubInstallationMember(org, "plain-member", deps)
   ).rejects.toThrow("membership could not be verified");
+});
+
+it("should read the login live from the identity token", async () => {
+  const request = vi.fn(
+    async (url: string | URL | Request, init?: RequestInit) => {
+      expect(String(url)).toBe("https://api.github.com/user");
+      expect(new Headers(init?.headers).get("Authorization")).toBe(
+        "Bearer identity-fixture"
+      );
+      return Response.json({ login: "current-login" });
+    }
+  );
+  expect(
+    await fetchGithubIdentityLogin("identity-fixture", request as never)
+  ).toBe("current-login");
+  expect(await fetchGithubIdentityLogin(null, request as never)).toBeNull();
+  expect(request).toHaveBeenCalledTimes(1);
+});
+
+it("should treat a rejected identity token as no login and an outage as an error", async () => {
+  expect(
+    await fetchGithubIdentityLogin(
+      "revoked-fixture",
+      async () => new Response(null, { status: 401 })
+    )
+  ).toBeNull();
+  expect(
+    await fetchGithubIdentityLogin("identity-fixture", async () =>
+      Response.json({})
+    )
+  ).toBeNull();
+  await expect(
+    fetchGithubIdentityLogin(
+      "identity-fixture",
+      async () => new Response(null, { status: 503 })
+    )
+  ).rejects.toThrow("identity could not be verified");
 });

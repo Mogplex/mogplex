@@ -132,27 +132,17 @@ function grantsSenderAccess(
 async function resolveSenderUserIds(
   plan: Exclude<GithubWebhookSyncPlan, { type: "none" }>
 ) {
-  if (!grantsSenderAccess(plan)) return [];
+  if (!grantsSenderAccess(plan) || !plan.senderId) return [];
   const { supabaseAdmin } = await import("@/lib/supabase/admin");
-  const lookups: Array<
-    ["github_user_id" | "github_username", string | number]
-  > = [];
-  if (plan.senderId) lookups.push(["github_user_id", plan.senderId]);
-  if (plan.senderLogin) lookups.push(["github_username", plan.senderLogin]);
-
-  // Prefer the immutable GitHub id; fall back to login for older profiles.
-  for (const [column, value] of lookups) {
-    const { data, error } = await supabaseAdmin
-      .from("profiles")
-      .select("id")
-      .eq(column, value);
-    if (error) {
-      throw new Error(`Failed to load sender profile: ${error.message}`);
-    }
-    const ids = (data || []).map((row) => row.id as string).filter(Boolean);
-    if (ids.length > 0) return ids;
+  // Only the immutable GitHub id: a login can be renamed and reissued.
+  const { data, error } = await supabaseAdmin
+    .from("profiles")
+    .select("id")
+    .eq("github_user_id", plan.senderId);
+  if (error) {
+    throw new Error(`Failed to load sender profile: ${error.message}`);
   }
-  return [];
+  return (data || []).map((row) => row.id as string).filter(Boolean);
 }
 
 async function resolveWebhookUserIds(

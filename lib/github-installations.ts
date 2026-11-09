@@ -4,7 +4,10 @@ import {
   hasGithubAppConfig,
   type GithubInstallation,
 } from "@/lib/github-app";
-import { verifyGithubInstallationMember } from "@/lib/github-installation-owner";
+import {
+  fetchGithubIdentityLogin,
+  verifyGithubInstallationMember,
+} from "@/lib/github-installation-owner";
 import { mapGithubRequests } from "@/lib/github-request-concurrency";
 import { syncGithubInstallationReposForUser } from "@/lib/github-sync";
 
@@ -13,6 +16,7 @@ const defaultDeps = {
   request: ((input, init) => fetch(input, init)) as typeof fetch,
   findInstallation: findGithubInstallationForAccount,
   verifyMember: verifyGithubInstallationMember,
+  fetchLogin: fetchGithubIdentityLogin,
   syncRepos: syncGithubInstallationReposForUser,
 };
 
@@ -58,7 +62,7 @@ async function listGithubOrgLogins(token: string, request: Deps["request"]) {
  */
 export async function reconcileGithubInstallationsForUser(
   userId: string,
-  githubUsername?: string | null,
+  _githubUsername?: string | null,
   githubToken?: string | null,
   overrides: Partial<Deps> = {}
 ) {
@@ -70,17 +74,17 @@ export async function reconcileGithubInstallationsForUser(
     .eq("user_id", userId);
   if (error) throw new Error("Could not verify existing GitHub installations");
 
-  const login = githubUsername?.trim();
-  if (!login) return { discovered: 0 };
+  // Membership is checked for the login the token reports now, never a stored
+  // one that a rename may have handed to someone else.
+  const login = await deps.fetchLogin(githubToken, deps.request);
+  if (!login || !githubToken) return { discovered: 0 };
 
   const attached = new Set(
     ((data ?? []) as Array<{ account_login: string | null }>)
       .map((row) => row.account_login?.toLowerCase())
       .filter(Boolean)
   );
-  const orgs = githubToken
-    ? await listGithubOrgLogins(githubToken, deps.request)
-    : [];
+  const orgs = await listGithubOrgLogins(githubToken, deps.request);
   const candidates = [
     ...new Map(
       [login, ...orgs].map((account) => [account.toLowerCase(), account])

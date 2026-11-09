@@ -76,6 +76,7 @@ it("should attach org installations only for orgs GitHub confirms the user belon
   vi.stubGlobal("fetch", async (url: string) => {
     const path = new URL(url).pathname;
     requests.push(path);
+    if (path === "/user") return Response.json({ login: "org-member" });
     if (path === "/user/orgs")
       return Response.json([{ login: "member-org" }, { login: "former-org" }]);
     if (path === "/orgs/member-org/installation")
@@ -150,6 +151,17 @@ it("should attach a new installation to the Mogplex user who installed it on Git
   });
   expect(outcome.matchedUsers).toBe(1);
   expect(await installationCount(installer)).toBe(1);
+  expect(await installationCount(bystander)).toBe(0);
+
+  const impostor = await syncGithubWebhookState("installation", {
+    action: "created",
+    sender: { login: "bystander", id: 9999 },
+    installation: {
+      id: 7003,
+      account: { login: "reissued-login-org", type: "Organization" },
+    },
+  });
+  expect(impostor.matchedUsers).toBe(0);
   expect(await installationCount(bystander)).toBe(0);
 
   const deleted = await syncGithubWebhookState("installation", {
