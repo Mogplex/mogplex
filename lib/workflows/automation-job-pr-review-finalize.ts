@@ -110,18 +110,17 @@ export async function finalizePrReviewSuccess(
   // Findings decide the rest: critical or warning findings need attention,
   // suggestions alone do not.
   const verdictMissing = isPrReviewVerdictMissing(input.reviewHarnessResult);
-  const reviewConclusion = prReviewVerdictConclusion(
-    prReviewVerdict(
-      input.reviewHarnessResult ??
-        (input.reviewOutcome
-          ? {
-              source: "structured",
-              fallbackText: null,
-              reviewOutcome: input.reviewOutcome,
-            }
-          : null)
-    )
+  const reviewVerdict = prReviewVerdict(
+    input.reviewHarnessResult ??
+      (input.reviewOutcome
+        ? {
+            source: "structured",
+            fallbackText: null,
+            reviewOutcome: input.reviewOutcome,
+          }
+        : null)
   );
+  const reviewConclusion = prReviewVerdictConclusion(reviewVerdict);
   const currentHeadSha = await loadCurrentPrReviewHeadSha();
   const isStaleHeadSha =
     reviewHeadSha.length > 0 &&
@@ -204,15 +203,20 @@ export async function finalizePrReviewSuccess(
     reviewOutcome: publishedOutcome,
     conclusion: reviewConclusion,
   });
-  const requiresReviewTimelineComment = reviewPrNumber != null;
-  const timelineCommentPublished = requiresReviewTimelineComment
-    ? await publishPrReviewTimelineComment({
-        reviewHarnessResult: publishedHarnessResult,
-        reviewOutcome: publishedOutcome,
-        fallbackText: input.result.text,
-        conclusion: reviewConclusion,
-      })
-    : false;
+  // Always published, but only required when no native review carries the
+  // findings: a run retried after a failed comment would post the native
+  // review a second time.
+  const timelineCommentPublished =
+    reviewPrNumber == null
+      ? false
+      : await publishPrReviewTimelineComment({
+          reviewHarnessResult: publishedHarnessResult,
+          reviewOutcome: publishedOutcome,
+          fallbackText: input.result.text,
+          conclusion: reviewConclusion,
+        });
+  const requiresReviewTimelineComment =
+    reviewPrNumber != null && !state.reviewGithubReviewPublished;
   let reviewFindingsPersisted = false;
   let reviewFindingsCount: number;
   let reviewFindingsPersistError: string | null = null;
@@ -277,6 +281,7 @@ export async function finalizePrReviewSuccess(
       review_outcome: reviewReason,
       review_outcome_label: formatAutomationReasonLabel(reviewReason),
       review_has_issues: input.reviewOutcome?.hasIssues ?? false,
+      review_verdict: reviewVerdict,
       review_summary: reviewSummary,
       review_affected_files: input.reviewOutcome?.affectedFiles ?? [],
       review_comment_posted: input.reviewCommentPosted,

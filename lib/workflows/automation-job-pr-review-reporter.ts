@@ -347,8 +347,14 @@ export function createPrReviewReporter(
         repoFullName: context.repo.full_name,
         prNumber: reviewPrNumber,
       });
-    } catch {
-      // Without the diff, findings keep the lines they name.
+    } catch (error) {
+      // Without the diff, findings keep the lines they name. Logged so a
+      // rejected review can be told apart from missing diff data.
+      console.warn("[automation-job] PR diff lookup failed", {
+        repoFullName: context.repo.full_name,
+        prNumber: reviewPrNumber,
+        error: error instanceof Error ? error.message : String(error),
+      });
       return null;
     }
   };

@@ -384,6 +384,7 @@ test("createAutomationJobTask skips native GitHub review publishing when PR head
       review_github_review_url: null,
       review_github_review_error: null,
       review_github_inline_comments_count: 0,
+      review_verdict: "blocking",
       review_check_run_id: null,
       review_check_run_url: null,
       review_check_run_completed: false,

@@ -11,6 +11,10 @@ A finished review is published in three places, each with one job:
 The order is check run, then inline comments, then the summary comment, so
 the summary can link the inline comments.
 
+The summary comment is published on every run. A failure to publish it
+fails the run only when no inline review carries the findings: retrying a
+run whose inline review already landed would post that review twice.
+
 ## Verdict
 
 `prReviewVerdict` decides from the findings, not from the model's
@@ -22,6 +26,9 @@ the summary can link the inline comments.
 | `suggestions` | Only suggestion findings | `success` | No blocking issues, suggestions only |
 | `clean` | No findings | `success` | No material issues found |
 | `incomplete` | The reviewer filed no report | `neutral` | Review incomplete |
+
+The run metadata records the verdict as `review_verdict` beside
+`review_has_issues`, which keeps the model's own flag.
 
 ## Anchoring
 
