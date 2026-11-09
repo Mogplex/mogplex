@@ -392,6 +392,16 @@ it("preserves shared team repositories through each owner's current grant for me
     "insert into repos(user_id,owner_type,owner_user_id,product_team_id,github_id,github_installation_id,full_name,workspace_id,is_hidden) values ($1,'team',null,$3,71,6001,'approved-a/app',$4,false),($2,'team',null,$3,72,6002,'approved-b/app',$4,false),($1,'team',null,$3,73,6001,'unapproved/transferred-team',$4,false),($1,'team',null,$3,75,null,'unapproved/oauth-team',$4,false),($1,'team',null,$3,76,6002,'unapproved/foreign-installation',$4,false)",
     [owner, member, team, workspace]
   );
+  // A team-scoped sync never prunes the member's personal legacy rows.
+  const memberWorkspace = "00000000-0000-4000-8000-000000000096";
+  await db.query(
+    "insert into workspaces(id,user_id,owner_user_id,name,is_default) values ($1,$2,$2,'Imported',true)",
+    [memberWorkspace, member]
+  );
+  await db.query(
+    "insert into repos(user_id,owner_type,owner_user_id,github_id,github_installation_id,full_name,workspace_id,is_hidden) values ($1,'user',$1,78,null,'unapproved/member-oauth',$2,false)",
+    [member, memberWorkspace]
+  );
   vi.stubEnv("GITHUB_APP_ID", "1");
   vi.stubEnv("GITHUB_APP_NAME", "fixture");
   vi.stubEnv(
@@ -452,4 +462,12 @@ it("preserves shared team repositories through each owner's current grant for me
       )
     ).rows
   ).toEqual([{ count: 5 }]);
+  expect(
+    (
+      await db.query(
+        "select full_name from repos where owner_user_id=$1 and product_team_id is null",
+        [member]
+      )
+    ).rows
+  ).toEqual([{ full_name: "unapproved/member-oauth" }]);
 });

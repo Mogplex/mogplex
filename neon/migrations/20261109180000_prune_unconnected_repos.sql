@@ -51,6 +51,7 @@ begin
     return 0;
   end if;
 
+  -- Same candidate predicate as the lock above; keep the two identical.
   delete from public.repos r
   where r.owner_type = 'user'
     and r.owner_user_id = p_user_id
