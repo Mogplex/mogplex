@@ -44,11 +44,16 @@ async function switchAppearance(control: Locator) {
     const onColor = getComputedStyle(secondarySurface).backgroundColor;
     secondarySurface.remove();
     const pageColor = getComputedStyle(document.body).backgroundColor;
+    secondarySurface.style.backgroundColor = "var(--ring)";
+    element.append(secondarySurface);
+    const ringColor = getComputedStyle(secondarySurface).backgroundColor;
+    secondarySurface.remove();
     return {
       border: style.borderColor,
       background: style.backgroundColor,
       secondaryColor,
       onColor,
+      ringColor,
       thumbColor: getComputedStyle(thumb).backgroundColor,
       outlineContrast: contrast(style.borderColor, pageColor),
       thumbPageContrast: contrast(
@@ -109,11 +114,18 @@ for (const theme of ["light", "dark"] as const) {
     await expect(control).toHaveText("");
     await control.focus();
     await expect(control).toBeFocused();
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("Shift+Tab");
+    await expect(control).toBeFocused();
+    const focused = await switchAppearance(control);
+    // Keyboard focus recolors the border with --ring, as before the restyle.
+    expect(focused.border).toBe(focused.ringColor);
     await page.keyboard.press("Space");
     await expect(control).toBeChecked();
     await expect(control).toHaveText("");
     const on = await switchAppearance(control);
     expect(on.thumbX).toBeGreaterThan(off.thumbX + 10);
+    expect(on.onColor).not.toBe("rgba(0, 0, 0, 0)");
     expect(on.background).toBe(on.onColor);
     expect(on.thumbColor).toBe("rgb(255, 255, 255)");
     expect(on.outlineContrast).toBeGreaterThanOrEqual(3);
