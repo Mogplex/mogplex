@@ -13,7 +13,6 @@ import {
   presentGithubSetup,
   presentRepoSyncFailure,
 } from "@/lib/activation/setup-state";
-import { repoOwner } from "@/lib/settings/repository-filter";
 import type { Repo } from "@/lib/types";
 
 function errorMessage(err: unknown) {
@@ -27,6 +26,8 @@ function errorMessage(err: unknown) {
  * connected repositories, against the shared repos cache. `pendingIds` holds
  * repositories with a visibility write in flight so rows can't double-submit.
  */
+const WRITE_WAVE = 6;
+
 export function useRepositoryAdmin() {
   const activeTeamId = useActiveTeamId();
   const { user } = useUser();
@@ -38,6 +39,10 @@ export function useRepositoryAdmin() {
     () => new Set()
   );
   const [removingOwner, setRemovingOwner] = useState(false);
+  const [removalProgress, setRemovalProgress] = useState<{
+    done: number;
+    total: number;
+  } | null>(null);
 
   const markPending = useCallback((ids: string[], pending: boolean) => {
     setPendingIds((current) => {
@@ -151,21 +156,37 @@ export function useRepositoryAdmin() {
     [markPending, setHidden]
   );
 
-  const removeOwner = useCallback(
-    async (owner: string) => {
-      const targets = repos.filter(
-        (repo) => repoOwner(repo) === owner && !repo.is_hidden
-      );
+  /**
+   * Hide exactly `targets`; `description` names the set in the result toast.
+   * Callers pass the same list they count and show, so a bulk removal never
+   * hides more than its confirmation described.
+   */
+  const removeRepos = useCallback(
+    async (targets: Repo[], description: string) => {
       if (targets.length === 0) return;
       const ids = targets.map((repo) => repo.id);
       setRemovingOwner(true);
       markPending(ids, true);
-      const results = await Promise.allSettled(
-        targets.map((repo) => setHidden(repo, true))
-      ).finally(() => {
+      const results: PromiseSettledResult<void>[] = [];
+      setRemovalProgress({ done: 0, total: targets.length });
+      try {
+        // Waves the size of the browser's per-host connection pool: every
+        // target is still written, without hundreds of requests queued at once.
+        for (let start = 0; start < targets.length; start += WRITE_WAVE) {
+          results.push(
+            ...(await Promise.allSettled(
+              targets
+                .slice(start, start + WRITE_WAVE)
+                .map((repo) => setHidden(repo, true))
+            ))
+          );
+          setRemovalProgress({ done: results.length, total: targets.length });
+        }
+      } finally {
+        setRemovalProgress(null);
         setRemovingOwner(false);
         markPending(ids, false);
-      });
+      }
       const failures = results.filter(
         (r): r is PromiseRejectedResult => r.status === "rejected"
       );
@@ -181,11 +202,11 @@ export function useRepositoryAdmin() {
           : {
               variant: "info",
               title: `Removed ${removed} ${removed === 1 ? "repository" : "repositories"}`,
-              description: owner,
+              description,
             }
       );
     },
-    [markPending, repos, setHidden]
+    [markPending, setHidden]
   );
 
   return {
@@ -197,8 +218,9 @@ export function useRepositoryAdmin() {
     syncError,
     sync,
     toggleHidden,
-    removeOwner,
+    removeRepos,
     pendingIds,
     removingOwner,
+    removalProgress,
   };
 }

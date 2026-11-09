@@ -3,6 +3,7 @@
 import type { RefObject } from "react";
 import { formatDate, roleOptions } from "./team-settings-helpers";
 import type { TeamMembersResponse } from "@/lib/team-api-types";
+import { formatTeamRole } from "@/lib/team-role-label";
 import type { TeamRole } from "@/lib/team-capabilities";
 
 type MembersTabContentProps = {
@@ -119,12 +120,12 @@ export function MembersTabContent({
                       className="border border-border bg-input px-3 py-2 text-sm text-foreground"
                     >
                       {options.map((role) => (
-                        <option key={role} value={role}>{role}</option>
+                        <option key={role} value={role}>{formatTeamRole(role)}</option>
                       ))}
                     </select>
                   ) : (
                     <span className="w-fit rounded-full border border-border px-2 py-1 text-[11px] text-muted-foreground">
-                      {member.role}
+                      {formatTeamRole(member.role)}
                     </span>
                   )}
                   {canEdit && (
@@ -194,7 +195,7 @@ export function MembersTabContent({
               <div className="min-w-0">
                 <div className="truncate text-sm text-foreground">{invite.email}</div>
                 <div className="mt-1 text-[11px] text-muted-foreground">
-                  {invite.role} · expires {formatDate(invite.expiresAt)}
+                  {formatTeamRole(invite.role)} · expires {formatDate(invite.expiresAt)}
                 </div>
               </div>
               <span className="w-fit rounded-full border border-border px-2 py-1 text-[11px] text-muted-foreground">

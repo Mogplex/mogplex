@@ -12,42 +12,70 @@ import {
 import { SandboxLaunchProvider } from "@/components/sandbox-launch-provider";
 import { scopedHref } from "@/lib/scoped-href";
 import { trackActivation } from "@/lib/activation-tracking";
+import { useUser } from "@/hooks/use-user";
 import {
+  activeOwnerRepos,
   filterRepositories,
+  groupRepositoriesByOwner,
   repoOwner,
+  splitByAppConnection,
 } from "@/lib/settings/repository-filter";
 import type { Repo } from "@/lib/types";
+import { NotConnectedRepositories } from "./not-connected-repositories";
 import { ConfirmRemoveButton, RepositoryRow } from "./repository-row";
+import { RepositoryOwnerGroup } from "./repository-owner-group";
 import { useRepositoryAdmin } from "./use-repository-admin";
 
 /**
  * Settings home for connected repositories: GitHub sync, project settings,
  * remove and restore repositories, and a link to sandbox management.
- * Day-to-day repo work lives in Command Center.
+ * Repositories are grouped by GitHub owner; ones without a GitHub App
+ * installation are listed apart. Day-to-day repo work lives in Command Center.
  */
 export function RepositoriesSection() {
   const { scope } = useParams<{ scope: string }>();
   const admin = useRepositoryAdmin();
+  const { user } = useUser();
   const [search, setSearch] = useState("");
   const [owner, setOwner] = useState("all");
   const [showRemoved, setShowRemoved] = useState(false);
   const [settingsRepoId, setSettingsRepoId] = useState<string | null>(null);
   const [settingsTab, setSettingsTab] = useState<ProjectSettingsTab>("env");
 
-  const owners = useMemo(
-    () => [...new Set(admin.repos.map(repoOwner))].sort(),
+  const { inventory, notConnected } = useMemo(
+    () => splitByAppConnection(admin.repos),
     [admin.repos]
   );
-  const { query, connected, removed, removedTotal, ownerConnectedCount } =
-    filterRepositories(admin.repos, { owner, search });
+  const owners = useMemo(
+    () => [...new Set(inventory.map(repoOwner))].sort(),
+    [inventory]
+  );
+  const { query, connected, removed, ownerRepos } = useMemo(
+    () => ({
+      ...filterRepositories(inventory, { owner, search }),
+      ownerRepos: activeOwnerRepos(inventory, owner),
+    }),
+    [inventory, owner, search]
+  );
+  const selfLogin = user?.github_username;
+  const groups = useMemo(
+    () => groupRepositoriesByOwner(connected, selfLogin),
+    [connected, selfLogin]
+  );
+  const notConnectedRepos = notConnected.filter((repo) => !repo.is_hidden);
+  const { removalProgress } = admin;
+  const removingLabel = removalProgress
+    ? `Removing ${removalProgress.done}/${removalProgress.total}…`
+    : null;
   const openSettings = (repo: Repo) => {
     setSettingsTab("env");
     setSettingsRepoId(repo.id);
   };
-  const renderRow = (repo: Repo) => (
+  const renderRow = (repo: Repo, label?: string) => (
     <RepositoryRow
       key={repo.id}
       repo={repo}
+      label={label}
       pending={admin.pendingIds.has(repo.id)}
       onToggle={(item) => void admin.toggleHidden(item)}
       onOpenSettings={openSettings}
@@ -119,16 +147,19 @@ export function RepositoriesSection() {
             ))}
           </select>
         ) : null}
-        {owner !== "all" && ownerConnectedCount > 0 ? (
+        {owner !== "all" && ownerRepos.length > 0 ? (
           <ConfirmRemoveButton
-            label={`Remove all from ${owner}`}
-            title={`Remove all ${ownerConnectedCount} ${ownerConnectedCount === 1 ? "repository" : "repositories"} from ${owner}?`}
-            confirmLabel={`Remove ${ownerConnectedCount} ${ownerConnectedCount === 1 ? "repository" : "repositories"}`}
+            label={removingLabel ?? `Remove all from ${owner}`}
+            ariaLabel={`Remove all from ${owner}`}
+            title={`Remove all ${ownerRepos.length} ${ownerRepos.length === 1 ? "repository" : "repositories"} from ${owner}?`}
+            confirmLabel={`Remove ${ownerRepos.length} ${ownerRepos.length === 1 ? "repository" : "repositories"}`}
             disabled={admin.removingOwner}
-            onConfirm={() => void admin.removeOwner(owner)}
+            onConfirm={() =>
+              void admin.removeRepos(ownerRepos, `Hidden from ${owner}.`)
+            }
           />
         ) : null}
-        {removedTotal > 0 ? (
+        {removed.length > 0 ? (
           <Button
             type="button"
             variant="ghost"
@@ -136,7 +167,7 @@ export function RepositoriesSection() {
             aria-pressed={showRemoved}
             onClick={() => setShowRemoved((current) => !current)}
           >
-            {showRemoved ? "Hide removed" : `Show removed (${removedTotal})`}
+            {showRemoved ? "Hide removed" : `Show removed (${removed.length})`}
           </Button>
         ) : null}
       </div>
@@ -150,24 +181,56 @@ export function RepositoriesSection() {
           Loading repositories…
         </p>
       ) : (
-        <ul aria-label="Connected repositories" className="border-border rounded-md border">
-          {connected.length === 0 ? (
-            <li className="text-muted-foreground px-3 py-4 text-xs">
-              {query || owner !== "all"
-                ? "No connected repositories match."
-                : "No connected repositories yet. Sync GitHub to import them."}
-            </li>
-          ) : (
-            connected.map(renderRow)
-          )}
-        </ul>
+        connected.length === 0 ? (
+          <p className="border-border text-muted-foreground rounded-md border px-3 py-4 text-xs">
+            {query || owner !== "all"
+              ? "No connected repositories match."
+              : "No connected repositories yet. Sync GitHub to import them."}
+          </p>
+        ) : (
+          <div aria-label="Connected repositories" role="region" className="space-y-4">
+            {groups.map(
+              (group) => (
+                <RepositoryOwnerGroup
+                  key={group.owner}
+                  owner={group.owner}
+                  count={group.repos.length}
+                >
+                  {group.repos.map((repo) =>
+                    renderRow(repo, repo.name || repo.full_name)
+                  )}
+                </RepositoryOwnerGroup>
+              )
+            )}
+          </div>
+        )
       )}
+
+      {/* Filters narrow the connected list only, so the card (and its
+          Remove all over every not-connected repository) waits until they clear. */}
+      {!admin.isLoading &&
+      !admin.loadError &&
+      !query &&
+      owner === "all" &&
+      notConnectedRepos.length > 0 ? (
+        <NotConnectedRepositories
+          repos={notConnectedRepos}
+          removing={admin.removingOwner}
+          removingLabel={removingLabel}
+          onRemoveAll={() =>
+            void admin.removeRepos(
+              notConnectedRepos,
+              "Hidden repositories without the GitHub App."
+            )
+          }
+        />
+      ) : null}
 
       {showRemoved && removed.length > 0 ? (
         <section className="space-y-2">
           <h2 className="ui-section-title">Removed repositories</h2>
           <ul aria-label="Removed repositories" className="border-border rounded-md border">
-            {removed.map(renderRow)}
+            {removed.map((repo) => renderRow(repo))}
           </ul>
         </section>
       ) : null}

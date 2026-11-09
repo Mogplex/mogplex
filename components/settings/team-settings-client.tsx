@@ -1,5 +1,6 @@
 "use client";
 
+import { ScopeIcon } from "@/components/scope-icon";
 import { DecisionChecksSection } from "@/components/settings/decision-checks-section";
 import { TeamApiKeyAccessSection } from "@/components/settings/team-api-key-access-section";
 import { useTeamSettingsActions } from "./use-team-settings-actions";
@@ -77,28 +78,11 @@ export function TeamSettingsClient({
 
       {section === "members" && (
         <section className="grid grid-cols-[3.5rem_minmax(0,1fr)] items-center gap-4 rounded-lg border border-border/60 bg-card px-5 py-4 sm:grid-cols-[3.5rem_minmax(0,1fr)_auto]">
-          <div
-            className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-md bg-accent text-sm font-medium text-foreground/80"
-            aria-hidden="true"
-          >
-            {membersData?.team.iconUrl ? (
-              <img
-                src={membersData.team.iconUrl}
-                alt=""
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              <span>
-                {(membersData?.team.name ?? teamSlug)
-                  .trim()
-                  .split(/\s+/)
-                  .filter(Boolean)
-                  .slice(0, 2)
-                  .map((part) => part[0]?.toUpperCase() ?? "")
-                  .join("") || "?"}
-              </span>
-            )}
-          </div>
+          <ScopeIcon
+            name={membersData?.team.name ?? teamSlug}
+            iconUrl={membersData?.team.iconUrl}
+            className="h-14 w-14 rounded-md text-sm"
+          />
           <div className="min-w-0 flex-1">
             <div className="ui-section-title">Team icon</div>
             <div className="ui-section-caption">

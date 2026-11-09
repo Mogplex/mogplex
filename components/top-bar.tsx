@@ -8,6 +8,8 @@ import { scopedHref } from "@/lib/scoped-href";
 import useSWR from "swr";
 import { useUser } from "@/hooks/use-user";
 import { ScopeMenuItems } from "@/components/scope-switcher";
+import { ScopeIcon } from "@/components/scope-icon";
+import { useMemberships } from "@/hooks/use-memberships";
 import { SlackFill } from "@/components/settings/icons";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { Button } from "@/components/ui/button";
@@ -121,6 +123,12 @@ export function TopBar() {
   const primaryItems = navItems.filter((item) => item.section === "primary");
   const adminItems = navItems.filter((item) => item.section === "admin");
   const { open: openCommandPalette } = useCommandPalette();
+  const { memberships } = useMemberships({ enabled: Boolean(user) });
+  // Personal scope wins, matching the project switcher's resolution.
+  const activeTeam =
+    scope && scope !== memberships.personal.slug
+      ? memberships.teams.find((team) => team.slug === scope)
+      : undefined;
   const {
     data: slackInstallationsData,
     error: slackInstallationsError,
@@ -212,9 +220,26 @@ export function TopBar() {
           <DropdownMenu open={userMenuOpen} onOpenChange={setUserMenuOpen}>
             <DropdownMenuTrigger asChild>
               <button
-                aria-label="User menu"
-                className="focus:ring-ring rounded-lg outline-none focus:ring-2"
+                aria-label={
+                  activeTeam ? `User menu, ${activeTeam.name} team` : "User menu"
+                }
+                className="focus:ring-ring flex items-center gap-2 rounded-lg outline-none focus:ring-2"
               >
+                {activeTeam && (
+                  <span
+                    data-testid="top-bar-active-team"
+                    className="border-border bg-card text-foreground/80 flex h-7 items-center gap-1.5 rounded-lg border pr-2.5 pl-1"
+                  >
+                    <ScopeIcon
+                      name={activeTeam.name}
+                      iconUrl={activeTeam.iconUrl}
+                      className="size-5 text-[9px]"
+                    />
+                    <span className="hidden max-w-32 truncate text-[12px] sm:inline">
+                      {activeTeam.name}
+                    </span>
+                  </span>
+                )}
                 {user.avatar_url ? (
                   <img
                     src={user.avatar_url}

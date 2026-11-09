@@ -11,6 +11,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { OpenNewWindow } from "iconoir-react";
 import { Button } from "@/components/ui/button";
 import type { Repo } from "@/lib/types";
 
@@ -20,6 +21,7 @@ export function ConfirmRemoveButton({
   ariaLabel,
   title,
   confirmLabel,
+  description = "Removed repositories disappear from Command Center and project pickers. Nothing changes on GitHub, and you can restore them from Show removed.",
   disabled,
   onConfirm,
 }: {
@@ -27,6 +29,8 @@ export function ConfirmRemoveButton({
   ariaLabel?: string;
   title: string;
   confirmLabel: string;
+  /** What removal means for this set, including how to undo it. */
+  description?: string;
   disabled?: boolean;
   onConfirm: () => void;
 }) {
@@ -47,11 +51,7 @@ export function ConfirmRemoveButton({
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
-          <AlertDialogDescription>
-            Removed repositories disappear from Command Center and project
-            pickers. Nothing changes on GitHub, and you can restore them from
-            Show removed.
-          </AlertDialogDescription>
+          <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -73,11 +73,14 @@ export function ConfirmRemoveButton({
  */
 export function RepositoryRow({
   repo,
+  label = repo.full_name,
   pending,
   onToggle,
   onOpenSettings,
 }: {
   repo: Repo;
+  /** Text shown for the repository; grouped rows show the short name. */
+  label?: string;
   pending: boolean;
   onToggle: (repo: Repo) => void;
   onOpenSettings: (repo: Repo) => void;
@@ -85,7 +88,19 @@ export function RepositoryRow({
   const removed = Boolean(repo.is_hidden);
   return (
     <li className="border-border flex items-center justify-between gap-3 border-b px-3 py-2 last:border-b-0">
-      <span className="min-w-0 truncate text-sm">{repo.full_name}</span>
+      <a
+        href={`https://github.com/${repo.full_name}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label={`Open ${repo.full_name} on GitHub`}
+        className="group text-foreground flex min-w-0 items-center gap-1.5 text-sm hover:underline"
+      >
+        <span className="truncate">{label}</span>
+        <OpenNewWindow
+          aria-hidden="true"
+          className="text-muted-foreground size-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+        />
+      </a>
       <div className="flex shrink-0 items-center gap-1">
         {removed ? (
           <Button

@@ -8,8 +8,6 @@ export function repoOwner(repo: Pick<Repo, "owner" | "full_name">) {
 /**
  * Split repositories for Settings → Repositories: those matching the owner
  * and search filters, sorted by name, into connected and removed lists.
- * `ownerConnectedCount` counts every connected repository of the selected
- * owner regardless of search, because bulk removal acts on all of them.
  */
 export function filterRepositories<
   T extends Pick<Repo, "owner" | "full_name" | "is_hidden">,
@@ -25,9 +23,72 @@ export function filterRepositories<
     query,
     connected: matches.filter((repo) => !repo.is_hidden),
     removed: matches.filter((repo) => repo.is_hidden),
-    removedTotal: repos.filter((repo) => repo.is_hidden).length,
-    ownerConnectedCount: repos.filter(
-      (repo) => repoOwner(repo) === filters.owner && !repo.is_hidden
-    ).length,
   };
+}
+
+/**
+ * Every connected repository of `owner`, regardless of search: the set the
+ * owner-wide Remove all counts, confirms, and hides.
+ */
+export function activeOwnerRepos<
+  T extends Pick<Repo, "owner" | "full_name" | "is_hidden">,
+>(repos: T[], owner: string) {
+  return repos.filter((repo) => !repo.is_hidden && repoOwner(repo) === owner);
+}
+
+/**
+ * Split Settings' repository inventory by GitHub App coverage, as the repos
+ * API reports it (`github_app_covered`, from `deriveRepoGithubCoverage`). On App
+ * deployments with an installation (`github_prefer_installation_coverage`)
+ * every other surface already hides repositories without an installation
+ * (see `visibleScopedRepos`); those came from the legacy OAuth sync of every
+ * repository the account could see and never receive webhooks, so Settings
+ * lists them apart. OAuth-only deployments, and accounts with no covered
+ * repository yet, keep every repository, matching that fallback.
+ */
+export function splitByAppConnection<
+  T extends Pick<
+    Repo,
+    "github_app_covered" | "github_prefer_installation_coverage" | "is_hidden"
+  >,
+>(repos: T[]) {
+  // Like visibleScopedRepos: with no visible covered repository (App
+  // installed but nothing synced through it, or every covered one removed),
+  // every repository stays listed.
+  if (
+    !repos.some((repo) => repo.github_prefer_installation_coverage) ||
+    !repos.some((repo) => repo.github_app_covered && !repo.is_hidden)
+  ) {
+    return { inventory: repos, notConnected: [] as T[] };
+  }
+  return {
+    inventory: repos.filter((repo) => repo.github_app_covered),
+    notConnected: repos.filter((repo) => !repo.github_app_covered),
+  };
+}
+
+/**
+ * Group repositories by owner the way GitHub lists them: the signed-in
+ * account first, then organizations and other owners by name. Order inside
+ * each group is kept.
+ */
+export function groupRepositoriesByOwner<
+  T extends Pick<Repo, "owner" | "full_name">,
+>(repos: T[], selfLogin?: string | null) {
+  const groups = new Map<string, T[]>();
+  for (const repo of repos) {
+    const owner = repoOwner(repo);
+    const group = groups.get(owner);
+    if (group) group.push(repo);
+    else groups.set(owner, [repo]);
+  }
+  const self = selfLogin?.toLowerCase();
+  return [...groups.entries()]
+    .map(([owner, ownerRepos]) => ({ owner, repos: ownerRepos }))
+    .sort(
+      (a, b) =>
+        Number(b.owner.toLowerCase() === self) -
+          Number(a.owner.toLowerCase() === self) ||
+        a.owner.localeCompare(b.owner)
+    );
 }
