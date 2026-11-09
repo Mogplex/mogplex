@@ -57,45 +57,50 @@ describe("filterRepositories", () => {
 });
 
 describe("groupRepositoriesByOwner", () => {
-  const installed = (
+  const row = (
     full_name: string,
-    github_installation_id: number | null
-  ) => ({
-    full_name,
-    owner: "",
-    github_installation_id,
-  });
+    github_installation_id: number | null,
+    is_hidden = false
+  ) => ({ full_name, owner: "", github_installation_id, is_hidden });
 
-  it("should group by owner in owner order and keep repository order", () => {
-    const groups = groupRepositoriesByOwner([
-      installed("zed/b", 1),
-      installed("acme/z", 2),
-      installed("zed/a", 1),
-    ]);
+  it("should group visible repositories by owner and keep their order", () => {
+    const repos = [row("zed/b", 1), row("acme/z", 2), row("zed/a", 1)];
+    const groups = groupRepositoriesByOwner(repos, repos);
 
     expect(groups.map((g) => g.owner)).toEqual(["acme", "zed"]);
     expect(groups[1].repos.map((r) => r.full_name)).toEqual(["zed/b", "zed/a"]);
   });
 
-  it("should mark an owner without any App installation as not installed", () => {
-    const groups = groupRepositoriesByOwner([
-      installed("oauth-only/docs", null),
-      installed("mixed/a", null),
-      installed("mixed/b", 7),
-    ]);
+  it("should classify owners as connected, partly connected, or not connected", () => {
+    const repos = [
+      row("legacy/docs", null),
+      row("mixed/a", null),
+      row("mixed/b", 7),
+      row("app/x", 3),
+    ];
+    const groups = groupRepositoriesByOwner(repos, repos);
 
-    expect(groups).toEqual([
-      expect.objectContaining({ owner: "mixed", appInstalled: true }),
-      expect.objectContaining({ owner: "oauth-only", appInstalled: false }),
+    expect(groups.map((g) => [g.owner, g.coverage])).toEqual([
+      ["app", "connected"],
+      ["mixed", "partial"],
+      ["legacy", "none"],
     ]);
+    expect(groups[1].notConnected.map((r) => r.full_name)).toEqual(["mixed/a"]);
   });
 
-  it("should list App-connected owners before owners without the App", () => {
-    const groups = groupRepositoriesByOwner([
-      installed("aaa-legacy/docs", null),
-      installed("zed/app", 3),
-    ]);
+  it("should judge coverage from every connected repository of the owner, not only the visible ones", () => {
+    const all = [row("mixed/alpha", 11), row("mixed/beta", null)];
+    const [group] = groupRepositoriesByOwner([all[1]], all);
 
-    expect(groups.map((g) => g.owner)).toEqual(["zed", "aaa-legacy"]);
+    expect(group.repos.map((r) => r.full_name)).toEqual(["mixed/beta"]);
+    expect(group.coverage).toBe("partial");
+    expect(group.notConnected.map((r) => r.full_name)).toEqual(["mixed/beta"]);
+  });
+
+  it("should ignore removed repositories when judging coverage", () => {
+    const all = [row("legacy/docs", null), row("legacy/old", 4, true)];
+    const [group] = groupRepositoriesByOwner([all[0]], all);
+
+    expect(group.coverage).toBe("none");
   });
 });

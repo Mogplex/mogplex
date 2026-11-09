@@ -13,7 +13,7 @@ import {
   presentGithubSetup,
   presentRepoSyncFailure,
 } from "@/lib/activation/setup-state";
-import { repoOwner } from "@/lib/settings/repository-filter";
+import { isAppConnected, repoOwner } from "@/lib/settings/repository-filter";
 import type { Repo } from "@/lib/types";
 
 function errorMessage(err: unknown) {
@@ -151,10 +151,17 @@ export function useRepositoryAdmin() {
     [markPending, setHidden]
   );
 
+  /**
+   * Hide every connected repository of `owner`, or with `notConnectedOnly`
+   * just the ones without a GitHub App installation.
+   */
   const removeOwner = useCallback(
-    async (owner: string) => {
+    async (owner: string, { notConnectedOnly = false } = {}) => {
       const targets = repos.filter(
-        (repo) => repoOwner(repo) === owner && !repo.is_hidden
+        (repo) =>
+          repoOwner(repo) === owner &&
+          !repo.is_hidden &&
+          !(notConnectedOnly && isAppConnected(repo))
       );
       if (targets.length === 0) return;
       const ids = targets.map((repo) => repo.id);

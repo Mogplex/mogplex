@@ -1,31 +1,37 @@
 "use client";
 
 import type { ReactNode } from "react";
+import type { OwnerCoverage } from "@/lib/settings/repository-filter";
 import { ConfirmRemoveButton } from "./repository-row";
 
+const noun = (count: number) => (count === 1 ? "repository" : "repositories");
+
 /**
- * One owner's connected repositories with its GitHub App status. Owners
- * without the App get a remove-all action, because their repositories came
- * from the legacy OAuth sync and never run reviews or automations.
+ * One owner's connected repositories with its GitHub App status. Repositories
+ * without the App came from the legacy OAuth sync and never run reviews or
+ * automations, so the header offers to remove exactly those.
  */
 export function RepositoryOwnerGroup({
   owner,
-  appInstalled,
+  coverage,
   shownCount,
-  totalCount,
+  notConnectedCount,
+  showRemove,
   removing,
-  onRemoveAll,
+  onRemoveNotConnected,
   children,
 }: {
   owner: string;
-  appInstalled: boolean;
+  coverage: OwnerCoverage;
   shownCount: number;
-  totalCount: number;
+  notConnectedCount: number;
+  /** False when another control already removes the same repositories. */
+  showRemove: boolean;
   removing: boolean;
-  onRemoveAll: () => void;
+  onRemoveNotConnected: () => void;
   children: ReactNode;
 }) {
-  const noun = (count: number) => (count === 1 ? "repository" : "repositories");
+  const connected = coverage === "connected";
 
   return (
     <section aria-label={owner} className="space-y-1.5">
@@ -36,29 +42,36 @@ export function RepositoryOwnerGroup({
         </span>
         <span
           className={`rounded-full border px-2 py-0.5 text-[11px] ${
-            appInstalled
+            connected
               ? "border-border text-foreground/80"
               : "border-destructive/40 text-destructive"
           }`}
         >
-          {appInstalled ? "GitHub App connected" : "Not connected"}
+          {connected
+            ? "GitHub App connected"
+            : coverage === "none"
+              ? "Not connected"
+              : `${notConnectedCount} not connected`}
         </span>
-        {appInstalled ? null : (
+        {connected ? null : (
           <>
             <span className="text-muted-foreground text-xs">
-              Imported by an older GitHub sign-in sync. PR reviews and
-              automations never run here.
+              {coverage === "none"
+                ? "Imported by an older GitHub sign-in sync. PR reviews and automations never run here."
+                : "Repositories marked Not connected were imported by an older GitHub sign-in sync. PR reviews and automations never run on them."}
             </span>
-            <span className="ml-auto">
-              <ConfirmRemoveButton
-                label="Remove all"
-                ariaLabel={`Remove all not-connected repositories from ${owner}`}
-                title={`Remove all ${totalCount} ${noun(totalCount)} from ${owner}?`}
-                confirmLabel={`Remove ${totalCount} ${noun(totalCount)}`}
-                disabled={removing}
-                onConfirm={onRemoveAll}
-              />
-            </span>
+            {showRemove ? (
+              <span className="ml-auto">
+                <ConfirmRemoveButton
+                  label={coverage === "none" ? "Remove all" : "Remove not connected"}
+                  ariaLabel={`Remove not-connected repositories from ${owner}`}
+                  title={`Remove ${notConnectedCount} not-connected ${noun(notConnectedCount)} from ${owner}?`}
+                  confirmLabel={`Remove ${notConnectedCount} ${noun(notConnectedCount)}`}
+                  disabled={removing}
+                  onConfirm={onRemoveNotConnected}
+                />
+              </span>
+            ) : null}
           </>
         )}
       </div>

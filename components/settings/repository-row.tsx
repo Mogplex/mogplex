@@ -74,18 +74,28 @@ export function ConfirmRemoveButton({
 export function RepositoryRow({
   repo,
   pending,
+  notConnected = false,
   onToggle,
   onOpenSettings,
 }: {
   repo: Repo;
   pending: boolean;
+  /** Mark a repository without the GitHub App inside a partly connected owner. */
+  notConnected?: boolean;
   onToggle: (repo: Repo) => void;
   onOpenSettings: (repo: Repo) => void;
 }) {
   const removed = Boolean(repo.is_hidden);
   return (
     <li className="border-border flex items-center justify-between gap-3 border-b px-3 py-2 last:border-b-0">
-      <span className="min-w-0 truncate text-sm">{repo.full_name}</span>
+      <span className="flex min-w-0 items-center gap-2">
+        <span className="truncate text-sm">{repo.full_name}</span>
+        {notConnected ? (
+          <span className="border-destructive/40 text-destructive shrink-0 rounded-full border px-2 py-0.5 text-[11px]">
+            Not connected
+          </span>
+        ) : null}
+      </span>
       <div className="flex shrink-0 items-center gap-1">
         {removed ? (
           <Button

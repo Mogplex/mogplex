@@ -15,6 +15,7 @@ import { trackActivation } from "@/lib/activation-tracking";
 import {
   filterRepositories,
   groupRepositoriesByOwner,
+  isAppConnected,
   repoOwner,
 } from "@/lib/settings/repository-filter";
 import type { Repo } from "@/lib/types";
@@ -46,11 +47,12 @@ export function RepositoriesSection() {
     setSettingsTab("env");
     setSettingsRepoId(repo.id);
   };
-  const renderRow = (repo: Repo) => (
+  const renderRow = (repo: Repo, notConnected = false) => (
     <RepositoryRow
       key={repo.id}
       repo={repo}
       pending={admin.pendingIds.has(repo.id)}
+      notConnected={notConnected}
       onToggle={(item) => void admin.toggleHidden(item)}
       onOpenSettings={openSettings}
     />
@@ -160,21 +162,26 @@ export function RepositoriesSection() {
           </p>
         ) : (
           <div aria-label="Connected repositories" role="region" className="space-y-4">
-            {groupRepositoriesByOwner(connected).map((group) => (
+            {groupRepositoriesByOwner(connected, admin.repos).map((group) => (
               <RepositoryOwnerGroup
                 key={group.owner}
                 owner={group.owner}
-                appInstalled={group.appInstalled}
+                coverage={group.coverage}
                 shownCount={group.repos.length}
-                totalCount={
-                  admin.repos.filter(
-                    (repo) => !repo.is_hidden && repoOwner(repo) === group.owner
-                  ).length
-                }
+                notConnectedCount={group.notConnected.length}
+                // The toolbar's "Remove all from owner" already hides this set.
+                showRemove={!(owner === group.owner && group.coverage === "none")}
                 removing={admin.removingOwner}
-                onRemoveAll={() => void admin.removeOwner(group.owner)}
+                onRemoveNotConnected={() =>
+                  void admin.removeOwner(group.owner, { notConnectedOnly: true })
+                }
               >
-                {group.repos.map(renderRow)}
+                {group.repos.map((repo) =>
+                  renderRow(
+                    repo,
+                    group.coverage === "partial" && !isAppConnected(repo)
+                  )
+                )}
               </RepositoryOwnerGroup>
             ))}
           </div>
@@ -185,7 +192,7 @@ export function RepositoriesSection() {
         <section className="space-y-2">
           <h2 className="ui-section-title">Removed repositories</h2>
           <ul aria-label="Removed repositories" className="border-border rounded-md border">
-            {removed.map(renderRow)}
+            {removed.map((repo) => renderRow(repo))}
           </ul>
         </section>
       ) : null}

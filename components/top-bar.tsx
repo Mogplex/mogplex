@@ -124,7 +124,11 @@ export function TopBar() {
   const adminItems = navItems.filter((item) => item.section === "admin");
   const { open: openCommandPalette } = useCommandPalette();
   const { memberships } = useMemberships();
-  const activeTeam = memberships.teams.find((team) => team.slug === scope);
+  // Personal scope wins, matching the project switcher's resolution.
+  const activeTeam =
+    scope && scope !== memberships.personal.slug
+      ? memberships.teams.find((team) => team.slug === scope)
+      : undefined;
   const {
     data: slackInstallationsData,
     error: slackInstallationsError,

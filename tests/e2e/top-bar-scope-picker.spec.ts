@@ -121,3 +121,32 @@ test("user menu filters projects and switches the selected scope by keyboard", a
     page.getByRole("button", { name: "User menu, Gamma Research team" })
   ).toBeVisible();
 });
+
+test("top bar treats the personal slug as personal even if a team shares it", async ({
+  page,
+}) => {
+  await enableScopedE2EAuth(page);
+  await mockSettingsPageData(page);
+  await page.route("**/api/integrations/slack/installations", (route) =>
+    fulfillJson(route, { installations: [] })
+  );
+  await page.route("**/api/memberships", (route) =>
+    fulfillJson(route, {
+      ...MEMBERSHIPS,
+      teams: [
+        ...MEMBERSHIPS.teams,
+        {
+          id: "team-3",
+          slug: "alex",
+          name: "Clash",
+          iconUrl: null,
+          role: "viewer",
+        },
+      ],
+    })
+  );
+
+  await page.goto(scopedPath("settings/teams"));
+  await expect(page.getByRole("list", { name: "Teams" })).toBeVisible();
+  await expect(page.getByTestId("top-bar-active-team")).toHaveCount(0);
+});
