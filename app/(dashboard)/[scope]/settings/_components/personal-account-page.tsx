@@ -6,6 +6,7 @@ import { useUser } from "@/hooks/use-user"
 import { fetchJsonArray, fetchJsonObject } from "@/lib/client-fetch"
 import { DecisionChecksSection } from "@/components/settings/decision-checks-section"
 import { trackActivation } from "@/lib/activation-tracking"
+import { buildGithubAccountRows } from "@/lib/github-account-rows"
 import { AccountSection } from "./account-section"
 import type { GithubInstallationView, GithubOwnerTarget, SettingsView } from "./settings-types"
 
@@ -27,8 +28,10 @@ export function PersonalAccountPage() {
     user?.github_connected ? "/api/github/owners" : null,
     (url: string) => fetchJsonArray<GithubOwnerTarget>(url, "Failed to load GitHub accounts"),
   )
-  const ownerTargets = githubOwnerTargets ?? []
-  const ownerTargetsNeedingInstall = ownerTargets.filter((target) => target.github_installation_id == null)
+  const githubAccounts = useMemo(
+    () => buildGithubAccountRows(githubInstallations ?? [], githubOwnerTargets ?? []),
+    [githubInstallations, githubOwnerTargets],
+  )
   const githubInstallationsLoadError = githubInstallationsError ? "Unable to load GitHub App installations" : null
 
   const githubPrimaryAction = useMemo(() => {
@@ -93,6 +96,7 @@ export function PersonalAccountPage() {
   return (
     <div className="space-y-4 md:space-y-6">
       {settingsLoadError && <div className="text-sm text-destructive">{settingsLoadError}</div>}
+      <DecisionChecksSection endpoint="/api/settings/decision-checks" audience="personal" />
       <AccountSection
         isLoading={isLoading}
         user={user}
@@ -101,11 +105,8 @@ export function PersonalAccountPage() {
         nextStep={nextStep}
         trackConnectionStart={trackConnectionStart}
         githubInstallationsLoadError={githubInstallationsLoadError}
-        githubInstallations={githubInstallations}
-        ownerTargets={ownerTargets}
-        ownerTargetsNeedingInstall={ownerTargetsNeedingInstall}
+        githubAccounts={githubAccounts}
       />
-      <DecisionChecksSection endpoint="/api/settings/decision-checks" audience="personal" />
     </div>
   )
 }

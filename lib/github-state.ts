@@ -54,7 +54,7 @@ export function deriveGithubState(input: {
     case "oauth_connected":
       githubStatusLabel = "OAuth only";
       githubStatusDetail = input.githubAppAvailable
-        ? "Repositories can sync through OAuth, but triggers and automation require the GitHub App."
+        ? "You are signed in with GitHub. Install the Mogplex app on an account so Mogplex can work on its repositories."
         : "GitHub is connected through OAuth.";
       githubPrimaryAction = input.githubAppAvailable
         ? {
@@ -87,7 +87,7 @@ export function deriveGithubState(input: {
     case "app_installed_with_synced_repos":
       githubStatusLabel = "Ready";
       githubStatusDetail =
-        "GitHub App coverage is active and synced repositories are available in Projects.";
+        "Mogplex can work on the repositories in your connected accounts.";
       githubPrimaryAction = null;
       break;
     case "disconnected":

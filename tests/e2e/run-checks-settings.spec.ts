@@ -26,9 +26,11 @@ test("Account settings show Run checks on, say what is sent, and save a change",
   await expect(toggle).toBeChecked();
   // The copy is the customer's only account of what leaves their workspace.
   await expect(
-    page.getByText(/summaries of the skills available to it are sent/)
+    page.getByText(
+      /summaries of the skills available to it\. Secrets are removed\./
+    )
   ).toBeVisible();
-  await expect(page.getByText(/When it is off, nothing is sent/)).toBeVisible();
+  await expect(page.getByText(/^Nothing is sent\./)).toBeVisible();
 
   await toggle.click();
 
@@ -62,4 +64,27 @@ test("Run checks stays on and says so when the change cannot be saved", async ({
 
   await expect(page.getByText("Unable to save run checks")).toBeVisible();
   await expect(toggle).toBeChecked();
+});
+
+test("Account settings show Run checks before the GitHub section", async ({
+  page,
+}) => {
+  await enableScopedE2EAuth(page);
+  await page.route(ENDPOINT, (route) =>
+    fulfillJson(route, { enabled: true, viewer: { canManage: true } })
+  );
+
+  await page.goto(scopedPath("settings/account"));
+
+  const runChecks = page.getByRole("switch", { name: "Run checks" });
+  const github = page.getByText(
+    /Mogplex works on repositories in the GitHub accounts/
+  );
+  await expect(runChecks).toBeVisible();
+  await expect(github).toBeVisible();
+  const [switchBox, githubBox] = await Promise.all([
+    runChecks.boundingBox(),
+    github.boundingBox(),
+  ]);
+  expect(switchBox?.y ?? Infinity).toBeLessThan(githubBox?.y ?? 0);
 });

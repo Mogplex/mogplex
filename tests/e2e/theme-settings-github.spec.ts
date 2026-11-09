@@ -40,7 +40,7 @@ test("settings renders org-scoped GitHub installation links", async ({
   );
 });
 
-test("settings keeps an add-install entry point visible after GitHub App setup", async ({
+test("settings lists each GitHub account once and keeps an add-install entry point after setup", async ({
   page,
 }) => {
   await enableScopedE2EAuth(page);
@@ -82,7 +82,7 @@ test("settings keeps an add-install entry point visible after GitHub App setup",
       github_state: "app_installed_with_synced_repos",
       github_status_label: "Ready",
       github_status_detail:
-        "GitHub App coverage is active and synced repositories are available in Projects.",
+        "Mogplex can work on the repositories in your connected accounts.",
       github_primary_action: null,
       github_installation_count: 1,
       github_synced_repo_count: 1,
@@ -96,12 +96,21 @@ test("settings keeps an add-install entry point visible after GitHub App setup",
     "href",
     "/api/auth/github"
   );
-  await expect(page.getByText("Available accounts")).toBeVisible();
-  await expect(page.getByText("alex")).toBeVisible();
+  // One row per account: acme is both an owner target and an installation.
+  const accounts = page.getByRole("list", { name: "GitHub accounts" });
+  const rows = accounts.getByTestId("settings-github-account");
+  await expect(rows).toHaveCount(2);
+  await expect(rows.nth(0)).toContainText("acme");
+  await expect(rows.nth(0)).toContainText("Organization · 1 repo in Mogplex");
   await expect(
-    page.getByText("OAuth can see it, but App coverage is missing")
+    rows.nth(0).getByRole("link", { name: "Manage on GitHub" })
   ).toBeVisible();
-  await expect(page.getByRole("link", { name: "Add in GitHub" })).toBeVisible();
+  await expect(rows.nth(1)).toContainText("alex");
+  await expect(rows.nth(1)).toContainText("Personal account · Not connected");
+  await expect(
+    rows.nth(1).getByRole("link", { name: "Connect" })
+  ).toHaveAttribute("href", "/api/auth/github");
+  await expect(accounts.getByText(/scope/i)).toHaveCount(0);
 });
 
 test("settings hides broken GitHub installation manage links when metadata is incomplete", async ({
@@ -183,7 +192,9 @@ test("settings surfaces installation load failures without crashing", async ({
   await expect(
     page.getByText("Unable to load GitHub App installations")
   ).toBeVisible();
-  await expect(page.getByText("GitHub App coverage")).toBeVisible();
+  await expect(
+    page.getByText(/Mogplex works on repositories in the GitHub accounts/)
+  ).toBeVisible();
   expect(pageErrors).toEqual([]);
 });
 

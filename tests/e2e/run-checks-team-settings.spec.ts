@@ -38,11 +38,11 @@ for (const role of ["owner", "admin"] as const) {
       )
     ).toBeVisible();
     await expect(
-      page.getByText(/summaries of the skills available to it are sent/)
+      page.getByText(
+        /summaries of the skills available to it\. Secrets are removed\./
+      )
     ).toBeVisible();
-    await expect(
-      page.getByText(/When it is off, nothing is sent/)
-    ).toBeVisible();
+    await expect(page.getByText(/^Nothing is sent\./)).toBeVisible();
 
     await toggle.click();
     await expect(toggle).not.toBeChecked();

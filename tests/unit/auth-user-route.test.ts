@@ -214,7 +214,7 @@ test("GET /api/auth/user treats covered repos as app-connected even when install
       github_covered_repo_count: 12,
       github_status_label: "Ready",
       github_status_detail:
-        "GitHub App coverage is active and synced repositories are available in Projects.",
+        "Mogplex can work on the repositories in your connected accounts.",
       github_primary_action: null,
       platform_access: {
         allowPlatformAi: true,
