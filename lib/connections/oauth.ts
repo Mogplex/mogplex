@@ -23,6 +23,8 @@ type OAuthCredentials = {
   client_secret?: string;
   access_token?: string;
   refresh_token?: string;
+  /** Set when Mogplex registered this row's client (custom MCP sign-in). */
+  registered_client?: true;
 };
 
 export type OAuthTokenResponse = {
@@ -57,6 +59,7 @@ function parseCredentials(encrypted: string): OAuthCredentials {
         typeof parsed.refresh_token === "string"
           ? parsed.refresh_token
           : undefined,
+      registered_client: parsed.registered_client === true ? true : undefined,
     };
   } catch {
     throw new Error("Invalid OAuth credentials format");
@@ -109,12 +112,12 @@ export function canPrepareOAuthConnection(connection: Connection): boolean {
 
 export function getOAuthResourceIndicator(
   connection: Connection,
-  grant: "authorize" | "refresh" = "authorize"
+  refresh?: { registeredClient: boolean }
 ): string | undefined {
-  // Refresh sends the indicator only for presets that declare it. Custom MCP
-  // rows hand-configured before browser sign-in may use servers that reject it.
+  // On refresh, custom rows name the resource only if Mogplex registered their
+  // client: hand-configured clients may use servers that reject it.
   const profile =
-    grant === "refresh"
+    refresh && !refresh.registeredClient
       ? getConnectionPreset(connection.source_preset)?.oauth_config
       : getOAuthProfile(connection);
   return profile?.use_resource_indicator && connection.type === "mcp_server"
@@ -187,9 +190,15 @@ export async function prepareOAuthConnection(
       }
     );
 
-    const credentials = registration.client_secret
-      ? JSON.stringify({ client_secret: registration.client_secret })
-      : undefined;
+    // Custom rows: the registered client replaces any saved secret and is
+    // marked so refresh keeps its resource. Presets keep theirs until migration.
+    const credentials =
+      preset && !registration.client_secret
+        ? undefined
+        : JSON.stringify({
+            client_secret: registration.client_secret,
+            ...(preset ? {} : { registered_client: true }),
+          });
 
     await updateConnection(nextConnection.id, {
       oauth_client_id: registration.client_id,
@@ -403,7 +412,9 @@ export async function refreshOAuthToken(
     connection.oauth_token_url!,
     "oauth_token_url"
   );
-  const resource = getOAuthResourceIndicator(connection, "refresh");
+  const resource = getOAuthResourceIndicator(connection, {
+    registeredClient: creds.registered_client === true,
+  });
   const res = await fetch(tokenUrl, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },

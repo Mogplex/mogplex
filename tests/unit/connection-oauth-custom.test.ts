@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Connection } from "../../lib/types";
-import { encrypt } from "../../lib/connections/encryption";
+import { decrypt, encrypt } from "../../lib/connections/encryption";
 
 type FetchInput = string | URL | Request;
 
@@ -65,7 +65,12 @@ function fetchUrl(input: FetchInput) {
       : input.url;
 }
 
-test("should discover and register a custom MCP server as a public PKCE client", async () => {
+/**
+ * Prepares a custom MCP row against a stubbed MCP server that publishes its
+ * authorization server and registers clients with `registered` as the reply.
+ */
+async function prepareWithDiscovery(registered: Record<string, unknown>) {
+  const helpers = await loadOAuthHelpers();
   const originalFetch = global.fetch;
   const updates: Array<Record<string, unknown>> = [];
   let registration: Record<string, unknown> | undefined;
@@ -86,7 +91,7 @@ test("should discover and register a custom MCP server as a public PKCE client",
       });
     if (url === `${MCP_ORIGIN}/oauth/register`) {
       registration = JSON.parse(String(init?.body)) as Record<string, unknown>;
-      return Response.json({ client_id: "custom-registered-client" });
+      return Response.json(registered);
     }
     if (url.startsWith("https://example.supabase.co/rest/v1/connections?")) {
       updates.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
@@ -94,30 +99,65 @@ test("should discover and register a custom MCP server as a public PKCE client",
     }
     throw new Error(`Unexpected fetch: ${url}`);
   };
-
   try {
-    const { prepareOAuthConnection, getOAuthResourceIndicator } =
-      await loadOAuthHelpers();
-    const prepared = await prepareOAuthConnection(createCustomConnection(), {
-      redirectUri: "https://mogplex.example/api/connections/oauth/callback",
-      origin: "https://mogplex.example",
-    });
-
-    assert.equal(
-      prepared.connection.oauth_client_id,
-      "custom-registered-client"
+    const prepared = await helpers.prepareOAuthConnection(
+      createCustomConnection(),
+      {
+        redirectUri: "https://mogplex.example/api/connections/oauth/callback",
+        origin: "https://mogplex.example",
+      }
     );
-    assert.equal(
-      prepared.connection.oauth_authorize_url,
-      `${MCP_ORIGIN}/oauth/authorize`
-    );
-    assert.ok(prepared.codeVerifier, "custom MCP sign-in always uses PKCE");
-    assert.equal(registration?.token_endpoint_auth_method, "none");
-    assert.equal(updates.at(-1)?.oauth_client_id, "custom-registered-client");
-    assert.equal(getOAuthResourceIndicator(prepared.connection), MCP_URL);
+    return { helpers, prepared, updates, registration };
   } finally {
     global.fetch = originalFetch;
   }
+}
+
+function storedCredentials(update: Record<string, unknown> | undefined) {
+  assert.equal(typeof update?.encrypted_credentials, "string");
+  return JSON.parse(decrypt(String(update?.encrypted_credentials))) as Record<
+    string,
+    unknown
+  >;
+}
+
+test("should discover and register a custom MCP server as a public PKCE client", async () => {
+  const { helpers, prepared, updates, registration } =
+    await prepareWithDiscovery({ client_id: "custom-registered-client" });
+
+  assert.equal(prepared.connection.oauth_client_id, "custom-registered-client");
+  assert.equal(
+    prepared.connection.oauth_authorize_url,
+    `${MCP_ORIGIN}/oauth/authorize`
+  );
+  assert.ok(prepared.codeVerifier, "custom MCP sign-in always uses PKCE");
+  assert.equal(registration?.token_endpoint_auth_method, "none");
+  assert.equal(updates.at(-1)?.oauth_client_id, "custom-registered-client");
+  assert.equal(helpers.getOAuthResourceIndicator(prepared.connection), MCP_URL);
+});
+
+test("should replace a saved client secret when Mogplex registers a new public client", async () => {
+  const { updates } = await prepareWithDiscovery({
+    client_id: "custom-registered-client",
+  });
+
+  // The registration write replaces the row's credentials, so a secret saved
+  // without a client id is never sent for the new public client.
+  assert.deepEqual(storedCredentials(updates.at(-1)), {
+    registered_client: true,
+  });
+});
+
+test("should keep the secret a registration issues for a custom MCP client", async () => {
+  const { updates } = await prepareWithDiscovery({
+    client_id: "custom-confidential-client",
+    client_secret: "issued-secret",
+  });
+
+  assert.deepEqual(storedCredentials(updates.at(-1)), {
+    client_secret: "issued-secret",
+    registered_client: true,
+  });
 });
 
 test("should leave non-MCP and non-OAuth custom connections out of browser sign-in", async () => {
@@ -139,18 +179,20 @@ test("should leave non-MCP and non-OAuth custom connections out of browser sign-
 
 /**
  * Runs one token request against a stubbed authorization server and returns
- * the form body it received. Stored credentials hold a refresh token.
+ * the form body it received plus the credential writes that followed. Stored
+ * credentials hold a refresh token and any extra `credentials`.
  */
 async function captureTokenRequest(
   run: (
     helpers: Awaited<ReturnType<typeof loadOAuthHelpers>>
-  ) => Promise<unknown>
+  ) => Promise<unknown>,
+  credentials: Record<string, unknown> = {}
 ) {
   const helpers = await loadOAuthHelpers();
   const originalFetch = global.fetch;
   const stored = {
     encrypted_credentials: encrypt(
-      JSON.stringify({ refresh_token: "stored-refresh-token" })
+      JSON.stringify({ refresh_token: "stored-refresh-token", ...credentials })
     ),
     updated_at: "2026-11-09T00:00:00.000Z",
     oauth_authorized_at: "2026-11-09T00:00:00.000Z",
@@ -163,14 +205,18 @@ async function captureTokenRequest(
     ),
   };
   let tokenBody: URLSearchParams | undefined;
+  const writes: Array<Record<string, unknown>> = [];
   global.fetch = async (input: FetchInput, init?: RequestInit) => {
     const url = fetchUrl(input);
     if (url === TOKEN_URL) {
       tokenBody = new URLSearchParams(String(init?.body));
       return Response.json({ access_token: "fresh-access-token" });
     }
-    if (url.startsWith("https://example.supabase.co/rest/v1/connections?"))
-      return Response.json(init?.method === "PATCH" ? refreshed : stored);
+    if (url.startsWith("https://example.supabase.co/rest/v1/connections?")) {
+      if (init?.method !== "PATCH") return Response.json(stored);
+      writes.push(JSON.parse(String(init.body)) as Record<string, unknown>);
+      return Response.json(refreshed);
+    }
     throw new Error(`Unexpected fetch: ${url}`);
   };
   try {
@@ -179,7 +225,7 @@ async function captureTokenRequest(
     global.fetch = originalFetch;
   }
   assert.ok(tokenBody, "the token endpoint was called");
-  return tokenBody;
+  return { body: tokenBody, writes };
 }
 
 const registeredCustomConnection = createCustomConnection({
@@ -189,7 +235,7 @@ const registeredCustomConnection = createCustomConnection({
 });
 
 test("should name the custom MCP server as the resource when exchanging the code", async () => {
-  const body = await captureTokenRequest(({ exchangeCodeForTokens }) =>
+  const { body } = await captureTokenRequest(({ exchangeCodeForTokens }) =>
     exchangeCodeForTokens(
       registeredCustomConnection,
       "authorization-code",
@@ -202,8 +248,20 @@ test("should name the custom MCP server as the resource when exchanging the code
   assert.equal(body.get("resource"), MCP_URL);
 });
 
-test("should refresh a custom MCP token without the resource indicator", async () => {
-  const body = await captureTokenRequest(({ refreshOAuthToken }) =>
+test("should refresh with the resource indicator when Mogplex registered the custom MCP client", async () => {
+  const { body, writes } = await captureTokenRequest(
+    ({ refreshOAuthToken }) => refreshOAuthToken(registeredCustomConnection),
+    { registered_client: true }
+  );
+
+  assert.equal(body.get("grant_type"), "refresh_token");
+  assert.equal(body.get("resource"), MCP_URL);
+  // The marker survives the token write, so the next refresh still sends it.
+  assert.equal(storedCredentials(writes.at(-1)).registered_client, true);
+});
+
+test("should refresh a hand-configured custom MCP client without the resource indicator", async () => {
+  const { body } = await captureTokenRequest(({ refreshOAuthToken }) =>
     refreshOAuthToken(registeredCustomConnection)
   );
 
@@ -213,7 +271,7 @@ test("should refresh a custom MCP token without the resource indicator", async (
 });
 
 test("should keep the resource indicator on refresh for presets that declare it", async () => {
-  const body = await captureTokenRequest(({ refreshOAuthToken }) =>
+  const { body } = await captureTokenRequest(({ refreshOAuthToken }) =>
     refreshOAuthToken({
       ...registeredCustomConnection,
       source_preset: "sentry",
