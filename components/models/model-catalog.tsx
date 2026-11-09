@@ -152,7 +152,7 @@ export function ModelCatalog() {
         sortDirection={sortDirection}
         onSort={handleSort}
         onChainChange={chain.onChange}
-        onToggle={(id) => void toggleModel(id)}
+        onToggle={(id, enabled) => void toggleModel(id, enabled)}
       />
 
       <ChainDraftBar modelName={nameOf} />

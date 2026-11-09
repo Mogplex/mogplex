@@ -117,8 +117,19 @@ function getRollbackRevalidationErrorMessage(error: unknown) {
   return `${getModelPreferenceErrorMessage(error)} ${REVALIDATION_FAILURE_DESCRIPTION}`;
 }
 
+type PreferenceQueue = { latest: number; tail: Promise<unknown> };
+
+/** Saves per team and model, so rapid toggles reach the server in click order. */
+const preferenceQueues = new Map<string, PreferenceQueue>();
+
+/**
+ * Set a model's enabled state to `enabled`, the value the user just chose.
+ * Saves for one model run in order; only the newest one revalidates or rolls
+ * back, so an older response can't overwrite a newer click.
+ */
 export async function toggleModelPreference({
   modelId,
+  enabled,
   catalog,
   mutate,
   activeTeamId = null,
@@ -126,6 +137,7 @@ export async function toggleModelPreference({
   toastFn = toast,
 }: {
   modelId: string;
+  enabled: boolean;
   catalog: CatalogModel[];
   mutate: ModelsMutator;
   activeTeamId?: string | null;
@@ -135,16 +147,36 @@ export async function toggleModelPreference({
   const current = catalog.find((model) => model.id === modelId);
   if (current?.is_hidden === true) return;
 
-  const newEnabled = !(current?.is_enabled ?? false);
-
   await mutate(
-    (previous) => buildOptimisticModelsResponse(previous, modelId, newEnabled),
+    (previous) => buildOptimisticModelsResponse(previous, modelId, enabled),
     false
   );
 
+  const key = `${activeTeamId ?? "personal"}:${modelId}`;
+  const queue = preferenceQueues.get(key) ?? {
+    latest: 0,
+    tail: Promise.resolve(),
+  };
+  preferenceQueues.set(key, queue);
+  const generation = ++queue.latest;
+  const save = queue.tail.then(() =>
+    patchModelPreference(fetchFn, modelId, enabled, activeTeamId)
+  );
+  queue.tail = save.catch(() => undefined);
+
+  let saved = true;
+  let error: unknown;
   try {
-    await patchModelPreference(fetchFn, modelId, newEnabled, activeTeamId);
-  } catch (error) {
+    await save;
+  } catch (saveError) {
+    saved = false;
+    error = saveError;
+  }
+  // A newer click owns the final state; it revalidates when it settles.
+  if (generation !== queue.latest) return;
+  preferenceQueues.delete(key);
+
+  if (!saved) {
     const rolledBack = await revalidateModelsWithFeedback(
       mutate,
       toastFn,
@@ -194,9 +226,10 @@ export function useModels(
   );
 
   const toggleModel = useCallback(
-    (modelId: string) =>
+    (modelId: string, enabled: boolean) =>
       toggleModelPreference({
         modelId,
+        enabled,
         catalog,
         mutate,
         activeTeamId,

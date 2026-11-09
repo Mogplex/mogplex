@@ -106,6 +106,7 @@ test("toggleModelPreference rolls back optimistic state and warns on failed PATC
 
   await toggleModelPreference({
     modelId: model.id,
+    enabled: !model.is_enabled,
     catalog: [model],
     mutate: harness.mutate,
     fetchFn,
@@ -140,6 +141,7 @@ test("toggleModelPreference persists successful toggles without warning", async 
 
   await toggleModelPreference({
     modelId: model.id,
+    enabled: !model.is_enabled,
     catalog: [model],
     mutate: harness.mutate,
     fetchFn,
@@ -165,6 +167,7 @@ test("toggleModelPreference sends the explicit active team header", async () => 
 
   await toggleModelPreference({
     modelId: model.id,
+    enabled: !model.is_enabled,
     catalog: [model],
     mutate: harness.mutate,
     activeTeamId: "team-1",
@@ -186,6 +189,7 @@ test("toggleModelPreference omits the team header for personal scope", async () 
 
   await toggleModelPreference({
     modelId: model.id,
+    enabled: !model.is_enabled,
     catalog: [model],
     mutate: harness.mutate,
     activeTeamId: null,
@@ -205,6 +209,7 @@ test("toggleModelPreference rolls back optimistic state and warns on network err
 
   await toggleModelPreference({
     modelId: model.id,
+    enabled: !model.is_enabled,
     catalog: [model],
     mutate: harness.mutate,
     fetchFn,
@@ -225,6 +230,7 @@ test("toggleModelPreference keeps PATCH details when rollback revalidation fails
 
   await toggleModelPreference({
     modelId: model.id,
+    enabled: !model.is_enabled,
     catalog: [model],
     mutate: harness.mutate,
     fetchFn,
@@ -252,6 +258,7 @@ test("toggleModelPreference warns when success-path revalidation fails", async (
 
   await toggleModelPreference({
     modelId: model.id,
+    enabled: !model.is_enabled,
     catalog: [model],
     mutate: harness.mutate,
     fetchFn,
@@ -264,5 +271,92 @@ test("toggleModelPreference warns when success-path revalidation fails", async (
   assert.equal(
     harness.toastCalls[0]?.description,
     "Please reload the page if the displayed state looks incorrect."
+  );
+});
+
+function deferred() {
+  let resolve: (response: Response) => void = () => undefined;
+  const promise = new Promise<Response>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+test("toggleModelPreference saves rapid toggles in click order even with a stale catalog", async () => {
+  const model = buildCatalogModel({
+    id: "provider/rapid-order",
+    is_enabled: false,
+  });
+  const harness = createHarness({ model });
+  const bodies: boolean[] = [];
+  const pending = [deferred(), deferred()];
+  const fetchFn: typeof fetch = (_input, init) => {
+    const enabled = JSON.parse(String(init?.body)).is_enabled as boolean;
+    const updated = { ...model, is_enabled: enabled };
+    const response = pending[bodies.length];
+    bodies.push(enabled);
+    return response!.promise.then((value) => {
+      harness.serverData.catalog = [updated];
+      harness.serverData.models = enabled ? [updated] : [];
+      return value;
+    });
+  };
+  // Both clicks land before a re-render, so both see the same catalog.
+  const options = {
+    modelId: model.id,
+    catalog: [model],
+    mutate: harness.mutate,
+    fetchFn,
+    toastFn: harness.toastFn,
+  };
+
+  const first = toggleModelPreference({ ...options, enabled: true });
+  const second = toggleModelPreference({ ...options, enabled: false });
+  await new Promise((done) => setImmediate(done));
+
+  assert.deepEqual(bodies, [true]);
+  pending[0]!.resolve(new Response(null, { status: 204 }));
+  await new Promise((done) => setImmediate(done));
+  assert.deepEqual(bodies, [true, false]);
+  pending[1]!.resolve(new Response(null, { status: 204 }));
+  await Promise.all([first, second]);
+
+  const revalidations = harness.mutateCalls.filter(
+    (call) => call.update === undefined
+  );
+  assert.equal(revalidations.length, 1);
+  assert.equal(harness.data.catalog[0]?.is_enabled, false);
+  assert.equal(harness.toastCalls.length, 0);
+});
+
+test("toggleModelPreference lets a newer click settle the state when an older save fails", async () => {
+  const model = buildCatalogModel({
+    id: "provider/older-failure",
+    is_enabled: false,
+  });
+  const harness = createHarness({ model });
+  let calls = 0;
+  const fetchFn: typeof fetch = async () => {
+    calls += 1;
+    return new Response(null, { status: calls === 1 ? 500 : 204 });
+  };
+  const options = {
+    modelId: model.id,
+    catalog: [model],
+    mutate: harness.mutate,
+    fetchFn,
+    toastFn: harness.toastFn,
+  };
+
+  await Promise.all([
+    toggleModelPreference({ ...options, enabled: true }),
+    toggleModelPreference({ ...options, enabled: false }),
+  ]);
+
+  assert.equal(calls, 2);
+  assert.equal(harness.toastCalls.length, 0);
+  assert.equal(
+    harness.mutateCalls.filter((call) => call.update === undefined).length,
+    1
   );
 });
