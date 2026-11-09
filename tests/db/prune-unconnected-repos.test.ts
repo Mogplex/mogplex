@@ -307,3 +307,39 @@ it("probes every guard column through an index", async () => {
   }
   expect(missing).toEqual([]);
 });
+
+/**
+ * Text columns that look like repository references but do not point at a
+ * repos row, with the reason. A new reference by name must be guarded in
+ * prune_unconnected_repos instead of added here.
+ */
+const NAME_COLUMNS_NOT_GUARDED = new Map<string, string>([
+  [
+    "github_merge_approvals.target_repo",
+    "a GitHub pull request's repository name (with target_owner), not a repos row",
+  ],
+]);
+
+it("guards or explains every column that names a repository", async () => {
+  const { rows } = await db.query<{ table_name: string; column_name: string }>(
+    `select c.table_name, c.column_name
+       from information_schema.columns c
+       join information_schema.tables t using (table_schema, table_name)
+      where c.table_schema = 'public'
+        and t.table_type = 'BASE TABLE'
+        and c.data_type in ('text', 'character varying')
+        and (c.column_name like '%repo%' or c.column_name = 'project')
+      order by 1, 2`
+  );
+  const guards = await guardsByTable();
+  const unexplained = rows
+    .map(({ table_name, column_name }) => `${table_name}.${column_name}`)
+    .filter((column) => {
+      const [table, name] = column.split(".");
+      return (
+        !guards.get(table)?.includes(`x.${name} = r.full_name`) &&
+        !NAME_COLUMNS_NOT_GUARDED.has(column)
+      );
+    });
+  expect(unexplained).toEqual([]);
+});
