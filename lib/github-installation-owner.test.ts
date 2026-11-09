@@ -1,92 +1,127 @@
 import { expect, it, vi } from "vitest";
-import { verifyGithubInstallationOwner } from "./github-installation-owner";
+import {
+  fetchGithubIdentityLogin,
+  verifyGithubInstallationOwner,
+} from "./github-installation-owner";
 
-it("requires the verified GitHub identity to own a personal installation", async () => {
+const org = {
+  id: 7,
+  account: { login: "member-org", type: "Organization" },
+};
+
+function orgDeps(response: () => Response) {
+  const paths: string[] = [];
+  const createInstallationAccessToken = vi.fn(async (id: number) => {
+    expect(id).toBe(7);
+    return { token: "installation-fixture" };
+  });
   const request = vi.fn(
-    async (_url: string | URL | Request, init?: RequestInit) => {
+    async (url: string | URL | Request, init?: RequestInit) => {
+      paths.push(new URL(String(url)).pathname);
       expect(new Headers(init?.headers).get("Authorization")).toBe(
-        "Bearer identity-only-fixture"
+        "Bearer installation-fixture"
       );
-      return Response.json({ login: "verified-owner" });
+      return response();
     }
   );
+  return { paths, deps: { createInstallationAccessToken, request } };
+}
+
+it("should attach a personal installation only to its own account", async () => {
+  const request = vi.fn();
+  const personal = {
+    id: 1,
+    account: { login: "VERIFIED-OWNER", type: "User" },
+  };
   expect(
-    await verifyGithubInstallationOwner(
-      { id: 1, account: { login: "VERIFIED-OWNER", type: "User" } },
-      "identity-only-fixture",
-      request
-    )
+    await verifyGithubInstallationOwner(personal, "verified-owner", {
+      request,
+    })
   ).toBe(true);
   expect(
-    await verifyGithubInstallationOwner(
-      { id: 2, account: { login: "someone-else", type: "User" } },
-      "identity-only-fixture",
-      request
-    )
+    await verifyGithubInstallationOwner(personal, "someone-else", { request })
   ).toBe(false);
-  expect(
-    request.mock.calls.every(
-      ([url]) => String(url) === "https://api.github.com/user"
-    )
-  ).toBe(true);
+  expect(request).not.toHaveBeenCalled();
 });
-it("requires active organization ownership and never accepts ordinary membership", async () => {
+
+it("should accept only active org owners, read with the installation token", async () => {
   for (const [state, role, allowed] of [
     ["active", "admin", true],
     ["active", "member", false],
     ["pending", "admin", false],
   ] as const) {
-    const paths: string[] = [];
-    const request = async (url: string | URL | Request) => {
-      const path = new URL(String(url)).pathname;
-      paths.push(path);
-      return Response.json(
-        path === "/user" ? { login: "verified-user" } : { state, role }
-      );
-    };
-    expect(
-      await verifyGithubInstallationOwner(
-        { id: 1, account: { login: "approved-org", type: "Organization" } },
-        "identity-fixture",
-        request
-      )
-    ).toBe(allowed);
-    expect(paths).toEqual(["/user", "/user/memberships/orgs/approved-org"]);
+    const { paths, deps } = orgDeps(() => Response.json({ state, role }));
+    expect(await verifyGithubInstallationOwner(org, "org-user", deps)).toBe(
+      allowed
+    );
+    expect(paths).toEqual(["/orgs/member-org/memberships/org-user"]);
   }
 });
-it("denies missing identities, inaccessible accounts, and malformed provider responses", async () => {
-  for (const response of [
-    new Response(null, { status: 401 }),
-    Response.json({}),
-    Response.json([]),
-  ]) {
-    expect(
-      await verifyGithubInstallationOwner(
-        { id: 1, account: { login: "approved", type: "User" } },
-        "identity-fixture",
-        async () => response
-      )
-    ).toBe(false);
-  }
-  const request = vi.fn();
-  expect(
-    await verifyGithubInstallationOwner({ id: 1 }, "identity-fixture", request)
-  ).toBe(false);
+
+it("should reject people outside the org", async () => {
+  const { deps } = orgDeps(() => new Response(null, { status: 404 }));
+  expect(await verifyGithubInstallationOwner(org, "outsider", deps)).toBe(
+    false
+  );
+});
+
+it("should reject missing logins and malformed installations without calling GitHub", async () => {
+  const { deps } = orgDeps(() => Response.json({}));
+  expect(await verifyGithubInstallationOwner(org, null, deps)).toBe(false);
+  expect(await verifyGithubInstallationOwner(org, "  ", deps)).toBe(false);
+  expect(await verifyGithubInstallationOwner({ id: 1 }, "org-user", deps)).toBe(
+    false
+  );
   expect(
     await verifyGithubInstallationOwner(
-      { id: 1, account: { login: "approved", type: "User" } },
-      "",
-      request
+      { id: 1, account: { login: "bot", type: "Bot" } },
+      "org-user",
+      deps
     )
   ).toBe(false);
-  expect(request).not.toHaveBeenCalled();
+  expect(deps.request).not.toHaveBeenCalled();
 });
-it("keeps provider outages distinct from a verified lack of ownership", async () => {
+
+it("should keep provider outages distinct from a verified non-owner", async () => {
+  const { deps } = orgDeps(() => new Response(null, { status: 503 }));
   await expect(
-    verifyGithubInstallationOwner(
-      { id: 1, account: { login: "approved", type: "User" } },
+    verifyGithubInstallationOwner(org, "org-user", deps)
+  ).rejects.toThrow("ownership could not be verified");
+});
+
+it("should read the login live from the identity token", async () => {
+  const request = vi.fn(
+    async (url: string | URL | Request, init?: RequestInit) => {
+      expect(String(url)).toBe("https://api.github.com/user");
+      expect(new Headers(init?.headers).get("Authorization")).toBe(
+        "Bearer identity-fixture"
+      );
+      return Response.json({ login: "current-login" });
+    }
+  );
+  expect(
+    await fetchGithubIdentityLogin("identity-fixture", request as never)
+  ).toBe("current-login");
+  expect(await fetchGithubIdentityLogin(null, request as never)).toBeNull();
+  expect(request).toHaveBeenCalledTimes(1);
+});
+
+it("should treat a rejected identity token as no login and an outage as an error", async () => {
+  expect(
+    await fetchGithubIdentityLogin(
+      "revoked-fixture",
+      async () => new Response(null, { status: 401 })
+    )
+  ).toBeNull();
+  expect(
+    await fetchGithubIdentityLogin("identity-fixture", async () =>
+      Response.json({})
+    )
+  ).toBeNull();
+  await expect(
+    fetchGithubIdentityLogin(
       "identity-fixture",
       async () => new Response(null, { status: 503 })
     )
-  ).rejects.toThrow("ownership could not be verified");
+  ).rejects.toThrow("identity could not be verified");
 });

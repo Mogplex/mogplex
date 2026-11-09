@@ -12,7 +12,7 @@ type GithubWebhookInstallation = {
 
 type GithubWebhookBody = Record<string, unknown> & {
   action?: string;
-  sender?: { login?: string };
+  sender?: { login?: string; id?: number };
   installation?: GithubWebhookInstallation;
   repository?: GithubRepoPayload;
   repositories_added?: GithubRepoPayload[];
@@ -26,6 +26,7 @@ export type GithubWebhookSyncPlan =
       action: string;
       installationId: number;
       senderLogin: string | null;
+      senderId: number | null;
       accountLogin: string | null;
       accountType: string | null;
       targetType: string | null;
@@ -36,6 +37,7 @@ export type GithubWebhookSyncPlan =
       action: string;
       installationId: number;
       senderLogin: string | null;
+      senderId: number | null;
       accountLogin: string | null;
       accountType: string | null;
       targetType: string | null;
@@ -48,6 +50,7 @@ export type GithubWebhookSyncPlan =
       action: string;
       installationId: number;
       senderLogin: string | null;
+      senderId: number | null;
       accountLogin: string | null;
       accountType: string | null;
       targetType: string | null;
@@ -62,6 +65,9 @@ function getInstallationBase(body: GithubWebhookBody) {
   return {
     installationId,
     senderLogin: body.sender?.login?.trim() || null,
+    senderId: Number.isSafeInteger(body.sender?.id)
+      ? (body.sender?.id ?? null)
+      : null,
     accountLogin: body.installation?.account?.login?.trim() || null,
     accountType: body.installation?.account?.type?.trim() || null,
     targetType: body.installation?.target_type?.trim() || null,
@@ -110,12 +116,72 @@ export function planGithubWebhookSync(
   return { type: "none" };
 }
 
-async function resolveWebhookUserIds(installationId: number) {
+const GRANTING_INSTALLATION_ACTIONS = new Set([
+  "created",
+  "new_permissions_accepted",
+  "unsuspend",
+]);
+
+function grantsSenderAccess(
+  plan: Exclude<GithubWebhookSyncPlan, { type: "none" }>
+) {
+  if (plan.type === "installation")
+    return GRANTING_INSTALLATION_ACTIONS.has(plan.action);
+  return plan.type === "installation_repositories" && plan.action === "added";
+}
+
+/**
+ * A signed install or repository change attaches the installation to the
+ * Mogplex user who made it, when they own the account. A repository admin
+ * can add one repository to an installation without owning the org, and must
+ * not receive its whole repository set. The payload's sender login is current
+ * at event time; the profile is matched by the immutable GitHub id.
+ */
+async function resolveSenderUserIds(
+  plan: Exclude<GithubWebhookSyncPlan, { type: "none" }>
+) {
+  if (!grantsSenderAccess(plan) || !plan.senderId) return [];
+  try {
+    const { verifyGithubInstallationOwner } =
+      await import("@/lib/github-installation-owner");
+    const isOwner = await verifyGithubInstallationOwner(
+      {
+        id: plan.installationId,
+        account: {
+          login: plan.accountLogin ?? undefined,
+          type: plan.accountType ?? undefined,
+        },
+      },
+      plan.senderLogin
+    );
+    if (!isOwner) return [];
+  } catch (error) {
+    console.error("[github-webhook-sync] sender ownership check failed", {
+      installationId: plan.installationId,
+      error,
+    });
+    return [];
+  }
+
+  const { supabaseAdmin } = await import("@/lib/supabase/admin");
+  const { data, error } = await supabaseAdmin
+    .from("profiles")
+    .select("id")
+    .eq("github_user_id", plan.senderId);
+  if (error) {
+    throw new Error(`Failed to load sender profile: ${error.message}`);
+  }
+  return (data || []).map((row) => row.id as string).filter(Boolean);
+}
+
+async function resolveWebhookUserIds(
+  plan: Exclude<GithubWebhookSyncPlan, { type: "none" }>
+) {
   const { supabaseAdmin } = await import("@/lib/supabase/admin");
   const { data: known, error: knownError } = await supabaseAdmin
     .from("github_installations")
     .select("user_id")
-    .eq("installation_id", installationId);
+    .eq("installation_id", plan.installationId);
 
   if (knownError) {
     throw new Error(
@@ -123,12 +189,11 @@ async function resolveWebhookUserIds(installationId: number) {
     );
   }
 
-  // Signed events refresh existing grants; sender metadata cannot attach a
-  // new user's account to an installation's full repository scope.
   return [
-    ...new Set(
-      (known || []).map((row) => row.user_id as string).filter(Boolean)
-    ),
+    ...new Set([
+      ...(known || []).map((row) => row.user_id as string).filter(Boolean),
+      ...(await resolveSenderUserIds(plan)),
+    ]),
   ];
 }
 
@@ -225,7 +290,7 @@ export async function syncGithubWebhookState(
     return { handled: false, matchedUsers: 0 };
   }
 
-  const userIds = await resolveWebhookUserIds(plan.installationId);
+  const userIds = await resolveWebhookUserIds(plan);
   if (userIds.length === 0) {
     return {
       handled: true,
@@ -236,7 +301,7 @@ export async function syncGithubWebhookState(
   }
 
   if (plan.type === "installation") {
-    if (["created", "new_permissions", "unsuspend"].includes(plan.action)) {
+    if (GRANTING_INSTALLATION_ACTIONS.has(plan.action)) {
       await ensureInstallationForUsers(userIds, plan);
       await syncInstallationReposForUsers(userIds, plan.installationId);
     } else if (["deleted", "suspend"].includes(plan.action)) {

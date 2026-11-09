@@ -1,61 +1,171 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { supabaseAdmin } from "@/lib/supabase/admin";
+import type { GithubInstallation } from "@/lib/github-app";
 import { reconcileGithubInstallationsForUser } from "./github-installations";
 
-const previous = Object.getOwnPropertyDescriptor(supabaseAdmin, "from");
-let count = 0;
-let error: { message: string } | null = null;
+type Upsert = Array<{ installation_id: number; account_login: string | null }>;
+
+function fixture({
+  attached = [] as string[],
+  loadError = null as { message: string } | null,
+  orgs = ["member-org", "outsider-org"],
+  owners = new Set(["member-org"]),
+} = {}) {
+  const upserts: Upsert[] = [];
+  const db = {
+    from: (table: string) => ({
+      select: () => ({
+        eq: async () => ({
+          data: attached.map((account_login) => ({ account_login })),
+          error: loadError,
+        }),
+      }),
+      upsert: async (rows: Upsert) => {
+        expect(table).toBe("github_installations");
+        upserts.push(rows);
+        return { error: null };
+      },
+      update: () => ({ eq: async () => ({ error: null }) }),
+    }),
+  };
+  const installations: Record<string, GithubInstallation> = {
+    "member-org": {
+      id: 11,
+      account: { login: "member-org", type: "Organization" },
+    },
+    "outsider-org": {
+      id: 12,
+      account: { login: "outsider-org", type: "Organization" },
+    },
+  };
+  const deps = {
+    db: db as never,
+    request: vi.fn(async () =>
+      Response.json(orgs.map((login) => ({ login })))
+    ) as unknown as typeof fetch,
+    findInstallation: vi.fn(
+      async (account: string) => installations[account] ?? null
+    ),
+    verifyOwner: vi.fn(
+      async (installation: GithubInstallation, _login?: string | null) =>
+        owners.has(installation.account?.login ?? "")
+    ),
+    fetchLogin: vi.fn(async (token: string | null | undefined) =>
+      token ? "member" : null
+    ),
+    syncRepos: vi.fn(async () => undefined) as never,
+  };
+  return { deps, upserts };
+}
+
 beforeEach(() => {
   vi.stubEnv("GITHUB_APP_ID", "1");
   vi.stubEnv("GITHUB_APP_NAME", "fixture");
   vi.stubEnv("GITHUB_APP_PRIVATE_KEY", "configured");
-  count = 0;
-  error = null;
-  const query = {
-    select: () => query,
-    eq: async (column: string, userId: string) => {
-      expect(column).toBe("user_id");
-      expect(userId).toBe("fixture-user");
-      return { count, error };
-    },
-  };
-  Object.defineProperty(supabaseAdmin, "from", {
-    configurable: true,
-    value: () => query,
-  });
 });
 afterEach(() => {
-  if (previous) Object.defineProperty(supabaseAdmin, "from", previous);
-  else Reflect.deleteProperty(supabaseAdmin, "from");
   vi.unstubAllEnvs();
-  vi.unstubAllGlobals();
 });
-it("reports only existing attachments without App-wide discovery or new grants", async () => {
-  const request = vi.fn();
-  vi.stubGlobal("fetch", request);
+
+it("should attach installations on orgs the user is a verified owner of", async () => {
+  const { deps, upserts } = fixture();
   expect(
     await reconcileGithubInstallationsForUser(
       "fixture-user",
       "member",
-      "legacy-fixture"
+      "identity-fixture",
+      deps
     )
-  ).toEqual({ discovered: 0 });
-  count = 2;
-  expect(await reconcileGithubInstallationsForUser("fixture-user")).toEqual({
-    discovered: 2,
-  });
-  expect(request).not.toHaveBeenCalled();
+  ).toEqual({ discovered: 1, checked: true });
+  expect(upserts.flat().map((row) => row.installation_id)).toEqual([11]);
+  expect(deps.verifyOwner).toHaveBeenCalledWith(
+    expect.objectContaining({ id: 12 }),
+    "member"
+  );
 });
-it("does not guess grants after a failed database lookup", async () => {
-  error = { message: "unavailable" };
+
+it("should skip accounts that are already attached even when other installations exist", async () => {
+  const { deps, upserts } = fixture({ attached: ["MEMBER-ORG", "member"] });
+  expect(
+    await reconcileGithubInstallationsForUser(
+      "fixture-user",
+      "member",
+      "identity-fixture",
+      deps
+    )
+  ).toEqual({ discovered: 0, checked: true });
+  expect(deps.findInstallation).toHaveBeenCalledTimes(1);
+  expect(deps.findInstallation).toHaveBeenCalledWith("outsider-org");
+  expect(upserts).toEqual([]);
+});
+
+it("should not attach anything without an identity token", async () => {
+  const { deps } = fixture();
+  expect(
+    await reconcileGithubInstallationsForUser(
+      "fixture-user",
+      "member",
+      null,
+      deps
+    )
+  ).toEqual({ discovered: 0, checked: false });
+  expect(deps.request).not.toHaveBeenCalled();
+  expect(deps.findInstallation).not.toHaveBeenCalled();
+});
+
+it("should check ownership for the login the token reports, not a stored one", async () => {
+  const { deps } = fixture();
+  await reconcileGithubInstallationsForUser(
+    "fixture-user",
+    "stale-login",
+    "identity-fixture",
+    deps
+  );
+  expect(deps.findInstallation).not.toHaveBeenCalledWith("stale-login");
+  for (const [, login] of deps.verifyOwner.mock.calls)
+    expect(login).toBe("member");
+});
+
+it("should not guess grants after a failed database lookup", async () => {
+  const { deps } = fixture({ loadError: { message: "unavailable" } });
   await expect(
-    reconcileGithubInstallationsForUser("fixture-user")
+    reconcileGithubInstallationsForUser("fixture-user", "member", null, deps)
   ).rejects.toThrow("existing GitHub installations");
 });
-it("does not discover App installations in an OAuth-only deployment", async () => {
+
+it("should not discover App installations in an OAuth-only deployment", async () => {
   vi.stubEnv("GITHUB_APP_PRIVATE_KEY", "");
-  count = 2;
-  expect(await reconcileGithubInstallationsForUser("fixture-user")).toEqual({
-    discovered: 0,
-  });
+  const { deps } = fixture();
+  expect(
+    await reconcileGithubInstallationsForUser(
+      "fixture-user",
+      "member",
+      "identity-fixture",
+      deps
+    )
+  ).toEqual({ discovered: 0, checked: false });
+  expect(deps.findInstallation).not.toHaveBeenCalled();
+});
+
+it("should discover orgs beyond the first page of memberships", async () => {
+  const { deps, upserts } = fixture();
+  const firstPage = Array.from({ length: 100 }, (_, index) => ({
+    login: `filler-${index}`,
+  }));
+  deps.request = vi.fn(async (url: string | URL | Request) =>
+    Response.json(
+      new URL(String(url)).searchParams.get("page") === "1"
+        ? firstPage
+        : [{ login: "member-org" }]
+    )
+  ) as unknown as typeof fetch;
+  expect(
+    await reconcileGithubInstallationsForUser(
+      "fixture-user",
+      "member",
+      "identity-fixture",
+      deps
+    )
+  ).toEqual({ discovered: 1, checked: true });
+  expect(upserts.flat().map((row) => row.installation_id)).toEqual([11]);
+  expect(deps.request).toHaveBeenCalledTimes(2);
 });

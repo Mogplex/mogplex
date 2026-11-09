@@ -70,7 +70,7 @@ test("GET /api/auth/user derives connected state from vault-backed OAuth storage
         username: username ?? null,
         token: token ?? null,
       });
-      return { discovered: 2 };
+      return { discovered: 2, checked: true };
     },
     getOAuthToken: async (_userId, provider) =>
       provider === "github" ? "vault-github-token" : null,

@@ -248,9 +248,9 @@ export function createGithubInstallationsGetHandler(
     }
 
     if (
-      (installations?.length ?? 0) === 0 &&
       deps.hasGithubAppConfig() &&
-      profile?.github_username
+      profile?.github_username &&
+      cookieStore.get("github_reconcile_skip")?.value !== "1"
     ) {
       try {
         const result = await deps.reconcileGithubInstallationsForUser(
@@ -260,6 +260,17 @@ export function createGithubInstallationsGetHandler(
         );
         if (result.discovered > 0) {
           cookieStore.delete("github_app_install_pending");
+        }
+        // Discovery calls GitHub per account; skip it on SWR refetches, but
+        // only after GitHub was actually asked.
+        if (result.checked) {
+          cookieStore.set("github_reconcile_skip", "1", {
+            maxAge: 300,
+            path: "/",
+            httpOnly: true,
+            sameSite: "lax",
+            secure: process.env.NODE_ENV === "production",
+          });
         }
         [
           { data: installations, error: installationsError },
