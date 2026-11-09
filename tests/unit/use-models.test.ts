@@ -274,34 +274,50 @@ test("toggleModelPreference warns when success-path revalidation fails", async (
   );
 });
 
-function deferred() {
-  let resolve: (response: Response) => void = () => undefined;
-  const promise = new Promise<Response>((done) => {
+function deferred<T = Response>() {
+  let resolve: (value: T) => void = () => undefined;
+  const promise = new Promise<T>((done) => {
     resolve = done;
   });
   return { promise, resolve };
 }
 
-test("toggleModelPreference saves rapid toggles in click order even with a stale catalog", async () => {
-  const model = buildCatalogModel({
-    id: "provider/rapid-order",
-    is_enabled: false,
-  });
-  const harness = createHarness({ model });
+const settle = () => new Promise((done) => setImmediate(done));
+
+/** A fetch whose PATCHes resolve only when the test says so. */
+function controlledFetch(
+  harness: ReturnType<typeof createHarness>,
+  model: CatalogModel
+) {
   const bodies: boolean[] = [];
-  const pending = [deferred(), deferred()];
+  const pending: Array<{ resolve: (value: Response) => void }> = [];
   const fetchFn: typeof fetch = (_input, init) => {
     const enabled = JSON.parse(String(init?.body)).is_enabled as boolean;
-    const updated = { ...model, is_enabled: enabled };
-    const response = pending[bodies.length];
+    const response = deferred();
+    pending.push(response);
     bodies.push(enabled);
-    return response!.promise.then((value) => {
+    return response.promise.then((value) => {
+      const updated = { ...model, is_enabled: enabled };
       harness.serverData.catalog = [updated];
       harness.serverData.models = enabled ? [updated] : [];
       return value;
     });
   };
-  // Both clicks land before a re-render, so both see the same catalog.
+  const ok = () => new Response(null, { status: 204 });
+  return { bodies, pending, fetchFn, ok };
+}
+
+const revalidationsOf = (harness: ReturnType<typeof createHarness>) =>
+  harness.mutateCalls.filter((call) => call.update === undefined).length;
+
+test("toggleModelPreference saves a click made during an in-flight save after it, using the clicked value", async () => {
+  const model = buildCatalogModel({
+    id: "provider/in-order",
+    is_enabled: false,
+  });
+  const harness = createHarness({ model });
+  const { bodies, pending, fetchFn, ok } = controlledFetch(harness, model);
+  // Both clicks see the same stale catalog, as before a re-render.
   const options = {
     modelId: model.id,
     catalog: [model],
@@ -311,35 +327,25 @@ test("toggleModelPreference saves rapid toggles in click order even with a stale
   };
 
   const first = toggleModelPreference({ ...options, enabled: true });
+  await settle();
   const second = toggleModelPreference({ ...options, enabled: false });
-  await new Promise((done) => setImmediate(done));
-
+  await settle();
   assert.deepEqual(bodies, [true]);
-  pending[0]!.resolve(new Response(null, { status: 204 }));
-  await new Promise((done) => setImmediate(done));
+
+  pending[0]!.resolve(ok());
+  await settle();
   assert.deepEqual(bodies, [true, false]);
-  pending[1]!.resolve(new Response(null, { status: 204 }));
+  pending[1]!.resolve(ok());
   await Promise.all([first, second]);
 
-  const revalidations = harness.mutateCalls.filter(
-    (call) => call.update === undefined
-  );
-  assert.equal(revalidations.length, 1);
   assert.equal(harness.data.catalog[0]?.is_enabled, false);
   assert.equal(harness.toastCalls.length, 0);
 });
 
-test("toggleModelPreference lets a newer click settle the state when an older save fails", async () => {
-  const model = buildCatalogModel({
-    id: "provider/older-failure",
-    is_enabled: false,
-  });
+test("toggleModelPreference skips saves that a newer click replaced before they started", async () => {
+  const model = buildCatalogModel({ id: "provider/skip", is_enabled: false });
   const harness = createHarness({ model });
-  let calls = 0;
-  const fetchFn: typeof fetch = async () => {
-    calls += 1;
-    return new Response(null, { status: calls === 1 ? 500 : 204 });
-  };
+  const { bodies, pending, fetchFn, ok } = controlledFetch(harness, model);
   const options = {
     modelId: model.id,
     catalog: [model],
@@ -348,15 +354,89 @@ test("toggleModelPreference lets a newer click settle the state when an older sa
     toastFn: harness.toastFn,
   };
 
-  await Promise.all([
-    toggleModelPreference({ ...options, enabled: true }),
-    toggleModelPreference({ ...options, enabled: false }),
-  ]);
+  const first = toggleModelPreference({ ...options, enabled: true });
+  await settle();
+  const second = toggleModelPreference({ ...options, enabled: false });
+  const third = toggleModelPreference({ ...options, enabled: true });
+  await settle();
+  pending[0]!.resolve(ok());
+  await settle();
+  pending[1]?.resolve(ok());
+  await Promise.all([first, second, third]);
 
-  assert.equal(calls, 2);
+  assert.deepEqual(bodies, [true, true]);
+  assert.equal(harness.data.catalog[0]?.is_enabled, true);
+});
+
+test("toggleModelPreference keeps a click made during a refresh instead of the refreshed value", async () => {
+  const model = buildCatalogModel({
+    id: "provider/refresh",
+    is_enabled: false,
+  });
+  const harness = createHarness({ model });
+  const { bodies, pending, fetchFn, ok } = controlledFetch(harness, model);
+  const refreshGate = deferred<void>();
+  let gateRefresh = true;
+  const mutate: ToggleOptions["mutate"] = async (update, shouldRevalidate) => {
+    if (update === undefined && gateRefresh) {
+      gateRefresh = false;
+      await refreshGate.promise;
+    }
+    return harness.mutate(update, shouldRevalidate);
+  };
+  const options = {
+    modelId: model.id,
+    catalog: [model],
+    mutate,
+    fetchFn,
+    toastFn: harness.toastFn,
+  };
+
+  const first = toggleModelPreference({ ...options, enabled: true });
+  await settle();
+  pending[0]!.resolve(ok());
+  await settle();
+  // The first save is refreshing; the user clicks again.
+  const second = toggleModelPreference({ ...options, enabled: false });
+  await settle();
+  assert.deepEqual(bodies, [true]);
+
+  refreshGate.resolve();
+  await settle();
+  assert.equal(harness.data.catalog[0]?.is_enabled, false);
+  assert.deepEqual(bodies, [true, false]);
+  pending[1]!.resolve(ok());
+  await Promise.all([first, second]);
+
+  assert.equal(harness.data.catalog[0]?.is_enabled, false);
+  assert.equal(revalidationsOf(harness), 2);
+});
+
+test("toggleModelPreference lets a newer click settle the state when an older save fails", async () => {
+  const model = buildCatalogModel({
+    id: "provider/older-failure",
+    is_enabled: false,
+  });
+  const harness = createHarness({ model });
+  const { pending, fetchFn, ok } = controlledFetch(harness, model);
+  const options = {
+    modelId: model.id,
+    catalog: [model],
+    mutate: harness.mutate,
+    fetchFn,
+    toastFn: harness.toastFn,
+  };
+
+  const first = toggleModelPreference({ ...options, enabled: true });
+  await settle();
+  const second = toggleModelPreference({ ...options, enabled: false });
+  await settle();
+  pending[0]!.resolve(new Response(null, { status: 500 }));
+  await settle();
+  pending[1]!.resolve(ok());
+  await Promise.all([first, second]);
+
   assert.equal(harness.toastCalls.length, 0);
-  assert.equal(
-    harness.mutateCalls.filter((call) => call.update === undefined).length,
-    1
-  );
+  assert.equal(revalidationsOf(harness), 1);
+  assert.equal(harness.data.catalog[0]?.is_enabled, false);
 });

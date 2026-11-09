@@ -117,15 +117,23 @@ function getRollbackRevalidationErrorMessage(error: unknown) {
   return `${getModelPreferenceErrorMessage(error)} ${REVALIDATION_FAILURE_DESCRIPTION}`;
 }
 
-type PreferenceQueue = { latest: number; tail: Promise<unknown> };
+type PreferenceQueue = {
+  latest: number;
+  /** The value of the newest click, re-applied if an older refresh lands. */
+  desired: boolean;
+  tail: Promise<unknown>;
+};
 
-/** Saves per team and model, so rapid toggles reach the server in click order. */
+/**
+ * One chain of saves per team and model. Each step saves and then refreshes
+ * before the next starts, so a refresh never races a newer click's save.
+ */
 const preferenceQueues = new Map<string, PreferenceQueue>();
 
 /**
  * Set a model's enabled state to `enabled`, the value the user just chose.
- * Saves for one model run in order; only the newest one revalidates or rolls
- * back, so an older response can't overwrite a newer click.
+ * A save that a newer click replaced before it started is skipped; only the
+ * newest click rolls back or warns on failure.
  */
 export async function toggleModelPreference({
   modelId,
@@ -147,53 +155,55 @@ export async function toggleModelPreference({
   const current = catalog.find((model) => model.id === modelId);
   if (current?.is_hidden === true) return;
 
-  await mutate(
-    (previous) => buildOptimisticModelsResponse(previous, modelId, enabled),
-    false
-  );
+  const applyOptimistic = (value: boolean) =>
+    mutate(
+      (previous) => buildOptimisticModelsResponse(previous, modelId, value),
+      false
+    );
+  await applyOptimistic(enabled);
 
   const key = `${activeTeamId ?? "personal"}:${modelId}`;
   const queue = preferenceQueues.get(key) ?? {
     latest: 0,
+    desired: enabled,
     tail: Promise.resolve(),
   };
   preferenceQueues.set(key, queue);
   const generation = ++queue.latest;
-  const save = queue.tail.then(() =>
-    patchModelPreference(fetchFn, modelId, enabled, activeTeamId)
-  );
-  queue.tail = save.catch(() => undefined);
+  queue.desired = enabled;
+  const isNewest = () => generation === queue.latest;
 
-  let saved = true;
-  let error: unknown;
-  try {
-    await save;
-  } catch (saveError) {
-    saved = false;
-    error = saveError;
-  }
-  // A newer click owns the final state; it revalidates when it settles.
-  if (generation !== queue.latest) return;
-  preferenceQueues.delete(key);
-
-  if (!saved) {
-    const rolledBack = await revalidateModelsWithFeedback(
-      mutate,
-      toastFn,
-      true,
-      getRollbackRevalidationErrorMessage(error)
-    );
-    if (rolledBack) {
-      toastFn({
-        title: "Model preference not saved",
-        description: getModelPreferenceErrorMessage(error),
-        variant: "destructive",
-      });
+  const step = queue.tail.then(async () => {
+    if (!isNewest()) return;
+    try {
+      await patchModelPreference(fetchFn, modelId, enabled, activeTeamId);
+    } catch (error) {
+      if (!isNewest()) return;
+      const rolledBack = await revalidateModelsWithFeedback(
+        mutate,
+        toastFn,
+        true,
+        getRollbackRevalidationErrorMessage(error)
+      );
+      if (rolledBack) {
+        toastFn({
+          title: "Model preference not saved",
+          description: getModelPreferenceErrorMessage(error),
+          variant: "destructive",
+        });
+      }
+      if (!isNewest()) await applyOptimistic(queue.desired);
+      return;
     }
-    return;
+    await revalidateModelsWithFeedback(mutate, toastFn, false);
+    // A click during the refresh keeps showing its value until its own save.
+    if (!isNewest()) await applyOptimistic(queue.desired);
+  });
+  queue.tail = step.catch(() => undefined);
+  await queue.tail;
+  if (isNewest() && preferenceQueues.get(key) === queue) {
+    preferenceQueues.delete(key);
   }
-
-  await revalidateModelsWithFeedback(mutate, toastFn, false);
 }
 
 export function useModels(
