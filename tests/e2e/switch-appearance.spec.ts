@@ -40,14 +40,25 @@ async function switchAppearance(control: Locator) {
     secondarySurface.style.backgroundColor = "var(--secondary)";
     element.append(secondarySurface);
     const secondaryColor = getComputedStyle(secondarySurface).backgroundColor;
+    secondarySurface.style.backgroundColor = "var(--switch-on)";
+    const onColor = getComputedStyle(secondarySurface).backgroundColor;
+    secondarySurface.remove();
+    const pageColor = getComputedStyle(document.body).backgroundColor;
+    secondarySurface.style.backgroundColor = "var(--ring)";
+    element.append(secondarySurface);
+    const ringColor = getComputedStyle(secondarySurface).backgroundColor;
     secondarySurface.remove();
     return {
       border: style.borderColor,
       background: style.backgroundColor,
       secondaryColor,
-      outlineContrast: contrast(
-        style.borderColor,
-        getComputedStyle(document.body).backgroundColor
+      onColor,
+      ringColor,
+      thumbColor: getComputedStyle(thumb).backgroundColor,
+      outlineContrast: contrast(style.borderColor, pageColor),
+      thumbPageContrast: contrast(
+        getComputedStyle(thumb).backgroundColor,
+        pageColor
       ),
       thumbContrast: contrast(
         getComputedStyle(thumb).backgroundColor,
@@ -64,7 +75,7 @@ async function switchAppearance(control: Locator) {
 }
 
 for (const theme of ["light", "dark"] as const) {
-  test(`${theme} switches use an outlined secondary track without state text and support the keyboard`, async ({
+  test(`${theme} switches show a grey thumb on an outlined track when off and a white thumb on green when on`, async ({
     page,
   }) => {
     await mockTeamSettings(page);
@@ -96,17 +107,27 @@ for (const theme of ["light", "dark"] as const) {
     await expect(control).toBeEnabled();
     const off = await switchAppearance(control);
     expect(off.border).not.toBe("rgba(0, 0, 0, 0)");
-    expect(off.outlineContrast).toBeGreaterThanOrEqual(3);
+    // The off track is deliberately quiet; the thumb carries the 3:1 contrast.
+    expect(off.thumbPageContrast).toBeGreaterThanOrEqual(3);
     expect(off.background).toBe(off.secondaryColor);
     expect(off.thumbContrast).toBeGreaterThanOrEqual(3);
     await expect(control).toHaveText("");
     await control.focus();
     await expect(control).toBeFocused();
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("Shift+Tab");
+    await expect(control).toBeFocused();
+    const focused = await switchAppearance(control);
+    // Keyboard focus recolors the border with --ring, as before the restyle.
+    expect(focused.border).toBe(focused.ringColor);
     await page.keyboard.press("Space");
     await expect(control).toBeChecked();
     await expect(control).toHaveText("");
     const on = await switchAppearance(control);
     expect(on.thumbX).toBeGreaterThan(off.thumbX + 10);
+    expect(on.onColor).not.toBe("rgba(0, 0, 0, 0)");
+    expect(on.background).toBe(on.onColor);
+    expect(on.thumbColor).toBe("rgb(255, 255, 255)");
     expect(on.outlineContrast).toBeGreaterThanOrEqual(3);
     expect(on.thumbContrast).toBeGreaterThanOrEqual(3);
     await control.evaluate((element) => {

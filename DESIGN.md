@@ -208,12 +208,19 @@ behavior. Defaults can be overridden by the owning screen; inspect it first.
   indicator on pages and in portaled dialogs. Native keyboard and picker
   behavior remain available; multiple-select listboxes keep their native
   treatment. Forced-color mode uses the system indicator.
-- **[Switch](./components/ui/switch.tsx):** 36px by 20px capsule with a visible
-  outline and a 16px thumb, matching the medium [Geist Toggle](https://vercel.com/geist/toggle)
-  scale while allowing for the outlined track. Off uses the secondary surface for its track; On
-  uses the primary accent with a fixed near-black thumb (`neutral-11`, an
-  intentional exception for contrast in both themes). Keep text outside the
-  control. Thumb position conveys state alongside color. An invisible surrounding
+- **[Switch](./components/ui/switch.tsx):** 36px by 20px capsule with a 14px
+  thumb. Off is a quiet secondary track with a 2px `border` outline and a grey
+  `neutral-5` thumb; the thumb, not the outline, carries the 3:1 contrast
+  against the page. On is a solid green `--switch-on` track (darker in light
+  theme so it keeps 3:1 against the page) with a white thumb. Every toggle in
+  the app uses this one style. Keep text outside the control. Thumb position
+  conveys state alongside color.
+  The quiet Off track and outline are a deliberate WCAG 1.4.11 exception
+  chosen by Charles (2026-11-09): they sit near 1.2 to 1.4:1 against the page,
+  so the grey thumb (3:1 or more against the page, asserted in
+  `switch-appearance.spec.ts`) is what identifies the control and its state.
+  If this is revisited, hold the Off outline at `--muted-foreground` and keep
+  the `secondary` fill. An invisible surrounding
   hit area keeps the pointer target at least 24px tall.
   Keep the Radix switch semantics, associated label, keyboard focus ring,
   disabled treatment, and reduced-motion behavior.
