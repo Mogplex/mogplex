@@ -3,6 +3,7 @@ import {
   isStdioConnectionPreset,
   needsNativeOAuthMigration,
 } from "./presets";
+import { getOAuthProfile } from "./oauth-profile";
 import { assertSafeOutboundHttpUrl } from "@/lib/security/outbound-url";
 import type { Connection, ConnectionApprovalMode } from "@/lib/types";
 
@@ -32,6 +33,11 @@ const VALID_AUTH_TYPES = new Set([
   "basic",
   "oauth",
 ]);
+
+function optionalHttpUrl(value: unknown, fieldName: string) {
+  const trimmed = optionalTrimmed(value);
+  return trimmed ? ensureHttpUrl(trimmed, fieldName) : undefined;
+}
 
 export class ConnectionValidationError extends Error {
   status: number;
@@ -257,23 +263,21 @@ export function normalizeConnectionCreateInput(
       auth_header: authHeader ?? getDefaultAuthHeader("oauth"),
       mcp_transport: mcpTransport,
       mcp_url: mcpUrl,
-      credentials: normalizeOauthCredentials(credentials),
+      // Registered MCP clients are public PKCE clients with no secret.
+      credentials: credentials
+        ? normalizeOauthCredentials(credentials)
+        : undefined,
       description,
       scope,
       repo_id: repoId,
-      oauth_client_id:
-        optionalTrimmed(raw.oauth_client_id) ??
-        (() => {
-          throw new ConnectionValidationError("oauth_client_id is required");
-        })(),
-      oauth_authorize_url: ensureHttpUrl(
-        asTrimmedString(raw.oauth_authorize_url),
+      // Left empty, these are discovered from the MCP server and its client
+      // is registered on first sign-in (lib/connections/oauth-profile.ts).
+      oauth_client_id: optionalTrimmed(raw.oauth_client_id),
+      oauth_authorize_url: optionalHttpUrl(
+        raw.oauth_authorize_url,
         "oauth_authorize_url"
       ),
-      oauth_token_url: ensureHttpUrl(
-        asTrimmedString(raw.oauth_token_url),
-        "oauth_token_url"
-      ),
+      oauth_token_url: optionalHttpUrl(raw.oauth_token_url, "oauth_token_url"),
       oauth_scopes: optionalTrimmed(raw.oauth_scopes),
     };
   }
@@ -369,7 +373,7 @@ export function isConnectionMisconfigured(
     return true;
   }
   if (connection.auth_type === "oauth") {
-    if (preset?.oauth_config?.registration === "dynamic") {
+    if (getOAuthProfile(connection)?.registration === "dynamic") {
       return false;
     }
     return (

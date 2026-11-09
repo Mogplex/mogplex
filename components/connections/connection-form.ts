@@ -17,6 +17,12 @@ export const CONNECTION_AUTH_OPTIONS = [
   { value: "basic", label: "Basic Auth" },
 ] as const;
 
+/** MCP servers can also sign in through the browser, discovered from the server. */
+export const MCP_CONNECTION_AUTH_OPTIONS = [
+  ...CONNECTION_AUTH_OPTIONS,
+  { value: "oauth", label: "OAuth (browser sign-in)" },
+] as const;
+
 export const INITIAL_CONNECTION_FORM: ConnectionForm = {
   type: "rest_api",
   name: "",

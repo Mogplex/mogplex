@@ -3,6 +3,7 @@ import { assertSafeOutboundHttpUrlWithDns } from "@/lib/security/outbound-url";
 import { encrypt, decrypt } from "./encryption";
 import { updateConnection } from "./service";
 import { getConnectionPreset } from "./presets";
+import { getOAuthProfile } from "./oauth-profile";
 import {
   discoverOAuthMetadata,
   registerOAuthClient,
@@ -109,8 +110,7 @@ export function canPrepareOAuthConnection(connection: Connection): boolean {
 export function getOAuthResourceIndicator(
   connection: Connection
 ): string | undefined {
-  const preset = getConnectionPreset(connection.source_preset);
-  return preset?.oauth_config?.use_resource_indicator &&
+  return getOAuthProfile(connection)?.use_resource_indicator &&
     connection.type === "mcp_server"
     ? (connection.mcp_url ?? undefined)
     : undefined;
@@ -124,19 +124,19 @@ export async function prepareOAuthConnection(
   }
 ): Promise<{ connection: Connection; codeVerifier: string | null }> {
   const preset = getConnectionPreset(connection.source_preset);
-  if (!preset?.oauth_config) {
+  const profile = getOAuthProfile(connection);
+  if (!profile) {
     return { connection, codeVerifier: null };
   }
 
   let nextConnection = { ...connection };
   let metadata: OAuthMetadata | null = null;
-  const oauthScopes =
-    preset.oauth_config.scopes?.join(" ") ?? nextConnection.oauth_scopes;
+  const oauthScopes = profile.scopes?.join(" ") ?? nextConnection.oauth_scopes;
 
   // Older preset rows may predate the pinned MCP URL. Restore the trusted
   // preset endpoint before discovery instead of sending users into a generic
   // OAuth setup failure that can only be fixed by recreating the connection.
-  if (!nextConnection.mcp_url && preset.mcp_url) {
+  if (!nextConnection.mcp_url && preset?.mcp_url) {
     await updateConnection(nextConnection.id, {
       mcp_url: preset.mcp_url,
       mcp_transport: preset.mcp_transport,
@@ -176,8 +176,8 @@ export async function prepareOAuthConnection(
       {
         clientName: "Mogplex",
         clientUri: options.origin,
-        tokenEndpointAuthMethod: preset.oauth_config.token_endpoint_auth_method,
-        scopes: preset.oauth_config.scopes,
+        tokenEndpointAuthMethod: profile.token_endpoint_auth_method,
+        scopes: oauthScopes?.split(" ").filter(Boolean),
       }
     );
 
@@ -216,7 +216,7 @@ export async function prepareOAuthConnection(
 
   return {
     connection: nextConnection,
-    codeVerifier: preset.oauth_config.use_pkce ? generatePkceVerifier() : null,
+    codeVerifier: profile.use_pkce ? generatePkceVerifier() : null,
   };
 }
 

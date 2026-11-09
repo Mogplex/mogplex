@@ -4,6 +4,7 @@ import { useState } from "react"
 import { MAX_MCP_CONNECTIONS } from "@/lib/connections/constants"
 import { toast } from "@/hooks/use-toast"
 import { PasswordInput } from "@/components/ui/password-input"
+import { getConnectionAuthorizationPath } from "@/lib/connections/presets"
 
 const AUTH_OPTIONS = [
   { value: "none", label: "None" },
@@ -76,6 +77,17 @@ export function InlineAddForm({ repoId, onCreated, onCancel, mcpCount }: {
       if (!res.ok) {
         const data = await res.json()
         throw new Error(data.error || "Failed to create connection")
+      }
+      if (type === "mcp_server" && authType === "oauth") {
+        const { connection } = (await res.json().catch(() => ({}))) as {
+          connection?: { id?: string }
+        }
+        if (connection?.id) {
+          window.location.href = getConnectionAuthorizationPath({
+            connectionId: connection.id,
+          })
+          return
+        }
       }
       toast({ variant: "success", title: "Connection created" })
       onCreated()
@@ -169,10 +181,10 @@ export function InlineAddForm({ repoId, onCreated, onCancel, mcpCount }: {
 
       {authType === "oauth" ? (
         <>
-          <input value={oauthClientId} onChange={(e) => setOauthClientId(e.target.value)} placeholder="Client ID" className="w-full px-2 py-1 bg-input border border-border text-[11px] text-foreground rounded" />
-          <PasswordInput label={`${name.trim() || "Connection"} client secret`} value={credentials} onChange={(e) => setCredentials(e.target.value)} placeholder="Client Secret" type="password" className="h-auto w-full px-2 py-1 bg-input border border-border text-[11px] md:text-[11px] text-foreground rounded" />
-          <input value={oauthAuthorizeUrl} onChange={(e) => setOauthAuthorizeUrl(e.target.value)} placeholder="Authorize URL" className="w-full px-2 py-1 bg-input border border-border text-[11px] text-foreground rounded" />
-          <input value={oauthTokenUrl} onChange={(e) => setOauthTokenUrl(e.target.value)} placeholder="Token URL" className="w-full px-2 py-1 bg-input border border-border text-[11px] text-foreground rounded" />
+          <input value={oauthClientId} onChange={(e) => setOauthClientId(e.target.value)} placeholder={type === "mcp_server" ? "Client ID (optional, registered automatically)" : "Client ID"} className="w-full px-2 py-1 bg-input border border-border text-[11px] text-foreground rounded" />
+          <PasswordInput label={`${name.trim() || "Connection"} client secret`} value={credentials} onChange={(e) => setCredentials(e.target.value)} placeholder={type === "mcp_server" ? "Client Secret (optional)" : "Client Secret"} type="password" className="h-auto w-full px-2 py-1 bg-input border border-border text-[11px] md:text-[11px] text-foreground rounded" />
+          <input value={oauthAuthorizeUrl} onChange={(e) => setOauthAuthorizeUrl(e.target.value)} placeholder={type === "mcp_server" ? "Authorize URL (optional, discovered)" : "Authorize URL"} className="w-full px-2 py-1 bg-input border border-border text-[11px] text-foreground rounded" />
+          <input value={oauthTokenUrl} onChange={(e) => setOauthTokenUrl(e.target.value)} placeholder={type === "mcp_server" ? "Token URL (optional, discovered)" : "Token URL"} className="w-full px-2 py-1 bg-input border border-border text-[11px] text-foreground rounded" />
           <input value={oauthScopes} onChange={(e) => setOauthScopes(e.target.value)} placeholder="Scopes (space-separated, optional)" className="w-full px-2 py-1 bg-input border border-border text-[11px] text-foreground rounded" />
         </>
       ) : authType !== "none" ? (
