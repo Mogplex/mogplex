@@ -11,6 +11,7 @@ import {
   hasGithubAppConfig,
 } from "@/lib/github-app";
 import { ensureDefaultWorkspaceForUser } from "@/lib/workspaces";
+import { pruneUnconnectedRepos } from "@/lib/github-repo-prune";
 import {
   applyResourceOwnerScope,
   buildResourceOwnershipInsert,
@@ -468,6 +469,8 @@ export async function syncGithubReposForUser(
       );
       for (const id of ids) authorizedGithubRepoIds.add(id);
     }
+    if (!options.productTeamId)
+      await pruneUnconnectedRepos(userId, authorizedGithubRepoIds.size);
   } else if (oauthToken && allowOAuth) {
     const githubRepos = await fetchAllGithubRepos(oauthToken);
     await upsertGithubReposForUser(userId, githubRepos, {
