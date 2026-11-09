@@ -23,7 +23,9 @@ const defaultRecordRepoSyncDeps: RecordRepoSyncDeps = {
  * Stamp when this installation's full repository list was last synced, for
  * Settings → Repositories. It means "when Mogplex last fetched this
  * installation's repositories from GitHub", whichever workspace (personal or
- * team) asked. Best effort: a failed stamp never fails the sync.
+ * team) asked. An OAuth-only connection has no installation to stamp, so
+ * the toolbar shows no time for it. Best effort: a failed stamp never fails
+ * the sync.
  */
 export async function recordInstallationRepoSync(
   userId: string,

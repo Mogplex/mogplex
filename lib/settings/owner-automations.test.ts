@@ -1,65 +1,16 @@
 import { describe, expect, it } from "vitest";
-import type { Flow, FlowStartFilter } from "@/lib/types";
+import type { FlowStartFilter } from "@/lib/types";
 import {
   automationsForOwner,
-  githubAutomations,
   installationForOwner,
   latestRepoSync,
+  type RepoAutomation,
 } from "./owner-automations";
 
-const flow = (
-  id: string,
-  filter: FlowStartFilter | undefined,
-  overrides: Partial<Flow> = {}
-) =>
-  ({
-    id,
-    name: id,
-    status: "active",
-    source_kind: "github",
-    published_version: {
-      id: `${id}-v1`,
-      flow_id: id,
-      version_number: 1,
-      created_at: "2026-11-09T00:00:00Z",
-      graph: {
-        nodes: [
-          {
-            id: "start",
-            type: "start",
-            position: { x: 0, y: 0 },
-            data: { label: "PR opened", event: "pr_opened", filter },
-          },
-        ],
-        edges: [],
-      },
-    },
-    ...overrides,
-  }) as Pick<
-    Flow,
-    "id" | "name" | "status" | "source_kind" | "published_version"
-  >;
-
-describe("githubAutomations", () => {
-  it("should keep only active, published, GitHub-triggered automations", () => {
-    const automations = githubAutomations([
-      flow("review", { scope: "all" }),
-      flow("paused", { scope: "all" }, { status: "inactive" }),
-      flow("nightly", undefined, { source_kind: "schedule" }),
-      flow("draft", undefined, { published_version: null }),
-    ]);
-
-    expect(automations.map((a) => a.id)).toEqual(["review"]);
-    expect(automations[0].filter).toEqual({ scope: "all" });
-  });
-
-  it("should drop a published graph the router cannot start", () => {
-    const noStart = flow("partial", { scope: "all" });
-    if (noStart.published_version) noStart.published_version.graph.nodes = [];
-
-    expect(githubAutomations([noStart])).toEqual([]);
-  });
-});
+const automationsOf = (
+  entries: Array<[id: string, filter: FlowStartFilter | undefined]>
+): RepoAutomation[] =>
+  entries.map(([id, filter]) => ({ id, name: id, filter }));
 
 describe("automationsForOwner", () => {
   const repos = [
@@ -68,13 +19,13 @@ describe("automationsForOwner", () => {
   ];
 
   it("should match automations whose trigger filter accepts any of the owner's repositories", () => {
-    const automations = githubAutomations([
-      flow("all", { scope: "all", authorFilter: "dependabot_only" }),
-      flow("orgs", { scope: "org" }),
-      flow("personal", { scope: "personal" }),
-      flow("site-only", { scope: "all", repos: ["acme/site"] }),
-      flow("other-repo", { scope: "all", repos: ["zed/x"] }),
-      flow("other-install", { scope: "all", installationIds: [9] }),
+    const automations = automationsOf([
+      ["all", { scope: "all", authorFilter: "dependabot_only" }],
+      ["orgs", { scope: "org" }],
+      ["personal", { scope: "personal" }],
+      ["site-only", { scope: "all", repos: ["acme/site"] }],
+      ["other-repo", { scope: "all", repos: ["zed/x"] }],
+      ["other-install", { scope: "all", installationIds: [9] }],
     ]);
 
     expect(
@@ -83,9 +34,9 @@ describe("automationsForOwner", () => {
   });
 
   it("should treat an unknown account type as a personal account, as the router does", () => {
-    const automations = githubAutomations([
-      flow("orgs", { scope: "org" }),
-      flow("personal", { scope: "personal" }),
+    const automations = automationsOf([
+      ["orgs", { scope: "org" }],
+      ["personal", { scope: "personal" }],
     ]);
 
     for (const accountType of [null, undefined, "Bot"]) {
@@ -96,7 +47,7 @@ describe("automationsForOwner", () => {
   });
 
   it("should match nothing for repositories without an installation", () => {
-    const automations = githubAutomations([flow("all", { scope: "all" })]);
+    const automations = automationsOf([["all", { scope: "all" }]]);
 
     expect(
       automationsForOwner(

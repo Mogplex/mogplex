@@ -3,10 +3,8 @@ import {
   listOwnedFlowsWithSummaries as listOwnedFlowsWithSummariesTest,
 } from "@/lib/flows/test-store";
 import { unwrapRowsOrThrow } from "@/lib/flows/supabase-result";
-import {
-  githubAutomations,
-  type RepoAutomation,
-} from "@/lib/settings/owner-automations";
+import { githubAutomations } from "@/lib/flows/github-automation-triggers";
+import type { RepoAutomation } from "@/lib/settings/owner-automations";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
 /**

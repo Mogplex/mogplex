@@ -140,7 +140,7 @@ export async function dashboard(
         account_login: "alex",
         account_type: "User",
         manage_url: "https://github.com/settings/installations/11",
-        repos_synced_at: "2026-01-01T00:00:00Z",
+        repos_synced_at: null,
       },
       {
         installation_id: 12,

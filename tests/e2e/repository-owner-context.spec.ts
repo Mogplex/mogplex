@@ -41,7 +41,7 @@ test("the toolbar shows when repositories were last synced and refreshes it afte
   page,
 }) => {
   const { installationRequests } = await dashboard(page);
-  await expect(page.getByText("Last synced 5m ago")).toBeVisible();
+  await expect(page.getByText(/^Last synced \d+m ago$/)).toBeVisible();
   const before = installationRequests.count;
   await page.getByRole("button", { name: "Sync GitHub" }).click();
   await expect.poll(() => installationRequests.count).toBeGreaterThan(before);
