@@ -6,6 +6,7 @@ import { NavArrowRight } from "iconoir-react"
 import { useMemberships } from "@/hooks/use-memberships"
 import { ScopeIcon } from "@/components/scope-icon"
 import { formatTeamRole } from "@/lib/team-role-label"
+import { scopedHref } from "@/lib/scoped-href"
 
 /**
  * Personal Settings → Teams: one row per team. Members, keys, models, and
@@ -61,7 +62,7 @@ export function TeamsListSection() {
             {teams.map((team) => (
               <li key={team.id}>
                 <Link
-                  href={`/${team.slug}/settings/members`}
+                  href={scopedHref(team.slug, "/settings/members")}
                   className="flex items-center gap-3 px-4 py-3 hover:bg-secondary/60"
                 >
                   <ScopeIcon

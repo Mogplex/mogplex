@@ -50,11 +50,18 @@ export function RepositoriesSection() {
     () => [...new Set(inventory.map(repoOwner))].sort(),
     [inventory]
   );
-  const { query, connected, removed } = filterRepositories(
-    inventory,
-    { owner, search }
+  const { query, connected, removed, ownerRepos } = useMemo(
+    () => ({
+      ...filterRepositories(inventory, { owner, search }),
+      ownerRepos: activeOwnerRepos(inventory, owner),
+    }),
+    [inventory, owner, search]
   );
-  const ownerRepos = activeOwnerRepos(inventory, owner);
+  const selfLogin = user?.github_username;
+  const groups = useMemo(
+    () => groupRepositoriesByOwner(connected, selfLogin),
+    [connected, selfLogin]
+  );
   const notConnectedRepos = notConnected.filter((repo) => !repo.is_hidden);
   const { removalProgress } = admin;
   const removingLabel = removalProgress
@@ -182,7 +189,7 @@ export function RepositoriesSection() {
           </p>
         ) : (
           <div aria-label="Connected repositories" role="region" className="space-y-4">
-            {groupRepositoriesByOwner(connected, user?.github_username).map(
+            {groups.map(
               (group) => (
                 <RepositoryOwnerGroup
                   key={group.owner}

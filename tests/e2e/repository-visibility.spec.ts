@@ -1,13 +1,25 @@
 import { expect, test, type Page } from "@playwright/test";
 import { enableScopedE2EAuth } from "./helpers/auth";
 import {
+  connectedUser,
   fulfillJson,
   mockBaseChrome,
 } from "./helpers/automation-control-plane-fixtures";
 
-async function dashboard(page: Page, failedIds: string[] = []) {
+async function dashboard(
+  page: Page,
+  failedIds: string[] = [],
+  githubUsername?: string
+) {
   await enableScopedE2EAuth(page);
   await mockBaseChrome(page);
+  if (githubUsername) {
+    await page.route("**/api/auth/user", (route) =>
+      fulfillJson(route, {
+        user: { ...connectedUser, github_username: githubUsername },
+      })
+    );
+  }
   // The repos API marks App coverage per repository; the legacy rows came
   // from the old OAuth sync and have no installation.
   const app = {
@@ -423,4 +435,15 @@ test("Show removed counts only the removed repositories the filters would show",
   await expect(
     page.getByRole("button", { name: "Show removed (1)" })
   ).toBeVisible();
+});
+
+test("the signed-in GitHub account's repositories are listed first", async ({
+  page,
+}) => {
+  await dashboard(page, [], "team");
+  await expect(connected(page).getByRole("heading", { level: 2 })).toHaveText([
+    "team",
+    "acme",
+    "alex",
+  ]);
 });

@@ -228,7 +228,7 @@ export function TopBar() {
                 {activeTeam && (
                   <span
                     data-testid="top-bar-active-team"
-                    className="border-border bg-card text-foreground/80 hover:border-border-dim flex h-7 items-center gap-1.5 rounded-lg border pr-2.5 pl-1"
+                    className="border-border bg-card text-foreground/80 flex h-7 items-center gap-1.5 rounded-lg border pr-2.5 pl-1"
                   >
                     <ScopeIcon
                       name={activeTeam.name}
