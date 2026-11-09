@@ -23,6 +23,32 @@ describe("review verdict merge guards", () => {
       getPrReviewAutoMergeBlockReason({ ...reviewed, reviewOutcome: null })
     ).toBe("Mogplex review did not produce a no-issues verdict");
   });
+  it("rejects a report with a warning even when hasIssues is false", () => {
+    const finding = {
+      title: "Unchecked null",
+      body: "Body.",
+      path: "lib/a.ts",
+      line: 4,
+    };
+    expect(
+      getPrReviewAutoMergeBlockReason({
+        ...reviewed,
+        reviewOutcome: {
+          hasIssues: false,
+          findings: [{ ...finding, severity: "warning" }],
+        },
+      })
+    ).toBe("Mogplex review reported issues");
+    expect(
+      getPrReviewAutoMergeBlockReason({
+        ...reviewed,
+        reviewOutcome: {
+          hasIssues: false,
+          findings: [{ ...finding, severity: "suggestion" }],
+        },
+      })
+    ).toBeNull();
+  });
   it("allows only a matching, filed clean report", () => {
     expect(
       getPrReviewAutoMergeBlockReason({

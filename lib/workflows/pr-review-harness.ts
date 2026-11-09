@@ -240,11 +240,3 @@ export function buildPrReviewGithubReviewBody(input: {
   }
   return parts.join("\n\n").trim();
 }
-
-export function shouldRetryPrReviewWithoutInlineComments(error: unknown) {
-  if (!(error instanceof Error)) {
-    return false;
-  }
-
-  return /GitHub PR review publish failed \(422\):/i.test(error.message);
-}

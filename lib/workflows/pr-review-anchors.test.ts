@@ -29,6 +29,15 @@ describe("parsePatchRightLines", () => {
 
     expect(parsePatchRightLines(patch)).toEqual([1, 2, 3, 4, 41, 42]);
   });
+
+  it("should stop at the end of each hunk when the patch ends in a newline", () => {
+    expect(parsePatchRightLines("@@ -1,1 +1,2 @@\n a\n+b\n")).toEqual([1, 2]);
+    expect(parsePatchRightLines("@@ -3 +3 @@\n-x\n+y\n")).toEqual([3]);
+  });
+
+  it("should list no lines for a deleted file", () => {
+    expect(parsePatchRightLines("@@ -1,2 +0,0 @@\n-a\n-b")).toEqual([]);
+  });
 });
 
 describe("anchorReviewFindings", () => {

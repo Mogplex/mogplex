@@ -32,7 +32,10 @@ export function flowMergePolicyScope(
 }
 
 export function getPrReviewAutoMergeBlockReason(input: {
-  reviewOutcome: Pick<ReviewOutcome, "hasIssues"> | null;
+  reviewOutcome:
+    | (Pick<ReviewOutcome, "hasIssues"> &
+        Partial<Pick<ReviewOutcome, "findings">>)
+    | null;
   /**
    * True when "no issues" is only the default for a run that never filed its
    * structured report. Optional so an omitted value can never unblock a merge
@@ -48,8 +51,13 @@ export function getPrReviewAutoMergeBlockReason(input: {
   if (input.verdictMissing) {
     return "Mogplex review finished without a structured verdict";
   }
-  if (input.reviewOutcome?.hasIssues === false) return null;
-  return input.reviewOutcome?.hasIssues === true
+  // A warning or critical finding blocks the merge even when the model left
+  // hasIssues false: the check run already treats that report as blocking.
+  const blockingFinding = input.reviewOutcome?.findings?.some(
+    (finding) => finding.severity !== "suggestion"
+  );
+  if (input.reviewOutcome?.hasIssues === false && !blockingFinding) return null;
+  return input.reviewOutcome?.hasIssues === true || blockingFinding
     ? "Mogplex review reported issues"
     : "Mogplex review did not produce a no-issues verdict";
 }
