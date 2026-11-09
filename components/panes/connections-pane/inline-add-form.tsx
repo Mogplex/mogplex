@@ -1,7 +1,6 @@
 "use client"
 
 import { useState } from "react"
-import { MAX_MCP_CONNECTIONS } from "@/lib/connections/constants"
 import { toast } from "@/hooks/use-toast"
 import { PasswordInput } from "@/components/ui/password-input"
 
@@ -13,11 +12,10 @@ const AUTH_OPTIONS = [
   { value: "oauth", label: "OAuth" },
 ]
 
-export function InlineAddForm({ repoId, onCreated, onCancel, mcpCount }: {
+export function InlineAddForm({ repoId, onCreated, onCancel }: {
   repoId?: string
   onCreated: () => void
   onCancel: () => void
-  mcpCount: number
 }) {
   const [type, setType] = useState<"rest_api" | "mcp_server">("rest_api")
   const [scope, setScope] = useState<"global" | "project">(repoId ? "project" : "global")
@@ -33,8 +31,6 @@ export function InlineAddForm({ repoId, onCreated, onCancel, mcpCount }: {
   const [oauthTokenUrl, setOauthTokenUrl] = useState("")
   const [oauthScopes, setOauthScopes] = useState("")
   const [saving, setSaving] = useState(false)
-
-  const mcpAtCap = mcpCount >= MAX_MCP_CONNECTIONS
 
   const handleCreate = async () => {
     if (!name) return
@@ -96,12 +92,10 @@ export function InlineAddForm({ repoId, onCreated, onCancel, mcpCount }: {
           REST API
         </button>
         <button
-          onClick={() => !mcpAtCap && setType("mcp_server")}
-          disabled={mcpAtCap}
-          className={`flex-1 px-2 py-1.5 text-[11px] rounded border ${type === "mcp_server" ? "border-purple-400 bg-purple-400/10 text-purple-400" : "border-border text-muted-foreground"} disabled:opacity-40`}
-          title={mcpAtCap ? `Max ${MAX_MCP_CONNECTIONS} MCPs reached` : undefined}
+          onClick={() => setType("mcp_server")}
+          className={`flex-1 px-2 py-1.5 text-[11px] rounded border ${type === "mcp_server" ? "border-purple-400 bg-purple-400/10 text-purple-400" : "border-border text-muted-foreground"}`}
         >
-          MCP Server{mcpAtCap ? " (at cap)" : ""}
+          MCP Server
         </button>
       </div>
 

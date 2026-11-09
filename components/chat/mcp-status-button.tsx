@@ -5,7 +5,6 @@ import Link from "next/link"
 import { useParams } from "next/navigation"
 import { useConnections } from "@/hooks/use-connections"
 import { scopedHref } from "@/lib/scoped-href"
-import { MAX_MCP_CONNECTIONS } from "@/lib/connections/constants"
 import { getConnectionStatusLabel } from "@/lib/connections/status"
 import type { ConnectionHealthStatus } from "@/lib/connections/status"
 import { summarizeMcpStatus } from "@/lib/connections/status-summary"
@@ -46,7 +45,6 @@ export function McpStatusButton({ repoId }: { repoId?: string }) {
   const {
     mcpServers,
     overrides,
-    resolvedMcpCount,
     isLoading,
     setEnabled,
     setExcluded,
@@ -87,20 +85,6 @@ export function McpStatusButton({ repoId }: { repoId?: string }) {
 
   const summary = summarizeMcpStatus(effectiveMcpServers)
 
-  // Server enforces two separate caps: project scope checks the repo-resolved
-  // count; global scope checks the user's total enabled-global count. Mirror
-  // that split on the client so the Add trigger and form submit reflect the
-  // scope the user actually picks, not just the repo-resolved view.
-  const globalEnabledMcpCount = mcpServers.filter(
-    s => s.scope === "global" && s.is_enabled,
-  ).length
-  const projectResolvedMcpCount =
-    resolvedMcpCount ?? effectiveMcpServers.filter(s => s.is_enabled).length
-  const globalAtCap = globalEnabledMcpCount >= MAX_MCP_CONNECTIONS
-  const projectAtCap = projectResolvedMcpCount >= MAX_MCP_CONNECTIONS
-  // The Add trigger opens the form; inside the form the user picks a scope.
-  // Only block the trigger when every scope they could pick is already full.
-  const mcpAtCap = repoId ? globalAtCap && projectAtCap : globalAtCap
 
   const closeMenu = useCallback(() => {
     setOpen(false)
@@ -316,8 +300,6 @@ export function McpStatusButton({ repoId }: { repoId?: string }) {
             {showAdd ? (
               <AddMcpForm
                 allowScopeSelection={Boolean(repoId)}
-                globalAtCap={globalAtCap}
-                projectAtCap={projectAtCap}
                 onCancel={() => setShowAdd(false)}
                 onSubmit={async values => {
                   setErrorMsg(null)
@@ -333,12 +315,10 @@ export function McpStatusButton({ repoId }: { repoId?: string }) {
             ) : (
               <div className="flex items-center justify-between px-3 py-2">
                 <button
-                  onClick={() => !mcpAtCap && setShowAdd(true)}
-                  disabled={mcpAtCap}
-                  title={mcpAtCap ? `Max ${MAX_MCP_CONNECTIONS} enabled MCPs reached` : undefined}
-                  className="text-[11px] text-accent-blue hover:underline disabled:opacity-50 disabled:no-underline disabled:cursor-not-allowed"
+                  onClick={() => setShowAdd(true)}
+                  className="text-[11px] text-accent-blue hover:underline"
                 >
-                  + Add MCP server{mcpAtCap ? " (at cap)" : ""}
+                  + Add MCP server
                 </button>
                 <Link
                   href={scopedHref(scope, "/connections")}

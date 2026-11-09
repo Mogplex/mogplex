@@ -6,10 +6,8 @@ import {
   createConnection,
   updateConnection,
   deleteConnection,
-  countResolvedMcps,
   findUserConnectionBySourcePreset,
 } from "@/lib/connections/service";
-import { MAX_MCP_CONNECTIONS } from "@/lib/connections/constants";
 import { requireUserId } from "@/lib/auth";
 import { logConnectionEvent } from "@/lib/connections/logging";
 import { isConnectionsEncryptionConfigError } from "@/lib/connections/encryption";
@@ -121,34 +119,6 @@ export function createConnectionHandlers(
               connection: existing,
             },
             { status: 409 }
-          );
-        }
-      }
-
-      // Enforce MCP cap: for project-scoped, check resolved count for that repo;
-      // for global, check total enabled MCP count
-      if (body.type === "mcp_server") {
-        let mcpCount: number;
-        if (body.scope === "project" && body.repo_id) {
-          mcpCount = await countResolvedMcps(userId, body.repo_id);
-        } else {
-          const existing = await getAllUserConnections(userId);
-          mcpCount = existing.filter(
-            (c) => c.type === "mcp_server" && c.is_enabled
-          ).length;
-        }
-        if (mcpCount >= MAX_MCP_CONNECTIONS) {
-          logConnectionEvent("connection_create_failed", {
-            userId,
-            presetId: body.source_preset ?? null,
-            connectionType: body.type,
-            authType: body.auth_type,
-            repoId: body.repo_id ?? null,
-            reason: "mcp_cap_reached",
-          });
-          return NextResponse.json(
-            { error: `Maximum ${MAX_MCP_CONNECTIONS} MCP connections allowed` },
-            { status: 400 }
           );
         }
       }
