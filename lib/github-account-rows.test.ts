@@ -19,8 +19,8 @@ describe("buildGithubAccountRows", () => {
     const rows = buildGithubAccountRows(
       [installation({ account_login: "Acme" })],
       [
-        { login: "acme", kind: "org" },
-        { login: "alex", kind: "personal" },
+        { login: "acme", kind: "org", github_installation_id: 1 },
+        { login: "alex", kind: "personal", github_installation_id: null },
       ]
     );
 
@@ -35,7 +35,7 @@ describe("buildGithubAccountRows", () => {
   it("should list connected accounts before ones still to connect", () => {
     const rows = buildGithubAccountRows(
       [installation({ account_login: "zeta" })],
-      [{ login: "beta", kind: "org" }]
+      [{ login: "beta", kind: "org", github_installation_id: null }]
     );
 
     expect(rows.map((row) => row.login)).toEqual(["zeta", "beta"]);
@@ -77,5 +77,30 @@ describe("buildGithubAccountRows", () => {
       ["alex", "Personal account"],
       ["Installation 42", "Account"],
     ]);
+  });
+});
+
+describe("buildGithubAccountRows after a reinstall or a failed request", () => {
+  it("should keep only the newest installation row for an account", () => {
+    const rows = buildGithubAccountRows(
+      [
+        installation({ id: "new", installation_id: 2, synced_repo_count: 3 }),
+        installation({ id: "old", installation_id: 1, account_login: "ACME" }),
+      ],
+      []
+    );
+
+    expect(
+      rows.map((row) => [row.key, row.connection?.syncedRepoCount])
+    ).toEqual([["installation-new", 3]]);
+  });
+
+  it("should show an installed account as connected when installations failed to load", () => {
+    const rows = buildGithubAccountRows(
+      [],
+      [{ login: "acme", kind: "org", github_installation_id: 7 }]
+    );
+
+    expect(rows[0]?.connection).toMatchObject({ syncedRepoCount: null });
   });
 });

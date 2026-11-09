@@ -17,6 +17,7 @@ type InstallationInput = {
 type OwnerInput = {
   login: string;
   kind: "personal" | "org";
+  github_installation_id: number | null;
 };
 
 export type GithubAccountKind = "Personal account" | "Organization" | "Account";
@@ -25,9 +26,12 @@ export type GithubAccountRow = {
   key: string;
   login: string;
   kind: GithubAccountKind;
-  /** Present when the Mogplex app is installed and linked to this user. */
+  /**
+   * Present when the Mogplex app is installed and linked to this user.
+   * `syncedRepoCount` is null when only the owners list knows about it.
+   */
   connection: {
-    syncedRepoCount: number;
+    syncedRepoCount: number | null;
     repoPreview: string[];
     moreRepoCount: number;
     manageUrl: string | null;
@@ -45,7 +49,8 @@ function kindFromScopeLabel(scopeLabel: string): GithubAccountKind {
 
 /**
  * Connected accounts first, then the accounts the user could still connect,
- * each alphabetical. An account that appears in both lists shows once.
+ * each alphabetical. An account shows once: installations arrive newest
+ * first, so a stale row left by a reinstall loses to the live one.
  */
 export function buildGithubAccountRows(
   installations: InstallationInput[],
@@ -58,6 +63,7 @@ export function buildGithubAccountRows(
     const login =
       installation.account_login ||
       `Installation ${installation.installation_id}`;
+    if (connectedLogins.has(login.toLowerCase())) continue;
     connectedLogins.add(login.toLowerCase());
     connected.push({
       key: `installation-${installation.id}`,
@@ -80,11 +86,25 @@ export function buildGithubAccountRows(
   const unconnected: GithubAccountRow[] = [];
   for (const owner of owners) {
     if (connectedLogins.has(owner.login.toLowerCase())) continue;
-    unconnected.push({
+    const row: GithubAccountRow = {
       key: `owner-${owner.kind}-${owner.login}`,
       login: owner.login,
       kind: owner.kind === "personal" ? "Personal account" : "Organization",
       connection: null,
+    };
+    // Still connected when the installations request failed or lags.
+    if (owner.github_installation_id == null) {
+      unconnected.push(row);
+      continue;
+    }
+    connected.push({
+      ...row,
+      connection: {
+        syncedRepoCount: null,
+        repoPreview: [],
+        moreRepoCount: 0,
+        manageUrl: null,
+      },
     });
   }
 

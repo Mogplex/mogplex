@@ -29,6 +29,13 @@ type AccountSectionProps = {
 const BUTTON_CLASS =
   "inline-flex rounded-md border border-border px-3 py-2 text-sm text-foreground hover:bg-secondary"
 
+function connectionSummary(connection: GithubAccountRow["connection"]) {
+  if (!connection) return " · Not connected"
+  if (connection.syncedRepoCount === null) return " · Connected"
+  if (connection.syncedRepoCount === 0) return " · Connected, no repos synced yet"
+  return ` · ${connection.syncedRepoCount} repo${connection.syncedRepoCount === 1 ? "" : "s"} in Mogplex`
+}
+
 function GithubAccountItem({
   account,
   trackConnectionStart,
@@ -43,9 +50,7 @@ function GithubAccountItem({
         <div className="text-sm text-foreground">{account.login}</div>
         <div className="mt-1 text-[11px] leading-5 text-muted-foreground">
           {account.kind}
-          {connection
-            ? ` · ${connection.syncedRepoCount} repo${connection.syncedRepoCount === 1 ? "" : "s"} in Mogplex`
-            : " · Not connected"}
+          {connectionSummary(connection)}
         </div>
         {connection && connection.repoPreview.length > 0 && (
           <div className="mt-1 text-[11px] leading-5 text-muted-foreground">
@@ -75,7 +80,7 @@ function GithubAccountItem({
           Manage on GitHub
         </a>
       )}
-      {connection && !connection.manageUrl && (
+      {connection && connection.syncedRepoCount !== null && !connection.manageUrl && (
         <div className="text-[11px] text-muted-foreground">
           Manage in GitHub settings unavailable until installation metadata is refreshed
         </div>

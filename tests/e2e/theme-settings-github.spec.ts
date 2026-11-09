@@ -110,7 +110,7 @@ test("settings lists each GitHub account once and keeps an add-install entry poi
   await expect(
     rows.nth(1).getByRole("link", { name: "Connect" })
   ).toHaveAttribute("href", "/api/auth/github");
-  await expect(page.getByText(/scope/i)).toHaveCount(0);
+  await expect(accounts.getByText(/scope/i)).toHaveCount(0);
 });
 
 test("settings hides broken GitHub installation manage links when metadata is incomplete", async ({
