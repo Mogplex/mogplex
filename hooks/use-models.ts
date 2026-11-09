@@ -10,9 +10,18 @@ import { toast } from "@/hooks/use-toast";
 import type { AIModel } from "@/lib/types";
 import type { MutatorOptions } from "swr";
 
-const fetcher = (url: string, activeTeamId: string | null) =>
+/**
+ * How long one models request may take before it fails. A toggle's save and
+ * its refresh both sit in the per-model save chain, so a request that never
+ * settled would otherwise hold back every later click.
+ */
+export const MODELS_REQUEST_TIMEOUT_MS = 30_000;
+
+/** Load the models list; bounded so a hung refresh can't stall toggles. */
+export const fetchModelsResponse = (url: string, activeTeamId: string | null) =>
   fetchJsonObject<ModelsResponse>(url, "Failed to load models", {
     headers: getActiveTeamRequestHeaders(undefined, activeTeamId),
+    signal: AbortSignal.timeout(MODELS_REQUEST_TIMEOUT_MS),
   });
 
 type CatalogModel = AIModel & {
@@ -89,10 +98,12 @@ async function patchModelPreference(
   fetchFn: ModelsFetch,
   modelId: string,
   isEnabled: boolean,
-  activeTeamId: string | null
+  activeTeamId: string | null,
+  timeoutMs: number
 ) {
   const response = await fetchFn("/api/models", {
     method: "PATCH",
+    signal: AbortSignal.timeout(timeoutMs),
     headers: getActiveTeamRequestHeaders(
       {
         "Content-Type": "application/json",
@@ -143,6 +154,7 @@ export async function toggleModelPreference({
   activeTeamId = null,
   fetchFn = fetch,
   toastFn = toast,
+  saveTimeoutMs = MODELS_REQUEST_TIMEOUT_MS,
 }: {
   modelId: string;
   enabled: boolean;
@@ -151,6 +163,7 @@ export async function toggleModelPreference({
   activeTeamId?: string | null;
   fetchFn?: ModelsFetch;
   toastFn?: ModelsToast;
+  saveTimeoutMs?: number;
 }) {
   const current = catalog.find((model) => model.id === modelId);
   if (current?.is_hidden === true) return;
@@ -160,8 +173,8 @@ export async function toggleModelPreference({
       (previous) => buildOptimisticModelsResponse(previous, modelId, value),
       false
     );
-  await applyOptimistic(enabled);
 
+  // Claim a place in line before any await, so click order decides it.
   const key = `${activeTeamId ?? "personal"}:${modelId}`;
   const queue = preferenceQueues.get(key) ?? {
     latest: 0,
@@ -172,11 +185,18 @@ export async function toggleModelPreference({
   const generation = ++queue.latest;
   queue.desired = enabled;
   const isNewest = () => generation === queue.latest;
+  const shown = applyOptimistic(enabled);
 
-  const step = queue.tail.then(async () => {
+  const step = Promise.all([queue.tail, shown]).then(async () => {
     if (!isNewest()) return;
     try {
-      await patchModelPreference(fetchFn, modelId, enabled, activeTeamId);
+      await patchModelPreference(
+        fetchFn,
+        modelId,
+        enabled,
+        activeTeamId,
+        saveTimeoutMs
+      );
     } catch (error) {
       if (!isNewest()) return;
       const rolledBack = await revalidateModelsWithFeedback(
@@ -218,7 +238,7 @@ export function useModels(
   const { data, error, isLoading, mutate } = useSWR<ModelsResponse>(
     ["/api/models", activeTeamId ?? "personal"],
     ([url, teamKey]) =>
-      fetcher(url, teamKey === "personal" ? null : String(teamKey)),
+      fetchModelsResponse(url, teamKey === "personal" ? null : String(teamKey)),
     { revalidateOnFocus: false, refreshInterval: 0 }
   );
 
