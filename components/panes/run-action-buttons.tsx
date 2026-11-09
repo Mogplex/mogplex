@@ -55,7 +55,15 @@ export function RunActionButtons({
             disabled={disabled}
             onClick={(event) => {
               event.stopPropagation()
-              void onRunAction(run.id, descriptor.action)
+              void Promise.resolve()
+                .then(() => onRunAction(run.id, descriptor.action))
+                .catch((error) => {
+                  console.error("[flows] run action failed", {
+                    jobId: run.id,
+                    action: descriptor.action,
+                    error: error instanceof Error ? error.message : "Unknown error",
+                  })
+                })
             }}
             className={descriptor.emphasis === "destructive" ? "shadow-none" : undefined}
           >

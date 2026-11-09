@@ -58,6 +58,17 @@ test("session persistence isolates failed keys and flushes on visibilitychange",
   try {
     sessionPersistStorage.setItem("quota-exceeded", "first");
     sessionPersistStorage.setItem("healthy", "second");
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      value: "visible",
+    });
+    window.dispatchEvent(new window.Event("visibilitychange"));
+    assert.deepEqual(writes, []);
+
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      value: "hidden",
+    });
     window.dispatchEvent(new window.Event("visibilitychange"));
 
     assert.deepEqual(writes, [["healthy", "second"]]);
@@ -70,4 +81,35 @@ test("session persistence isolates failed keys and flushes on visibilitychange",
   } finally {
     console.error = originalConsoleError;
   }
+});
+
+test("session persistence reads pending values and flushes or removes them on pagehide", async () => {
+  const values = new Map<string, string>([["sessions", "previous"]]);
+  const writes: Array<[string, string]> = [];
+  globalThis.localStorage = {
+    getItem: (name) => values.get(name) ?? null,
+    setItem: (name, value) => {
+      values.set(name, value);
+      writes.push([name, value]);
+    },
+    removeItem: (name) => {
+      values.delete(name);
+    },
+    clear: () => values.clear(),
+    key: () => null,
+    length: 0,
+  };
+  const { sessionPersistStorage } =
+    await import("../../hooks/session-persist-storage");
+
+  sessionPersistStorage.setItem("sessions", "latest");
+  assert.equal(sessionPersistStorage.getItem("sessions"), "latest");
+  window.dispatchEvent(new window.Event("pagehide"));
+  assert.deepEqual(writes, [["sessions", "latest"]]);
+
+  sessionPersistStorage.setItem("sessions", "must-not-resurrect");
+  sessionPersistStorage.removeItem("sessions");
+  window.dispatchEvent(new window.Event("pagehide"));
+  assert.equal(sessionPersistStorage.getItem("sessions"), null);
+  assert.deepEqual(writes, [["sessions", "latest"]]);
 });

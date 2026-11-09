@@ -21,7 +21,7 @@ function flushPendingWrites() {
 }
 
 export const sessionPersistStorage: StateStorage = {
-  getItem: (name) => localStorage.getItem(name),
+  getItem: (name) => pendingWrites.get(name) ?? localStorage.getItem(name),
   setItem: (name, value) => {
     pendingWrites.set(name, value);
     if (flushTimer) clearTimeout(flushTimer);
@@ -35,5 +35,7 @@ export const sessionPersistStorage: StateStorage = {
 
 if (typeof window !== "undefined") {
   window.addEventListener("pagehide", flushPendingWrites);
-  window.addEventListener("visibilitychange", flushPendingWrites);
+  window.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") flushPendingWrites();
+  });
 }

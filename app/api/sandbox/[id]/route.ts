@@ -293,6 +293,8 @@ export function createSandboxDeleteHandler(
           healthStatus: "stopped",
           stopReason: "manual",
           fromStatuses: DELETE_ACTIVE_FROM_STATUSES,
+          expectedSandboxId: loaded.record.sandbox_id,
+          expectedLastBootStartedAt: loaded.record.last_boot_started_at ?? null,
         });
       } catch (stopError) {
         console.error(
