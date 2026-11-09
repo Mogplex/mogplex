@@ -132,10 +132,10 @@ test("repair-jobs selects trigger_id and counts unsupported pending runs as skip
   const body = await response.json();
 
   assert.match(selectedColumns, /\btrigger_id\b/);
-  assert.deepEqual(startedJobIds, ["job-1"]);
+  assert.deepEqual(startedJobIds, ["job-1", "trigger-flow"]);
   assert.equal(body.scanned, 3);
-  assert.equal(body.skipped, 2);
-  assert.equal(body.started, 1);
+  assert.equal(body.skipped, 1);
+  assert.equal(body.started, 2);
 });
 
 test("repair-jobs returns consistent counters for an empty batch", async () => {

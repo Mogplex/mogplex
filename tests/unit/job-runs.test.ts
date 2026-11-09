@@ -120,9 +120,9 @@ test("only failed flow-backed runs are requeueable", () => {
     isRequeueableJobRun({
       status: "failed",
       flow_id: "flow-1",
-      trigger_id: "legacy-trigger",
+      trigger_id: "trigger-1",
     }),
-    false
+    true
   );
   assert.equal(
     isRequeueableJobRun({ status: "success", flow_id: "flow-1" }),

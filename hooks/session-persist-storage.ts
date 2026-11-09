@@ -8,7 +8,14 @@ function flushPendingWrites() {
   if (flushTimer) clearTimeout(flushTimer);
   flushTimer = null;
   for (const [name, value] of pendingWrites) {
-    localStorage.setItem(name, value);
+    try {
+      localStorage.setItem(name, value);
+    } catch (error) {
+      console.error("[session-persist] failed to write", {
+        name,
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
   }
   pendingWrites.clear();
 }
@@ -28,4 +35,5 @@ export const sessionPersistStorage: StateStorage = {
 
 if (typeof window !== "undefined") {
   window.addEventListener("pagehide", flushPendingWrites);
+  window.addEventListener("visibilitychange", flushPendingWrites);
 }

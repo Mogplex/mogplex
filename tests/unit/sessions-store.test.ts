@@ -116,6 +116,39 @@ test("pane callbacks keep their originating session when the active session chan
   }
 });
 
+test("split resize frames coalesce persisted tree updates", async (t) => {
+  const useSessionsStore = await resetSessionsStore();
+  const { installControlHookDom } = await import("../support/control-hook-dom");
+  const cleanup = installControlHookDom();
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const { renderHook, act } = await import("@testing-library/react");
+  const { useSplitPanes } = await import("../../hooks/use-split-panes");
+  const updatePaneTree = useSessionsStore.getState().updatePaneTree;
+  let updateCount = 0;
+  useSessionsStore.setState({
+    updatePaneTree: (tree, activeId, options) => {
+      updateCount += 1;
+      updatePaneTree(tree, activeId, options);
+    },
+  });
+  const view = renderHook(() => useSplitPanes());
+
+  try {
+    await act(async () => {
+      for (let frame = 0; frame < 20; frame += 1) {
+        view.result.current.updateSplitSizes("split-1", [frame, 100 - frame]);
+      }
+    });
+    assert.equal(updateCount, 1);
+    await act(async () => t.mock.timers.tick(100));
+    assert.equal(updateCount, 2);
+  } finally {
+    view.unmount();
+    t.mock.timers.reset();
+    cleanup();
+  }
+});
+
 test("getPreferredWorkspaceSession falls back to the first workspace session when the active session is blank", async () => {
   const { getPreferredWorkspaceSession } =
     await import("../../hooks/use-sessions");

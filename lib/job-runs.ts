@@ -53,7 +53,7 @@ export function isRepairableJobRun(
 export function isExecutableJobRunSource(
   run: Pick<JobRunStateFields, "flow_id" | "trigger_id">
 ) {
-  return Boolean(run.flow_id) && !run.trigger_id;
+  return Boolean(run.flow_id);
 }
 
 export function isRequeueableJobRun(

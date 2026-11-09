@@ -105,7 +105,7 @@ export function SessionBar() {
                   },
                 ]
               : []),
-            ...(renderedSessions.length > 1
+            ...(sessions.length > 1
               ? [
                   { type: "separator" as const },
                   { type: "item" as const, label: "Close", onSelect: () => closeSession(session.id), destructive: true },
@@ -147,7 +147,7 @@ export function SessionBar() {
                     {session.index}:{session.name}
                   </span>
                 )}
-                {renderedSessions.length > 1 && (
+                {sessions.length > 1 && (
                   <button
                     onClick={(e) => {
                       e.stopPropagation()

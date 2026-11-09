@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { installControlHookDom } from "../support/control-hook-dom";
+
+const cleanupDom = installControlHookDom();
+test.after(cleanupDom);
 
 test("session persistence coalesces writes and keeps the latest state", async () => {
   const writes: Array<[string, string]> = [];
@@ -26,4 +30,44 @@ test("session persistence coalesces writes and keeps the latest state", async ()
     ["sessions", "latest"],
     ["other", "other-value"],
   ]);
+});
+
+test("session persistence isolates failed keys and flushes on visibilitychange", async () => {
+  const writes: Array<[string, string]> = [];
+  const errors: unknown[][] = [];
+  const originalConsoleError = console.error;
+  console.error = (...args: unknown[]) => {
+    errors.push(args);
+  };
+  globalThis.localStorage = {
+    getItem: () => null,
+    setItem: (name, value) => {
+      if (name === "quota-exceeded") {
+        throw new Error("storage full");
+      }
+      writes.push([name, value]);
+    },
+    removeItem: () => {},
+    clear: () => {},
+    key: () => null,
+    length: 0,
+  };
+  const { sessionPersistStorage } =
+    await import("../../hooks/session-persist-storage");
+
+  try {
+    sessionPersistStorage.setItem("quota-exceeded", "first");
+    sessionPersistStorage.setItem("healthy", "second");
+    window.dispatchEvent(new window.Event("visibilitychange"));
+
+    assert.deepEqual(writes, [["healthy", "second"]]);
+    assert.deepEqual(errors, [
+      [
+        "[session-persist] failed to write",
+        { name: "quota-exceeded", error: "storage full" },
+      ],
+    ]);
+  } finally {
+    console.error = originalConsoleError;
+  }
 });

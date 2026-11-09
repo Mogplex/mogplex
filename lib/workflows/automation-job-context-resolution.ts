@@ -158,13 +158,9 @@ export async function resolveJobContext(
 
   const runtime = resolveJobRunRuntimeDetails(job);
 
-  // Legacy trigger dispatch removed: it built JobContext straight from the
-  // agent row, so a run took `agents.model` with no way for the automation to
-  // override it — the second source of truth this refactor exists to delete.
-  // Every automation now runs as a flow, where the node owns the model.
-  // Fail loudly rather than silently rerouting: a trigger-dispatched job means
-  // something upstream still enqueues one, and that should be visible.
-  if (job.trigger_id) {
+  // Legacy trigger-only dispatch has no flow node to own the model, so it is
+  // unroutable. Trigger-launched flows continue through the flow path below.
+  if (job.trigger_id && !job.flow_id && !job.flow_version_id) {
     return { error: "MISSING_CONFIG" as const };
   }
 

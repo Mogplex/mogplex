@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useSessionsStore } from "./use-sessions";
 import {
   createDefaultTree,
@@ -265,14 +265,61 @@ export function useSplitPanes() {
     [updateActiveSessionTree]
   );
 
+  const splitSizeUpdateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
+  const pendingSplitSizeUpdateRef = useRef<{
+    splitId: string;
+    sizes: number[];
+    update: typeof updateActiveSessionTree;
+  } | null>(null);
+
   const updateSplitSizes = useCallback(
     (splitId: string, sizes: number[]) => {
+      if (splitSizeUpdateTimerRef.current) {
+        pendingSplitSizeUpdateRef.current = {
+          splitId,
+          sizes,
+          update: updateActiveSessionTree,
+        };
+        return;
+      }
+
       updateActiveSessionTree((currentRoot, currentActiveId) => ({
         root: updateSplitNodeSizes(currentRoot, splitId, sizes),
         activeId: currentActiveId,
       }));
+      splitSizeUpdateTimerRef.current = setTimeout(() => {
+        splitSizeUpdateTimerRef.current = null;
+        const pending = pendingSplitSizeUpdateRef.current;
+        pendingSplitSizeUpdateRef.current = null;
+        if (!pending) return;
+        pending.update((currentRoot, currentActiveId) => ({
+          root: updateSplitNodeSizes(
+            currentRoot,
+            pending.splitId,
+            pending.sizes
+          ),
+          activeId: currentActiveId,
+        }));
+      }, 60);
     },
     [updateActiveSessionTree]
+  );
+
+  useEffect(
+    () => () => {
+      if (splitSizeUpdateTimerRef.current) {
+        clearTimeout(splitSizeUpdateTimerRef.current);
+      }
+      const pending = pendingSplitSizeUpdateRef.current;
+      if (!pending) return;
+      pending.update((currentRoot, currentActiveId) => ({
+        root: updateSplitNodeSizes(currentRoot, pending.splitId, pending.sizes),
+        activeId: currentActiveId,
+      }));
+    },
+    []
   );
 
   const movePaneById = useCallback(

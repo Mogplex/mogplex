@@ -55,8 +55,8 @@ export function createRepairJobsGetHandler(
           );
         }
 
-        // Legacy assignment and trigger-backed rows are not restartable: the
-        // executor rejects them as MISSING_CONFIG instead of repairing them.
+        // Legacy assignment and trigger-only rows are not restartable without
+        // a flow; trigger-launched flows repair through their flow context.
         const repairableJobs = (jobs || []).filter(
           (job) =>
             isExecutableJobRunSource(job) && deps.isRepairablePendingJob(job)
