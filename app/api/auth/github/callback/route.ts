@@ -15,7 +15,7 @@ import {
 import { getOAuthToken, storeOAuthToken } from "@/lib/oauth-tokens";
 import {
   fetchGithubIdentityLogin,
-  verifyGithubInstallationMember,
+  verifyGithubInstallationOwner,
 } from "@/lib/github-installation-owner";
 import { getUserId } from "@/lib/auth";
 import { isGithubOAuthRepositoryAccessAllowed } from "@/lib/github-repository-auth";
@@ -61,8 +61,12 @@ export async function GET(request: Request) {
     if (!userId) {
       return redirect("/login");
     }
-    // Installs started on GitHub carry no state. Membership below is the
-    // authorization, so the state cookie is not required.
+    // Installs started on GitHub carry no state, so a missing one is accepted
+    // and ownership below is the authorization. A state that does not match
+    // the one Mogplex issued is still rejected.
+    const installState = cookieStore.get(GITHUB_INSTALL_STATE_COOKIE)?.value;
+    if (state && installState && state !== installState)
+      return redirect("/?error=github_installation_state");
     cookieStore.delete(GITHUB_INSTALL_STATE_COOKIE);
 
     const installationId = Number(installationIdParam);
@@ -75,8 +79,8 @@ export async function GET(request: Request) {
       const githubLogin = await fetchGithubIdentityLogin(
         await getOAuthToken(userId, "github")
       );
-      if (!(await verifyGithubInstallationMember(installation, githubLogin))) {
-        return redirect("/?error=github_installation_member_required");
+      if (!(await verifyGithubInstallationOwner(installation, githubLogin))) {
+        return redirect("/?error=github_installation_owner_required");
       }
 
       const { error: installationError } = await supabaseAdmin

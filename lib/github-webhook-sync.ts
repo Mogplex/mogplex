@@ -116,25 +116,54 @@ export function planGithubWebhookSync(
   return { type: "none" };
 }
 
-/**
- * Installing the App, or changing its repositories, takes an account owner or
- * App manager on GitHub. A signed event for that change attaches the
- * installation to the Mogplex user who made it.
- */
+const GRANTING_INSTALLATION_ACTIONS = new Set([
+  "created",
+  "new_permissions_accepted",
+  "unsuspend",
+]);
+
 function grantsSenderAccess(
   plan: Exclude<GithubWebhookSyncPlan, { type: "none" }>
 ) {
   if (plan.type === "installation")
-    return ["created", "new_permissions", "unsuspend"].includes(plan.action);
+    return GRANTING_INSTALLATION_ACTIONS.has(plan.action);
   return plan.type === "installation_repositories" && plan.action === "added";
 }
 
+/**
+ * A signed install or repository change attaches the installation to the
+ * Mogplex user who made it, when they own the account. A repository admin
+ * can add one repository to an installation without owning the org, and must
+ * not receive its whole repository set. The payload's sender login is current
+ * at event time; the profile is matched by the immutable GitHub id.
+ */
 async function resolveSenderUserIds(
   plan: Exclude<GithubWebhookSyncPlan, { type: "none" }>
 ) {
   if (!grantsSenderAccess(plan) || !plan.senderId) return [];
+  try {
+    const { verifyGithubInstallationOwner } =
+      await import("@/lib/github-installation-owner");
+    const isOwner = await verifyGithubInstallationOwner(
+      {
+        id: plan.installationId,
+        account: {
+          login: plan.accountLogin ?? undefined,
+          type: plan.accountType ?? undefined,
+        },
+      },
+      plan.senderLogin
+    );
+    if (!isOwner) return [];
+  } catch (error) {
+    console.error("[github-webhook-sync] sender ownership check failed", {
+      installationId: plan.installationId,
+      error,
+    });
+    return [];
+  }
+
   const { supabaseAdmin } = await import("@/lib/supabase/admin");
-  // Only the immutable GitHub id: a login can be renamed and reissued.
   const { data, error } = await supabaseAdmin
     .from("profiles")
     .select("id")
@@ -272,7 +301,7 @@ export async function syncGithubWebhookState(
   }
 
   if (plan.type === "installation") {
-    if (["created", "new_permissions", "unsuspend"].includes(plan.action)) {
+    if (GRANTING_INSTALLATION_ACTIONS.has(plan.action)) {
       await ensureInstallationForUsers(userIds, plan);
       await syncInstallationReposForUsers(userIds, plan.installationId);
     } else if (["deleted", "suspend"].includes(plan.action)) {

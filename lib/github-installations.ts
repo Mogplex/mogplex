@@ -6,7 +6,7 @@ import {
 } from "@/lib/github-app";
 import {
   fetchGithubIdentityLogin,
-  verifyGithubInstallationMember,
+  verifyGithubInstallationOwner,
 } from "@/lib/github-installation-owner";
 import { mapGithubRequests } from "@/lib/github-request-concurrency";
 import { syncGithubInstallationReposForUser } from "@/lib/github-sync";
@@ -15,7 +15,7 @@ const defaultDeps = {
   db: supabaseAdmin,
   request: ((input, init) => fetch(input, init)) as typeof fetch,
   findInstallation: findGithubInstallationForAccount,
-  verifyMember: verifyGithubInstallationMember,
+  verifyOwner: verifyGithubInstallationOwner,
   fetchLogin: fetchGithubIdentityLogin,
   syncRepos: syncGithubInstallationReposForUser,
 };
@@ -40,7 +40,13 @@ async function listGithubOrgLogins(token: string, request: Deps["request"]) {
           signal: AbortSignal.timeout(15_000),
         }
       );
-      if (!response.ok) break;
+      if (!response.ok) {
+        console.warn("[github-installations] org list refused", {
+          status: response.status,
+          page,
+        });
+        break;
+      }
       const orgs: unknown = await response.json();
       if (!Array.isArray(orgs)) break;
       for (const org of orgs) {
@@ -49,16 +55,17 @@ async function listGithubOrgLogins(token: string, request: Deps["request"]) {
       }
       if (orgs.length < ORG_PAGE_SIZE) break;
     }
-  } catch {
+  } catch (error) {
     // The user's own account is still a candidate.
+    console.warn("[github-installations] org list failed", { error });
   }
   return logins;
 }
 
 /**
  * Attach the Mogplex App installations on the user's account and on orgs they
- * belong to. The App must already be installed on the account; this only
- * links installations the user is a verified member of.
+ * own. The App must already be installed on the account. `checked` says
+ * whether GitHub was asked at all, so callers only throttle real attempts.
  */
 export async function reconcileGithubInstallationsForUser(
   userId: string,
@@ -66,7 +73,7 @@ export async function reconcileGithubInstallationsForUser(
   githubToken?: string | null,
   overrides: Partial<Deps> = {}
 ) {
-  if (!hasGithubAppConfig()) return { discovered: 0 };
+  if (!hasGithubAppConfig()) return { discovered: 0, checked: false };
   const deps = { ...defaultDeps, ...overrides };
   const { data, error } = await deps.db
     .from("github_installations")
@@ -74,10 +81,10 @@ export async function reconcileGithubInstallationsForUser(
     .eq("user_id", userId);
   if (error) throw new Error("Could not verify existing GitHub installations");
 
-  // Membership is checked for the login the token reports now, never a stored
+  // Ownership is checked for the login the token reports now, never a stored
   // one that a rename may have handed to someone else.
   const login = await deps.fetchLogin(githubToken, deps.request);
-  if (!login || !githubToken) return { discovered: 0 };
+  if (!login || !githubToken) return { discovered: 0, checked: false };
 
   const attached = new Set(
     ((data ?? []) as Array<{ account_login: string | null }>)
@@ -95,7 +102,7 @@ export async function reconcileGithubInstallationsForUser(
     try {
       const installation = await deps.findInstallation(account);
       if (!installation) return null;
-      return (await deps.verifyMember(installation, login))
+      return (await deps.verifyOwner(installation, login))
         ? installation
         : null;
     } catch (lookupError) {
@@ -110,7 +117,7 @@ export async function reconcileGithubInstallationsForUser(
   const installations = found.filter(
     (installation): installation is GithubInstallation => installation !== null
   );
-  if (installations.length === 0) return { discovered: 0 };
+  if (installations.length === 0) return { discovered: 0, checked: true };
 
   const now = new Date().toISOString();
   const { error: upsertError } = await deps.db
@@ -156,5 +163,5 @@ export async function reconcileGithubInstallationsForUser(
     )
   );
 
-  return { discovered: installations.length };
+  return { discovered: installations.length, checked: true };
 }

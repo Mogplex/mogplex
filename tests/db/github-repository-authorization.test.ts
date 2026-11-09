@@ -65,7 +65,7 @@ async function installationCount(userId: string) {
   ).rows[0]?.count;
 }
 
-it("should attach org installations only for orgs GitHub confirms the user belongs to", async () => {
+it("should attach org installations only for orgs GitHub confirms the user owns", async () => {
   const member = "00000000-0000-4000-8000-0000000000a1";
   await db.query(
     "insert into profiles(id,github_username) values ($1,'org-member')",
@@ -91,8 +91,10 @@ it("should attach org installations only for orgs GitHub confirms the user belon
       });
     if (path.endsWith("/access_tokens"))
       return Response.json({ token: "ghs-fixture" });
-    if (path === "/orgs/member-org/members/org-member")
-      return new Response(null, { status: 204 });
+    if (path === "/orgs/member-org/memberships/org-member")
+      return Response.json({ state: "active", role: "admin" });
+    if (path === "/orgs/former-org/memberships/org-member")
+      return Response.json({ state: "active", role: "member" });
     if (path === "/installation/repositories")
       return Response.json({ repositories: [] });
     return new Response(null, { status: 404 });
@@ -103,7 +105,7 @@ it("should attach org installations only for orgs GitHub confirms the user belon
       "org-member",
       "identity-fixture"
     )
-  ).toEqual({ discovered: 1 });
+  ).toEqual({ discovered: 1, checked: true });
   expect(
     (
       await db.query(
@@ -112,7 +114,7 @@ it("should attach org installations only for orgs GitHub confirms the user belon
       )
     ).rows
   ).toEqual([{ installation_id: 6001 }]);
-  expect(requests).toContain("/orgs/former-org/members/org-member");
+  expect(requests).toContain("/orgs/former-org/memberships/org-member");
 
   requests.length = 0;
   expect(
@@ -121,11 +123,11 @@ it("should attach org installations only for orgs GitHub confirms the user belon
       "org-member",
       "identity-fixture"
     )
-  ).toEqual({ discovered: 0 });
+  ).toEqual({ discovered: 0, checked: true });
   expect(requests).not.toContain("/orgs/member-org/installation");
 });
 
-it("should attach a new installation to the Mogplex user who installed it on GitHub", async () => {
+it("should attach a new installation to the org owner who installed it on GitHub, and never to a repository admin", async () => {
   const installer = "00000000-0000-4000-8000-0000000000a2";
   const bystander = "00000000-0000-4000-8000-0000000000a3";
   await db.query(
@@ -137,6 +139,10 @@ it("should attach a new installation to the Mogplex user who installed it on Git
     const path = new URL(url).pathname;
     if (path.endsWith("/access_tokens"))
       return Response.json({ token: "ghs-fixture" });
+    if (path === "/orgs/new-org/memberships/renamed-installer")
+      return Response.json({ state: "active", role: "admin" });
+    if (path === "/orgs/new-org/memberships/bystander")
+      return Response.json({ state: "active", role: "member" });
     if (path === "/installation/repositories")
       return Response.json({ repositories: [] });
     return new Response(null, { status: 404 });
@@ -163,6 +169,32 @@ it("should attach a new installation to the Mogplex user who installed it on Git
   });
   expect(impostor.matchedUsers).toBe(0);
   expect(await installationCount(bystander)).toBe(0);
+
+  const repositoryAdmin = await syncGithubWebhookState(
+    "installation_repositories",
+    {
+      action: "added",
+      sender: { login: "bystander", id: 4343 },
+      installation: {
+        id: 7001,
+        account: { login: "new-org", type: "Organization" },
+      },
+      repositories_added: [],
+    }
+  );
+  expect(repositoryAdmin.matchedUsers).toBe(1);
+  expect(await installationCount(bystander)).toBe(0);
+
+  const accepted = await syncGithubWebhookState("installation", {
+    action: "new_permissions_accepted",
+    sender: { login: "renamed-installer", id: 4242 },
+    installation: {
+      id: 7004,
+      account: { login: "new-org", type: "Organization" },
+    },
+  });
+  expect(accepted.matchedUsers).toBe(1);
+  expect(await installationCount(installer)).toBe(2);
 
   const deleted = await syncGithubWebhookState("installation", {
     action: "deleted",
@@ -216,12 +248,13 @@ it("keeps every attached grant user-scoped and never treats an App profile as OA
   expect(await isGithubOAuthRepositoryAccessAllowed(other)).toBe(false);
   expect(await reconcileGithubInstallationsForUser(owner)).toEqual({
     discovered: 0,
+    checked: false,
   });
   expect(
     await reconcileGithubInstallationsForUser(
       "00000000-0000-4000-8000-000000000073"
     )
-  ).toEqual({ discovered: 0 });
+  ).toEqual({ discovered: 0, checked: false });
 });
 
 it("uses the current App repository grant and retains disconnected stored work without exposing it as authorized", async () => {

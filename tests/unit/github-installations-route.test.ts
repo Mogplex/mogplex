@@ -42,7 +42,10 @@ test("GET /api/github/installations returns org-scoped manage URLs", async () =>
       error: null,
     }),
     getOAuthToken: async () => null,
-    reconcileGithubInstallationsForUser: async () => ({ discovered: 0 }),
+    reconcileGithubInstallationsForUser: async () => ({
+      discovered: 0,
+      checked: true,
+    }),
     getGithubInstallation: async () => {
       throw new Error("getGithubInstallation should not be called");
     },
@@ -95,7 +98,10 @@ test("GET /api/github/installations returns personal manage URLs for user instal
       error: null,
     }),
     getOAuthToken: async () => null,
-    reconcileGithubInstallationsForUser: async () => ({ discovered: 0 }),
+    reconcileGithubInstallationsForUser: async () => ({
+      discovered: 0,
+      checked: true,
+    }),
     getGithubInstallation: async () => {
       throw new Error("getGithubInstallation should not be called");
     },
@@ -149,7 +155,10 @@ test("GET /api/github/installations refreshes incomplete metadata before buildin
       error: null,
     }),
     getOAuthToken: async () => null,
-    reconcileGithubInstallationsForUser: async () => ({ discovered: 0 }),
+    reconcileGithubInstallationsForUser: async () => ({
+      discovered: 0,
+      checked: true,
+    }),
     getGithubInstallation: async () => ({
       id: 91,
       account: { login: "acme", type: "Organization" },
@@ -219,7 +228,10 @@ test("GET /api/github/installations omits manage_url when incomplete metadata ca
       error: null,
     }),
     getOAuthToken: async () => null,
-    reconcileGithubInstallationsForUser: async () => ({ discovered: 0 }),
+    reconcileGithubInstallationsForUser: async () => ({
+      discovered: 0,
+      checked: true,
+    }),
     getGithubInstallation: async () => {
       throw new Error("not found");
     },
@@ -290,7 +302,7 @@ test("GET /api/github/installations discovers new org installations beside exist
     getOAuthToken: async () => "identity-fixture",
     reconcileGithubInstallationsForUser: async (userId) => {
       reconcileCalls.push(userId);
-      return { discovered: 1 };
+      return { discovered: 1, checked: true };
     },
     getGithubInstallation: async () => {
       throw new Error("getGithubInstallation should not be called");
@@ -308,4 +320,39 @@ test("GET /api/github/installations discovers new org installations beside exist
 
   await handler();
   assert.deepEqual(reconcileCalls, ["user-123"]);
+});
+
+test("GET /api/github/installations does not throttle discovery that never reached GitHub", async () => {
+  const { createGithubInstallationsGetHandler } =
+    await loadGithubInstallationsRoute();
+  const cookies = new Map<string, string>();
+  const handler = createGithubInstallationsGetHandler({
+    getCookies: async () =>
+      ({
+        get: (name: string) =>
+          cookies.has(name) ? { value: cookies.get(name) } : undefined,
+        set: (name: string, value: string) => cookies.set(name, value),
+        delete: (name: string) => cookies.delete(name),
+      }) as never,
+    requireUserId: async () => "user-123",
+    hasGithubAppConfig: () => true,
+    loadInstallations: async () => ({ data: [], error: null }),
+    loadRepos: async () => ({ data: [], error: null }),
+    loadProfile: async () => ({
+      data: { github_username: "octocat" },
+      error: null,
+    }),
+    getOAuthToken: async () => null,
+    reconcileGithubInstallationsForUser: async () => ({
+      discovered: 0,
+      checked: false,
+    }),
+    getGithubInstallation: async () => {
+      throw new Error("getGithubInstallation should not be called");
+    },
+    updateInstallationMetadata: async () => ({ error: null }),
+  });
+
+  await handler();
+  assert.equal(cookies.has("github_reconcile_skip"), false);
 });

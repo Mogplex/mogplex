@@ -14,15 +14,21 @@ resolved using the same attached installation ID, without discovering and
 attaching another account's installation.
 The App must be installed on an account before anyone can use its
 repositories. A user may attach an installation on their own personal account
-or on an organization they are a member of; the organization decides what
-members see by choosing the installation's repository set. Membership is
-checked with the installation token, so organizations that restrict OAuth apps
-still verify. Three paths attach an installation: the install callback (with or
-without Mogplex's state, since installs started on GitHub carry none),
-discovery across the user's account and GitHub organizations, and a signed
-`installation` or `installation_repositories` webhook, which attaches the
-Mogplex user who made the change on GitHub. Cached repository names never
-attach an installation. Existing stored grants are retained.
+or on an organization they own. Attaching hands over the installation's whole
+repository set, which can include repositories GitHub hides from ordinary
+members, so other members use repositories shared through their Mogplex team.
+Ownership is read live from GitHub with the installation token, so
+organizations that restrict OAuth apps still verify, and the user's login comes
+from their identity token at that moment, never from a stored name a rename
+could have reissued. Three paths attach an installation: the install callback
+(installs started on GitHub carry no state and are accepted; a state that does
+not match Mogplex's is rejected), discovery across the user's account and
+GitHub organizations, and a signed `installation` (`created`,
+`new_permissions_accepted`, `unsuspend`) or `installation_repositories`
+(`added`) webhook, which attaches the Mogplex user who made the change,
+matched by GitHub user id, when they own the account. A repository admin who
+adds one repository is not given the installation. Cached repository names
+never attach an installation. Existing stored grants are retained.
 
 The synchronized inventory uses the current App repository IDs. A repository
 transferred outside an installation or left over from OAuth synchronization

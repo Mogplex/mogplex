@@ -8,7 +8,7 @@ function fixture({
   attached = [] as string[],
   loadError = null as { message: string } | null,
   orgs = ["member-org", "outsider-org"],
-  members = new Set(["member-org"]),
+  owners = new Set(["member-org"]),
 } = {}) {
   const upserts: Upsert[] = [];
   const db = {
@@ -45,9 +45,9 @@ function fixture({
     findInstallation: vi.fn(
       async (account: string) => installations[account] ?? null
     ),
-    verifyMember: vi.fn(
+    verifyOwner: vi.fn(
       async (installation: GithubInstallation, _login?: string | null) =>
-        members.has(installation.account?.login ?? "")
+        owners.has(installation.account?.login ?? "")
     ),
     fetchLogin: vi.fn(async (token: string | null | undefined) =>
       token ? "member" : null
@@ -66,7 +66,7 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-it("should attach installations on orgs the user is a verified member of", async () => {
+it("should attach installations on orgs the user is a verified owner of", async () => {
   const { deps, upserts } = fixture();
   expect(
     await reconcileGithubInstallationsForUser(
@@ -75,9 +75,9 @@ it("should attach installations on orgs the user is a verified member of", async
       "identity-fixture",
       deps
     )
-  ).toEqual({ discovered: 1 });
+  ).toEqual({ discovered: 1, checked: true });
   expect(upserts.flat().map((row) => row.installation_id)).toEqual([11]);
-  expect(deps.verifyMember).toHaveBeenCalledWith(
+  expect(deps.verifyOwner).toHaveBeenCalledWith(
     expect.objectContaining({ id: 12 }),
     "member"
   );
@@ -92,7 +92,7 @@ it("should skip accounts that are already attached even when other installations
       "identity-fixture",
       deps
     )
-  ).toEqual({ discovered: 0 });
+  ).toEqual({ discovered: 0, checked: true });
   expect(deps.findInstallation).toHaveBeenCalledTimes(1);
   expect(deps.findInstallation).toHaveBeenCalledWith("outsider-org");
   expect(upserts).toEqual([]);
@@ -107,12 +107,12 @@ it("should not attach anything without an identity token", async () => {
       null,
       deps
     )
-  ).toEqual({ discovered: 0 });
+  ).toEqual({ discovered: 0, checked: false });
   expect(deps.request).not.toHaveBeenCalled();
   expect(deps.findInstallation).not.toHaveBeenCalled();
 });
 
-it("should check membership for the login the token reports, not a stored one", async () => {
+it("should check ownership for the login the token reports, not a stored one", async () => {
   const { deps } = fixture();
   await reconcileGithubInstallationsForUser(
     "fixture-user",
@@ -121,7 +121,7 @@ it("should check membership for the login the token reports, not a stored one", 
     deps
   );
   expect(deps.findInstallation).not.toHaveBeenCalledWith("stale-login");
-  for (const [, login] of deps.verifyMember.mock.calls)
+  for (const [, login] of deps.verifyOwner.mock.calls)
     expect(login).toBe("member");
 });
 
@@ -142,7 +142,7 @@ it("should not discover App installations in an OAuth-only deployment", async ()
       "identity-fixture",
       deps
     )
-  ).toEqual({ discovered: 0 });
+  ).toEqual({ discovered: 0, checked: false });
   expect(deps.findInstallation).not.toHaveBeenCalled();
 });
 
@@ -165,7 +165,7 @@ it("should discover orgs beyond the first page of memberships", async () => {
       "identity-fixture",
       deps
     )
-  ).toEqual({ discovered: 1 });
+  ).toEqual({ discovered: 1, checked: true });
   expect(upserts.flat().map((row) => row.installation_id)).toEqual([11]);
   expect(deps.request).toHaveBeenCalledTimes(2);
 });

@@ -1,7 +1,7 @@
 import { expect, it, vi } from "vitest";
 import {
   fetchGithubIdentityLogin,
-  verifyGithubInstallationMember,
+  verifyGithubInstallationOwner,
 } from "./github-installation-owner";
 
 const org = {
@@ -9,7 +9,7 @@ const org = {
   account: { login: "member-org", type: "Organization" },
 };
 
-function orgDeps(status: number) {
+function orgDeps(response: () => Response) {
   const paths: string[] = [];
   const createInstallationAccessToken = vi.fn(async (id: number) => {
     expect(id).toBe(7);
@@ -21,7 +21,7 @@ function orgDeps(status: number) {
       expect(new Headers(init?.headers).get("Authorization")).toBe(
         "Bearer installation-fixture"
       );
-      return new Response(null, { status });
+      return response();
     }
   );
   return { paths, deps: { createInstallationAccessToken, request } };
@@ -34,55 +34,59 @@ it("should attach a personal installation only to its own account", async () => 
     account: { login: "VERIFIED-OWNER", type: "User" },
   };
   expect(
-    await verifyGithubInstallationMember(personal, "verified-owner", {
+    await verifyGithubInstallationOwner(personal, "verified-owner", {
       request,
     })
   ).toBe(true);
   expect(
-    await verifyGithubInstallationMember(personal, "someone-else", { request })
+    await verifyGithubInstallationOwner(personal, "someone-else", { request })
   ).toBe(false);
   expect(request).not.toHaveBeenCalled();
 });
 
-it("should accept any org member, checked with the installation token", async () => {
-  const { paths, deps } = orgDeps(204);
-  expect(await verifyGithubInstallationMember(org, "plain-member", deps)).toBe(
-    true
-  );
-  expect(paths).toEqual(["/orgs/member-org/members/plain-member"]);
-});
-
-it("should reject non-members of an org installation", async () => {
-  for (const status of [404, 302]) {
-    const { deps } = orgDeps(status);
-    expect(await verifyGithubInstallationMember(org, "outsider", deps)).toBe(
-      false
+it("should accept only active org owners, read with the installation token", async () => {
+  for (const [state, role, allowed] of [
+    ["active", "admin", true],
+    ["active", "member", false],
+    ["pending", "admin", false],
+  ] as const) {
+    const { paths, deps } = orgDeps(() => Response.json({ state, role }));
+    expect(await verifyGithubInstallationOwner(org, "org-user", deps)).toBe(
+      allowed
     );
+    expect(paths).toEqual(["/orgs/member-org/memberships/org-user"]);
   }
 });
 
+it("should reject people outside the org", async () => {
+  const { deps } = orgDeps(() => new Response(null, { status: 404 }));
+  expect(await verifyGithubInstallationOwner(org, "outsider", deps)).toBe(
+    false
+  );
+});
+
 it("should reject missing logins and malformed installations without calling GitHub", async () => {
-  const { deps } = orgDeps(204);
-  expect(await verifyGithubInstallationMember(org, null, deps)).toBe(false);
-  expect(await verifyGithubInstallationMember(org, "  ", deps)).toBe(false);
+  const { deps } = orgDeps(() => Response.json({}));
+  expect(await verifyGithubInstallationOwner(org, null, deps)).toBe(false);
+  expect(await verifyGithubInstallationOwner(org, "  ", deps)).toBe(false);
+  expect(await verifyGithubInstallationOwner({ id: 1 }, "org-user", deps)).toBe(
+    false
+  );
   expect(
-    await verifyGithubInstallationMember({ id: 1 }, "plain-member", deps)
-  ).toBe(false);
-  expect(
-    await verifyGithubInstallationMember(
+    await verifyGithubInstallationOwner(
       { id: 1, account: { login: "bot", type: "Bot" } },
-      "plain-member",
+      "org-user",
       deps
     )
   ).toBe(false);
   expect(deps.request).not.toHaveBeenCalled();
 });
 
-it("should keep provider outages distinct from a verified non-member", async () => {
-  const { deps } = orgDeps(503);
+it("should keep provider outages distinct from a verified non-owner", async () => {
+  const { deps } = orgDeps(() => new Response(null, { status: 503 }));
   await expect(
-    verifyGithubInstallationMember(org, "plain-member", deps)
-  ).rejects.toThrow("membership could not be verified");
+    verifyGithubInstallationOwner(org, "org-user", deps)
+  ).rejects.toThrow("ownership could not be verified");
 });
 
 it("should read the login live from the identity token", async () => {
