@@ -10,9 +10,18 @@ import { toast } from "@/hooks/use-toast";
 import type { AIModel } from "@/lib/types";
 import type { MutatorOptions } from "swr";
 
-const fetcher = (url: string, activeTeamId: string | null) =>
+/**
+ * How long one models request may take before it fails. A toggle's save and
+ * its refresh both sit in the per-model save chain, so a request that never
+ * settled would otherwise hold back every later click.
+ */
+export const MODELS_REQUEST_TIMEOUT_MS = 30_000;
+
+/** Load the models list; bounded so a hung refresh can't stall toggles. */
+export const fetchModelsResponse = (url: string, activeTeamId: string | null) =>
   fetchJsonObject<ModelsResponse>(url, "Failed to load models", {
     headers: getActiveTeamRequestHeaders(undefined, activeTeamId),
+    signal: AbortSignal.timeout(MODELS_REQUEST_TIMEOUT_MS),
   });
 
 type CatalogModel = AIModel & {
@@ -85,12 +94,6 @@ function buildOptimisticModelsResponse(
   };
 }
 
-/**
- * How long one save may take before it fails. Saves for a model run in order,
- * so a request that never settles would otherwise hold back every later click.
- */
-export const MODEL_PREFERENCE_SAVE_TIMEOUT_MS = 30_000;
-
 async function patchModelPreference(
   fetchFn: ModelsFetch,
   modelId: string,
@@ -151,7 +154,7 @@ export async function toggleModelPreference({
   activeTeamId = null,
   fetchFn = fetch,
   toastFn = toast,
-  saveTimeoutMs = MODEL_PREFERENCE_SAVE_TIMEOUT_MS,
+  saveTimeoutMs = MODELS_REQUEST_TIMEOUT_MS,
 }: {
   modelId: string;
   enabled: boolean;
@@ -235,7 +238,7 @@ export function useModels(
   const { data, error, isLoading, mutate } = useSWR<ModelsResponse>(
     ["/api/models", activeTeamId ?? "personal"],
     ([url, teamKey]) =>
-      fetcher(url, teamKey === "personal" ? null : String(teamKey)),
+      fetchModelsResponse(url, teamKey === "personal" ? null : String(teamKey)),
     { revalidateOnFocus: false, refreshInterval: 0 }
   );
 

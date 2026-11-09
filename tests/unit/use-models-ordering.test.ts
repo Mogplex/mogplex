@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { toggleModelPreference } from "../../hooks/use-models";
+import {
+  fetchModelsResponse,
+  toggleModelPreference,
+} from "../../hooks/use-models";
 import {
   buildCatalogModel,
   controlledFetch,
@@ -215,7 +218,8 @@ test(
       mutate: harness.mutate,
       fetchFn,
       toastFn: harness.toastFn,
-      saveTimeoutMs: 20,
+      // Wide enough that the second click always lands before the abort.
+      saveTimeoutMs: 250,
     };
 
     // Node doesn't keep the process alive for AbortSignal.timeout; browsers do.
@@ -235,3 +239,20 @@ test(
     assert.equal(harness.toastCalls.length, 0);
   }
 );
+
+test("fetchModelsResponse bounds the models refresh so a hung request can't stall toggles", async () => {
+  const originalFetch = globalThis.fetch;
+  let signal: AbortSignal | null | undefined;
+  globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    signal = init?.signal;
+    return Response.json({ models: [], catalog: [] });
+  }) as typeof fetch;
+  try {
+    await fetchModelsResponse("/api/models", null);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.ok(signal instanceof AbortSignal);
+  assert.equal(signal.aborted, false);
+});
