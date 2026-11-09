@@ -245,8 +245,10 @@ test("a re-review keeps the thread of a finding it reports again and posts only 
   );
   assert.match(
     summaryBodies[0],
-    /Guard nullable widget lookup \(still open\).*\(https:\/\/github\.com\/acme\/widgets\/pull\/44#discussion_aaaaaaaaaaaa\)/
+    /Guard nullable widget lookup \(still open\).*\(https:\/\/github\.com\/acme\/widgets\/pull\/44#discussion_aaaaaaaaaaaa\)\n {2}The caller guard does not cover the retry path\./
   );
+  // A finding posted in this run keeps its body in its inline comment only.
+  assert.doesNotMatch(summaryBodies[0], /Two locales share one entry/);
 });
 
 test("a re-review resolves the thread of a finding it no longer reports and records the new state", async () => {

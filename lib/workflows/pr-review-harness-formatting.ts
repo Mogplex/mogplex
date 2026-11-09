@@ -72,9 +72,15 @@ function indentListItemBody(body: string) {
     .join("\n");
 }
 
-/** Findings that sit in inline threads, each with its thread's URL if known. */
+/**
+ * Findings that sit in inline threads, each with its thread's URL if known.
+ * `carried` holds findings whose thread an earlier review opened: that
+ * thread shows the earlier body, so this review's body (which may answer a
+ * reply on it) stays in the summary.
+ */
 export type InlineReviewFindings = {
   links: ReadonlyMap<ReviewFinding, string | null>;
+  carried?: ReadonlySet<ReviewFinding>;
 };
 
 export function buildReviewFindingsSections(
@@ -110,9 +116,14 @@ export function buildReviewFindingsSections(
               : `- **${finding.title}**`;
             if (inline?.links.has(finding)) {
               const url = inline.links.get(finding);
-              return url
+              const linked = url
                 ? `${heading}: [inline comment](${url})`
                 : `${heading}: inline comment`;
+              return inline.carried?.has(finding)
+                ? [linked, indentListItemBody(finding.body)]
+                    .filter(Boolean)
+                    .join("\n")
+                : linked;
             }
             return [heading, indentListItemBody(finding.body)]
               .filter(Boolean)

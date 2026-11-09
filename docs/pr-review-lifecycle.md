@@ -105,7 +105,9 @@ and the harness JSON line).
   finding reported again without its `priorId`, in the same file with the
   same title, keeps it too. Others get a new key.
 - A finding whose key has an open Mogplex thread is not posted again; the
-  summary links the existing thread.
+  summary links the existing thread and keeps this review's body under the
+  link, since the thread still shows the earlier body. That body is where
+  the reviewer answers a reply on the thread.
 - An open Mogplex thread whose key is not reported again is resolved with a
   reply: "No longer reported at `abc1234`." It is resolved only when the
   run filed a complete structured report; an incomplete or failed review

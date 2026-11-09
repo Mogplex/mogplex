@@ -120,11 +120,6 @@ export function parsePrReviewState(
   }
 }
 
-/**
- * The newest verified state among the marked comments. Anyone can post a
- * marked comment, even a copy of an earlier signed state from this PR, so
- * the latest review time wins rather than the latest comment.
- */
 /** A comment carrying the summary marker, as GitHub returned it. */
 export type PrReviewSummaryComment = { body: string; author: string | null };
 

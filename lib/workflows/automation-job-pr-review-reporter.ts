@@ -375,6 +375,7 @@ export function createPrReviewReporter(
                 (finding) => [finding, state.reviewGithubReviewUrl] as const
               ),
             ]),
+            carried: new Set(lifecycle.plan.existingThreads.keys()),
           },
           resolvedFindings: lifecycle.plan.resolvedFindings.map((prior) => ({
             title: prior.title,
