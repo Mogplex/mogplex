@@ -159,7 +159,7 @@ Core structural untangling only. Optional comment cleanup and test cleanup were 
 
 ## Redesign and implementation
 
-1. **Make lifecycle generation and terminal outcomes explicit.** Required sandbox generation predicates will never be dropped on retry; embedded reloads will retain those predicates. Resume/restart will share one boot-stream service. Snapshot deletion will distinguish not-found from failure. Pending caps will default to disabled (`null`) to match the documented policy, executable-source capability will gate retry/repair, and unsupported failed-run Repair will disappear.
+1. **Make lifecycle generation and terminal outcomes explicit.** Required sandbox generation predicates will never be dropped on retry; a non-null guarded write is the CAS verdict and embedded relation reloads read by id only. Resume/restart will share one boot-stream service. Snapshot deletion will distinguish not-found from failure. Pending caps will default to disabled (`null`) to match the documented policy, executable-source capability will gate retry/repair, and unsupported failed-run Repair will disappear.
 2. **Make run preparation and completion single-owner services.** Slack will consume full stream errors before delivery; ACP mode and MCP configuration will become launch preconditions; decision observers will join pending work; `advise` will be observational; outcome-only harness memory will contain no prompt. PR-check creation and terminal queue release will return typed outcomes through one coordinator.
 3. **Colocate tool definitions with construction.** `OrchestratorToolDef` will become a discriminated union: implemented definitions carry a builder, planned definitions do not. Category modules will own their builders and context availability; the registry will only normalize context and execute definitions. Unused planned schema maps will go.
 4. **Make Control and sandbox routes adapters.** Control request types, validation, startup, and execution move to `lib/control`; Slack webhook parsing/dispatch and sandbox exec/changes services move out of route internals. Routes and Trigger workers will depend on those services in one direction. GitHub dispatch will use typed outcomes/errors rather than a caller boolean.
@@ -194,11 +194,27 @@ Re-audit regressions fixed:
 - Memory tools share a request-local bundle and execution-time sandbox scope.
 - Canonical pane updates suppress no-ops and debounce only storage, not state.
 - Same-name persistent boot guards, Better Auth missing profiles, snapshot replacement ids, and trigger-backed retry sources are handled explicitly.
-- Embedded sandbox reloads guard the newly written status and generation rather than rejecting their own successful transitions.
+- Embedded sandbox reloads read by id after a guarded write, so stale pre-write predicates and ambiguous post-write filters cannot reject a successful claim.
 - Hydration uses `useEffectEvent`; late saves are revision guarded; project/session launches bind the intended session.
 - Conversation history retains legacy and cross-session records so workspace restoration remains reachable.
 - The changes route adapter exposes both `GET` and `POST`; a route-contract regression test covers the mutation export.
 - Queue pagination has an `id` tie-breaker, and retry source types reuse the canonical union.
+
+## Per-area review guide
+
+Git rename scores identify the behavior-neutral moves below; the focused tests and CI cover both those moves and the intentional deltas.
+
+| Area | Behavior-neutral code motion | Intentional behavior changes |
+| --- | --- | --- |
+| Control chat | Every moved module except `messages.ts` is a 100% rename into `lib/control/chat/`. | Queueing, lifecycle completion, auth, and legacy-history fixes. |
+| Slack webhooks | `event-types.ts`, `native-input.ts`, and `verified-dispatch.ts` are 100% renames. | Stream errors are fully consumed before delivery. |
+| Sandbox collection | Every existing collection `_lib` module and its tests are 100% renames. | Readiness, persistence, and launch-race fixes are isolated from those moves. |
+| Exec and harness | Exec command/shell helpers and most harness internals are 100% renames; the remaining files have small dependency-seam edits. | One `POST` entry point per adapter, explicit env injection, and cancellation/delivery fixes. |
+| Sandbox lifecycle | No byte-for-byte claim; review `records.ts`, resume, restart, stop, and delete directly. | CAS conflict responses, id-only embedded reloads, failure-aware snapshot reaping, and per-repo failure isolation. |
+| Pane and session state | `pane-binding.ts` is a 100% rename. | Canonical store ownership, empty-session fallback, and callbacks bound to their originating session. |
+| Repair and queue | No byte-for-byte claim; review `job-runs.ts`, `job-run-repair.ts`, and `queue-release.ts` directly. | Executable-source gating, skipped-run reporting, stable pagination, and coordinated queue release. |
+| Flow editor and presentation | No byte-for-byte claim; review the shared presenter and save handlers directly. | Revision-guarded saves and diagnostics for failed saves after flow switches. |
+| Auth and shared contracts | `lib/observability/formatters.ts` is a 100% rename. | Missing identities fail closed; shared types consolidate existing wire contracts without intentionally changing them. |
 
 Final verification:
 

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-test("sandbox updates reload embedded relations after a narrow write", async () => {
+test("sandbox updates reload embedded relations by id after a narrow CAS write", async () => {
   process.env.NEXT_PUBLIC_SUPABASE_URL ||= "https://example.supabase.co";
   process.env.SUPABASE_SERVICE_ROLE_KEY ||= "test-service-role-key";
 
@@ -9,11 +9,15 @@ test("sandbox updates reload embedded relations after a narrow write", async () 
   const { updateSandboxRecord } = await import("../../lib/sandbox/records");
   const originalFrom = supabaseAdmin.from.bind(supabaseAdmin);
   const selects: string[] = [];
+  const filters: string[] = [];
 
   const buildQuery = (result: unknown) => {
     const query = {
       update: () => query,
-      eq: () => query,
+      eq: (column: string, value: unknown) => {
+        filters.push(`${column}:${String(value)}`);
+        return query;
+      },
       in: () => query,
       select: (value: string) => {
         selects.push(value);
@@ -43,12 +47,22 @@ test("sandbox updates reload embedded relations after a narrow write", async () 
     const result = await updateSandboxRecord(
       "sandbox-1",
       { health_status: "running" },
-      { select: "id, repo:repos(root_directory)" }
+      {
+        expectedSandboxId: "vm-1",
+        expectedHealthStatus: "booting",
+        select: "id, repo:repos(root_directory)",
+      }
     );
 
     assert.deepEqual(selects, [
       "id, sandbox_id, status, health_status",
       "id, repo:repos(root_directory)",
+    ]);
+    assert.deepEqual(filters, [
+      "id:sandbox-1",
+      "sandbox_id:vm-1",
+      "health_status:booting",
+      "id:sandbox-1",
     ]);
     assert.deepEqual(result, {
       id: "sandbox-1",

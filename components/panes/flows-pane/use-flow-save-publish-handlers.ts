@@ -183,9 +183,17 @@ export function useFlowSavePublishHandlers(
         }
         return true;
       } catch (error) {
-        if (isStale()) return false;
         const description =
           error instanceof Error ? error.message : "Failed to save flow";
+        if (isStale()) {
+          if (hydratedFlowIdRef.current !== flowId) {
+            console.warn("[flows] save failed after flow change", {
+              flowId,
+              error: description,
+            });
+          }
+          return false;
+        }
         setSaveStatus("error");
         setSaveError(description);
         toast({
