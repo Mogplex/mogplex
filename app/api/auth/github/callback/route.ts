@@ -19,6 +19,7 @@ import {
 } from "@/lib/github-installation-owner";
 import { getUserId } from "@/lib/auth";
 import { isGithubOAuthRepositoryAccessAllowed } from "@/lib/github-repository-auth";
+import type { GithubInstallFailureReason } from "@/lib/github-install-outcome";
 
 function requireEnv(name: "GITHUB_CLIENT_ID" | "GITHUB_CLIENT_SECRET") {
   const value = process.env[name]?.trim();
@@ -47,15 +48,26 @@ export async function GET(request: Request) {
   const redirect = (path: string) =>
     NextResponse.redirect(buildAppUrl(path, request));
 
-  /** Redirect back to the caller's page, preserving the outcome query. */
-  const redirectBack = (query: string) => {
-    if (returnTo === "/") return redirect(`/${query}`);
-    const target = buildAppUrl(returnTo, request);
+  /**
+   * Redirect to the caller's page with the outcome query. Installs started on
+   * GitHub carry no return path, so they land on Settings, where the GitHub
+   * connection lives; a failure never continues into a chained API route.
+   */
+  const redirectWithOutcome = (query: string, failed: boolean) => {
+    const path =
+      returnTo === "/" || (failed && returnTo.startsWith("/api/"))
+        ? "/settings/account"
+        : returnTo;
+    const target = buildAppUrl(path, request);
     for (const [key, value] of new URLSearchParams(query.replace(/^\?/, ""))) {
       target.searchParams.set(key, value);
     }
     return NextResponse.redirect(target);
   };
+  const redirectBack = (query: string) => redirectWithOutcome(query, false);
+  /** Report a failure the GitHub install toast can explain. */
+  const fail = (reason: GithubInstallFailureReason) =>
+    redirectWithOutcome(`?github=error&reason=${reason}`, true);
 
   if (installationIdParam && hasGithubAppConfig()) {
     if (!userId) {
@@ -66,12 +78,12 @@ export async function GET(request: Request) {
     // the one Mogplex issued is still rejected.
     const installState = cookieStore.get(GITHUB_INSTALL_STATE_COOKIE)?.value;
     if (state && installState && state !== installState)
-      return redirect("/?error=github_installation_state");
+      return fail("github_installation_state");
     cookieStore.delete(GITHUB_INSTALL_STATE_COOKIE);
 
     const installationId = Number(installationIdParam);
     if (!Number.isSafeInteger(installationId) || installationId <= 0) {
-      return redirect("/?error=github_installation_invalid");
+      return fail("github_installation_invalid");
     }
 
     try {
@@ -80,7 +92,7 @@ export async function GET(request: Request) {
         await getOAuthToken(userId, "github")
       );
       if (!(await verifyGithubInstallationOwner(installation, githubLogin))) {
-        return redirect("/?error=github_installation_owner_required");
+        return fail("github_installation_owner_required");
       }
 
       const { error: installationError } = await supabaseAdmin
@@ -103,7 +115,7 @@ export async function GET(request: Request) {
           "Failed to persist GitHub installation",
           installationError
         );
-        return redirect("/?error=github_installation_persist");
+        return fail("github_installation_persist");
       }
 
       const { error: profileError } = await supabaseAdmin
@@ -115,7 +127,7 @@ export async function GET(request: Request) {
 
       if (profileError) {
         console.error("Failed to update GitHub profile mode", profileError);
-        return redirect("/?error=github_profile_update");
+        return fail("github_profile_update");
       }
 
       try {
@@ -132,12 +144,12 @@ export async function GET(request: Request) {
       return redirectBack("?github=connected");
     } catch (error) {
       console.error("GitHub App install callback failed", error);
-      return redirect("/?error=github_installation_fetch");
+      return fail("github_installation_fetch");
     }
   }
 
   if (!code || !state || state !== storedState) {
-    return redirect("/?error=invalid_state");
+    return fail("invalid_state");
   }
 
   if (!userId) {
@@ -160,13 +172,13 @@ export async function GET(request: Request) {
   });
 
   if (!tokenRes.ok) {
-    return redirect("/?error=github_token_exchange");
+    return fail("github_token_exchange");
   }
 
   const { access_token, error } = await tokenRes.json();
 
   if (error || !access_token) {
-    return redirect("/?error=github_token_error");
+    return fail("github_token_error");
   }
 
   const userRes = await fetch("https://api.github.com/user", {
@@ -174,7 +186,7 @@ export async function GET(request: Request) {
   });
 
   if (!userRes.ok) {
-    return redirect("/?error=github_user_fetch");
+    return fail("github_user_fetch");
   }
 
   const ghUser = await userRes.json();
@@ -184,7 +196,7 @@ export async function GET(request: Request) {
       !(await isGithubOAuthRepositoryAccessAllowed(userId))
     ).repositoryAuthMode;
   } catch {
-    return redirect("/?error=github_repository_authorization");
+    return fail("github_repository_authorization");
   }
 
   const { error: profileError } = await supabaseAdmin
@@ -197,7 +209,7 @@ export async function GET(request: Request) {
     .eq("id", userId);
 
   if (profileError) {
-    return redirect("/?error=github_profile_update");
+    return fail("github_profile_update");
   }
 
   try {
@@ -207,7 +219,7 @@ export async function GET(request: Request) {
       userId,
       tokenStoreError,
     });
-    return redirect("/?error=github_token_store");
+    return fail("github_token_store");
   }
 
   try {

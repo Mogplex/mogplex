@@ -1,4 +1,5 @@
 "use client"
+import { Suspense } from "react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
 import { TopBar } from "@/components/top-bar"
@@ -7,6 +8,7 @@ import { AppSidebar } from "@/components/app-sidebar"
 import { MogplexMark } from "@/components/brand/mogplex-mark"
 import { CommandPaletteProvider } from "@/components/command-palette-provider"
 import { NewModelsDialog } from "@/components/new-models-dialog"
+import { GithubInstallToast } from "@/components/connections/github-install-toast"
 import { scopedHref } from "@/lib/scoped-href"
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
@@ -46,6 +48,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         </div>
       </div>
       <NewModelsDialog />
+      <Suspense fallback={null}>
+        <GithubInstallToast />
+      </Suspense>
     </CommandPaletteProvider>
   )
 }
