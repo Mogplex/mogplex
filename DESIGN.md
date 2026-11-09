@@ -214,7 +214,13 @@ behavior. Defaults can be overridden by the owning screen; inspect it first.
   against the page. On is a solid green `--switch-on` track (darker in light
   theme so it keeps 3:1 against the page) with a white thumb. Every toggle in
   the app uses this one style. Keep text outside the control. Thumb position
-  conveys state alongside color. An invisible surrounding
+  conveys state alongside color.
+  The quiet Off track and outline are a deliberate WCAG 1.4.11 exception
+  chosen by Charles (2026-11-09): they sit near 1.2 to 1.4:1 against the page,
+  so the grey thumb (3:1 or more against the page, asserted in
+  `switch-appearance.spec.ts`) is what identifies the control and its state.
+  If this is revisited, hold the Off outline at `--muted-foreground` and keep
+  the `secondary` fill. An invisible surrounding
   hit area keeps the pointer target at least 24px tall.
   Keep the Radix switch semantics, associated label, keyboard focus ring,
   disabled treatment, and reduced-motion behavior.

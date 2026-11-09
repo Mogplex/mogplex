@@ -136,7 +136,7 @@ export function ModelCatalogTable({
                     <div className="flex items-center gap-2">
                       <Switch
                         checked={model.is_enabled}
-                        aria-label={`Enable ${model.name}`}
+                        aria-label={`${model.name} enabled`}
                         data-testid={`models-toggle-${model.id}`}
                         disabled={chainSaving}
                         onCheckedChange={() => onToggle(model.id)}
