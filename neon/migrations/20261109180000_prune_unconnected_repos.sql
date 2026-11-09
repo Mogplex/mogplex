@@ -20,7 +20,7 @@ create or replace function public.prune_unconnected_repos(p_user_id uuid)
 returns integer
 language plpgsql
 security definer
-set search_path = public
+set search_path = ''
 as $$
 declare
   v_deleted integer;
@@ -60,6 +60,7 @@ begin
     -- Settings stored on the row itself: a row the user configured is kept.
     and not r.is_favorite
     and not r.is_monorepo
+    and r.parent_repo_id is null
     and r.sandbox_env_vars = '{}'::jsonb
     and r.install_command is null
     and r.dev_command is null

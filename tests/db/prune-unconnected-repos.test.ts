@@ -11,8 +11,6 @@ import { applyNeonMigrations } from "@/lib/db/neon-migrations";
 
 const root = path.resolve(import.meta.dirname, "../..");
 const migrationName = "20261109180000_prune_unconnected_repos.sql";
-const indexMigrationName =
-  "20261109180500_prune_unconnected_repos_guard_indexes.sql";
 
 let db: PGlite;
 let scratch: string;
@@ -80,7 +78,10 @@ beforeAll(async () => {
   // The baseline has no API roles; create them so the migration's revoke for
   // them runs, as it does on databases that have them.
   await db.exec("create role anon; create role authenticated");
-  for (const name of [migrationName, indexMigrationName])
+  // This change's migrations: the function and its guard indexes.
+  for (const name of (await readdir(migrationsDir))
+    .filter((file) => file.includes("prune_unconnected_repos"))
+    .sort())
     await db.exec(await readFile(path.join(migrationsDir, name), "utf8"));
   await account(user, "user@example.com");
   await account(other, "other@example.com");
@@ -341,5 +342,55 @@ it("guards or explains every column that names a repository", async () => {
         !NAME_COLUMNS_NOT_GUARDED.has(column)
       );
     });
+  expect(unexplained).toEqual([]);
+});
+
+/**
+ * repos columns the settings guard does not check, with the reason. A new
+ * column a user can set must be checked in prune_unconnected_repos instead.
+ */
+const GITHUB_METADATA = "copied from GitHub or set at import, not by the user";
+const SNAPSHOT_BOOKKEEPING = "snapshot bookkeeping; snapshot_id is checked";
+const VERCEL_LINK_STATUS = "Vercel link status; vercel_project_id is checked";
+const REPO_COLUMNS_NOT_SETTINGS = new Map<string, string>([
+  ["user_id", GITHUB_METADATA],
+  ["github_id", GITHUB_METADATA],
+  ["created_at", GITHUB_METADATA],
+  ["owner", GITHUB_METADATA],
+  ["name", GITHUB_METADATA],
+  ["default_branch", GITHUB_METADATA],
+  ["workspace_id", GITHUB_METADATA],
+  ["created_by_user_id", GITHUB_METADATA],
+  ["is_hidden", "hidden legacy rows are deleted on purpose"],
+  ["snapshot_build_started_at", SNAPSHOT_BOOKKEEPING],
+  ["snapshot_billing_source", SNAPSHOT_BOOKKEEPING],
+  ["snapshot_billing_team_id", SNAPSHOT_BOOKKEEPING],
+  ["snapshot_billing_project_id", SNAPSHOT_BOOKKEEPING],
+  ["snapshot_lockfile_hash", SNAPSHOT_BOOKKEEPING],
+  ["snapshot_commit_sha", SNAPSHOT_BOOKKEEPING],
+  ["vercel_link_status", VERCEL_LINK_STATUS],
+  ["vercel_link_checked_at", VERCEL_LINK_STATUS],
+  ["vercel_link_error_code", VERCEL_LINK_STATUS],
+  ["vercel_link_message", VERCEL_LINK_STATUS],
+]);
+
+it("checks or explains every repos column in the settings guard", async () => {
+  const definition = (
+    await db.query<{ def: string }>(
+      "select pg_get_functiondef('public.prune_unconnected_repos(uuid)'::regprocedure) as def"
+    )
+  ).rows[0].def;
+  const { rows } = await db.query<{ column_name: string }>(
+    `select column_name from information_schema.columns
+      where table_schema = 'public' and table_name = 'repos'
+      order by ordinal_position`
+  );
+  const unexplained = rows
+    .map((row) => row.column_name)
+    .filter(
+      (column) =>
+        !new RegExp(`\\br\\.${column}\\b`).test(definition) &&
+        !REPO_COLUMNS_NOT_SETTINGS.has(column)
+    );
   expect(unexplained).toEqual([]);
 });
