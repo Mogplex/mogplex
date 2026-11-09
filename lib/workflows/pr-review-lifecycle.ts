@@ -89,8 +89,17 @@ export function planPrReviewThreads(input: {
   }
   if (!input.complete) return plan;
 
+  const changed = new Set(input.history.changedFiles);
   for (const prior of input.history.findings) {
     if (reported.has(prior.key)) continue;
+    // An incremental review reads only the files changed since; it has not
+    // re-checked a finding elsewhere, so that finding stays open.
+    if (
+      input.history.mode === "incremental" &&
+      !(prior.path && changed.has(prior.path))
+    ) {
+      continue;
+    }
     plan.resolvedFindings.push(prior);
     if (prior.thread && !prior.thread.isResolved) {
       plan.resolve.push({

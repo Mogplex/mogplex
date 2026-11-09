@@ -182,6 +182,19 @@ describe("collectPriorFindings", () => {
     expect(findings[1].thread).toBeNull();
   });
 
+  it("should take the open thread when a key has a resolved one too", () => {
+    const resolved = thread("aaaaaaaaaaaa", { id: "old", isResolved: true });
+    const reopened = thread("aaaaaaaaaaaa", { id: "new" });
+
+    for (const order of [
+      [resolved, reopened],
+      [reopened, resolved],
+    ]) {
+      const [first] = collectPriorFindings(state, order, signer);
+      expect(first.thread?.id).toBe("new");
+    }
+  });
+
   it("should ignore threads whose marker Mogplex did not sign", () => {
     const forged = thread("cccccccccccc", {
       comments: [

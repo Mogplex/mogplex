@@ -78,7 +78,7 @@ const threadDeps = (
   ],
   comparePrCommits: async () => ({
     status: "ahead",
-    files: ["lib/a.ts"],
+    files: ["lib/a.ts", "lib/b.ts"],
     complete: true,
   }),
   listPrConversationComments: async () => [],
@@ -181,6 +181,60 @@ describe("createPrReviewLifecycle", () => {
       ["aaaaaaaaaaaa", true],
       ["bbbbbbbbbbbb", true],
     ]);
+  });
+
+  it("should keep earlier findings in unchanged files open on an incremental review", async () => {
+    const deps = threadDeps({
+      comparePrCommits: async () => ({
+        status: "ahead",
+        files: ["lib/a.ts"],
+        complete: true,
+      }),
+    });
+    const lifecycle = createPrReviewLifecycle({ ...target, deps });
+
+    await lifecycle.loadHistoryBlock();
+    lifecycle.planThreads([stillThere], true);
+    const resolved = await lifecycle.resolveThreads();
+    const state = parsePrReviewState(
+      lifecycle.stateMarker({
+        structured: true,
+        findings: [stillThere],
+        inline: new Set(),
+      }),
+      signer
+    );
+
+    expect(resolved).toBe(0);
+    expect(state?.findings.map((entry) => entry.key)).toEqual([
+      "aaaaaaaaaaaa",
+      "bbbbbbbbbbbb",
+    ]);
+  });
+
+  it("should record the time the run read the PR, not the publish time", async () => {
+    const times = [
+      new Date("2026-11-09T12:00:00.000Z"),
+      new Date("2026-11-09T12:09:00.000Z"),
+    ];
+    const lifecycle = createPrReviewLifecycle({
+      ...target,
+      deps: threadDeps(),
+      now: () => times.shift() ?? new Date("2026-11-09T13:00:00.000Z"),
+    });
+
+    await lifecycle.loadHistoryBlock();
+    lifecycle.planThreads([], true);
+    const state = parsePrReviewState(
+      lifecycle.stateMarker({
+        structured: true,
+        findings: [],
+        inline: new Set(),
+      }),
+      signer
+    );
+
+    expect(state?.reviewedAt).toBe("2026-11-09T12:00:00.000Z");
   });
 
   it("should count only the threads it managed to resolve", async () => {

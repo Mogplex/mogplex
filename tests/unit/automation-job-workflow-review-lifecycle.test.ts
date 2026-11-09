@@ -108,7 +108,7 @@ async function runReReview() {
       ],
       comparePrCommits: async () => ({
         status: "ahead",
-        files: ["src/widget.ts", "src/cache.ts"],
+        files: ["src/widget.ts", "src/cache.ts", "src/io.ts"],
         complete: true,
       }),
       listPrConversationComments: async () => [],

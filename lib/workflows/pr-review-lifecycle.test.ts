@@ -44,7 +44,7 @@ const openThread = (id: string) => ({
 const history = (findings: PriorFinding[]): PrReviewHistory => ({
   reviewedSha: "old",
   reviewedAt: "2026-11-09T10:00:00.000Z",
-  mode: "incremental",
+  mode: "full",
   changedFiles: [],
   findings,
   conversation: [],
@@ -145,6 +145,27 @@ describe("planPrReviewThreads", () => {
     expect(plan.resolve).toEqual([]);
     expect(plan.resolvedFindings).toEqual([]);
     expect(plan.existingThreads.size).toBe(1);
+  });
+
+  it("should close only findings in changed files on an incremental review", () => {
+    const elsewhere = {
+      ...prior("F2", "bbbbbbbbbbbb", openThread("t2")),
+      path: "lib/untouched.ts",
+    };
+    const changedHere = prior("F5", "eeeeeeeeeeee", openThread("t5"));
+    const plan = planPrReviewThreads({
+      history: {
+        ...history([elsewhere, changedHere]),
+        mode: "incremental",
+        changedFiles: ["lib/a.ts"],
+      },
+      keys: new Map(),
+      headSha: "1234567890",
+      complete: true,
+    });
+
+    expect(plan.resolve.map((entry) => entry.threadId)).toEqual(["t5"]);
+    expect(plan.resolvedFindings.map((entry) => entry.id)).toEqual(["F5"]);
   });
 
   it("should plan nothing for a first review", () => {

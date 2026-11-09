@@ -71,10 +71,19 @@ export function createPrReviewLifecycle(input: {
   // Earlier findings a possibly cut report left out: kept in the state, not
   // closed, so the next review still knows them.
   let carried: PrReviewStateFinding[] = [];
+  let startedAt: Date | null = null;
 
   return {
     /** The prompt block for the previous review, or null for a first review. */
     async loadHistoryBlock(): Promise<string | null> {
+      // The review time is when this run read the PR, so comments posted
+      // while it runs are still new to the next review.
+      startedAt = now();
+      if (input.deps && !signer && prNumber != null) {
+        console.warn(
+          "[pr-review] no signing key (GITHUB_APP_PRIVATE_KEY); review memory is off"
+        );
+      }
       if (!deps || !signer || prNumber == null || headSha.length === 0)
         return null;
       const target = { githubToken, repoFullName, prNumber };
@@ -105,15 +114,19 @@ export function createPrReviewLifecycle(input: {
       const complete = structured && findings.length < PR_REVIEW_MAX_FINDINGS;
       plan = planPrReviewThreads({ history, keys, headSha, complete });
       const reported = new Set(keys.values());
-      carried =
-        structured && !complete
-          ? (history?.findings ?? [])
-              .filter((prior) => !reported.has(prior.key))
-              .map(({ id: _id, thread, ...prior }) => ({
-                ...prior,
-                inline: thread != null && !thread.isResolved,
-              }))
-          : [];
+      // Earlier findings this review neither reported nor closed (a cut
+      // report, or files an incremental review did not read) stay known.
+      const closed = new Set(plan.resolvedFindings.map((prior) => prior.key));
+      carried = structured
+        ? (history?.findings ?? [])
+            .filter(
+              (prior) => !reported.has(prior.key) && !closed.has(prior.key)
+            )
+            .map(({ id: _id, thread, ...prior }) => ({
+              ...prior,
+              inline: thread != null && !thread.isResolved,
+            }))
+        : [];
       return { keys, plan };
     },
 
@@ -169,7 +182,7 @@ export function createPrReviewLifecycle(input: {
       return serializePrReviewState(
         {
           sha: headSha,
-          reviewedAt: now().toISOString(),
+          reviewedAt: (startedAt ?? now()).toISOString(),
           findings: [
             ...report.findings.map((finding) => ({
               key: keys.get(finding) ?? "",

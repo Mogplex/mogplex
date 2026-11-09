@@ -44,7 +44,9 @@ export function createPrReviewSigner(
 /**
  * The marker key comes from the GitHub App private key, which every
  * deployment that reviews pull requests already has. Read per call so a
- * build-time import never freezes an empty value.
+ * build-time import never freezes an empty value. Rotating that key resets
+ * review memory: existing markers stop verifying, so the next review on each
+ * PR is a first review and may post its findings inline again.
  */
 export function readPrReviewSigningSecret(): string | null {
   const secret = process.env.GITHUB_APP_PRIVATE_KEY?.trim();

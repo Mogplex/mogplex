@@ -152,7 +152,13 @@ export function collectPriorFindings(
   const threadsByKey = new Map<string, PrReviewThread>();
   for (const thread of threads) {
     const key = findingKeyOf(thread.comments[0]?.body ?? "", signer);
-    if (key && !threadsByKey.has(key)) threadsByKey.set(key, thread);
+    if (!key) continue;
+    // A key can own two threads: one a person resolved, and a newer one
+    // posted when the finding came back. The open one is the live thread.
+    const known = threadsByKey.get(key);
+    if (!known || (known.isResolved && !thread.isResolved)) {
+      threadsByKey.set(key, thread);
+    }
   }
   const toThread = (thread: PrReviewThread | undefined) =>
     thread
@@ -212,19 +218,32 @@ export async function loadPrReviewHistory(
   deps: LoadPrReviewHistoryDeps
 ): Promise<PrReviewHistory | null> {
   const state = newestPrReviewState(
-    await deps.readSummaryComments().catch(() => [] as string[]),
+    await deps.readSummaryComments().catch((error: unknown) => {
+      console.warn("[pr-review] history lookup failed", {
+        lookup: "summary",
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return [] as string[];
+    }),
     deps.signer
   );
   if (!state) return null;
 
+  // Each lookup that fails narrows the history; say so, or review memory
+  // could degrade with no signal.
+  const warn = (lookup: string) => (error: unknown) => {
+    console.warn("[pr-review] history lookup failed", {
+      lookup,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  };
   const [threads, comparison, conversation] = await Promise.all([
-    deps.listThreads().catch(() => [] as PrReviewThread[]),
+    deps.listThreads().catch(warn("threads")),
     state.sha === headSha
       ? Promise.resolve(null)
-      : deps.compare(state.sha).catch(() => null),
-    deps
-      .listConversation(state.reviewedAt)
-      .catch(() => [] as PrConversationComment[]),
+      : deps.compare(state.sha).catch(warn("compare")),
+    deps.listConversation(state.reviewedAt).catch(warn("conversation")),
   ]);
   const incremental = comparison?.status === "ahead" && comparison.complete;
   let mode: PrReviewHistory["mode"] = incremental ? "incremental" : "full";
@@ -234,8 +253,8 @@ export async function loadPrReviewHistory(
     reviewedAt: state.reviewedAt,
     mode,
     changedFiles: incremental ? comparison.files : [],
-    findings: collectPriorFindings(state, threads, deps.signer),
-    conversation: conversation.filter(
+    findings: collectPriorFindings(state, threads ?? [], deps.signer),
+    conversation: (conversation ?? []).filter(
       (comment) => !comment.isBot && !comment.body.includes(MOGPLEX_MARKER)
     ),
   };

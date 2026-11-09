@@ -49,7 +49,9 @@ thread someone else's. A copy within the same PR still verifies, so the
 reader looks at every comment carrying the summary marker and takes the
 verified state with the newest review time; an old copy cannot stand in for
 the latest review. Without the key, the lifecycle stays off and every
-review is a first review.
+review is a first review. Rotating the App private key resets review
+memory the same way: existing markers stop verifying, and the next review
+on each PR may post its findings inline again.
 
 The summary upsert edits the newest comment carrying the marker. If that
 comment is someone else's (GitHub answers 403 or 404 to the edit), it posts
@@ -101,6 +103,13 @@ and the harness JSON line).
 - A native report holds at most 20 findings. A report at that cap may have
   left live findings out, so it resolves nothing, and the earlier findings
   it did not report stay in the new state for the next review.
+- An incremental review reads only the files changed since the last one.
+  It closes an earlier finding only when that finding's file changed;
+  earlier findings elsewhere stay open and stay in the state.
+- If a key has two threads (a person resolved one, and the finding came
+  back), the open one is the finding's thread.
+- The state's review time is when the run read the PR, so comments posted
+  while it ran are still new to the next review.
 - A thread someone resolved by hand stays resolved. If the finding is
   reported again, it gets a new inline comment.
 
