@@ -69,7 +69,7 @@ type Props = {
   sortDirection: SortDirection;
   onSort: (key: SortKey) => void;
   onChainChange: (chain: ModelChain) => void;
-  onToggle: (id: string) => void;
+  onToggle: (id: string, enabled: boolean) => void;
 };
 
 export function ModelCatalogTable({
@@ -139,7 +139,7 @@ export function ModelCatalogTable({
                         aria-label={`${model.name} enabled`}
                         data-testid={`models-toggle-${model.id}`}
                         disabled={chainSaving}
-                        onCheckedChange={() => onToggle(model.id)}
+                        onCheckedChange={(enabled) => onToggle(model.id, enabled)}
                       />
                       <span className={cn("text-[11px]", model.is_available ? "text-accent-green" : "text-muted-foreground")}>
                         {model.is_available ? "Available" : "Unavailable"}

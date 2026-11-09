@@ -117,8 +117,27 @@ function getRollbackRevalidationErrorMessage(error: unknown) {
   return `${getModelPreferenceErrorMessage(error)} ${REVALIDATION_FAILURE_DESCRIPTION}`;
 }
 
+type PreferenceQueue = {
+  latest: number;
+  /** The value of the newest click, re-applied if an older refresh lands. */
+  desired: boolean;
+  tail: Promise<unknown>;
+};
+
+/**
+ * One chain of saves per team and model. Each step saves and then refreshes
+ * before the next starts, so a refresh never races a newer click's save.
+ */
+const preferenceQueues = new Map<string, PreferenceQueue>();
+
+/**
+ * Set a model's enabled state to `enabled`, the value the user just chose.
+ * A save that a newer click replaced before it started is skipped; only the
+ * newest click rolls back or warns on failure.
+ */
 export async function toggleModelPreference({
   modelId,
+  enabled,
   catalog,
   mutate,
   activeTeamId = null,
@@ -126,6 +145,7 @@ export async function toggleModelPreference({
   toastFn = toast,
 }: {
   modelId: string;
+  enabled: boolean;
   catalog: CatalogModel[];
   mutate: ModelsMutator;
   activeTeamId?: string | null;
@@ -135,33 +155,60 @@ export async function toggleModelPreference({
   const current = catalog.find((model) => model.id === modelId);
   if (current?.is_hidden === true) return;
 
-  const newEnabled = !(current?.is_enabled ?? false);
-
-  await mutate(
-    (previous) => buildOptimisticModelsResponse(previous, modelId, newEnabled),
-    false
-  );
-
-  try {
-    await patchModelPreference(fetchFn, modelId, newEnabled, activeTeamId);
-  } catch (error) {
-    const rolledBack = await revalidateModelsWithFeedback(
-      mutate,
-      toastFn,
-      true,
-      getRollbackRevalidationErrorMessage(error)
+  const applyOptimistic = (value: boolean) =>
+    mutate(
+      (previous) => buildOptimisticModelsResponse(previous, modelId, value),
+      false
     );
-    if (rolledBack) {
-      toastFn({
-        title: "Model preference not saved",
-        description: getModelPreferenceErrorMessage(error),
-        variant: "destructive",
-      });
-    }
-    return;
-  }
+  await applyOptimistic(enabled);
 
-  await revalidateModelsWithFeedback(mutate, toastFn, false);
+  const key = `${activeTeamId ?? "personal"}:${modelId}`;
+  const queue = preferenceQueues.get(key) ?? {
+    latest: 0,
+    desired: enabled,
+    tail: Promise.resolve(),
+  };
+  preferenceQueues.set(key, queue);
+  const generation = ++queue.latest;
+  queue.desired = enabled;
+  const isNewest = () => generation === queue.latest;
+
+  const step = queue.tail.then(async () => {
+    if (!isNewest()) return;
+    try {
+      await patchModelPreference(fetchFn, modelId, enabled, activeTeamId);
+    } catch (error) {
+      if (!isNewest()) return;
+      const rolledBack = await revalidateModelsWithFeedback(
+        mutate,
+        toastFn,
+        true,
+        getRollbackRevalidationErrorMessage(error)
+      );
+      if (rolledBack) {
+        toastFn({
+          title: "Model preference not saved",
+          description: getModelPreferenceErrorMessage(error),
+          variant: "destructive",
+        });
+      }
+      if (!isNewest()) await applyOptimistic(queue.desired);
+      return;
+    }
+    // A click during the save owns the next refresh; skip this one.
+    if (!isNewest()) {
+      await applyOptimistic(queue.desired);
+      return;
+    }
+    await revalidateModelsWithFeedback(mutate, toastFn, false);
+    // A click during the refresh keeps showing its value until its own save.
+    if (!isNewest()) await applyOptimistic(queue.desired);
+  });
+  queue.tail = step.catch(() => undefined);
+  await queue.tail;
+  if (isNewest() && preferenceQueues.get(key) === queue) {
+    preferenceQueues.delete(key);
+  }
 }
 
 export function useModels(
@@ -194,9 +241,10 @@ export function useModels(
   );
 
   const toggleModel = useCallback(
-    (modelId: string) =>
+    (modelId: string, enabled: boolean) =>
       toggleModelPreference({
         modelId,
+        enabled,
         catalog,
         mutate,
         activeTeamId,
