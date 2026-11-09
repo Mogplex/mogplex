@@ -12,8 +12,6 @@ import {
   buildPrReviewCheckText,
   buildPrReviewCheckSummary,
   buildPrReviewCheckTitle,
-  buildPrReviewGithubReviewBody,
-  buildPrReviewInlineComments,
   buildPrReviewTimelineCommentBody,
   type PrReviewConclusion,
   type PrReviewFailureDetails,
@@ -26,7 +24,11 @@ import type {
   loadPullRequestChangedLines,
   upsertPrReviewTimelineComment,
 } from "@/lib/github-check-runs";
-import { anchorReviewFindings } from "./pr-review-anchors";
+import { publishInlinePrReview } from "./automation-job-pr-review-inline";
+import {
+  createPrReviewLifecycle,
+  type PrReviewThreadsDeps,
+} from "./pr-review-lifecycle-runner";
 import type { loadPullRequestDetails } from "./automation-job-github";
 import type { persistJobReviewFindings } from "./automation-job-persistence";
 import type { polishPrReviewForPublish } from "./pr-review-format-check";
@@ -45,6 +47,8 @@ export type PrReviewReporterDeps = {
   /** Without it, inline comments go only on the lines findings name. */
   loadPullRequestChangedLines?: typeof loadPullRequestChangedLines;
   upsertPrReviewTimelineComment: typeof upsertPrReviewTimelineComment;
+  /** Without it, every review is a first review (no thread lifecycle). */
+  reviewThreads?: PrReviewThreadsDeps;
   loadPullRequestDetails: typeof loadPullRequestDetails;
   persistJobReviewFindings: typeof persistJobReviewFindings;
   polishPrReviewForPublish?: typeof polishPrReviewForPublish;
@@ -85,8 +89,10 @@ export type PrReviewReporterState = {
   reviewGithubReviewUrl: string | null;
   reviewGithubReviewError: string | null;
   reviewGithubInlineCommentCount: number;
-  /** Findings the native review carries as inline comments. */
+  /** Findings this run posted as new inline comments. */
   reviewInlineFindings: ReadonlySet<ReviewFinding>;
+  /** Earlier threads this run replied to and resolved. */
+  reviewThreadsResolved: number;
   reviewStaleHeadCheckError: string | null;
   prReviewCompletionReason: string | null;
 };
@@ -94,6 +100,14 @@ export type PrReviewReporterState = {
 export type PrReviewReporter = {
   state: PrReviewReporterState;
   loadCurrentPrReviewHeadSha: () => Promise<string | null>;
+  /** The context with the previous review's history for the prompt. */
+  withReviewHistory: (context: JobContext) => Promise<JobContext>;
+  /** Key the report's findings and plan the earlier threads. */
+  planReviewThreads: (input: {
+    reviewHarnessResult: PrReviewHarnessResult | null;
+    reviewOutcome: ReviewOutcome | null;
+  }) => void;
+  resolveStaleReviewThreads: () => Promise<number>;
   completeStalePrReviewCheckRun: (currentHeadSha: string) => Promise<boolean>;
   publishPrReviewCheckRun: (input: {
     reviewHarnessResult: PrReviewHarnessResult | null;
@@ -162,8 +176,44 @@ export function createPrReviewReporter(
     reviewGithubReviewError: null,
     reviewGithubInlineCommentCount: 0,
     reviewInlineFindings: new Set(),
+    reviewThreadsResolved: 0,
     reviewStaleHeadCheckError: null,
     prReviewCompletionReason: null,
+  };
+
+  const lifecycle = createPrReviewLifecycle({
+    deps: deps.reviewThreads,
+    githubToken,
+    repoFullName: context.repo.full_name,
+    prNumber: isPrReview ? reviewPrNumber : null,
+    headSha: reviewHeadSha,
+  });
+  let plannedFindings: ReviewFinding[] = [];
+  let plannedStructured = false;
+
+  const withReviewHistory = async (
+    jobContext: JobContext
+  ): Promise<JobContext> => {
+    const block = await lifecycle.loadHistoryBlock();
+    if (!block) return jobContext;
+    return {
+      ...jobContext,
+      metadata: { ...jobContext.metadata, pr_review_history_block: block },
+    };
+  };
+
+  const planReviewThreads = (planInput: {
+    reviewHarnessResult: PrReviewHarnessResult | null;
+    reviewOutcome: ReviewOutcome | null;
+  }) => {
+    plannedStructured = planInput.reviewHarnessResult?.source === "structured";
+    plannedFindings = planInput.reviewOutcome?.findings ?? [];
+    lifecycle.planThreads(plannedFindings, plannedStructured);
+  };
+
+  const resolveStaleReviewThreads = async () => {
+    state.reviewThreadsResolved = await lifecycle.resolveThreads();
+    return state.reviewThreadsResolved;
   };
 
   const loadCurrentPrReviewHeadSha = async (): Promise<string | null> => {
@@ -319,9 +369,23 @@ export function createPrReviewReporter(
           checkRunUrl: state.reviewCheckRunUrl,
           failureDetails: pubInput.failureDetails,
           inline: {
-            findings: state.reviewInlineFindings,
-            reviewUrl: state.reviewGithubReviewUrl,
+            links: new Map([
+              ...lifecycle.plan.existingThreads,
+              ...[...state.reviewInlineFindings].map(
+                (finding) => [finding, state.reviewGithubReviewUrl] as const
+              ),
+            ]),
           },
+          resolvedFindings: lifecycle.plan.resolvedFindings.map((prior) => ({
+            title: prior.title,
+            path: prior.path,
+            url: prior.thread?.url ?? null,
+          })),
+          stateMarker: lifecycle.stateMarker({
+            structured: plannedStructured && pubInput.conclusion !== "failure",
+            findings: plannedFindings,
+            inline: state.reviewInlineFindings,
+          }),
         }),
       });
       state.reviewTimelineCommentPublished = true;
@@ -338,85 +402,32 @@ export function createPrReviewReporter(
     }
   };
 
-  const loadChangedLines = async () => {
-    if (!deps.loadPullRequestChangedLines || reviewPrNumber == null)
-      return null;
-    try {
-      return await deps.loadPullRequestChangedLines({
-        githubToken,
-        repoFullName: context.repo.full_name,
-        prNumber: reviewPrNumber,
-      });
-    } catch (error) {
-      // Without the diff, findings keep the lines they name. Logged so a
-      // rejected review can be told apart from missing diff data.
-      console.warn("[automation-job] PR diff lookup failed", {
-        repoFullName: context.repo.full_name,
-        prNumber: reviewPrNumber,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return null;
-    }
-  };
-
-  /**
-   * Publish the findings that can sit on the diff as one native review of
-   * inline comments. Findings it cannot anchor stay in the summary comment,
-   * which is published after this and lists the inline ones by link.
-   */
   const publishPrReviewGithubReview = async (pubInput: {
     reviewHarnessResult: PrReviewHarnessResult | null;
     reviewOutcome: ReviewOutcome | null;
     conclusion: PrReviewConclusion;
   }): Promise<boolean> => {
-    const reviewOutcome = pubInput.reviewOutcome;
-
     if (
       !isPrReview ||
       reviewPrNumber == null ||
       reviewHeadSha.length === 0 ||
       pubInput.reviewHarnessResult?.source !== "structured" ||
-      !reviewOutcome?.findings.length
+      !pubInput.reviewOutcome?.findings.length
     ) {
       return false;
     }
-
-    const { comments } = anchorReviewFindings(
-      reviewOutcome.findings,
-      await loadChangedLines()
-    );
-    if (comments.length === 0) return false;
-
-    try {
-      const review = await deps.createPrReviewGithubReview({
-        githubToken,
-        repoFullName: context.repo.full_name,
-        prNumber: reviewPrNumber,
-        commitId: reviewHeadSha,
-        body: buildPrReviewGithubReviewBody({
-          harnessResult: pubInput.reviewHarnessResult,
-          conclusion: pubInput.conclusion,
-          checkRunUrl: state.reviewCheckRunUrl,
-          inlineCommentCount: comments.length,
-        }),
-        comments: buildPrReviewInlineComments(comments),
-      });
-      state.reviewGithubReviewPublished = true;
-      state.reviewGithubReviewId = review.id;
-      state.reviewGithubReviewUrl = review.htmlUrl;
-      state.reviewGithubReviewError = null;
-      state.reviewGithubInlineCommentCount = comments.length;
-      state.reviewInlineFindings = new Set(
-        comments.map((comment) => comment.finding)
-      );
-      return true;
-    } catch (error) {
-      // The summary comment then carries every finding in full.
-      state.reviewGithubReviewError =
-        error instanceof Error ? error.message : "Failed to publish PR review";
-      state.reviewGithubInlineCommentCount = 0;
-      return false;
-    }
+    return publishInlinePrReview({
+      deps,
+      githubToken,
+      repoFullName: context.repo.full_name,
+      prNumber: reviewPrNumber,
+      headSha: reviewHeadSha,
+      state,
+      lifecycle,
+      harnessResult: pubInput.reviewHarnessResult,
+      findings: pubInput.reviewOutcome.findings,
+      conclusion: pubInput.conclusion,
+    });
   };
 
   const wrappedFinalizePrReviewSuccess = (finalizeInput: {
@@ -443,12 +454,17 @@ export function createPrReviewReporter(
         publishPrReviewCheckRun,
         publishPrReviewGithubReview,
         publishPrReviewTimelineComment,
+        planReviewThreads,
+        resolveStaleReviewThreads,
       }
     );
 
   return {
     state,
     loadCurrentPrReviewHeadSha,
+    withReviewHistory,
+    planReviewThreads,
+    resolveStaleReviewThreads,
     completeStalePrReviewCheckRun,
     publishPrReviewCheckRun,
     publishPrReviewTimelineComment,

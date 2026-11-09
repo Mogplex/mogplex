@@ -288,6 +288,7 @@ export async function findExistingTimelineComment(
     if (matchingComment) {
       return {
         id: matchingComment.id,
+        body: matchingComment.body,
         htmlUrl:
           typeof matchingComment.html_url === "string"
             ? matchingComment.html_url

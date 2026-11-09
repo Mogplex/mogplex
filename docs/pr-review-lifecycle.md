@@ -1,0 +1,102 @@
+# PR review lifecycle: memory across runs
+
+Every push to a pull request starts a new review. Without memory, each run
+reviews the whole PR from scratch: it re-raises findings the author already
+answered, files new suggestions on code nobody touched, and leaves its old
+threads open after the code is fixed. Reviews never converge. This design
+gives the reviewer three things, all kept on GitHub (no schema change):
+
+1. **Finding lifecycle.** Each finding has a stable key across runs. A
+   finding that is reported again keeps its thread; one that is no longer
+   reported gets a reply and its thread is resolved.
+2. **Replies are input.** The author's thread replies and PR comments since
+   the last review go into the next review's prompt. A finding the author
+   answered is not reported again unless the code changed or the reviewer
+   answers the reason.
+3. **Incremental re-review.** When the PR head moved forward from the last
+   reviewed commit, the reviewer checks earlier findings and reviews only
+   what changed since then for new ones.
+
+## State
+
+- **Finding key.** A short hash of the finding's path, title and body when
+  it is first reported. The inline comment carries it as
+  `<!-- mogplex-finding:KEY.SIG -->`.
+- **Review state.** The summary comment ends with
+  `<!-- mogplex-review-state:BASE64URL.SIG -->`: the reviewed head SHA, the
+  review time, and every finding with its key, severity, title, path, line,
+  and whether it was posted inline.
+- **Threads.** Read through GraphQL `pullRequest.reviewThreads`. A thread is
+  Mogplex's when its first comment carries a finding marker that verifies.
+  Replies are its other comments that carry no Mogplex marker.
+
+### Signed markers
+
+Anyone who can comment on the PR can write a marker, and reviews may post
+with the connected user's token, so the comment author does not identify
+Mogplex. Without a check, a forged state comment could claim the PR was
+already reviewed at a commit of the author's choosing and narrow the next
+review to a few files.
+
+`lib/workflows/pr-review-signing.ts` signs every marker with an HMAC bound
+to the repository and PR number. The key is derived (HKDF, labelled for
+this purpose) from `GITHUB_APP_PRIVATE_KEY`, which every deployment that
+reviews PRs already has, so there is no new secret to provision. A marker
+that does not verify is read as absent: forged or copied state means a
+first review, and a forged finding marker makes a thread someone else's.
+Without the key, the lifecycle stays off and every review is a first
+review.
+
+A PR reviewed before this shipped has no state, so its next review is a
+first review.
+
+## Before the run: history
+
+`loadPrReviewHistory` (`lib/workflows/pr-review-history.ts`) reads the
+summary comment's state, the Mogplex threads, the author's PR comments
+since the last review, and `compare/{reviewedSha}...{head}`:
+
+- `ahead`, with the full file list: incremental. The prompt lists the files
+  changed since the last review.
+- The same commit (a rerun): a full review, described as a rerun.
+- Anything else (force-push, rebase, more than 300 changed files, lookup
+  failed): a full review. Both full modes still get the earlier findings
+  and replies.
+
+`buildPrReviewHistoryBlock` turns this into a `<previous_review>` block in
+the review prompt, for native and harness reviewers alike. Earlier findings
+get short ids (`F1`, `F2`, ...) with their thread state and the author's
+replies. The rules it states:
+
+- Report an earlier finding again only if it still applies at the current
+  head, with `priorId` set to its id.
+- If the author replied, do not report it again unless the code it is about
+  changed or the finding body answers the reply with new evidence.
+- In an incremental review, report new findings only on code that changed
+  since the last review, unless they are critical.
+
+The report schema adds an optional `priorId` to each finding (`reportReview`
+and the harness JSON line).
+
+## After the run: reconcile
+
+`planPrReviewThreads` (`lib/workflows/pr-review-lifecycle.ts`) is pure:
+
+- A finding with a valid `priorId` keeps that finding's key; others get a
+  new key.
+- A finding whose key has an open Mogplex thread is not posted again; the
+  summary links the existing thread.
+- An open Mogplex thread whose key is not reported again is resolved with a
+  reply: "No longer reported at `abc1234`." It is resolved only when the
+  run filed a structured report; an incomplete or failed review changes no
+  thread.
+- A thread someone resolved by hand stays resolved. If the finding is
+  reported again, it gets a new inline comment.
+
+The reporter applies the plan after the inline review is published, then
+writes the summary comment with the new state and a "Resolved since the
+last review" list.
+
+Every GitHub call here is best effort. A history that fails to load means a
+first review. A reply or resolve that fails leaves the thread open, and the
+next run tries again.

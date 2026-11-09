@@ -114,6 +114,10 @@ export function buildPromptForJob(
     // so Anthropic prompt caching can fire. See issue #530.
     return buildPrReviewRunSpec({
       flowContextBlock,
+      historyBlock:
+        typeof metadata.pr_review_history_block === "string"
+          ? metadata.pr_review_history_block
+          : null,
       prNumber: metadata.pr_number,
       systemPrompt,
       lifecycleTools: metadata.flow_auto_merge === true,
@@ -417,7 +421,7 @@ export function buildAutomationHarnessPrompt(input: {
   } else if (isReview) {
     instructions.push(
       "Inspect only. Do not edit files, push commits, merge, or publish GitHub comments or reviews; Mogplex publishes the review after you finish.",
-      `Your final non-empty line must be ${AUTOMATION_HARNESS_REVIEW_PREFIX} followed by one compact JSON object with this shape: {"hasIssues":true,"summary":"...","commentBody":"...","affectedFiles":["path"],"findings":[{"severity":"warning","title":"...","body":"...","path":"path","line":1}]}.`,
+      `Your final non-empty line must be ${AUTOMATION_HARNESS_REVIEW_PREFIX} followed by one compact JSON object with this shape: {"hasIssues":true,"summary":"...","commentBody":"...","affectedFiles":["path"],"findings":[{"severity":"warning","title":"...","body":"...","path":"path","line":1}]}. A finding that repeats one from the previous review also carries "priorId" with that finding's id.`,
       "Use hasIssues=false when there are no material issues; list any non-blocking suggestions as findings with severity suggestion."
     );
   } else {

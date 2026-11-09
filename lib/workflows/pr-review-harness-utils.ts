@@ -61,6 +61,9 @@ export function toReviewFindings(value: unknown): ReviewFinding[] {
         body,
         path: toOptionalString(entry.path),
         line: toPositiveInteger(entry.line),
+        ...(toOptionalString(entry.priorId)
+          ? { priorId: toOptionalString(entry.priorId) }
+          : {}),
       },
     ];
   });

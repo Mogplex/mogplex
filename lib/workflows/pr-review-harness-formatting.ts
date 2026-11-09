@@ -72,10 +72,9 @@ function indentListItemBody(body: string) {
     .join("\n");
 }
 
-/** Findings published as inline comments, and where those comments are. */
+/** Findings that sit in inline threads, each with its thread's URL if known. */
 export type InlineReviewFindings = {
-  findings: ReadonlySet<ReviewFinding>;
-  reviewUrl: string | null;
+  links: ReadonlyMap<ReviewFinding, string | null>;
 };
 
 export function buildReviewFindingsSections(
@@ -109,9 +108,10 @@ export function buildReviewFindingsSections(
             const heading = location
               ? `- **${finding.title}** (${formatInlineCode(location)})`
               : `- **${finding.title}**`;
-            if (inline?.findings.has(finding)) {
-              return inline.reviewUrl
-                ? `${heading}: [inline comment](${inline.reviewUrl})`
+            if (inline?.links.has(finding)) {
+              const url = inline.links.get(finding);
+              return url
+                ? `${heading}: [inline comment](${url})`
                 : `${heading}: inline comment`;
             }
             return [heading, indentListItemBody(finding.body)]

@@ -247,6 +247,20 @@ export async function loadPullRequestChangedLines(input: {
   }
 }
 
+/** The body of the canonical Mogplex review comment on a PR, if any. */
+export async function readPrReviewTimelineComment(input: {
+  githubToken: string;
+  repoFullName: string;
+  prNumber: number;
+}): Promise<string | null> {
+  const { owner, repo } = parseRepoFullName(input.repoFullName);
+  const existing = await findExistingTimelineComment(
+    { githubToken: input.githubToken, owner, repo, prNumber: input.prNumber },
+    MOGPLEX_PR_REVIEW_TIMELINE_MARKER
+  );
+  return existing?.body ?? null;
+}
+
 function withTimelineMarker(body: string) {
   // Prefix a hidden marker and newline so future runs can locate the canonical
   // comment with includes(marker) and update it instead of creating a new one.

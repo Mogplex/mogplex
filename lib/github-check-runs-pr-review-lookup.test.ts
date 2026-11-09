@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  MOGPLEX_PR_REVIEW_TIMELINE_MARKER,
   getLatestPrReviewCheckRun,
   getPullRequestHeadSha,
+  readPrReviewTimelineComment,
 } from "./github-check-runs";
 
 afterEach(() => {
@@ -196,5 +198,43 @@ describe("getLatestPrReviewCheckRun", () => {
         headSha: "abc123",
       })
     ).rejects.toThrow(/GitHub check runs lookup failed \(502\): Bad Gateway/);
+  });
+});
+
+describe("readPrReviewTimelineComment", () => {
+  it("returns the body of the newest Mogplex review comment", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      Response.json([
+        { id: 1, body: `${MOGPLEX_PR_REVIEW_TIMELINE_MARKER}\nOld review` },
+        { id: 2, body: "A person's comment" },
+        { id: 3, body: `${MOGPLEX_PR_REVIEW_TIMELINE_MARKER}\nNew review` },
+      ])
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const body = await readPrReviewTimelineComment({
+      githubToken: "token",
+      repoFullName: "acme/widgets",
+      prNumber: 12,
+    });
+
+    expect(body).toBe(`${MOGPLEX_PR_REVIEW_TIMELINE_MARKER}\nNew review`);
+  });
+
+  it("returns null when the PR has no Mogplex review comment", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(Response.json([{ id: 2, body: "Hello" }]))
+    );
+
+    await expect(
+      readPrReviewTimelineComment({
+        githubToken: "token",
+        repoFullName: "acme/widgets",
+        prNumber: 12,
+      })
+    ).resolves.toBeNull();
   });
 });

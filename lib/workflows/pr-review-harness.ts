@@ -204,6 +204,14 @@ export function buildPrReviewTimelineCommentBody(input: {
   checkRunUrl?: string | null;
   failureDetails?: PrReviewFailureDetails | null;
   inline?: InlineReviewFindings | null;
+  /** Earlier findings this review no longer reports. */
+  resolvedFindings?: Array<{
+    title: string;
+    path: string | null;
+    url: string | null;
+  }>;
+  /** Hidden state the next review reads (`serializePrReviewState`). */
+  stateMarker?: string | null;
 }) {
   const detail = buildPrReviewCheckText({
     harnessResult: input.harnessResult,
@@ -218,8 +226,26 @@ export function buildPrReviewTimelineCommentBody(input: {
     parts.push(detail);
   }
 
+  if (input.resolvedFindings?.length) {
+    parts.push(
+      [
+        "**Resolved since the last review**",
+        ...input.resolvedFindings.map((finding) => {
+          const label = finding.path
+            ? `${finding.title} (${formatInlineCode(finding.path)})`
+            : finding.title;
+          return finding.url ? `- [${label}](${finding.url})` : `- ${label}`;
+        }),
+      ].join("\n")
+    );
+  }
+
   if (input.checkRunUrl?.trim()) {
     parts.push(`[View check run](${input.checkRunUrl.trim()})`);
+  }
+
+  if (input.stateMarker) {
+    parts.push(input.stateMarker);
   }
 
   return parts.join("\n\n").trim();

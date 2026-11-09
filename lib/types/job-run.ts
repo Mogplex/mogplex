@@ -61,6 +61,8 @@ export type ReviewFinding = {
   body: string;
   path: string | null;
   line: number | null;
+  /** Id of the earlier finding this one repeats (`F1`), from the review history. */
+  priorId?: string | null;
 };
 
 export type JobRunReviewFindingStatus =

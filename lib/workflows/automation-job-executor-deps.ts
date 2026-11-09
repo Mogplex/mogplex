@@ -11,8 +11,17 @@ import {
   completePrReviewCheckRun,
   createPrReviewGithubReview,
   createPrReviewCheckRun,
+  readPrReviewTimelineComment,
   upsertPrReviewTimelineComment,
 } from "@/lib/github-check-runs";
+import {
+  comparePrCommits,
+  listPrConversationComments,
+  listPrReviewThreads,
+  replyAndResolvePrReviewThread,
+} from "@/lib/github-pr-review-threads";
+import type { PrReviewThreadsDeps } from "@/lib/workflows/pr-review-lifecycle-runner";
+import { readPrReviewSigningSecret } from "@/lib/workflows/pr-review-signing";
 import {
   supabaseWaitStore,
   triggerWaitProvider,
@@ -78,6 +87,8 @@ export type AutomationJobExecutorDeps = {
   completePrReviewCheckRun: typeof completePrReviewCheckRun;
   createPrReviewGithubReview: typeof createPrReviewGithubReview;
   loadPullRequestChangedLines?: typeof loadPullRequestChangedLines;
+  // Without it, every PR review is a first review.
+  reviewThreads?: PrReviewThreadsDeps;
   upsertPrReviewTimelineComment: typeof upsertPrReviewTimelineComment;
   resolveAutomationModel: typeof resolveAutomationModel;
   loadPullRequestDetails: typeof loadPullRequestDetails;
@@ -120,6 +131,14 @@ export const defaultAutomationJobExecutorDeps: AutomationJobExecutorDeps = {
   completePrReviewCheckRun,
   createPrReviewGithubReview,
   loadPullRequestChangedLines,
+  reviewThreads: {
+    readPrReviewTimelineComment,
+    listPrReviewThreads,
+    comparePrCommits,
+    listPrConversationComments,
+    replyAndResolvePrReviewThread,
+    signingSecret: readPrReviewSigningSecret,
+  },
   upsertPrReviewTimelineComment,
   resolveAutomationModel,
   loadPullRequestDetails,

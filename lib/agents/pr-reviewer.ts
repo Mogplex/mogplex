@@ -73,6 +73,12 @@ export function buildPRReviewTools(config: {
     body: z.string(),
     path: z.string().optional(),
     line: z.number().int().positive().optional(),
+    priorId: z
+      .string()
+      .optional()
+      .describe(
+        "When this repeats an earlier finding from the previous review, that finding's id (for example F1)."
+      ),
   });
   const reportObjectSchema = z
     .object({

@@ -21,6 +21,8 @@ const PR_REVIEW_LIFECYCLE_INSTRUCTIONS = [
 
 export function buildPrReviewRunSpec(input: {
   flowContextBlock?: string | null;
+  /** The previous review's findings and replies (`buildPrReviewHistoryBlock`). */
+  historyBlock?: string | null;
   prNumber: unknown;
   systemPrompt?: string | null;
   lifecycleTools?: boolean;
@@ -33,7 +35,11 @@ export function buildPrReviewRunSpec(input: {
     ]
       .filter(Boolean)
       .join("\n\n"),
-    prompt: [input.flowContextBlock, `Review PR #${input.prNumber}.`]
+    prompt: [
+      input.flowContextBlock,
+      input.historyBlock,
+      `Review PR #${input.prNumber}.`,
+    ]
       .filter(Boolean)
       .join("\n\n"),
   };
