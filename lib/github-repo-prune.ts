@@ -41,11 +41,21 @@ export async function pruneUnconnectedRepos(
       p_user_id: userId,
     });
     if (error) throw new Error(error.message);
-    const deleted = typeof data === "number" ? data : 0;
-    if (deleted > 0) {
-      deps.logger.info("Pruned unconnected repositories", { userId, deleted });
+    // The function returns the full names it deleted, for support to trace.
+    if (
+      !Array.isArray(data) ||
+      !data.every((name) => typeof name === "string")
+    ) {
+      throw new Error("prune_unconnected_repos returned an unexpected shape");
     }
-    return deleted;
+    if (data.length > 0) {
+      deps.logger.info("Pruned unconnected repositories", {
+        userId,
+        deleted: data.length,
+        repositories: data,
+      });
+    }
+    return data.length;
   } catch (error) {
     deps.logger.error("Failed to prune unconnected repositories", {
       userId,

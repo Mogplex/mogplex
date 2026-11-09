@@ -17,68 +17,70 @@
 --
 -- Expand only: a new function, no change to any table.
 create or replace function public.prune_unconnected_repos(p_user_id uuid)
-returns integer
+returns setof text
 language plpgsql
 security definer
 set search_path = ''
 as $$
 declare
-  v_deleted integer;
+  v_ids uuid[];
 begin
   if p_user_id is null then
-    return 0;
+    return;
   end if;
 
-  -- Lock the candidates first. This only orders writers that go through a
-  -- foreign key: they hold a key-share lock on the repo row, so this waits
-  -- for them to commit and the delete below (a new statement, so a new
-  -- snapshot) sees their reference; later ones wait for this transaction and
-  -- then fail their foreign key check. The hand-written guards
-  -- (control_sessions.repo_id and project, orchestration_*.repo_id,
+  -- Lock the candidates that carry no user settings; a row the user
+  -- configured is never locked or deleted. The lock only orders writers that
+  -- go through a foreign key: they hold a key-share lock on the repo row, so
+  -- this waits for them to commit and the delete below (a new statement, so
+  -- a new snapshot) sees their reference; later ones wait for this
+  -- transaction and then fail their foreign key check. The hand-written
+  -- guards (control_sessions.repo_id and project, orchestration_*.repo_id,
   -- job_runs.metadata, review_findings.repo_full_name) take no such lock and
   -- are best effort. App deployments hide these rows everywhere, so nothing
   -- should be writing new references to them; the window is theoretical.
-  perform 1
-  from public.repos r
-  where r.owner_type = 'user'
-    and r.owner_user_id = p_user_id
-    and r.product_team_id is null
-    and r.github_installation_id is null
-  for update;
+  select array_agg(c.id) into v_ids
+  from (
+    select r.id
+    from public.repos r
+    where r.owner_type = 'user'
+      and r.owner_user_id = p_user_id
+      and r.product_team_id is null
+      and r.github_installation_id is null
+      -- Settings stored on the row itself: a row the user configured is kept.
+      and not r.is_favorite
+      and not r.is_monorepo
+      and r.parent_repo_id is null
+      and r.sandbox_env_vars = '{}'::jsonb
+      and r.install_command is null
+      and r.dev_command is null
+      and r.root_directory is null
+      and r.runtime is null
+      and r.sandbox_timeout_ms is null
+      and r.sandbox_idle_timeout_ms is null
+      and r.dev_port = 3000
+      and r.dev_port_auto
+      and r.env_sync_mode = 'sandbox-only'
+      and r.sandbox_billing_target = 'personal'
+      and r.sandbox_billing_mode_override is null
+      and r.vercel_project_id is null
+      and r.vercel_team_id is null
+      and r.webhook_secret is null
+      and r.snapshot_id is null
+      and r.snapshot_build_token is null
+      and r.snapshot_created_at is null
+    for update
+  ) c;
 
   -- Users with no legacy rows have no candidates; skip the guard.
-  if not found then
-    return 0;
+  if v_ids is null then
+    return;
   end if;
 
-  -- Same candidate predicate as the lock above; keep the two identical.
+  -- Only the locked rows, and only those nothing refers to.
+  return query
   delete from public.repos r
-  where r.owner_type = 'user'
-    and r.owner_user_id = p_user_id
-    and r.product_team_id is null
-    and r.github_installation_id is null
-    -- Settings stored on the row itself: a row the user configured is kept.
-    and not r.is_favorite
-    and not r.is_monorepo
-    and r.parent_repo_id is null
-    and r.sandbox_env_vars = '{}'::jsonb
-    and r.install_command is null
-    and r.dev_command is null
-    and r.root_directory is null
-    and r.runtime is null
-    and r.sandbox_timeout_ms is null
-    and r.sandbox_idle_timeout_ms is null
-    and r.dev_port = 3000
-    and r.dev_port_auto
-    and r.env_sync_mode = 'sandbox-only'
-    and r.sandbox_billing_target = 'personal'
-    and r.sandbox_billing_mode_override is null
-    and r.vercel_project_id is null
-    and r.vercel_team_id is null
-    and r.webhook_secret is null
-    and r.snapshot_id is null
-    and r.snapshot_build_token is null
-    and r.snapshot_created_at is null
+  where r.id = any (v_ids)
     and not exists (select 1 from public.repos x where x.parent_repo_id = r.id)
     and not exists (select 1 from public.ai_call_events x where x.repo_id = r.id)
     and not exists (select 1 from public.ai_calls x where x.repo_id = r.id)
@@ -113,10 +115,8 @@ begin
     and not exists (select 1 from public.sandboxes x where x.repo_id = r.id)
     and not exists (select 1 from public.slack_channel_links x where x.repo_id = r.id)
     and not exists (select 1 from public.slack_connection_requests x where x.repo_id = r.id)
-    and not exists (select 1 from public.team_audit_events x where x.repo_id = r.id);
-
-  get diagnostics v_deleted = row_count;
-  return v_deleted;
+    and not exists (select 1 from public.team_audit_events x where x.repo_id = r.id)
+  returning r.full_name;
 end;
 $$;
 

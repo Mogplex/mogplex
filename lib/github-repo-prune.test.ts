@@ -18,7 +18,7 @@ function deps(
 
 describe("pruneUnconnectedRepos", () => {
   it("should call the prune function for the user after an App sync that returned repositories", async () => {
-    const injected = deps({ data: 3, error: null });
+    const injected = deps({ data: ["a/one", "a/two", "b/three"], error: null });
 
     const deleted = await pruneUnconnectedRepos("user-1", 5, injected);
 
@@ -28,12 +28,16 @@ describe("pruneUnconnectedRepos", () => {
     });
     expect(injected.logger.info).toHaveBeenCalledWith(
       "Pruned unconnected repositories",
-      { userId: "user-1", deleted: 3 }
+      {
+        userId: "user-1",
+        deleted: 3,
+        repositories: ["a/one", "a/two", "b/three"],
+      }
     );
   });
 
   it("should not touch the database when the App sync returned no repositories", async () => {
-    const injected = deps({ data: 3, error: null });
+    const injected = deps({ data: ["a/one"], error: null });
 
     expect(await pruneUnconnectedRepos("user-1", 0, injected)).toBe(0);
     expect(injected.rpc).not.toHaveBeenCalled();
@@ -57,9 +61,22 @@ describe("pruneUnconnectedRepos", () => {
   });
 
   it("should stay quiet when nothing was deleted", async () => {
-    const injected = deps({ data: 0, error: null });
+    const injected = deps({ data: [], error: null });
 
     expect(await pruneUnconnectedRepos("user-1", 2, injected)).toBe(0);
     expect(injected.logger.info).not.toHaveBeenCalled();
+  });
+
+  it("should report an unexpected result shape instead of treating it as nothing deleted", async () => {
+    const injected = deps({ data: 3, error: null });
+
+    expect(await pruneUnconnectedRepos("user-1", 2, injected)).toBe(0);
+    expect(injected.logger.error).toHaveBeenCalledWith(
+      "Failed to prune unconnected repositories",
+      {
+        userId: "user-1",
+        error: "prune_unconnected_repos returned an unexpected shape",
+      }
+    );
   });
 });

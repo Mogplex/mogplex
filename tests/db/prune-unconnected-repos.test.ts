@@ -155,7 +155,7 @@ it("deletes only the user's unreferenced personal repositories without a GitHub 
     "alter role service_role bypassrls; grant usage on schema public to service_role; grant select, insert, update, delete on all tables in schema public to service_role; set role service_role"
   );
   const { rows } = await db.query<{ deleted: number }>(
-    "select public.prune_unconnected_repos($1) as deleted",
+    "select count(*)::int as deleted from public.prune_unconnected_repos($1)",
     [user]
   );
   await db.exec("reset role");
@@ -191,7 +191,7 @@ it("returns before evaluating the guard when the user has no candidate rows", as
   await db.exec("begin; alter table public.job_runs rename to job_runs_moved");
   try {
     const { rows } = await db.query<{ deleted: number }>(
-      "select public.prune_unconnected_repos($1) as deleted",
+      "select count(*)::int as deleted from public.prune_unconnected_repos($1)",
       [idle]
     );
     expect(rows[0].deleted).toBe(0);
