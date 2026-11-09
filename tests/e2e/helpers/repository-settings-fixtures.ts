@@ -159,36 +159,14 @@ export async function dashboard(
       },
     ]);
   });
-  const prFlow = (id: string, name: string, filter: object) => ({
-    id,
-    name,
-    status: "active",
-    source_kind: "github",
-    published_version: {
-      id: `${id}-v1`,
-      flow_id: id,
-      version_number: 1,
-      created_at: "2026-11-01T00:00:00Z",
-      graph: {
-        nodes: [
-          {
-            id: "start",
-            type: "start",
-            position: { x: 0, y: 0 },
-            data: { label: "PR opened", event: "pr_opened", filter },
-          },
-        ],
-        edges: [],
-      },
-    },
-  });
-  await page.route("**/api/flows", (route) =>
+  await page.route("**/api/flows?view=triggers", (route) =>
     fulfillJson(route, [
-      prFlow("review", "PR-Review", { scope: "org" }),
-      prFlow("beta-check", "Beta check", {
-        scope: "all",
-        repos: ["alex/beta"],
-      }),
+      { id: "review", name: "PR-Review", filter: { scope: "org" } },
+      {
+        id: "beta-check",
+        name: "Beta check",
+        filter: { scope: "all", repos: ["alex/beta"] },
+      },
     ])
   );
   for (const name of ["workspaces", "agents", "assignments", "memberships"]) {

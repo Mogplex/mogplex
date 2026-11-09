@@ -2,7 +2,7 @@ import { getStartConfig } from "@/lib/flows/graph";
 import { coerceGraph } from "@/lib/flows/graph-coerce";
 import {
   evaluateTriggerFilter,
-  type TriggerFilterAccountType,
+  normalizeAccountType,
 } from "@/lib/flows/trigger-filter";
 import type { Flow, FlowStartFilter } from "@/lib/types";
 
@@ -18,7 +18,9 @@ export type RepoAutomation = {
  */
 export function githubAutomations(
   flows: Array<
-    Pick<Flow, "id" | "name" | "status" | "source_kind" | "published_version">
+    Pick<Flow, "id" | "name" | "status" | "source_kind"> & {
+      published_version?: { graph?: unknown } | null;
+    }
   >
 ): RepoAutomation[] {
   const automations: RepoAutomation[] = [];
@@ -37,14 +39,15 @@ export function githubAutomations(
  * Automations that can run on at least one of an owner's repositories,
  * judged with the webhook router's own trigger filter. The author filter is
  * left out: it depends on each pull request, not on the repository, so a
- * Dependabot-only review still runs here.
+ * Dependabot-only review still runs here. The account type is the stored
+ * installation value, normalized exactly as the router does (unknown → User).
  */
 export function automationsForOwner(
   automations: RepoAutomation[],
   repos: Array<{ full_name: string; github_installation_id?: number | null }>,
-  accountType: TriggerFilterAccountType | null
+  installationAccountType: string | null | undefined
 ): RepoAutomation[] {
-  if (!accountType) return [];
+  const accountType = normalizeAccountType(installationAccountType);
   return automations.filter((automation) => {
     const filter = automation.filter && {
       ...automation.filter,
@@ -62,13 +65,20 @@ export function automationsForOwner(
   });
 }
 
-/** GitHub's account type label as the trigger filter expects it. */
-export function toTriggerAccountType(
-  accountType: string | null | undefined
-): TriggerFilterAccountType | null {
-  const value = accountType?.toLowerCase() ?? "";
-  if (value.includes("org")) return "Organization";
-  if (value.includes("user")) return "User";
+/**
+ * The installation behind an owner's repositories: the first one carrying an
+ * installation id that the installations list knows. Null when none does.
+ */
+export function installationForOwner<T>(
+  repos: Array<{ github_installation_id?: number | null }>,
+  installationsById: ReadonlyMap<number, T>
+): T | null {
+  for (const repo of repos) {
+    const id = Number(repo.github_installation_id);
+    if (repo.github_installation_id == null || !Number.isFinite(id)) continue;
+    const installation = installationsById.get(id);
+    if (installation) return installation;
+  }
   return null;
 }
 

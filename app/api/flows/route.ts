@@ -9,6 +9,7 @@ import {
   createFlowForUser,
   listOwnedFlowsWithSummaries,
 } from "@/lib/flows/api";
+import { listGithubAutomationTriggers } from "@/lib/flows/api-flow-triggers";
 import {
   isFlowStarterTemplateId,
   type FlowStarterTemplateId,
@@ -30,6 +31,7 @@ function readTemplateId(
 type FlowsRouteDeps = {
   requireUserId: typeof requireUserId;
   listOwnedFlowsWithSummaries: typeof listOwnedFlowsWithSummaries;
+  listGithubAutomationTriggers: typeof listGithubAutomationTriggers;
   createFlowForUser: typeof createFlowForUser;
   resolveActiveTeamCapabilities: typeof resolveActiveTeamCapabilities;
 };
@@ -38,16 +40,23 @@ export function createFlowsGetHandler(overrides: Partial<FlowsRouteDeps> = {}) {
   const deps: FlowsRouteDeps = {
     requireUserId,
     listOwnedFlowsWithSummaries,
+    listGithubAutomationTriggers,
     createFlowForUser,
     resolveActiveTeamCapabilities,
     ...overrides,
   };
 
-  return async function GET() {
+  return async function GET(request: Request) {
     const userId = await deps.requireUserId();
     if (userId instanceof Response) return userId;
 
     try {
+      // ?view=triggers: GitHub automations and their start filters only.
+      if (new URL(request.url).searchParams.get("view") === "triggers") {
+        return NextResponse.json(
+          await deps.listGithubAutomationTriggers(userId)
+        );
+      }
       const flows = await deps.listOwnedFlowsWithSummaries(userId);
       return NextResponse.json(flows);
     } catch (error) {
@@ -64,6 +73,7 @@ export function createFlowsPostHandler(
   const deps: FlowsRouteDeps = {
     requireUserId,
     listOwnedFlowsWithSummaries,
+    listGithubAutomationTriggers,
     createFlowForUser,
     resolveActiveTeamCapabilities,
     ...overrides,

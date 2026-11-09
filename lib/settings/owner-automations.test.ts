@@ -3,8 +3,8 @@ import type { Flow, FlowStartFilter } from "@/lib/types";
 import {
   automationsForOwner,
   githubAutomations,
+  installationForOwner,
   latestRepoSync,
-  toTriggerAccountType,
 } from "./owner-automations";
 
 const flow = (
@@ -75,10 +75,22 @@ describe("automationsForOwner", () => {
     ).toEqual(["all", "orgs", "site-only"]);
   });
 
-  it("should match nothing without a known account type or installation", () => {
+  it("should treat an unknown account type as a personal account, as the router does", () => {
+    const automations = githubAutomations([
+      flow("orgs", { scope: "org" }),
+      flow("personal", { scope: "personal" }),
+    ]);
+
+    for (const accountType of [null, undefined, "Bot"]) {
+      expect(
+        automationsForOwner(automations, repos, accountType).map((a) => a.id)
+      ).toEqual(["personal"]);
+    }
+  });
+
+  it("should match nothing for repositories without an installation", () => {
     const automations = githubAutomations([flow("all", { scope: "all" })]);
 
-    expect(automationsForOwner(automations, repos, null)).toEqual([]);
     expect(
       automationsForOwner(
         automations,
@@ -89,11 +101,32 @@ describe("automationsForOwner", () => {
   });
 });
 
-describe("toTriggerAccountType", () => {
-  it("should map GitHub account types to trigger filter account types", () => {
-    expect(toTriggerAccountType("Organization")).toBe("Organization");
-    expect(toTriggerAccountType("User")).toBe("User");
-    expect(toTriggerAccountType(null)).toBeNull();
+describe("installationForOwner", () => {
+  const installations = new Map([
+    [7, { manage_url: "https://example.test/7" }],
+  ]);
+
+  it("should return the first known installation behind the owner's repositories", () => {
+    expect(
+      installationForOwner(
+        [
+          { github_installation_id: null },
+          { github_installation_id: 9 },
+          { github_installation_id: 7 },
+        ],
+        installations
+      )
+    ).toEqual({ manage_url: "https://example.test/7" });
+  });
+
+  it("should return null when no repository carries a known installation", () => {
+    expect(installationForOwner([], installations)).toBeNull();
+    expect(
+      installationForOwner([{ github_installation_id: null }], installations)
+    ).toBeNull();
+    expect(
+      installationForOwner([{ github_installation_id: 9 }], installations)
+    ).toBeNull();
   });
 });
 

@@ -153,4 +153,12 @@ describe("notConnectedReasons", () => {
       ["skhard99/docs", "not_installed"],
     ]);
   });
+
+  it("should count an installation with no selected repositories as installed", () => {
+    const all = [row("Empty-Org/site", false), row("skhard99/docs", false)];
+
+    expect(
+      notConnectedReasons(all, all, ["empty-org"]).map(({ reason }) => reason)
+    ).toEqual(["not_selected", "not_installed"]);
+  });
 });

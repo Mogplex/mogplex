@@ -23,7 +23,7 @@ import {
 } from "@/lib/settings/repository-filter";
 import {
   automationsForOwner,
-  toTriggerAccountType,
+  installationForOwner,
 } from "@/lib/settings/owner-automations";
 import { timeAgo } from "@/lib/observability/formatters";
 import type { Repo } from "@/lib/types";
@@ -75,20 +75,20 @@ export function RepositoriesSection() {
       groups.map((group) => {
         // Judge the owner by all its connected repositories, not the search.
         const ownerAll = activeOwnerRepos(inventory, group.owner);
-        const installation = context.installationsById.get(
-          Number(
-            ownerAll.find((repo) => repo.github_installation_id != null)
-              ?.github_installation_id
-          )
+        const installation = installationForOwner(
+          ownerAll,
+          context.installationsById
         );
         return {
           ...group,
           manageUrl: installation?.manage_url ?? null,
-          automations: automationsForOwner(
-            context.automations,
-            ownerAll,
-            toTriggerAccountType(installation?.account_type)
-          ),
+          automations: installation
+            ? automationsForOwner(
+                context.automations,
+                ownerAll,
+                installation.account_type
+              )
+            : [],
         };
       }),
     [groups, inventory, context]
@@ -124,7 +124,10 @@ export function RepositoriesSection() {
             size="sm"
             disabled={admin.syncing}
             onClick={() =>
-              void admin.sync().then(() => context.refreshInstallations())
+              void admin
+                .sync()
+                .then(() => context.refreshInstallations())
+                .catch(() => undefined)
             }
           >
             {admin.syncing ? "Syncing…" : "Sync GitHub"}
@@ -258,7 +261,11 @@ export function RepositoriesSection() {
       owner === "all" &&
       notConnectedRepos.length > 0 ? (
         <NotConnectedRepositories
-          repos={notConnectedReasons(notConnectedRepos, admin.repos)}
+          repos={notConnectedReasons(
+            notConnectedRepos,
+            admin.repos,
+            context.installedOwners
+          )}
           removing={admin.removingOwner}
           removingLabel={removingLabel}
           onRemoveAll={() =>

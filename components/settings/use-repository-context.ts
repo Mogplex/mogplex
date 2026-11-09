@@ -4,13 +4,13 @@ import { useMemo } from "react";
 import useSWR from "swr";
 import { fetchJsonArray } from "@/lib/client-fetch";
 import {
-  githubAutomations,
   latestRepoSync,
+  type RepoAutomation,
 } from "@/lib/settings/owner-automations";
-import type { Flow } from "@/lib/types";
 
 export type RepositoryInstallation = {
   installation_id: number;
+  account_login?: string | null;
   account_type?: string | null;
   manage_url?: string | null;
   repos_synced_at?: string | null;
@@ -18,8 +18,8 @@ export type RepositoryInstallation = {
 
 const fetchInstallations = (url: string) =>
   fetchJsonArray<RepositoryInstallation>(url, "Failed to load installations");
-const fetchFlows = (url: string) =>
-  fetchJsonArray<Flow>(url, "Failed to load automations");
+const fetchAutomations = (url: string) =>
+  fetchJsonArray<RepoAutomation>(url, "Failed to load automations");
 
 /**
  * What Settings → Repositories shows around the list: each installation's
@@ -32,7 +32,10 @@ export function useRepositoryContext() {
     "/api/github/installations",
     fetchInstallations
   );
-  const { data: flows } = useSWR("/api/flows", fetchFlows);
+  const { data: automations } = useSWR(
+    "/api/flows?view=triggers",
+    fetchAutomations
+  );
 
   return useMemo(
     () => ({
@@ -42,10 +45,13 @@ export function useRepositoryContext() {
           installation,
         ])
       ),
-      automations: githubAutomations(flows ?? []),
+      automations: automations ?? [],
+      installedOwners: (installations ?? []).flatMap((installation) =>
+        installation.account_login ? [installation.account_login] : []
+      ),
       lastSyncedAt: latestRepoSync(installations ?? []),
       refreshInstallations,
     }),
-    [installations, flows, refreshInstallations]
+    [installations, automations, refreshInstallations]
   );
 }
