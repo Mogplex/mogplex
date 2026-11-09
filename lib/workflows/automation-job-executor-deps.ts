@@ -7,7 +7,7 @@
  */
 
 import {
-  clearPrReviewTimelineComment,
+  loadPullRequestChangedLines,
   completePrReviewCheckRun,
   createPrReviewGithubReview,
   createPrReviewCheckRun,
@@ -77,7 +77,7 @@ export type AutomationJobExecutorDeps = {
   createPrReviewCheckRun: typeof createPrReviewCheckRun;
   completePrReviewCheckRun: typeof completePrReviewCheckRun;
   createPrReviewGithubReview: typeof createPrReviewGithubReview;
-  clearPrReviewTimelineComment: typeof clearPrReviewTimelineComment;
+  loadPullRequestChangedLines?: typeof loadPullRequestChangedLines;
   upsertPrReviewTimelineComment: typeof upsertPrReviewTimelineComment;
   resolveAutomationModel: typeof resolveAutomationModel;
   loadPullRequestDetails: typeof loadPullRequestDetails;
@@ -119,7 +119,7 @@ export const defaultAutomationJobExecutorDeps: AutomationJobExecutorDeps = {
   createPrReviewCheckRun,
   completePrReviewCheckRun,
   createPrReviewGithubReview,
-  clearPrReviewTimelineComment,
+  loadPullRequestChangedLines,
   upsertPrReviewTimelineComment,
   resolveAutomationModel,
   loadPullRequestDetails,

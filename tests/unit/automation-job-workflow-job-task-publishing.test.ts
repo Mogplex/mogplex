@@ -83,11 +83,6 @@ test("createAutomationJobTask skips PR review publishing when the PR head change
       githubReviewCalled = true;
       throw new Error("stale PR reviews should not post native reviews");
     },
-    clearPrReviewTimelineComment: async () => ({
-      deleted: false,
-      id: null,
-      htmlUrl: null,
-    }),
     resolveAutomationModel: async () => ({
       model: "openai/gpt-5.4",
       effectiveModelId: "openai/gpt-5.4",

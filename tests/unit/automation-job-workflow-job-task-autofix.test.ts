@@ -12,6 +12,7 @@ test("createAutomationJobTask includes flow autofix commit diffs in PR review ou
   const originalFetch = globalThis.fetch;
   let nodeRunSequence = 0;
   let checkRunText: string | null = null;
+  let summaryCommentBody: string | null = null;
   let githubReviewBody: string | null = null;
 
   const workflow = createAutomationJobTask({
@@ -249,11 +250,14 @@ test("createAutomationJobTask includes flow autofix commit diffs in PR review ou
           "https://github.com/acme/widgets/pull/144#pullrequestreview-1444",
       };
     },
-    clearPrReviewTimelineComment: async () => ({
-      deleted: false,
-      id: null,
-      htmlUrl: null,
-    }),
+    upsertPrReviewTimelineComment: async (input) => {
+      summaryCommentBody = input.body;
+      return {
+        id: 1445,
+        htmlUrl: "https://github.com/acme/widgets/pull/144#issuecomment-1445",
+        created: true,
+      };
+    },
     persistJobSuccess: async () => true,
     persistJobReviewFindings: async ({ findings }) =>
       makePersistedReviewFindingsResult(findings.length),
@@ -332,10 +336,12 @@ test("createAutomationJobTask includes flow autofix commit diffs in PR review ou
       checkRunText ?? "",
       /\[abcdef1\]\(https:\/\/github\.com\/acme\/widgets\/commit\/abcdef1\)/
     );
-    assert.match(githubReviewBody ?? "", /Autofix Applied/);
-    assert.match(githubReviewBody ?? "", /`src\/widget\.ts`/);
+    // The summary comment carries the autofix; the review only the findings.
+    assert.doesNotMatch(githubReviewBody ?? "", /Autofix Applied/);
+    assert.match(summaryCommentBody ?? "", /Autofix Applied/);
+    assert.match(summaryCommentBody ?? "", /`src\/widget\.ts`/);
     assert.match(
-      githubReviewBody ?? "",
+      summaryCommentBody ?? "",
       /\[abcdef1\]\(https:\/\/github\.com\/acme\/widgets\/commit\/abcdef1\)/
     );
   } finally {

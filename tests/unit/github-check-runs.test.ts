@@ -4,12 +4,12 @@ import test from "node:test";
 import {
   MOGPLEX_PR_REVIEW_RERUN_ACTION,
   MOGPLEX_PR_REVIEW_TIMELINE_MARKER,
-  clearPrReviewTimelineComment,
   completePrReviewCheckRun,
   createPrReviewGithubReview,
   createPrReviewCheckRun,
   isMogplexPrReviewCheckName,
   isMogplexPrReviewRerunEvent,
+  loadPullRequestChangedLines,
   upsertPrReviewTimelineComment,
 } from "../../lib/github-check-runs";
 
@@ -400,55 +400,38 @@ test("upsertPrReviewTimelineComment searches newest comment pages first when upd
   }
 });
 
-test("clearPrReviewTimelineComment deletes an existing canonical timeline comment", async () => {
+test("loadPullRequestChangedLines reads every page of the pull request's files", async () => {
   const originalFetch = globalThis.fetch;
-  const requests: Array<{ url: string; init: RequestInit | undefined }> = [];
+  const urls: string[] = [];
 
   try {
-    globalThis.fetch = (async (url, init) => {
-      requests.push({ url: String(url), init });
-
-      if (requests.length === 1) {
-        return new Response(
-          JSON.stringify([
-            {
-              id: 19,
-              body: `${MOGPLEX_PR_REVIEW_TIMELINE_MARKER}\nold body`,
-              html_url:
-                "https://github.com/acme/widgets/pull/12#issuecomment-19",
-            },
-          ]),
-          {
-            status: 200,
-            headers: { "content-type": "application/json" },
-          }
-        );
-      }
-
-      return new Response(null, { status: 204 });
+    globalThis.fetch = (async (url) => {
+      urls.push(String(url));
+      const page = Number(new URL(String(url)).searchParams.get("page"));
+      const files =
+        page === 1
+          ? Array.from({ length: 100 }, (_, index) => ({
+              filename: `src/file-${index}.ts`,
+              patch: "@@ -1,1 +1,2 @@\n line\n+added",
+            }))
+          : [{ filename: "assets/logo.png" }];
+      return new Response(JSON.stringify(files), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
     }) as typeof globalThis.fetch;
 
-    const result = await clearPrReviewTimelineComment({
+    const changed = await loadPullRequestChangedLines({
       githubToken: "token",
       repoFullName: "acme/widgets",
-      prNumber: 12,
+      prNumber: 7,
     });
 
-    assert.deepEqual(result, {
-      deleted: true,
-      id: 19,
-      htmlUrl: "https://github.com/acme/widgets/pull/12#issuecomment-19",
-    });
-    assert.equal(requests.length, 2);
-    assert.equal(
-      requests[0]?.url,
-      "https://api.github.com/repos/acme/widgets/issues/12/comments?per_page=100&page=1"
-    );
-    assert.equal(
-      requests[1]?.url,
-      "https://api.github.com/repos/acme/widgets/issues/comments/19"
-    );
-    assert.equal(requests[1]?.init?.method, "DELETE");
+    assert.equal(urls.length, 2);
+    assert.match(urls[1], /\/pulls\/7\/files\?per_page=100&page=2$/);
+    assert.deepEqual(changed.get("src/file-0.ts"), [1, 2]);
+    assert.deepEqual(changed.get("assets/logo.png"), []);
+    assert.equal(changed.size, 101);
   } finally {
     globalThis.fetch = originalFetch;
   }

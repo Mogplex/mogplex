@@ -34,7 +34,6 @@ test("createAutomationJobTask keeps legacy PR reviews review-only by default", a
     body: string;
     comments: Array<{ path: string; body: string; line: number }>;
   } | null = null;
-  let clearedTimelineComment = false;
 
   const workflow = createAutomationJobTask({
     resolveJobContext: async () => ({
@@ -100,14 +99,6 @@ test("createAutomationJobTask keeps legacy PR reviews review-only by default", a
       return {
         id: 44,
         htmlUrl: "https://github.com/acme/widgets/pull/42#pullrequestreview-44",
-      };
-    },
-    clearPrReviewTimelineComment: async () => {
-      clearedTimelineComment = true;
-      return {
-        deleted: true,
-        id: 501,
-        htmlUrl: "https://github.com/acme/widgets/pull/42#issuecomment-501",
       };
     },
     resolveAutomationModel: async () => ({
@@ -301,13 +292,12 @@ test("createAutomationJobTask keeps legacy PR reviews review-only by default", a
   assert.equal(capturedAiCallInput.inputTokens, 13);
   assert.equal(capturedAiCallInput.outputTokens, 21);
   assert.equal(createdCheckRun, true);
-  assert.equal(clearedTimelineComment, true);
   assert.deepEqual(completedCheckRun, {
     conclusion: "neutral",
     summary: "Reviewer found two issues.",
   });
-  assert.equal(timelineCommentInput, null);
-  assert.deepEqual(githubReviewInput, {
+  // The summary comment is the canonical review and links the inline ones.
+  assert.deepEqual(timelineCommentInput, {
     prNumber: 42,
     body: [
       "## Mogplex PR Review",
@@ -316,7 +306,28 @@ test("createAutomationJobTask keeps legacy PR reviews review-only by default", a
       "",
       "Reviewer found two issues.",
       "",
-      "2 findings were added inline.",
+      "**Affected files**",
+      "- `src/widget.ts`",
+      "",
+      "**Warnings**",
+      "",
+      "- **Guard nullable lookup** (`src/widget.ts:L18`): [inline comment](https://github.com/acme/widgets/pull/42#pullrequestreview-44)",
+      "",
+      "**Suggestions**",
+      "",
+      "- **Trim the fallback branch** (`src/widget.ts:L27`): [inline comment](https://github.com/acme/widgets/pull/42#pullrequestreview-44)",
+      "",
+      "[View check run](https://github.com/acme/widgets/runs/91)",
+    ].join("\n"),
+  });
+  assert.deepEqual(githubReviewInput, {
+    prNumber: 42,
+    body: [
+      "## Mogplex PR Review",
+      "",
+      "**Status:** Attention needed",
+      "",
+      "2 findings are on the changed lines below. The full review is in the Mogplex PR Review comment on this pull request.",
       "",
       "[View check run](https://github.com/acme/widgets/runs/91)",
     ].join("\n"),
@@ -347,9 +358,10 @@ test("createAutomationJobTask keeps legacy PR reviews review-only by default", a
       review_summary: "Reviewer found two issues.",
       review_affected_files: ["src/widget.ts"],
       review_comment_posted: false,
-      review_timeline_comment_posted: false,
-      review_timeline_comment_id: null,
-      review_timeline_comment_url: null,
+      review_timeline_comment_posted: true,
+      review_timeline_comment_id: 501,
+      review_timeline_comment_url:
+        "https://github.com/acme/widgets/pull/42#issuecomment-501",
       review_timeline_comment_error: null,
       review_github_review_posted: true,
       review_github_review_id: 44,

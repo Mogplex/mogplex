@@ -17,6 +17,10 @@ import type {
   ReviewOutcome,
 } from "./pr-review-harness";
 import { isPrReviewVerdictMissing } from "./pr-review-harness-extraction";
+import {
+  prReviewVerdict,
+  prReviewVerdictConclusion,
+} from "./pr-review-harness-formatting";
 import type { persistJobReviewFindings } from "./automation-job-persistence";
 import type { PrReviewReporterState } from "./automation-job-pr-review-reporter";
 import {
@@ -69,7 +73,6 @@ export type FinalizePrReviewSuccessContext = {
     reviewOutcome: ReviewOutcome | null;
     conclusion: PrReviewConclusion;
   }) => Promise<boolean>;
-  clearStalePrReviewTimelineComment: () => Promise<boolean>;
   publishPrReviewTimelineComment: (input: {
     reviewHarnessResult: PrReviewHarnessResult | null;
     reviewOutcome: ReviewOutcome | null;
@@ -97,7 +100,6 @@ export async function finalizePrReviewSuccess(
     completeStalePrReviewCheckRun,
     publishPrReviewCheckRun,
     publishPrReviewGithubReview,
-    clearStalePrReviewTimelineComment,
     publishPrReviewTimelineComment,
   } = ctx;
 
@@ -105,9 +107,21 @@ export async function finalizePrReviewSuccess(
   const requiresReviewCheckRun = reviewHeadSha.length > 0;
   // A run that never filed its report has no verdict, so its check must not
   // turn green: a required check would otherwise pass a PR nobody reviewed.
+  // Findings decide the rest: critical or warning findings need attention,
+  // suggestions alone do not.
   const verdictMissing = isPrReviewVerdictMissing(input.reviewHarnessResult);
-  const reviewConclusion =
-    input.reviewOutcome?.hasIssues || verdictMissing ? "neutral" : "success";
+  const reviewConclusion = prReviewVerdictConclusion(
+    prReviewVerdict(
+      input.reviewHarnessResult ??
+        (input.reviewOutcome
+          ? {
+              source: "structured",
+              fallbackText: null,
+              reviewOutcome: input.reviewOutcome,
+            }
+          : null)
+    )
+  );
   const currentHeadSha = await loadCurrentPrReviewHeadSha();
   const isStaleHeadSha =
     reviewHeadSha.length > 0 &&
@@ -183,23 +197,14 @@ export async function finalizePrReviewSuccess(
     fallbackText: input.result.text,
     conclusion: reviewConclusion,
   });
-  const githubReviewPublished = await publishPrReviewGithubReview({
+  // Inline comments go first so the summary comment can link to them. The
+  // summary comment is the one canonical review on every run.
+  await publishPrReviewGithubReview({
     reviewHarnessResult: publishedHarnessResult,
     reviewOutcome: publishedOutcome,
     conclusion: reviewConclusion,
   });
-  if (
-    input.reviewHarnessResult?.source === "structured" &&
-    input.reviewOutcome?.hasIssues &&
-    githubReviewPublished
-  ) {
-    // Native GitHub reviews are the canonical success surface for findings.
-    // Remove any older marker comment so the PR shows a single review.
-    await clearStalePrReviewTimelineComment();
-  }
-  const requiresReviewTimelineComment =
-    reviewPrNumber != null &&
-    (!input.reviewOutcome?.hasIssues || !githubReviewPublished);
+  const requiresReviewTimelineComment = reviewPrNumber != null;
   const timelineCommentPublished = requiresReviewTimelineComment
     ? await publishPrReviewTimelineComment({
         reviewHarnessResult: publishedHarnessResult,
@@ -257,11 +262,13 @@ export async function finalizePrReviewSuccess(
     };
   }
 
-  const reviewReason = input.reviewOutcome?.hasIssues
-    ? PR_REVIEW_REASON_CODES.posted
-    : verdictMissing
-      ? PR_REVIEW_REASON_CODES.incomplete
-      : PR_REVIEW_REASON_CODES.noFindings;
+  const reviewReason =
+    input.reviewOutcome?.hasIssues ||
+    (publishedOutcome?.findings.length ?? 0) > 0
+      ? PR_REVIEW_REASON_CODES.posted
+      : verdictMissing
+        ? PR_REVIEW_REASON_CODES.incomplete
+        : PR_REVIEW_REASON_CODES.noFindings;
 
   return {
     ok: true,

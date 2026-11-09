@@ -432,6 +432,7 @@ describe("finalizePrReviewSuccess and the format check", () => {
       reviewGithubReviewUrl: null,
       reviewGithubReviewError: null,
       reviewGithubInlineCommentCount: 0,
+      reviewInlineFindings: new Set(),
       reviewStaleHeadCheckError: null,
       prReviewCompletionReason: null,
     } satisfies PrReviewReporterState;
@@ -458,7 +459,6 @@ describe("finalizePrReviewSuccess and the format check", () => {
         return true;
       },
       publishPrReviewGithubReview: async () => false,
-      clearStalePrReviewTimelineComment: async () => true,
       publishPrReviewTimelineComment: async (input) => {
         seen.comment.push(input.reviewHarnessResult);
         return true;

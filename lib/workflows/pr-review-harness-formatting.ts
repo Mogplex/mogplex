@@ -72,7 +72,16 @@ function indentListItemBody(body: string) {
     .join("\n");
 }
 
-export function buildReviewFindingsSections(findings: ReviewFinding[]) {
+/** Findings published as inline comments, and where those comments are. */
+export type InlineReviewFindings = {
+  findings: ReadonlySet<ReviewFinding>;
+  reviewUrl: string | null;
+};
+
+export function buildReviewFindingsSections(
+  findings: ReviewFinding[],
+  inline?: InlineReviewFindings | null
+) {
   const sections: string[] = [];
   const orderedSections: Array<{
     title: string;
@@ -100,6 +109,11 @@ export function buildReviewFindingsSections(findings: ReviewFinding[]) {
             const heading = location
               ? `- **${finding.title}** (${formatInlineCode(location)})`
               : `- **${finding.title}**`;
+            if (inline?.findings.has(finding)) {
+              return inline.reviewUrl
+                ? `${heading}: [inline comment](${inline.reviewUrl})`
+                : `${heading}: inline comment`;
+            }
             return [heading, indentListItemBody(finding.body)]
               .filter(Boolean)
               .join("\n");
@@ -173,10 +187,6 @@ export function formatReviewFindingSeverityLabel(
   }
 }
 
-export function isInlinePublishableReviewFinding(finding: ReviewFinding) {
-  return Boolean(finding.path) && finding.line != null;
-}
-
 /** Public failure output is authored here, never copied from provider diagnostics.
  * Raw messages and routing/billing metadata remain in the internal run record.
  */
@@ -189,6 +199,52 @@ export function buildPrReviewFailureMessage(
   return "Mogplex could not complete this review. Please try again later. If the problem continues, contact Mogplex support.";
 }
 
+/**
+ * What a finished review concluded, from its findings rather than from the
+ * model's own flag: any critical or warning finding needs attention; only
+ * suggestions does not. A report without findings falls back to its flag.
+ */
+export type PrReviewVerdict =
+  | "incomplete"
+  | "blocking"
+  | "suggestions"
+  | "clean";
+
+export function prReviewVerdict(
+  harnessResult: PrReviewHarnessResult | null
+): PrReviewVerdict {
+  if (isPrReviewVerdictMissing(harnessResult)) return "incomplete";
+  const outcome = harnessResult?.reviewOutcome;
+  const findings = outcome?.findings ?? [];
+  if (findings.some((finding) => finding.severity !== "suggestion"))
+    return "blocking";
+  if (findings.length > 0) return "suggestions";
+  return outcome?.hasIssues ? "blocking" : "clean";
+}
+
+/** The check conclusion for a verdict: only a clear verdict is success. */
+export function prReviewVerdictConclusion(
+  verdict: PrReviewVerdict
+): "success" | "neutral" {
+  return verdict === "blocking" || verdict === "incomplete"
+    ? "neutral"
+    : "success";
+}
+
+const STATUS_LABELS: Record<PrReviewVerdict, string> = {
+  incomplete: "Review incomplete",
+  blocking: "Attention needed",
+  suggestions: "No blocking issues, suggestions only",
+  clean: "No material issues found",
+};
+
+const CHECK_TITLES: Record<PrReviewVerdict, string> = {
+  incomplete: "Review incomplete",
+  blocking: "Review found issues",
+  suggestions: "Suggestions only",
+  clean: "No issues found",
+};
+
 export function buildPrReviewStatusHeading(input: {
   harnessResult: PrReviewHarnessResult | null;
   conclusion: PrReviewConclusion;
@@ -196,14 +252,7 @@ export function buildPrReviewStatusHeading(input: {
   if (input.conclusion === "failure") {
     return "**Status:** Review failed";
   }
-
-  if (isPrReviewVerdictMissing(input.harnessResult)) {
-    return "**Status:** Review incomplete";
-  }
-
-  return input.harnessResult?.reviewOutcome.hasIssues
-    ? "**Status:** Attention needed"
-    : "**Status:** No material issues found";
+  return `**Status:** ${STATUS_LABELS[prReviewVerdict(input.harnessResult)]}`;
 }
 
 export function buildPrReviewCheckTitle(input: {
@@ -213,12 +262,5 @@ export function buildPrReviewCheckTitle(input: {
   if (input.conclusion === "failure") {
     return "Review failed";
   }
-
-  if (isPrReviewVerdictMissing(input.harnessResult)) {
-    return "Review incomplete";
-  }
-
-  return input.harnessResult?.reviewOutcome.hasIssues
-    ? "Review found issues"
-    : "No issues found";
+  return CHECK_TITLES[prReviewVerdict(input.harnessResult)];
 }

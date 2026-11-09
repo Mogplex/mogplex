@@ -6,6 +6,7 @@
  */
 
 import type { AutomationModelExecutionMetadata } from "@/lib/workflows/automation-model-execution";
+import type { ReviewFinding } from "@/lib/types";
 import type { AutomationAgentResult, JobContext } from "./automation-job-types";
 import {
   buildPrReviewCheckText,
@@ -14,7 +15,6 @@ import {
   buildPrReviewGithubReviewBody,
   buildPrReviewInlineComments,
   buildPrReviewTimelineCommentBody,
-  shouldRetryPrReviewWithoutInlineComments,
   type PrReviewConclusion,
   type PrReviewFailureDetails,
   type PrReviewHarnessResult,
@@ -23,9 +23,10 @@ import {
 import type {
   completePrReviewCheckRun,
   createPrReviewGithubReview,
-  clearPrReviewTimelineComment,
+  loadPullRequestChangedLines,
   upsertPrReviewTimelineComment,
 } from "@/lib/github-check-runs";
+import { anchorReviewFindings } from "./pr-review-anchors";
 import type { loadPullRequestDetails } from "./automation-job-github";
 import type { persistJobReviewFindings } from "./automation-job-persistence";
 import type { polishPrReviewForPublish } from "./pr-review-format-check";
@@ -41,7 +42,8 @@ import {
 export type PrReviewReporterDeps = {
   completePrReviewCheckRun: typeof completePrReviewCheckRun;
   createPrReviewGithubReview: typeof createPrReviewGithubReview;
-  clearPrReviewTimelineComment: typeof clearPrReviewTimelineComment;
+  /** Without it, inline comments go only on the lines findings name. */
+  loadPullRequestChangedLines?: typeof loadPullRequestChangedLines;
   upsertPrReviewTimelineComment: typeof upsertPrReviewTimelineComment;
   loadPullRequestDetails: typeof loadPullRequestDetails;
   persistJobReviewFindings: typeof persistJobReviewFindings;
@@ -83,6 +85,8 @@ export type PrReviewReporterState = {
   reviewGithubReviewUrl: string | null;
   reviewGithubReviewError: string | null;
   reviewGithubInlineCommentCount: number;
+  /** Findings the native review carries as inline comments. */
+  reviewInlineFindings: ReadonlySet<ReviewFinding>;
   reviewStaleHeadCheckError: string | null;
   prReviewCompletionReason: string | null;
 };
@@ -105,7 +109,6 @@ export type PrReviewReporter = {
     conclusion: PrReviewConclusion;
     failureDetails?: PrReviewFailureDetails | null;
   }) => Promise<boolean>;
-  clearStalePrReviewTimelineComment: () => Promise<boolean>;
   publishPrReviewGithubReview: (input: {
     reviewHarnessResult: PrReviewHarnessResult | null;
     reviewOutcome: ReviewOutcome | null;
@@ -158,6 +161,7 @@ export function createPrReviewReporter(
     reviewGithubReviewUrl: null,
     reviewGithubReviewError: null,
     reviewGithubInlineCommentCount: 0,
+    reviewInlineFindings: new Set(),
     reviewStaleHeadCheckError: null,
     prReviewCompletionReason: null,
   };
@@ -254,6 +258,12 @@ export function createPrReviewReporter(
       return true;
 
     try {
+      const summary = buildPrReviewCheckSummary({
+        harnessResult: pubInput.reviewHarnessResult,
+        fallbackText: pubInput.fallbackText,
+        conclusion: pubInput.conclusion,
+        failureDetails: pubInput.failureDetails,
+      });
       const updatedCheckRun = await deps.completePrReviewCheckRun({
         githubToken,
         repoFullName: context.repo.full_name,
@@ -263,17 +273,13 @@ export function createPrReviewReporter(
           harnessResult: pubInput.reviewHarnessResult,
           conclusion: pubInput.conclusion,
         }),
-        summary: buildPrReviewCheckSummary({
-          harnessResult: pubInput.reviewHarnessResult,
-          fallbackText: pubInput.fallbackText,
-          conclusion: pubInput.conclusion,
-          failureDetails: pubInput.failureDetails,
-        }),
+        summary,
         text: buildPrReviewCheckText({
           harnessResult: pubInput.reviewHarnessResult,
           fallbackText: pubInput.fallbackText,
           conclusion: pubInput.conclusion,
           failureDetails: pubInput.failureDetails,
+          shownSummary: summary,
         }),
         detailsUrl: reviewCheckDetailsUrl,
       });
@@ -312,6 +318,10 @@ export function createPrReviewReporter(
           conclusion: pubInput.conclusion,
           checkRunUrl: state.reviewCheckRunUrl,
           failureDetails: pubInput.failureDetails,
+          inline: {
+            findings: state.reviewInlineFindings,
+            reviewUrl: state.reviewGithubReviewUrl,
+          },
         }),
       });
       state.reviewTimelineCommentPublished = true;
@@ -328,33 +338,26 @@ export function createPrReviewReporter(
     }
   };
 
-  const clearStalePrReviewTimelineComment = async (): Promise<boolean> => {
-    if (!isPrReview || reviewPrNumber == null) return false;
-
+  const loadChangedLines = async () => {
+    if (!deps.loadPullRequestChangedLines || reviewPrNumber == null)
+      return null;
     try {
-      const cleared = await deps.clearPrReviewTimelineComment({
+      return await deps.loadPullRequestChangedLines({
         githubToken,
         repoFullName: context.repo.full_name,
         prNumber: reviewPrNumber,
       });
-
-      if (cleared.deleted) {
-        state.reviewTimelineCommentPublished = false;
-        state.reviewTimelineCommentId = null;
-        state.reviewTimelineCommentUrl = null;
-      }
-
-      state.reviewTimelineCommentError = null;
-      return cleared.deleted;
-    } catch (error) {
-      state.reviewTimelineCommentError =
-        error instanceof Error
-          ? error.message
-          : "Failed to clear stale GitHub timeline comment";
-      return false;
+    } catch {
+      // Without the diff, findings keep the lines they name.
+      return null;
     }
   };
 
+  /**
+   * Publish the findings that can sit on the diff as one native review of
+   * inline comments. Findings it cannot anchor stay in the summary comment,
+   * which is published after this and lists the inline ones by link.
+   */
   const publishPrReviewGithubReview = async (pubInput: {
     reviewHarnessResult: PrReviewHarnessResult | null;
     reviewOutcome: ReviewOutcome | null;
@@ -367,63 +370,45 @@ export function createPrReviewReporter(
       reviewPrNumber == null ||
       reviewHeadSha.length === 0 ||
       pubInput.reviewHarnessResult?.source !== "structured" ||
-      !reviewOutcome?.hasIssues
+      !reviewOutcome?.findings.length
     ) {
       return false;
     }
 
-    const inlineComments = buildPrReviewInlineComments(reviewOutcome.findings);
-    const publishReview = (
-      comments: ReturnType<typeof buildPrReviewInlineComments>
-    ) =>
-      deps.createPrReviewGithubReview({
+    const { comments } = anchorReviewFindings(
+      reviewOutcome.findings,
+      await loadChangedLines()
+    );
+    if (comments.length === 0) return false;
+
+    try {
+      const review = await deps.createPrReviewGithubReview({
         githubToken,
         repoFullName: context.repo.full_name,
         prNumber: reviewPrNumber,
         commitId: reviewHeadSha,
         body: buildPrReviewGithubReviewBody({
-          reviewOutcome,
+          harnessResult: pubInput.reviewHarnessResult,
           conclusion: pubInput.conclusion,
           checkRunUrl: state.reviewCheckRunUrl,
           inlineCommentCount: comments.length,
-          autofix: pubInput.reviewHarnessResult?.autofix ?? null,
         }),
-        comments,
+        comments: buildPrReviewInlineComments(comments),
       });
-
-    try {
-      const review = await publishReview(inlineComments);
       state.reviewGithubReviewPublished = true;
       state.reviewGithubReviewId = review.id;
       state.reviewGithubReviewUrl = review.htmlUrl;
       state.reviewGithubReviewError = null;
-      state.reviewGithubInlineCommentCount = inlineComments.length;
+      state.reviewGithubInlineCommentCount = comments.length;
+      state.reviewInlineFindings = new Set(
+        comments.map((comment) => comment.finding)
+      );
       return true;
     } catch (error) {
-      let publishError: unknown = error;
-
-      if (
-        inlineComments.length > 0 &&
-        shouldRetryPrReviewWithoutInlineComments(publishError)
-      ) {
-        try {
-          const review = await publishReview([]);
-          state.reviewGithubReviewPublished = true;
-          state.reviewGithubReviewId = review.id;
-          state.reviewGithubReviewUrl = review.htmlUrl;
-          state.reviewGithubReviewError = null;
-          state.reviewGithubInlineCommentCount = 0;
-          return true;
-        } catch (retryError) {
-          publishError = retryError;
-        }
-      }
-
+      // The summary comment then carries every finding in full.
       state.reviewGithubReviewError =
-        publishError instanceof Error
-          ? publishError.message
-          : "Failed to publish PR review";
-      state.reviewGithubInlineCommentCount = inlineComments.length;
+        error instanceof Error ? error.message : "Failed to publish PR review";
+      state.reviewGithubInlineCommentCount = 0;
       return false;
     }
   };
@@ -451,7 +436,6 @@ export function createPrReviewReporter(
         completeStalePrReviewCheckRun,
         publishPrReviewCheckRun,
         publishPrReviewGithubReview,
-        clearStalePrReviewTimelineComment,
         publishPrReviewTimelineComment,
       }
     );
@@ -462,7 +446,6 @@ export function createPrReviewReporter(
     completeStalePrReviewCheckRun,
     publishPrReviewCheckRun,
     publishPrReviewTimelineComment,
-    clearStalePrReviewTimelineComment,
     publishPrReviewGithubReview,
     finalizePrReviewSuccess: wrappedFinalizePrReviewSuccess,
   };
