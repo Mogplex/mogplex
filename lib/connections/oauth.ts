@@ -1,6 +1,11 @@
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { assertSafeOutboundHttpUrlWithDns } from "@/lib/security/outbound-url";
-import { encrypt, decrypt } from "./encryption";
+import { encrypt } from "./encryption";
+import {
+  type OAuthCredentials,
+  parseCredentials,
+  parseCredentialsSafely,
+} from "./oauth-credentials";
 import { updateConnection } from "./service";
 import { getConnectionPreset } from "./presets";
 import { getOAuthProfile } from "./oauth-profile";
@@ -19,18 +24,12 @@ export {
   discoverOAuthMetadata,
 } from "./oauth-discovery";
 
-type OAuthCredentials = {
-  client_secret?: string;
-  access_token?: string;
-  refresh_token?: string;
-  /** Set when Mogplex registered this row's client (custom MCP sign-in). */
-  registered_client?: true;
-};
-
 export type OAuthTokenResponse = {
   access_token: string;
   refresh_token?: string;
   expires_in?: number;
+  /** Set by the code exchange only: whether it named a resource. */
+  resource_indicator?: boolean;
 };
 
 export type StoredOAuthConnectionState = {
@@ -39,44 +38,6 @@ export type StoredOAuthConnectionState = {
   oauth_authorized_at: string | null;
   oauth_token_expires_at: string | null;
 };
-
-function parseCredentials(encrypted: string): OAuthCredentials {
-  const raw = decrypt(encrypted);
-  try {
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    // Only native OAuth fields are recognized. Unknown legacy broker payloads
-    // intentionally parse without a token and must fail closed until reconnect.
-    return {
-      client_secret:
-        typeof parsed.client_secret === "string"
-          ? parsed.client_secret
-          : undefined,
-      access_token:
-        typeof parsed.access_token === "string"
-          ? parsed.access_token
-          : undefined,
-      refresh_token:
-        typeof parsed.refresh_token === "string"
-          ? parsed.refresh_token
-          : undefined,
-      registered_client: parsed.registered_client === true ? true : undefined,
-    };
-  } catch {
-    throw new Error("Invalid OAuth credentials format");
-  }
-}
-
-function parseCredentialsSafely(encrypted: string | null): OAuthCredentials {
-  if (!encrypted) {
-    return {};
-  }
-
-  try {
-    return parseCredentials(encrypted);
-  } catch {
-    return {};
-  }
-}
 
 async function getStoredOAuthConnectionState(
   connectionId: string
@@ -112,15 +73,16 @@ export function canPrepareOAuthConnection(connection: Connection): boolean {
 
 export function getOAuthResourceIndicator(
   connection: Connection,
-  refresh?: { registeredClient: boolean }
+  refresh?: { resourceBound: boolean }
 ): string | undefined {
-  // On refresh, custom rows name the resource only if Mogplex registered their
-  // client: hand-configured clients may use servers that reject it.
-  const profile =
-    refresh && !refresh.registeredClient
-      ? getConnectionPreset(connection.source_preset)?.oauth_config
-      : getOAuthProfile(connection);
-  return profile?.use_resource_indicator && connection.type === "mcp_server"
+  // Refresh names the resource when the code exchange did or a preset declares
+  // it. Tokens from exchanges that predate the marker refresh without it.
+  const sendsResource = refresh
+    ? refresh.resourceBound ||
+      getConnectionPreset(connection.source_preset)?.oauth_config
+        ?.use_resource_indicator
+    : getOAuthProfile(connection)?.use_resource_indicator;
+  return sendsResource && connection.type === "mcp_server"
     ? (connection.mcp_url ?? undefined)
     : undefined;
 }
@@ -190,15 +152,12 @@ export async function prepareOAuthConnection(
       }
     );
 
-    // Custom rows: the registered client replaces any saved secret and is
-    // marked so refresh keeps its resource. Presets keep theirs until migration.
+    // A custom row's registered client replaces any secret saved for another
+    // client. Preset rows keep theirs until the token write completes migration.
     const credentials =
-      preset && !registration.client_secret
-        ? undefined
-        : JSON.stringify({
-            client_secret: registration.client_secret,
-            ...(preset ? {} : { registered_client: true }),
-          });
+      registration.client_secret || !preset
+        ? JSON.stringify({ client_secret: registration.client_secret })
+        : undefined;
 
     await updateConnection(nextConnection.id, {
       oauth_client_id: registration.client_id,
@@ -244,6 +203,10 @@ async function compareAndSwapOAuthConnectionState(
     ...parseCredentialsSafely(current.encrypted_credentials),
     access_token: tokens.access_token,
     ...(tokens.refresh_token ? { refresh_token: tokens.refresh_token } : {}),
+    // A code exchange records whether it named the resource; refreshes keep it.
+    ...(tokens.resource_indicator === undefined
+      ? {}
+      : { resource_indicator: tokens.resource_indicator || undefined }),
   };
 
   const update: Record<string, unknown> = {
@@ -390,6 +353,7 @@ export async function exchangeCodeForTokens(
       typeof json.refresh_token === "string" ? json.refresh_token : undefined,
     expires_in:
       typeof json.expires_in === "number" ? json.expires_in : undefined,
+    resource_indicator: Boolean(resource),
   };
 }
 
@@ -413,7 +377,7 @@ export async function refreshOAuthToken(
     "oauth_token_url"
   );
   const resource = getOAuthResourceIndicator(connection, {
-    registeredClient: creds.registered_client === true,
+    resourceBound: creds.resource_indicator === true,
   });
   const res = await fetch(tokenUrl, {
     method: "POST",

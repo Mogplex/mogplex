@@ -65,11 +65,21 @@ function fetchUrl(input: FetchInput) {
       : input.url;
 }
 
+const DISCOVERED_ENDPOINTS = {
+  authorization_endpoint: `${MCP_ORIGIN}/oauth/authorize`,
+  token_endpoint: TOKEN_URL,
+  registration_endpoint: `${MCP_ORIGIN}/oauth/register`,
+};
+
 /**
  * Prepares a custom MCP row against a stubbed MCP server that publishes its
- * authorization server and registers clients with `registered` as the reply.
+ * authorization server (with `endpoints`) and registers clients with
+ * `registered` as the reply.
  */
-async function prepareWithDiscovery(registered: Record<string, unknown>) {
+async function prepareWithDiscovery(
+  registered: Record<string, unknown>,
+  endpoints: Record<string, unknown> = DISCOVERED_ENDPOINTS
+) {
   const helpers = await loadOAuthHelpers();
   const originalFetch = global.fetch;
   const updates: Array<Record<string, unknown>> = [];
@@ -84,11 +94,7 @@ async function prepareWithDiscovery(registered: Record<string, unknown>) {
         authorization_servers: [MCP_ORIGIN],
       });
     if (url === `${MCP_ORIGIN}/.well-known/oauth-authorization-server`)
-      return Response.json({
-        authorization_endpoint: `${MCP_ORIGIN}/oauth/authorize`,
-        token_endpoint: TOKEN_URL,
-        registration_endpoint: `${MCP_ORIGIN}/oauth/register`,
-      });
+      return Response.json(endpoints);
     if (url === `${MCP_ORIGIN}/oauth/register`) {
       registration = JSON.parse(String(init?.body)) as Record<string, unknown>;
       return Response.json(registered);
@@ -143,9 +149,7 @@ test("should replace a saved client secret when Mogplex registers a new public c
 
   // The registration write replaces the row's credentials, so a secret saved
   // without a client id is never sent for the new public client.
-  assert.deepEqual(storedCredentials(updates.at(-1)), {
-    registered_client: true,
-  });
+  assert.deepEqual(storedCredentials(updates.at(-1)), {});
 });
 
 test("should keep the secret a registration issues for a custom MCP client", async () => {
@@ -156,9 +160,33 @@ test("should keep the secret a registration issues for a custom MCP client", asy
 
   assert.deepEqual(storedCredentials(updates.at(-1)), {
     client_secret: "issued-secret",
-    registered_client: true,
   });
 });
+
+for (const [field, value, reason] of [
+  // eslint-disable-next-line sonarjs/no-clear-text-protocols -- rejection-path fixture
+  ["authorization_endpoint", "http://203.0.113.10/oauth/authorize", /https/],
+  // eslint-disable-next-line no-script-url -- rejection-path fixture
+  ["authorization_endpoint", "javascript:alert(1)", /http or https/],
+  ["authorization_endpoint", "https://localhost/oauth/authorize", /public/],
+  ["token_endpoint", "https://127.0.0.1/oauth/token", /public/],
+  ["token_endpoint", "https://10.0.0.5/oauth/token", /public/],
+] as const) {
+  test(`should fail sign-in when discovery advertises ${field} ${value}`, async () => {
+    const attempt = prepareWithDiscovery(
+      { client_id: "never-registered" },
+      { ...DISCOVERED_ENDPOINTS, [field]: value }
+    );
+
+    await assert.rejects(attempt, (error: Error) => {
+      assert.match(error.message, new RegExp(`^${field} `));
+      assert.match(error.message, reason);
+      // The message names the field, never the advertised URL.
+      assert.ok(!error.message.includes(value));
+      return true;
+    });
+  });
+}
 
 test("should leave non-MCP and non-OAuth custom connections out of browser sign-in", async () => {
   const { prepareOAuthConnection, getOAuthResourceIndicator } =
@@ -177,107 +205,165 @@ test("should leave non-MCP and non-OAuth custom connections out of browser sign-
   }
 });
 
+type StoredState = {
+  encrypted_credentials: string;
+  updated_at: string;
+  oauth_authorized_at: string | null;
+  oauth_token_expires_at: string | null;
+};
+
 /**
- * Runs one token request against a stubbed authorization server and returns
- * the form body it received plus the credential writes that followed. Stored
- * credentials hold a refresh token and any extra `credentials`.
+ * Runs `run` against a stubbed authorization server and an in-memory row whose
+ * credentials start as `credentials`. Returns every token request body and the
+ * row's final credentials.
  */
-async function captureTokenRequest(
+async function withTokenServer(
+  credentials: Record<string, unknown>,
   run: (
-    helpers: Awaited<ReturnType<typeof loadOAuthHelpers>>
-  ) => Promise<unknown>,
-  credentials: Record<string, unknown> = {}
+    helpers: Awaited<ReturnType<typeof loadOAuthHelpers>>,
+    initial: StoredState
+  ) => Promise<unknown>
 ) {
   const helpers = await loadOAuthHelpers();
   const originalFetch = global.fetch;
-  const stored = {
-    encrypted_credentials: encrypt(
-      JSON.stringify({ refresh_token: "stored-refresh-token", ...credentials })
-    ),
+  let row: StoredState = {
+    encrypted_credentials: encrypt(JSON.stringify(credentials)),
     updated_at: "2026-11-09T00:00:00.000Z",
-    oauth_authorized_at: "2026-11-09T00:00:00.000Z",
-    oauth_token_expires_at: "2026-11-09T01:00:00.000Z",
+    oauth_authorized_at: null,
+    oauth_token_expires_at: null,
   };
-  const refreshed = {
-    ...stored,
-    encrypted_credentials: encrypt(
-      JSON.stringify({ access_token: "fresh-access-token" })
-    ),
-  };
-  let tokenBody: URLSearchParams | undefined;
-  const writes: Array<Record<string, unknown>> = [];
+  const initial = row;
+  const tokenBodies: URLSearchParams[] = [];
   global.fetch = async (input: FetchInput, init?: RequestInit) => {
     const url = fetchUrl(input);
     if (url === TOKEN_URL) {
-      tokenBody = new URLSearchParams(String(init?.body));
-      return Response.json({ access_token: "fresh-access-token" });
+      tokenBodies.push(new URLSearchParams(String(init?.body)));
+      return Response.json({
+        access_token: `access-${tokenBodies.length}`,
+        refresh_token: `refresh-${tokenBodies.length}`,
+      });
     }
     if (url.startsWith("https://example.supabase.co/rest/v1/connections?")) {
-      if (init?.method !== "PATCH") return Response.json(stored);
-      writes.push(JSON.parse(String(init.body)) as Record<string, unknown>);
-      return Response.json(refreshed);
+      if (init?.method === "PATCH") {
+        const update = JSON.parse(String(init.body)) as Partial<StoredState>;
+        row = { ...row, ...update, updated_at: `${row.updated_at}+` };
+      }
+      return Response.json(row);
     }
     throw new Error(`Unexpected fetch: ${url}`);
   };
   try {
-    await run(helpers);
+    await run(helpers, initial);
   } finally {
     global.fetch = originalFetch;
   }
-  assert.ok(tokenBody, "the token endpoint was called");
-  return { body: tokenBody, writes };
+  return {
+    tokenBodies,
+    credentials: JSON.parse(decrypt(row.encrypted_credentials)) as Record<
+      string,
+      unknown
+    >,
+  };
 }
 
-const registeredCustomConnection = createCustomConnection({
-  oauth_client_id: "custom-registered-client",
-  oauth_authorize_url: `${MCP_ORIGIN}/oauth/authorize`,
-  oauth_token_url: TOKEN_URL,
-});
-
-test("should name the custom MCP server as the resource when exchanging the code", async () => {
-  const { body } = await captureTokenRequest(({ exchangeCodeForTokens }) =>
-    exchangeCodeForTokens(
-      registeredCustomConnection,
+/** Signs in through the code exchange, stores the tokens, then refreshes. */
+function signInThenRefresh(
+  connection: Connection,
+  credentials: Record<string, unknown> = {}
+) {
+  return withTokenServer(credentials, async (helpers, initial) => {
+    const tokens = await helpers.exchangeCodeForTokens(
+      connection,
       "authorization-code",
       "https://mogplex.example/api/connections/oauth/callback",
       { codeVerifier: "pkce-verifier" }
-    )
-  );
+    );
+    await helpers.storeOAuthTokensWithRetry(connection.id, initial, tokens);
+    await helpers.refreshOAuthToken(connection);
+  });
+}
 
-  assert.equal(body.get("grant_type"), "authorization_code");
-  assert.equal(body.get("resource"), MCP_URL);
-});
+const signedInEndpoints = {
+  oauth_authorize_url: `${MCP_ORIGIN}/oauth/authorize`,
+  oauth_token_url: TOKEN_URL,
+};
 
-test("should refresh with the resource indicator when Mogplex registered the custom MCP client", async () => {
-  const { body, writes } = await captureTokenRequest(
-    ({ refreshOAuthToken }) => refreshOAuthToken(registeredCustomConnection),
-    { registered_client: true }
-  );
-
-  assert.equal(body.get("grant_type"), "refresh_token");
-  assert.equal(body.get("resource"), MCP_URL);
-  // The marker survives the token write, so the next refresh still sends it.
-  assert.equal(storedCredentials(writes.at(-1)).registered_client, true);
-});
-
-test("should refresh a hand-configured custom MCP client without the resource indicator", async () => {
-  const { body } = await captureTokenRequest(({ refreshOAuthToken }) =>
-    refreshOAuthToken(registeredCustomConnection)
-  );
-
-  assert.equal(body.get("grant_type"), "refresh_token");
-  assert.equal(body.get("refresh_token"), "stored-refresh-token");
-  assert.equal(body.get("resource"), null);
-});
-
-test("should keep the resource indicator on refresh for presets that declare it", async () => {
-  const { body } = await captureTokenRequest(({ refreshOAuthToken }) =>
-    refreshOAuthToken({
-      ...registeredCustomConnection,
-      source_preset: "sentry",
+test("should refresh with the resource when a registered custom client signed in with it", async () => {
+  const { tokenBodies, credentials } = await signInThenRefresh(
+    createCustomConnection({
+      ...signedInEndpoints,
+      oauth_client_id: "custom-registered-client",
     })
   );
 
-  assert.equal(body.get("grant_type"), "refresh_token");
-  assert.equal(body.get("resource"), MCP_URL);
+  const [exchange, refresh] = tokenBodies;
+  assert.equal(exchange?.get("grant_type"), "authorization_code");
+  assert.equal(exchange?.get("resource"), MCP_URL);
+  assert.equal(credentials.resource_indicator, true);
+  assert.equal(refresh?.get("grant_type"), "refresh_token");
+  assert.equal(refresh?.get("resource"), MCP_URL);
+});
+
+test("should refresh with the resource when a hand-configured custom client signed in with it", async () => {
+  const { tokenBodies } = await signInThenRefresh(
+    createCustomConnection({
+      ...signedInEndpoints,
+      oauth_client_id: "hand-configured-client",
+    }),
+    { client_secret: "hand-configured-secret" }
+  );
+
+  const [exchange, refresh] = tokenBodies;
+  assert.equal(exchange?.get("client_secret"), "hand-configured-secret");
+  assert.equal(exchange?.get("resource"), MCP_URL);
+  assert.equal(refresh?.get("resource"), MCP_URL);
+});
+
+test("should refresh tokens from before the exchange recorded the resource without it", async () => {
+  const { tokenBodies } = await withTokenServer(
+    { refresh_token: "legacy-refresh-token" },
+    (helpers) =>
+      helpers.refreshOAuthToken(
+        createCustomConnection({
+          ...signedInEndpoints,
+          oauth_client_id: "hand-configured-client",
+        })
+      )
+  );
+
+  assert.equal(tokenBodies.length, 1);
+  assert.equal(tokenBodies[0]?.get("refresh_token"), "legacy-refresh-token");
+  assert.equal(tokenBodies[0]?.get("resource"), null);
+});
+
+test("should clear the resource marker when a later sign-in does not name a resource", async () => {
+  // Notion's preset does not declare a resource indicator.
+  const { tokenBodies, credentials } = await signInThenRefresh(
+    createCustomConnection({
+      ...signedInEndpoints,
+      source_preset: "notion",
+      oauth_client_id: "notion-client",
+    }),
+    { resource_indicator: true }
+  );
+
+  assert.equal(tokenBodies[0]?.get("resource"), null);
+  assert.equal(credentials.resource_indicator, undefined);
+  assert.equal(tokenBodies[1]?.get("resource"), null);
+});
+
+test("should keep the resource indicator on refresh for presets that declare it", async () => {
+  const { tokenBodies } = await withTokenServer(
+    { refresh_token: "preset-refresh-token" },
+    (helpers) =>
+      helpers.refreshOAuthToken(
+        createCustomConnection({
+          ...signedInEndpoints,
+          source_preset: "sentry",
+          oauth_client_id: "sentry-client",
+        })
+      )
+  );
+
+  assert.equal(tokenBodies[0]?.get("resource"), MCP_URL);
 });
