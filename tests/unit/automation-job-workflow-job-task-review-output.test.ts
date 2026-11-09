@@ -155,6 +155,7 @@ test("createAutomationJobTask falls back to a timeline comment when reportReview
       review_github_review_url: null,
       review_github_review_error: null,
       review_github_inline_comments_count: 0,
+      review_verdict: "blocking",
       review_check_run_id: 17,
       review_check_run_url: "https://github.com/acme/widgets/runs/17",
       review_check_run_completed: true,
@@ -167,7 +168,7 @@ test("createAutomationJobTask falls back to a timeline comment when reportReview
   });
 });
 
-test("createAutomationJobTask publishes a body-only native GitHub review when issues have no structured findings", async () => {
+test("createAutomationJobTask publishes a report without structured findings as the summary comment only", async () => {
   const { createAutomationJobTask } = await loadAutomationJobWorkflowModule();
 
   let controlDispatchEvent: CapturedControlDispatchEvent | null = null;
@@ -232,11 +233,6 @@ test("createAutomationJobTask publishes a body-only native GitHub review when is
           "https://github.com/acme/widgets/pull/18#pullrequestreview-418",
       };
     },
-    clearPrReviewTimelineComment: async () => ({
-      deleted: false,
-      id: null,
-      htmlUrl: null,
-    }),
     resolveAutomationModel: async () => ({
       model: "openai/gpt-5.4",
       effectiveModelId: "openai/gpt-5.4",
@@ -303,8 +299,10 @@ test("createAutomationJobTask publishes a body-only native GitHub review when is
     output: "Reviewer found one issue.",
     observabilityError: null,
   });
-  assert.equal(timelineCommentInput, null);
-  assert.deepEqual(githubReviewInput, {
+  // Nothing can sit on the diff, so there is no native review; the summary
+  // comment is the whole review.
+  assert.equal(githubReviewInput, null);
+  assert.deepEqual(timelineCommentInput, {
     prNumber: 18,
     body: [
       "## Mogplex PR Review",
@@ -313,9 +311,13 @@ test("createAutomationJobTask publishes a body-only native GitHub review when is
       "",
       "Reviewer found one issue.",
       "",
+      "The query needs a null guard.",
+      "",
+      "**Affected files**",
+      "- `src/query.ts`",
+      "",
       "[View check run](https://github.com/acme/widgets/runs/18)",
     ].join("\n"),
-    comments: [],
   });
   assert.deepEqual(controlDispatchEvent, {
     outcome: "completed",
@@ -327,16 +329,17 @@ test("createAutomationJobTask publishes a body-only native GitHub review when is
       review_summary: "Reviewer found one issue.",
       review_affected_files: ["src/query.ts"],
       review_comment_posted: false,
-      review_timeline_comment_posted: false,
-      review_timeline_comment_id: null,
-      review_timeline_comment_url: null,
+      review_timeline_comment_posted: true,
+      review_timeline_comment_id: 118,
+      review_timeline_comment_url:
+        "https://github.com/acme/widgets/pull/18#issuecomment-118",
       review_timeline_comment_error: null,
-      review_github_review_posted: true,
-      review_github_review_id: 418,
-      review_github_review_url:
-        "https://github.com/acme/widgets/pull/18#pullrequestreview-418",
+      review_github_review_posted: false,
+      review_github_review_id: null,
+      review_github_review_url: null,
       review_github_review_error: null,
       review_github_inline_comments_count: 0,
+      review_verdict: "blocking",
       review_check_run_id: 18,
       review_check_run_url: "https://github.com/acme/widgets/runs/18",
       review_check_run_completed: true,

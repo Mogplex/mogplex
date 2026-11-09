@@ -1,11 +1,9 @@
-import type { ReviewFinding } from "@/lib/types";
 import type {
   PrReviewConclusion,
   PrReviewContractSource,
   PrReviewFailureDetails,
   PrReviewHarnessResult,
   ReviewOutcome,
-  PrAutofixOutcome,
 } from "./pr-review-harness-types";
 import { toOptionalString } from "./pr-review-harness-utils";
 import {
@@ -17,8 +15,12 @@ import {
   demoteAgentMarkdownHeadings,
   formatInlineCode,
   formatReviewFindingSeverityLabel,
-  isInlinePublishableReviewFinding,
+  type InlineReviewFindings,
 } from "./pr-review-harness-formatting";
+import {
+  describeReviewAnchor,
+  type AnchoredReviewComment,
+} from "./pr-review-anchors";
 
 // Re-export types from split modules
 export type {
@@ -50,25 +52,25 @@ export {
   demoteAgentMarkdownHeadings,
   buildPrReviewStatusHeading,
   buildPrReviewCheckTitle,
+  prReviewVerdict,
+  prReviewVerdictConclusion,
+  type InlineReviewFindings,
+  type PrReviewVerdict,
 } from "./pr-review-harness-formatting";
 
-export function buildPrReviewInlineComments(findings: ReviewFinding[]) {
-  return findings.flatMap((finding) => {
-    if (!finding.path || finding.line == null) {
-      return [];
-    }
-
-    return [
-      {
-        path: finding.path,
-        line: finding.line,
-        body: [
-          `**${formatReviewFindingSeverityLabel(finding.severity)}:** ${finding.title}`,
-          demoteAgentMarkdownHeadings(finding.body),
-        ].join("\n\n"),
-      },
-    ];
-  });
+/** GitHub review comments for findings anchored to the diff. */
+export function buildPrReviewInlineComments(comments: AnchoredReviewComment[]) {
+  return comments.map((comment) => ({
+    path: comment.path,
+    line: comment.line,
+    body: [
+      `**${formatReviewFindingSeverityLabel(comment.finding.severity)}:** ${comment.finding.title}`,
+      describeReviewAnchor(comment),
+      demoteAgentMarkdownHeadings(comment.finding.body),
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
+  }));
 }
 
 /**
@@ -113,6 +115,9 @@ export function buildPrReviewCheckText(input: {
   fallbackText: string | null | undefined;
   conclusion: PrReviewConclusion;
   failureDetails?: PrReviewFailureDetails | null;
+  /** Shown above this text (the check summary); not repeated in it. */
+  shownSummary?: string | null;
+  inline?: InlineReviewFindings | null;
 }) {
   if (input.conclusion === "failure") {
     return buildPrReviewFailureMessage(input.failureDetails);
@@ -134,9 +139,16 @@ export function buildPrReviewCheckText(input: {
     reviewOutcome,
     fallbackText
   );
-  if (narrative) {
-    parts.push(demoteAgentMarkdownHeadings(narrative));
+  // GitHub shows the check summary above this text, so drop it from the
+  // front of the narrative. The summary is demoted too; compare demoted forms.
+  let shownNarrative = narrative
+    ? demoteAgentMarkdownHeadings(narrative).trim()
+    : "";
+  const shownSummary = input.shownSummary?.trim();
+  if (shownSummary && shownNarrative.startsWith(shownSummary)) {
+    shownNarrative = shownNarrative.slice(shownSummary.length).trim();
   }
+  if (shownNarrative) parts.push(shownNarrative);
 
   if ((reviewOutcome?.affectedFiles.length ?? 0) > 0) {
     parts.push(
@@ -150,7 +162,9 @@ export function buildPrReviewCheckText(input: {
   }
 
   if ((reviewOutcome?.findings.length ?? 0) > 0) {
-    parts.push(...buildReviewFindingsSections(reviewOutcome!.findings));
+    parts.push(
+      ...buildReviewFindingsSections(reviewOutcome!.findings, input.inline)
+    );
   }
 
   const autofixSection = buildAutofixSection(input.harnessResult?.autofix);
@@ -178,18 +192,25 @@ export function buildPrReviewCheckSummary(input: {
   );
 }
 
+/**
+ * The canonical review summary: one comment per pull request, updated in
+ * place on every run. Findings that were posted inline are listed with a
+ * link to their comment instead of being repeated.
+ */
 export function buildPrReviewTimelineCommentBody(input: {
   harnessResult: PrReviewHarnessResult | null;
   fallbackText: string | null | undefined;
   conclusion: PrReviewConclusion;
   checkRunUrl?: string | null;
   failureDetails?: PrReviewFailureDetails | null;
+  inline?: InlineReviewFindings | null;
 }) {
   const detail = buildPrReviewCheckText({
     harnessResult: input.harnessResult,
     fallbackText: input.fallbackText,
     conclusion: input.conclusion,
     failureDetails: input.failureDetails,
+    inline: input.inline,
   });
   const parts = ["## Mogplex PR Review", buildPrReviewStatusHeading(input)];
 
@@ -204,66 +225,25 @@ export function buildPrReviewTimelineCommentBody(input: {
   return parts.join("\n\n").trim();
 }
 
+/**
+ * The native review only carries the inline comments. Its body points at the
+ * canonical summary comment rather than repeating the review.
+ */
 export function buildPrReviewGithubReviewBody(input: {
-  reviewOutcome: ReviewOutcome;
+  harnessResult: PrReviewHarnessResult | null;
   conclusion: PrReviewConclusion;
   checkRunUrl?: string | null;
   inlineCommentCount: number;
-  autofix?: PrAutofixOutcome | null;
 }) {
-  const summary =
-    toOptionalString(input.reviewOutcome.summary) ??
-    toOptionalString(input.reviewOutcome.commentBody);
   const parts = [
     "## Mogplex PR Review",
-    buildPrReviewStatusHeading({
-      harnessResult: {
-        source: "structured",
-        fallbackText: null,
-        reviewOutcome: input.reviewOutcome,
-      },
-      conclusion: input.conclusion,
-    }),
+    buildPrReviewStatusHeading(input),
+    input.inlineCommentCount === 1
+      ? "1 finding is on the changed lines below. The full review is in the Mogplex PR Review comment on this pull request."
+      : `${input.inlineCommentCount} findings are on the changed lines below. The full review is in the Mogplex PR Review comment on this pull request.`,
   ];
-  const findingsForBody =
-    input.inlineCommentCount > 0
-      ? input.reviewOutcome.findings.filter(
-          (finding) => !isInlinePublishableReviewFinding(finding)
-        )
-      : input.reviewOutcome.findings;
-
-  if (summary) {
-    parts.push(demoteAgentMarkdownHeadings(summary));
-  }
-
-  if (input.inlineCommentCount > 0) {
-    parts.push(
-      input.inlineCommentCount === 1
-        ? "1 finding was added inline."
-        : `${input.inlineCommentCount} findings were added inline.`
-    );
-  }
-
-  if (findingsForBody.length > 0) {
-    parts.push(...buildReviewFindingsSections(findingsForBody));
-  }
-
-  const autofixSection = buildAutofixSection(input.autofix);
-  if (autofixSection) {
-    parts.push(autofixSection);
-  }
-
   if (input.checkRunUrl?.trim()) {
     parts.push(`[View check run](${input.checkRunUrl.trim()})`);
   }
-
   return parts.join("\n\n").trim();
-}
-
-export function shouldRetryPrReviewWithoutInlineComments(error: unknown) {
-  if (!(error instanceof Error)) {
-    return false;
-  }
-
-  return /GitHub PR review publish failed \(422\):/i.test(error.message);
 }

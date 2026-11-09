@@ -433,6 +433,7 @@ test("createAutomationJobTask records a no-findings control outcome for PR revie
       review_github_review_url: null,
       review_github_review_error: null,
       review_github_inline_comments_count: 0,
+      review_verdict: "clean",
       review_check_run_id: 15,
       review_check_run_url: "https://github.com/acme/widgets/runs/15",
       review_check_run_completed: true,

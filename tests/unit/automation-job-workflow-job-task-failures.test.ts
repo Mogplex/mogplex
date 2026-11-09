@@ -60,11 +60,6 @@ test("createAutomationJobTask fails PR reviews when a required check run cannot 
       id: 424,
       htmlUrl: "https://github.com/acme/widgets/pull/24#pullrequestreview-424",
     }),
-    clearPrReviewTimelineComment: async () => ({
-      deleted: false,
-      id: null,
-      htmlUrl: null,
-    }),
     resolveAutomationModel: async () => ({
       model: "openai/gpt-5.4",
       effectiveModelId: "openai/gpt-5.4",
@@ -142,10 +137,9 @@ test("createAutomationJobTask fails PR reviews when a required check run cannot 
       review_timeline_comment_url:
         "https://github.com/acme/widgets/pull/24#issuecomment-224",
       review_timeline_comment_error: null,
-      review_github_review_posted: true,
-      review_github_review_id: 424,
-      review_github_review_url:
-        "https://github.com/acme/widgets/pull/24#pullrequestreview-424",
+      review_github_review_posted: false,
+      review_github_review_id: null,
+      review_github_review_url: null,
       review_github_review_error: null,
       review_github_inline_comments_count: 0,
       review_check_run_id: 24,
@@ -292,7 +286,7 @@ test("createAutomationJobTask fails PR reviews when a required fallback timeline
       review_github_review_posted: false,
       review_github_review_id: null,
       review_github_review_url: null,
-      review_github_review_error: "review unavailable",
+      review_github_review_error: null,
       review_github_inline_comments_count: 0,
       review_check_run_id: 26,
       review_check_run_url: "https://github.com/acme/widgets/runs/26",

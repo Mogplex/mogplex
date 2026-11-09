@@ -212,7 +212,7 @@ export async function runAutomationJob(
         deps: {
           completePrReviewCheckRun: deps.completePrReviewCheckRun,
           createPrReviewGithubReview: deps.createPrReviewGithubReview,
-          clearPrReviewTimelineComment: deps.clearPrReviewTimelineComment,
+          loadPullRequestChangedLines: deps.loadPullRequestChangedLines,
           upsertPrReviewTimelineComment: deps.upsertPrReviewTimelineComment,
           loadPullRequestDetails: deps.loadPullRequestDetails,
           persistJobReviewFindings: deps.persistJobReviewFindings,

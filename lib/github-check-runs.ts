@@ -9,6 +9,7 @@ import {
   toCheckSummary,
   toCheckText,
 } from "./github-check-runs.internals";
+import { parsePatchRightLines, type PrChangedLines } from "./github-diff-lines";
 
 export const MOGPLEX_PR_REVIEW_CHECK_NAME = "Mogplex PR Review";
 export const MOGPLEX_PR_REVIEW_RERUN_ACTION = "rerun-pr-review";
@@ -208,6 +209,44 @@ export async function createPrReviewGithubReview(input: {
   return parsePullRequestReviewResponse(response);
 }
 
+const PR_FILES_PAGE_SIZE = 100;
+
+/**
+ * The new-file lines each changed file's diff shows, which are the lines a
+ * review comment can attach to. Reads every page of the pull request's files.
+ */
+export async function loadPullRequestChangedLines(input: {
+  githubToken: string;
+  repoFullName: string;
+  prNumber: number;
+}): Promise<PrChangedLines> {
+  const { owner, repo } = parseRepoFullName(input.repoFullName);
+  const changed: PrChangedLines = new Map();
+  for (let page = 1; ; page += 1) {
+    const response = await fetch(
+      `${GITHUB_API_BASE}/repos/${owner}/${repo}/pulls/${input.prNumber}/files?per_page=${PR_FILES_PAGE_SIZE}&page=${page}`,
+      { headers: getGithubHeaders(input.githubToken) }
+    );
+    const payload = (await response.json().catch(() => null)) as unknown;
+    if (!response.ok || !Array.isArray(payload)) {
+      throw new Error(
+        `GitHub pull request files lookup failed (${response.status})`
+      );
+    }
+    for (const file of payload as Array<{
+      filename?: unknown;
+      patch?: unknown;
+    }>) {
+      if (typeof file.filename !== "string") continue;
+      changed.set(
+        file.filename,
+        typeof file.patch === "string" ? parsePatchRightLines(file.patch) : []
+      );
+    }
+    if (payload.length < PR_FILES_PAGE_SIZE) return changed;
+  }
+}
+
 function withTimelineMarker(body: string) {
   // Prefix a hidden marker and newline so future runs can locate the canonical
   // comment with includes(marker) and update it instead of creating a new one.
@@ -265,57 +304,5 @@ export async function upsertPrReviewTimelineComment(input: {
     id: created.id,
     htmlUrl: created.htmlUrl,
     created: true,
-  };
-}
-
-export async function clearPrReviewTimelineComment(input: {
-  githubToken: string;
-  repoFullName: string;
-  prNumber: number;
-}) {
-  const { owner, repo } = parseRepoFullName(input.repoFullName);
-  const existingComment = await findExistingTimelineComment(
-    {
-      githubToken: input.githubToken,
-      owner,
-      repo,
-      prNumber: input.prNumber,
-    },
-    MOGPLEX_PR_REVIEW_TIMELINE_MARKER
-  );
-
-  if (!existingComment) {
-    return {
-      deleted: false,
-      id: null,
-      htmlUrl: null,
-    };
-  }
-
-  const response = await fetch(
-    `${GITHUB_API_BASE}/repos/${owner}/${repo}/issues/comments/${existingComment.id}`,
-    {
-      method: "DELETE",
-      headers: getGithubHeaders(input.githubToken),
-    }
-  );
-
-  if (!response.ok) {
-    const payload = (await response.json().catch(() => null)) as {
-      message?: string;
-    } | null;
-    const message =
-      payload && typeof payload.message === "string"
-        ? payload.message
-        : response.statusText || "Unknown GitHub API error";
-    throw new Error(
-      `GitHub PR timeline comment delete failed (${response.status}): ${message}`
-    );
-  }
-
-  return {
-    deleted: true,
-    id: existingComment.id,
-    htmlUrl: existingComment.htmlUrl,
   };
 }

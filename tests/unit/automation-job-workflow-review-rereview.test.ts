@@ -214,11 +214,6 @@ test("a flow's clean re-review is its verdict even after an earlier review node 
       htmlUrl: "https://github.com/acme/widgets/pull/143#issuecomment-5143",
       created: true,
     }),
-    clearPrReviewTimelineComment: async () => ({
-      deleted: false,
-      id: null,
-      htmlUrl: null,
-    }),
     persistJobSuccess: async () => true,
     persistJobReviewFindings: async () => makePersistedReviewFindingsResult(0),
     getDurationMs: async () => 444,

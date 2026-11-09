@@ -112,11 +112,6 @@ test("createAutomationJobTask routes flow autofix through sandbox runner when op
       htmlUrl:
         "https://github.com/acme/widgets/pull/144#pullrequestreview-1444",
     }),
-    clearPrReviewTimelineComment: async () => ({
-      deleted: false,
-      id: null,
-      htmlUrl: null,
-    }),
     upsertPrReviewTimelineComment: async () => ({
       id: 501,
       htmlUrl: "https://github.com/acme/widgets/pull/144#issuecomment-501",

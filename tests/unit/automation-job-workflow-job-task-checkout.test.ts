@@ -171,11 +171,6 @@ test("createAutomationJobTask resolves PR head checkouts but fails when the repo
       htmlUrl: "https://github.com/acme/widgets/pull/143#issuecomment-5143",
       created: true,
     }),
-    clearPrReviewTimelineComment: async () => ({
-      deleted: false,
-      id: null,
-      htmlUrl: null,
-    }),
     persistJobSuccess: async () => {
       throw new Error("Must not report success without a saved report");
     },

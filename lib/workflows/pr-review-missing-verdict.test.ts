@@ -215,6 +215,7 @@ function makeFinalizeContext() {
     reviewGithubReviewUrl: null,
     reviewGithubReviewError: null,
     reviewGithubInlineCommentCount: 0,
+    reviewInlineFindings: new Set(),
     reviewStaleHeadCheckError: null,
     prReviewCompletionReason: null,
   };
@@ -236,7 +237,6 @@ function makeFinalizeContext() {
       return true;
     },
     publishPrReviewGithubReview: async () => false,
-    clearStalePrReviewTimelineComment: async () => true,
     publishPrReviewTimelineComment: async (input) => {
       published.comment.push(input.conclusion);
       return true;
