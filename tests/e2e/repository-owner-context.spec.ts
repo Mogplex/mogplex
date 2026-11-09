@@ -10,7 +10,7 @@ test("owner headers show which automations run there and link to GitHub access s
 
   await expect(
     group("acme").getByRole("link", { name: "PR-Review" })
-  ).toBeVisible();
+  ).toHaveAttribute("href", "/alex/automations");
   await expect(
     group("team").getByRole("link", { name: "PR-Review" })
   ).toBeVisible();

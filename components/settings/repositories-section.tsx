@@ -243,7 +243,7 @@ export function RepositoriesSection() {
                   count={group.repos.length}
                   manageUrl={group.manageUrl}
                   automations={group.automations}
-                  automationsHref={scopedHref(scope, "/workflows")}
+                  automationsHref={scopedHref(scope, "/automations")}
                 >
                   {group.repos.map((repo) =>
                     renderRow(repo, repo.name || repo.full_name)
