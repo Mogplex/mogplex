@@ -76,6 +76,7 @@ export function RepositoriesSection() {
         // Judge the owner by all its connected repositories, not the search.
         const ownerAll = activeOwnerRepos(inventory, group.owner);
         const installation = installationForOwner(
+          group.owner,
           ownerAll,
           context.installationsById
         );
@@ -86,7 +87,8 @@ export function RepositoriesSection() {
             ? automationsForOwner(
                 context.automations,
                 ownerAll,
-                installation.account_type
+                // Same fallback as the access link's scope label.
+                installation.target_type || installation.account_type
               )
             : [],
         };

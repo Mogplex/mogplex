@@ -13,6 +13,9 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
  * The user's GitHub-triggered automations with each one's start filter, for
  * Settings → Repositories. Reads only the flow columns and published graphs
  * it needs, none of the run and dispatch summaries `GET /api/flows` builds.
+ * It skips that list's published-pointer repair on purpose: an active flow
+ * with no published version cannot be started by the webhook router, so it
+ * does not run on any repository.
  */
 export async function listGithubAutomationTriggers(
   userId: string

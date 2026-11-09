@@ -50,3 +50,20 @@ test("GET /api/flows still returns flow summaries without a view", async () => {
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), []);
 });
+
+test("GET /api/flows?view=triggers reports a failed load as a 500", async () => {
+  const { createFlowsGetHandler } = await loadRoute();
+  const handler = createFlowsGetHandler({
+    requireUserId: async () => "user-1",
+    listGithubAutomationTriggers: async () => {
+      throw new Error("flows unavailable");
+    },
+  });
+
+  const response = await handler(
+    new Request("http://localhost/api/flows?view=triggers")
+  );
+
+  assert.equal(response.status, 500);
+  assert.deepEqual(await response.json(), { error: "flows unavailable" });
+});

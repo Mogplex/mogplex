@@ -12,6 +12,7 @@ export type RepositoryInstallation = {
   installation_id: number;
   account_login?: string | null;
   account_type?: string | null;
+  target_type?: string | null;
   manage_url?: string | null;
   repos_synced_at?: string | null;
 };

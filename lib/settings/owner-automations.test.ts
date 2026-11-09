@@ -52,6 +52,13 @@ describe("githubAutomations", () => {
     expect(automations.map((a) => a.id)).toEqual(["review"]);
     expect(automations[0].filter).toEqual({ scope: "all" });
   });
+
+  it("should drop a published graph the router cannot start", () => {
+    const noStart = flow("partial", { scope: "all" });
+    if (noStart.published_version) noStart.published_version.graph.nodes = [];
+
+    expect(githubAutomations([noStart])).toEqual([]);
+  });
 });
 
 describe("automationsForOwner", () => {
@@ -103,29 +110,50 @@ describe("automationsForOwner", () => {
 
 describe("installationForOwner", () => {
   const installations = new Map([
-    [7, { manage_url: "https://example.test/7" }],
+    [7, { account_login: "acme", manage_url: "https://example.test/7" }],
   ]);
 
   it("should return the first known installation behind the owner's repositories", () => {
     expect(
       installationForOwner(
+        "zed",
         [
           { github_installation_id: null },
           { github_installation_id: 9 },
           { github_installation_id: 7 },
         ],
         installations
-      )
-    ).toEqual({ manage_url: "https://example.test/7" });
+      )?.manage_url
+    ).toBe("https://example.test/7");
+  });
+
+  it("should prefer the installation whose account is the owner", () => {
+    const byId = new Map([
+      ...installations,
+      [8, { account_login: "New-Owner", manage_url: "https://example.test/8" }],
+    ]);
+
+    expect(
+      installationForOwner("new-owner", [{ github_installation_id: 7 }], byId)
+        ?.manage_url
+    ).toBe("https://example.test/8");
   });
 
   it("should return null when no repository carries a known installation", () => {
-    expect(installationForOwner([], installations)).toBeNull();
+    expect(installationForOwner("zed", [], installations)).toBeNull();
     expect(
-      installationForOwner([{ github_installation_id: null }], installations)
+      installationForOwner(
+        "zed",
+        [{ github_installation_id: null }],
+        installations
+      )
     ).toBeNull();
     expect(
-      installationForOwner([{ github_installation_id: 9 }], installations)
+      installationForOwner(
+        "zed",
+        [{ github_installation_id: 9 }],
+        installations
+      )
     ).toBeNull();
   });
 });

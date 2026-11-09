@@ -66,13 +66,23 @@ export function automationsForOwner(
 }
 
 /**
- * The installation behind an owner's repositories: the first one carrying an
- * installation id that the installations list knows. Null when none does.
+ * The installation behind an owner's repositories. Prefers the installation
+ * whose account is the owner (a transferred repository keeps its old
+ * installation id until the next sync), else the first one carrying an
+ * installation id the installations list knows. Null when none does.
  */
-export function installationForOwner<T>(
+export function installationForOwner<
+  T extends { account_login?: string | null },
+>(
+  owner: string,
   repos: Array<{ github_installation_id?: number | null }>,
   installationsById: ReadonlyMap<number, T>
 ): T | null {
+  const login = owner.toLowerCase();
+  for (const installation of installationsById.values()) {
+    if (installation.account_login?.toLowerCase() === login)
+      return installation;
+  }
   for (const repo of repos) {
     const id = Number(repo.github_installation_id);
     if (repo.github_installation_id == null || !Number.isFinite(id)) continue;
