@@ -212,7 +212,12 @@ test("models catalog supports provider, state, pricing filters, and state sortin
   await expect(
     page.getByTestId("models-set-default-openai/gpt-oss-120b")
   ).toBeDisabled();
-  await page.getByTestId("models-toggle-openai/gpt-oss-120b").click();
+  const toggle = page.getByTestId("models-toggle-openai/gpt-oss-120b");
+  // Same shared switch as every other toggle, not a bespoke pill.
+  await expect(toggle).toHaveAttribute("data-slot", "switch");
+  await expect(toggle).not.toBeChecked();
+  await toggle.click();
+  await expect(toggle).toBeChecked();
 
   await page.getByTestId("models-set-default-openai/gpt-oss-120b").click();
   await expect(primaryRole("openai/gpt-oss-120b")).toHaveText("Primary");

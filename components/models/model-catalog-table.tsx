@@ -2,6 +2,7 @@
 
 import { ProviderIcon } from "@/components/provider-icon";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { ACCOUNT_FALLBACK_MODEL_MAX_COUNT } from "@/lib/models/fallback-limits";
 import { cn } from "@/lib/utils";
 import {
@@ -133,24 +134,13 @@ export function ModelCatalogTable({
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={model.is_enabled}
-                        aria-label={`${model.is_enabled ? "Disable" : "Enable"} ${model.name}`}
+                      <Switch
+                        checked={model.is_enabled}
+                        aria-label={`Enable ${model.name}`}
                         data-testid={`models-toggle-${model.id}`}
                         disabled={chainSaving}
-                        onClick={() => onToggle(model.id)}
-                        className={cn(
-                          "inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50",
-                          model.is_enabled
-                            ? "border-primary/40 bg-primary/10 text-primary"
-                            : "border-border text-muted-foreground hover:bg-secondary"
-                        )}
-                      >
-                        <span aria-hidden className={cn("size-1.5 rounded-full", model.is_enabled ? "bg-primary" : "bg-border-dim")} />
-                        {model.is_enabled ? "Enabled" : "Disabled"}
-                      </button>
+                        onCheckedChange={() => onToggle(model.id)}
+                      />
                       <span className={cn("text-[11px]", model.is_available ? "text-accent-green" : "text-muted-foreground")}>
                         {model.is_available ? "Available" : "Unavailable"}
                       </span>
