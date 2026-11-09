@@ -258,12 +258,15 @@ export function createAuthUserHandler(
         if (installationCount > 0) {
           cookieStore.delete("github_app_install_pending");
           cookieStore.delete("github_reconcile_skip");
-        } else {
-          // Avoid re-hitting GitHub API on every SWR refetch
+        } else if (result.checked) {
+          // Avoid re-hitting GitHub API on every SWR refetch, but only after
+          // GitHub was actually asked; a pass without a token skips nothing.
           cookieStore.set("github_reconcile_skip", "1", {
             maxAge: 300,
             path: "/",
             httpOnly: true,
+            sameSite: "lax",
+            secure: process.env.NODE_ENV === "production",
           });
         }
       } catch (error) {
