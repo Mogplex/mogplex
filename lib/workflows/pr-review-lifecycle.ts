@@ -4,6 +4,9 @@ import type { PrReviewHistory, PriorFinding } from "./pr-review-history";
 
 export const MOGPLEX_REPLY_MARKER = "<!-- mogplex-reply -->";
 
+/** The most findings one native review report may carry. */
+export const PR_REVIEW_MAX_FINDINGS = 20;
+
 function newFindingKey(finding: ReviewFinding) {
   return createHash("sha256")
     .update(
@@ -56,14 +59,16 @@ export type PrReviewThreadPlan = {
 
 /**
  * What to do with the previous review's threads. Only a review that filed a
- * structured report closes anything: an incomplete or failed run has not
- * judged the earlier findings. A thread someone resolved stays resolved.
+ * complete structured report closes anything: an incomplete or failed run has
+ * not judged the earlier findings, and a report at the findings cap may have
+ * left live ones out. A thread someone resolved stays resolved.
  */
 export function planPrReviewThreads(input: {
   history: PrReviewHistory | null;
   keys: Map<ReviewFinding, string>;
   headSha: string;
-  structured: boolean;
+  /** A structured report that cannot have been cut at the findings cap. */
+  complete: boolean;
 }): PrReviewThreadPlan {
   const plan: PrReviewThreadPlan = {
     existingThreads: new Map(),
@@ -82,7 +87,7 @@ export function planPrReviewThreads(input: {
       plan.existingThreads.set(finding, thread.url);
     }
   }
-  if (!input.structured) return plan;
+  if (!input.complete) return plan;
 
   for (const prior of input.history.findings) {
     if (reported.has(prior.key)) continue;

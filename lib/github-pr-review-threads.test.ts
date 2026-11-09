@@ -16,27 +16,29 @@ const target = {
   prNumber: 7,
 };
 
+const rootComment = (id: string) => ({
+  id: `${id}-c0`,
+  body: "**Warning:** x",
+  url: `https://github.com/acme/widgets/pull/7#${id}`,
+  createdAt: "2026-11-09T10:00:00Z",
+  author: { login: "mogplex" },
+});
+const reply = (id: string, index: number) => ({
+  id: `${id}-c${index}`,
+  body: `Reply ${index}`,
+  url: "u",
+  createdAt: "2026-11-09T11:00:00Z",
+  author: null,
+});
+
+/** A short thread: the latest comments include the root too. */
 const threadNode = (id: string) => ({
   id,
   isResolved: false,
   path: "lib/a.ts",
   line: 4,
-  comments: {
-    nodes: [
-      {
-        body: "**Warning:** x",
-        url: `https://github.com/acme/widgets/pull/7#${id}`,
-        createdAt: "2026-11-09T10:00:00Z",
-        author: { login: "mogplex" },
-      },
-      {
-        body: "Reply",
-        url: "u",
-        createdAt: "2026-11-09T11:00:00Z",
-        author: null,
-      },
-    ],
-  },
+  root: { nodes: [rootComment(id)] },
+  recent: { nodes: [rootComment(id), reply(id, 1)] },
 });
 
 const threadsPage = (
@@ -70,7 +72,7 @@ describe("listPrReviewThreads", () => {
       url: "https://github.com/acme/widgets/pull/7#t1",
       comments: [
         { author: "mogplex", body: "**Warning:** x" },
-        { author: null, body: "Reply" },
+        { author: null, body: "Reply 1" },
       ],
     });
     const secondBody = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body));
@@ -80,6 +82,40 @@ describe("listPrReviewThreads", () => {
       number: 7,
       after: "cursor-1",
     });
+  });
+
+  it("should keep the root comment and the latest replies of a long thread", async () => {
+    const long = {
+      ...threadNode("t1"),
+      recent: {
+        nodes: Array.from({ length: 100 }, (_, index) =>
+          reply("t1", index + 50)
+        ),
+      },
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>().mockResolvedValue(
+        Response.json({
+          data: {
+            repository: {
+              pullRequest: {
+                reviewThreads: {
+                  pageInfo: { hasNextPage: false, endCursor: null },
+                  nodes: [long],
+                },
+              },
+            },
+          },
+        })
+      )
+    );
+
+    const [thread] = await listPrReviewThreads(target);
+
+    expect(thread.comments).toHaveLength(101);
+    expect(thread.comments[0].body).toBe("**Warning:** x");
+    expect(thread.comments[100].body).toBe("Reply 149");
   });
 
   it("should throw when GraphQL reports an error", async () => {

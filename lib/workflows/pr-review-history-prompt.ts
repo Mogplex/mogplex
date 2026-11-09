@@ -1,7 +1,14 @@
 import type { PrReviewHistory, PriorFinding } from "./pr-review-history";
 
+const BLOCK_TAG = /<\s*\/?\s*previous_review\s*>/gi;
+
+/** Author text must not open or close the block it is quoted in. */
+function neutralize(text: string) {
+  return text.replace(BLOCK_TAG, "[previous_review tag removed]");
+}
+
 function quote(text: string) {
-  return text
+  return neutralize(text)
     .trim()
     .split("\n")
     .map((line) => `    > ${line}`)
@@ -18,7 +25,7 @@ function describeFinding(finding: PriorFinding) {
     ? ` \`${finding.path}${finding.line == null ? "" : `:${finding.line}`}\``
     : "";
   const lines = [
-    `- ${finding.id} (${finding.severity}, ${describeState(finding)})${location}: ${finding.title}`,
+    `- ${finding.id} (${finding.severity}, ${describeState(finding)})${location}: ${neutralize(finding.title)}`,
   ];
   for (const reply of finding.thread?.replies ?? []) {
     lines.push(

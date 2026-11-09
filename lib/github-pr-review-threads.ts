@@ -36,8 +36,11 @@ const THREADS_QUERY = `query($owner: String!, $repo: String!, $number: Int!, $af
           isResolved
           path
           line
-          comments(first: 100) {
-            nodes { body url createdAt author { login } }
+          root: comments(first: 1) {
+            nodes { id body url createdAt author { login } }
+          }
+          recent: comments(last: 100) {
+            nodes { id body url createdAt author { login } }
           }
         }
       }
@@ -68,6 +71,14 @@ async function githubGraphql<T>(
   return payload.data;
 }
 
+type ThreadCommentNode = {
+  id: string;
+  body: string;
+  url: string;
+  createdAt: string;
+  author: { login: string } | null;
+};
+
 type ThreadsPage = {
   repository: {
     pullRequest: {
@@ -78,14 +89,8 @@ type ThreadsPage = {
           isResolved: boolean;
           path: string | null;
           line: number | null;
-          comments: {
-            nodes: Array<{
-              body: string;
-              url: string;
-              createdAt: string;
-              author: { login: string } | null;
-            }>;
-          };
+          root: { nodes: ThreadCommentNode[] };
+          recent: { nodes: ThreadCommentNode[] };
         }>;
       };
     } | null;
@@ -110,13 +115,20 @@ export async function listPrReviewThreads(input: {
     const connection = page.repository?.pullRequest?.reviewThreads;
     if (!connection) return threads;
     for (const node of connection.nodes) {
+      // The first comment carries the finding marker; the latest hundred
+      // carry the discussion. Together they cover any thread length.
+      const root = node.root.nodes[0];
+      const recent = node.recent.nodes.filter(
+        (comment) => comment.id !== root?.id
+      );
+      const comments = root ? [root, ...recent] : recent;
       threads.push({
         id: node.id,
         isResolved: node.isResolved,
         path: node.path,
         line: node.line,
-        url: node.comments.nodes[0]?.url ?? null,
-        comments: node.comments.nodes.map((comment) => ({
+        url: root?.url ?? null,
+        comments: comments.map((comment) => ({
           author: comment.author?.login ?? null,
           body: comment.body,
           createdAt: comment.createdAt,

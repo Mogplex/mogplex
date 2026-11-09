@@ -1,4 +1,4 @@
-import type { readPrReviewTimelineComment } from "@/lib/github-check-runs";
+import type { readPrReviewTimelineComments } from "@/lib/github-check-runs";
 import type {
   comparePrCommits,
   listPrConversationComments,
@@ -9,21 +9,23 @@ import type { ReviewFinding } from "@/lib/types";
 import {
   loadPrReviewHistory,
   findingMarker,
-  parsePrReviewState,
+  newestPrReviewState,
   serializePrReviewState,
   type PrReviewHistory,
   type PrReviewState,
+  type PrReviewStateFinding,
 } from "./pr-review-history";
 import { buildPrReviewHistoryBlock } from "./pr-review-history-prompt";
 import { createPrReviewSigner } from "./pr-review-signing";
 import {
+  PR_REVIEW_MAX_FINDINGS,
   assignFindingKeys,
   planPrReviewThreads,
   type PrReviewThreadPlan,
 } from "./pr-review-lifecycle";
 
 export type PrReviewThreadsDeps = {
-  readPrReviewTimelineComment: typeof readPrReviewTimelineComment;
+  readPrReviewTimelineComments: typeof readPrReviewTimelineComments;
   listPrReviewThreads: typeof listPrReviewThreads;
   comparePrCommits: typeof comparePrCommits;
   listPrConversationComments: typeof listPrConversationComments;
@@ -66,6 +68,9 @@ export function createPrReviewLifecycle(input: {
   let history: PrReviewHistory | null = null;
   let keys = new Map<ReviewFinding, string>();
   let plan = EMPTY_PLAN;
+  // Earlier findings a possibly cut report left out: kept in the state, not
+  // closed, so the next review still knows them.
+  let carried: PrReviewStateFinding[] = [];
 
   return {
     /** The prompt block for the previous review, or null for a first review. */
@@ -75,10 +80,10 @@ export function createPrReviewLifecycle(input: {
       const target = { githubToken, repoFullName, prNumber };
       history = await loadPrReviewHistory(headSha, {
         signer,
-        readSummaryComment: async () => {
-          const body = await deps.readPrReviewTimelineComment(target);
-          previousState = parsePrReviewState(body, signer);
-          return body;
+        readSummaryComments: async () => {
+          const bodies = await deps.readPrReviewTimelineComments(target);
+          previousState = newestPrReviewState(bodies, signer);
+          return bodies;
         },
         listThreads: () => deps.listPrReviewThreads(target),
         compare: (base) =>
@@ -97,7 +102,18 @@ export function createPrReviewLifecycle(input: {
     /** Key the report's findings and decide what happens to earlier threads. */
     planThreads(findings: ReviewFinding[], structured: boolean) {
       keys = assignFindingKeys(findings, history);
-      plan = planPrReviewThreads({ history, keys, headSha, structured });
+      const complete = structured && findings.length < PR_REVIEW_MAX_FINDINGS;
+      plan = planPrReviewThreads({ history, keys, headSha, complete });
+      const reported = new Set(keys.values());
+      carried =
+        structured && !complete
+          ? (history?.findings ?? [])
+              .filter((prior) => !reported.has(prior.key))
+              .map(({ id: _id, thread, ...prior }) => ({
+                ...prior,
+                inline: thread != null && !thread.isResolved,
+              }))
+          : [];
       return { keys, plan };
     },
 
@@ -154,15 +170,18 @@ export function createPrReviewLifecycle(input: {
         {
           sha: headSha,
           reviewedAt: now().toISOString(),
-          findings: report.findings.map((finding) => ({
-            key: keys.get(finding) ?? "",
-            severity: finding.severity,
-            title: finding.title,
-            path: finding.path,
-            line: finding.line,
-            inline:
-              report.inline.has(finding) || plan.existingThreads.has(finding),
-          })),
+          findings: [
+            ...report.findings.map((finding) => ({
+              key: keys.get(finding) ?? "",
+              severity: finding.severity,
+              title: finding.title,
+              path: finding.path,
+              line: finding.line,
+              inline:
+                report.inline.has(finding) || plan.existingThreads.has(finding),
+            })),
+            ...carried,
+          ],
         },
         signer
       );

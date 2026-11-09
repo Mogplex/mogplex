@@ -66,6 +66,7 @@ async function runReReview() {
   const summaryBodies: string[] = [];
   const resolvedThreads: Array<{ threadId: string; body: string }> = [];
   let promptHistory: unknown = null;
+  let metadata: Record<string, unknown> | null = null;
 
   const workflow = createAutomationJobTask({
     resolveJobContext: async () => ({
@@ -98,8 +99,9 @@ async function runReReview() {
         ["src/cache.ts", [3]],
       ]),
     reviewThreads: {
-      readPrReviewTimelineComment: async () =>
+      readPrReviewTimelineComments: async () => [
         `<!-- mogplex-pr-review -->\nOld review\n${serializePrReviewState(previousState, signer)}`,
+      ],
       listPrReviewThreads: async () => [
         thread("aaaaaaaaaaaa", "src/widget.ts", 14),
         thread("bbbbbbbbbbbb", "src/io.ts", 8),
@@ -179,7 +181,9 @@ async function runReReview() {
     persistJobReviewFindings: async ({ findings: persisted }) =>
       makePersistedReviewFindingsResult(persisted.length),
     tryLogAiCall: async () => null,
-    recordControlDispatchEvent: async () => {},
+    recordControlDispatchEvent: async (input) => {
+      metadata = input.metadata ?? null;
+    },
     releaseQueuedJobs: async () => [],
     isJobRunCancellationRequested: async () => false,
     throwIfJobRunCancelled: async () => {},
@@ -205,6 +209,7 @@ async function runReReview() {
     summaryBodies,
     resolvedThreads,
     promptHistory,
+    metadata: metadata as Record<string, unknown> | null,
   };
 }
 
@@ -242,7 +247,7 @@ test("a re-review keeps the thread of a finding it reports again and posts only 
 });
 
 test("a re-review resolves the thread of a finding it no longer reports and records the new state", async () => {
-  const { resolvedThreads, summaryBodies } = await runReReview();
+  const { resolvedThreads, summaryBodies, metadata } = await runReReview();
 
   assert.deepEqual(resolvedThreads, [
     {
@@ -250,6 +255,7 @@ test("a re-review resolves the thread of a finding it no longer reports and reco
       body: "<!-- mogplex-reply -->\nNo longer reported at `newhead`.",
     },
   ]);
+  assert.equal(metadata?.review_threads_resolved, 1);
   assert.match(summaryBodies[0], /Resolved since the last review/);
   assert.match(summaryBodies[0], /Close the file handle/);
   const state = parsePrReviewState(summaryBodies[0], signer);

@@ -26,9 +26,10 @@ gives the reviewer three things, all kept on GitHub (no schema change):
   `<!-- mogplex-review-state:BASE64URL.SIG -->`: the reviewed head SHA, the
   review time, and every finding with its key, severity, title, path, line,
   and whether it was posted inline.
-- **Threads.** Read through GraphQL `pullRequest.reviewThreads`. A thread is
-  Mogplex's when its first comment carries a finding marker that verifies.
-  Replies are its other comments that carry no Mogplex marker.
+- **Threads.** Read through GraphQL `pullRequest.reviewThreads`, with each
+  thread's first comment and its latest hundred. A thread is Mogplex's when
+  its first comment carries a finding marker that verifies. Replies are its
+  other comments that carry no Mogplex marker.
 
 ### Signed markers
 
@@ -42,10 +43,17 @@ review to a few files.
 to the repository and PR number. The key is derived (HKDF, labelled for
 this purpose) from `GITHUB_APP_PRIVATE_KEY`, which every deployment that
 reviews PRs already has, so there is no new secret to provision. A marker
-that does not verify is read as absent: forged or copied state means a
-first review, and a forged finding marker makes a thread someone else's.
-Without the key, the lifecycle stays off and every review is a first
-review.
+that does not verify is read as absent: forged state, or state copied from
+another PR, means a first review, and a forged finding marker makes a
+thread someone else's. A copy within the same PR still verifies, so the
+reader looks at every comment carrying the summary marker and takes the
+verified state with the newest review time; an old copy cannot stand in for
+the latest review. Without the key, the lifecycle stays off and every
+review is a first review.
+
+The summary upsert edits the newest comment carrying the marker. If that
+comment is someone else's (GitHub answers 403 or 404 to the edit), it posts
+a new summary comment instead.
 
 A PR reviewed before this shipped has no state, so its next review is a
 first review.
@@ -88,8 +96,11 @@ and the harness JSON line).
   summary links the existing thread.
 - An open Mogplex thread whose key is not reported again is resolved with a
   reply: "No longer reported at `abc1234`." It is resolved only when the
-  run filed a structured report; an incomplete or failed review changes no
-  thread.
+  run filed a complete structured report; an incomplete or failed review
+  changes no thread.
+- A native report holds at most 20 findings. A report at that cap may have
+  left live findings out, so it resolves nothing, and the earlier findings
+  it did not report stay in the new state for the next review.
 - A thread someone resolved by hand stays resolved. If the finding is
   reported again, it gets a new inline comment.
 

@@ -94,7 +94,7 @@ describe("planPrReviewThreads", () => {
       history: earlier,
       keys,
       headSha: "1234567890",
-      structured: true,
+      complete: true,
     });
 
     expect(plan.existingThreads.get(reported)).toBe("https://github.com/t/t1");
@@ -105,7 +105,7 @@ describe("planPrReviewThreads", () => {
       history: earlier,
       keys,
       headSha: "1234567890",
-      structured: true,
+      complete: true,
     });
 
     expect(plan.resolve).toEqual([
@@ -127,19 +127,19 @@ describe("planPrReviewThreads", () => {
       history: earlier,
       keys: new Map([[reopened, "cccccccccccc"]]),
       headSha: "1234567890",
-      structured: true,
+      complete: true,
     });
 
     expect(plan.existingThreads.has(reopened)).toBe(false);
     expect(plan.resolve.map((entry) => entry.threadId)).toEqual(["t1", "t2"]);
   });
 
-  it("should close nothing when the review filed no structured report", () => {
+  it("should close nothing when the report is incomplete or may be cut", () => {
     const plan = planPrReviewThreads({
       history: earlier,
       keys,
       headSha: "1234567890",
-      structured: false,
+      complete: false,
     });
 
     expect(plan.resolve).toEqual([]);
@@ -152,7 +152,7 @@ describe("planPrReviewThreads", () => {
       history: null,
       keys,
       headSha: "1234567890",
-      structured: true,
+      complete: true,
     });
 
     expect(plan.existingThreads.size).toBe(0);

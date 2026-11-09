@@ -11,8 +11,10 @@ export type PrReviewSigner = {
  * Signs the hidden markers Mogplex leaves on a pull request. Anyone who can
  * comment on the PR can write a marker, and reviews may post with a user's
  * token, so the author cannot tell our markers apart. A signature bound to
- * the repo and PR can: a forged or copied marker fails to verify and is read
- * as absent.
+ * the repo and PR can: a forged marker, or one copied from another repo or
+ * PR, fails to verify and is read as absent. A copy within the same PR still
+ * verifies; readers of the review state take the newest review time, so an
+ * old copy cannot stand in for the latest review.
  */
 export function createPrReviewSigner(
   secret: string,

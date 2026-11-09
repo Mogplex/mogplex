@@ -299,3 +299,31 @@ export async function findExistingTimelineComment(
 
   return null;
 }
+
+/**
+ * The bodies of every comment on a PR that carries `marker`, oldest first.
+ * Anyone can write the marker, so callers must check what they read.
+ */
+export async function listTimelineCommentBodies(
+  input: {
+    githubToken: string;
+    owner: string;
+    repo: string;
+    prNumber: number;
+  },
+  marker: string
+): Promise<string[]> {
+  const bodies: string[] = [];
+  let lastPage = 1;
+  for (let page = 1; page <= lastPage; page += 1) {
+    const result = await listIssueCommentsPage({ ...input, page });
+    // Only the first page's Link header names the last page.
+    if (page === 1) lastPage = result.lastPage;
+    for (const comment of result.comments) {
+      if (typeof comment.body === "string" && comment.body.includes(marker)) {
+        bodies.push(comment.body);
+      }
+    }
+  }
+  return bodies;
+}

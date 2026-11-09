@@ -310,6 +310,7 @@ export async function finalizePrReviewSuccess(
       review_github_review_url: state.reviewGithubReviewUrl,
       review_github_review_error: state.reviewGithubReviewError,
       review_github_inline_comments_count: state.reviewGithubInlineCommentCount,
+      review_threads_resolved: state.reviewThreadsResolved,
       review_check_run_id: state.reviewCheckRunId,
       review_check_run_url: state.reviewCheckRunUrl,
       review_check_run_completed: reviewCheckPublished,

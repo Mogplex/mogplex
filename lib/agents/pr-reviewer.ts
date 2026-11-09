@@ -15,6 +15,7 @@ import {
 } from "@/lib/agents/github-file-content";
 import { isRecord } from "@/lib/workflows/pr-review-harness-utils";
 import { clearsReviewWithoutFindings } from "@/lib/workflows/pr-review-report-state";
+import { PR_REVIEW_MAX_FINDINGS as MAX_FINDINGS } from "@/lib/workflows/pr-review-lifecycle";
 import type { AutomationAgentResult } from "@/lib/workflows/automation-job-types";
 
 const PR_REVIEW_FILE_CONTENT_CHAR_LIMIT = GITHUB_FILE_CONTENT_CHAR_LIMIT;
@@ -95,7 +96,7 @@ export function buildPRReviewTools(config: {
           "Only when there are no findings: supporting evidence as a short markdown bullet list."
         ),
       affectedFiles: z.array(z.string()).max(20).optional(),
-      findings: z.array(reviewFindingSchema).max(20).optional(),
+      findings: z.array(reviewFindingSchema).max(MAX_FINDINGS).optional(),
     })
     .superRefine((value, ctx) => {
       if (value.hasIssues && (!value.findings || value.findings.length === 0)) {

@@ -5,6 +5,7 @@ import {
   findingKeyOf,
   findingMarker,
   loadPrReviewHistory,
+  newestPrReviewState,
   parsePrReviewState,
   serializePrReviewState,
   type LoadPrReviewHistoryDeps,
@@ -126,6 +127,23 @@ describe("PR review state", () => {
     ]);
   });
 
+  it("should take the newest verified state, not the newest comment", () => {
+    const older = {
+      ...state,
+      sha: "older00",
+      reviewedAt: "2026-11-08T10:00:00.000Z",
+    };
+    const bodies = [
+      summaryWith(state),
+      // A copy of an earlier signed state, posted after the latest review.
+      `> quoted\n${summaryWith(older)}`,
+      "<!-- mogplex-pr-review -->\nno state",
+    ];
+
+    expect(newestPrReviewState(bodies, signer)?.sha).toBe(state.sha);
+    expect(newestPrReviewState([], signer)).toBeNull();
+  });
+
   it("should find the finding key in an inline comment body", () => {
     expect(
       findingKeyOf(`text\n\n${findingMarker("0123abcd4567", signer)}`, signer)
@@ -204,7 +222,7 @@ const deps = (
   overrides: Partial<LoadPrReviewHistoryDeps> = {}
 ): LoadPrReviewHistoryDeps => ({
   signer,
-  readSummaryComment: async () => summaryWith(state),
+  readSummaryComments: async () => [summaryWith(state)],
   listThreads: async () => [thread("aaaaaaaaaaaa")],
   compare: async () => ({
     status: "ahead",
@@ -232,16 +250,13 @@ const deps = (
 describe("loadPrReviewHistory", () => {
   it("should be null for a first review", async () => {
     await expect(
-      loadPrReviewHistory(
-        "head",
-        deps({ readSummaryComment: async () => null })
-      )
+      loadPrReviewHistory("head", deps({ readSummaryComments: async () => [] }))
     ).resolves.toBeNull();
     await expect(
       loadPrReviewHistory(
         "head",
         deps({
-          readSummaryComment: async () => {
+          readSummaryComments: async () => {
             throw new Error("down");
           },
         })

@@ -97,6 +97,28 @@ export function parsePrReviewState(
   }
 }
 
+/**
+ * The newest verified state among the marked comments. Anyone can post a
+ * marked comment, even a copy of an earlier signed state from this PR, so
+ * the latest review time wins rather than the latest comment.
+ */
+export function newestPrReviewState(
+  bodies: string[],
+  signer: PrReviewSigner
+): PrReviewState | null {
+  let newest: PrReviewState | null = null;
+  for (const body of bodies) {
+    const state = parsePrReviewState(body, signer);
+    if (
+      state &&
+      (!newest || Date.parse(state.reviewedAt) > Date.parse(newest.reviewedAt))
+    ) {
+      newest = state;
+    }
+  }
+  return newest;
+}
+
 export function findingMarker(key: string, signer: PrReviewSigner) {
   return `<!-- mogplex-finding:${key}.${signer.sign(`finding:${key}`)} -->`;
 }
@@ -171,7 +193,7 @@ export function collectPriorFindings(
 
 export type LoadPrReviewHistoryDeps = {
   signer: PrReviewSigner;
-  readSummaryComment: () => Promise<string | null>;
+  readSummaryComments: () => Promise<string[]>;
   listThreads: () => Promise<PrReviewThread[]>;
   compare: (
     base: string
@@ -182,15 +204,15 @@ export type LoadPrReviewHistoryDeps = {
 /**
  * What the previous review left behind. Null for a first review, including a
  * PR whose summary comment predates the review state, or when the summary
- * comment cannot be read. A later lookup that fails narrows the history
+ * comments cannot be read. A later lookup that fails narrows the history
  * (a full review, no replies) instead of dropping it.
  */
 export async function loadPrReviewHistory(
   headSha: string,
   deps: LoadPrReviewHistoryDeps
 ): Promise<PrReviewHistory | null> {
-  const state = parsePrReviewState(
-    await deps.readSummaryComment().catch(() => null),
+  const state = newestPrReviewState(
+    await deps.readSummaryComments().catch(() => [] as string[]),
     deps.signer
   );
   if (!state) return null;

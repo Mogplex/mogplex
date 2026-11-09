@@ -11,7 +11,7 @@ import {
   completePrReviewCheckRun,
   createPrReviewGithubReview,
   createPrReviewCheckRun,
-  readPrReviewTimelineComment,
+  readPrReviewTimelineComments,
   upsertPrReviewTimelineComment,
 } from "@/lib/github-check-runs";
 import {
@@ -132,7 +132,7 @@ export const defaultAutomationJobExecutorDeps: AutomationJobExecutorDeps = {
   createPrReviewGithubReview,
   loadPullRequestChangedLines,
   reviewThreads: {
-    readPrReviewTimelineComment,
+    readPrReviewTimelineComments,
     listPrReviewThreads,
     comparePrCommits,
     listPrConversationComments,

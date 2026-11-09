@@ -147,6 +147,7 @@ test("createAutomationJobTask does not fail when GitHub review publishing is bes
       review_github_review_error: "secondary rate limit",
       review_github_inline_comments_count: 0,
       review_verdict: "blocking",
+      review_threads_resolved: 0,
       review_check_run_id: 19,
       review_check_run_url: "https://github.com/acme/widgets/runs/19",
       review_check_run_completed: true,

@@ -69,8 +69,9 @@ const thread = (key: string): PrReviewThread => ({
 const threadDeps = (
   overrides: Partial<PrReviewThreadsDeps> = {}
 ): PrReviewThreadsDeps => ({
-  readPrReviewTimelineComment: async () =>
+  readPrReviewTimelineComments: async () => [
     `review\n${serializePrReviewState(previousState, signer)}`,
+  ],
   listPrReviewThreads: async () => [
     thread("aaaaaaaaaaaa"),
     thread("bbbbbbbbbbbb"),
@@ -148,6 +149,38 @@ describe("createPrReviewLifecycle", () => {
       threadId: "thread-bbbbbbbbbbbb",
       body: expect.stringContaining("No longer reported at `newhead`"),
     });
+  });
+
+  it("should resolve nothing and keep earlier findings when the report is at the cap", async () => {
+    const deps = threadDeps();
+    const lifecycle = createPrReviewLifecycle({ ...target, deps });
+    const atCap = Array.from({ length: 20 }, (_, index) => ({
+      ...brandNew,
+      title: `Finding ${index}`,
+    }));
+
+    await lifecycle.loadHistoryBlock();
+    lifecycle.planThreads(atCap, true);
+    const resolved = await lifecycle.resolveThreads();
+    const state = parsePrReviewState(
+      lifecycle.stateMarker({
+        structured: true,
+        findings: atCap,
+        inline: new Set(),
+      }),
+      signer
+    );
+
+    expect(resolved).toBe(0);
+    expect(deps.replyAndResolvePrReviewThread).not.toHaveBeenCalled();
+    expect(lifecycle.plan.resolvedFindings).toEqual([]);
+    expect(state?.findings).toHaveLength(22);
+    expect(
+      state?.findings.slice(20).map((entry) => [entry.key, entry.inline])
+    ).toEqual([
+      ["aaaaaaaaaaaa", true],
+      ["bbbbbbbbbbbb", true],
+    ]);
   });
 
   it("should count only the threads it managed to resolve", async () => {
