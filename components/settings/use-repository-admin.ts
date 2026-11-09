@@ -39,6 +39,10 @@ export function useRepositoryAdmin() {
     () => new Set()
   );
   const [removingOwner, setRemovingOwner] = useState(false);
+  const [removalProgress, setRemovalProgress] = useState<{
+    done: number;
+    total: number;
+  } | null>(null);
 
   const markPending = useCallback((ids: string[], pending: boolean) => {
     setPendingIds((current) => {
@@ -164,6 +168,7 @@ export function useRepositoryAdmin() {
       setRemovingOwner(true);
       markPending(ids, true);
       const results: PromiseSettledResult<void>[] = [];
+      setRemovalProgress({ done: 0, total: targets.length });
       try {
         // Waves the size of the browser's per-host connection pool: every
         // target is still written, without hundreds of requests queued at once.
@@ -175,8 +180,10 @@ export function useRepositoryAdmin() {
                 .map((repo) => setHidden(repo, true))
             ))
           );
+          setRemovalProgress({ done: results.length, total: targets.length });
         }
       } finally {
+        setRemovalProgress(null);
         setRemovingOwner(false);
         markPending(ids, false);
       }
@@ -214,5 +221,6 @@ export function useRepositoryAdmin() {
     removeRepos,
     pendingIds,
     removingOwner,
+    removalProgress,
   };
 }

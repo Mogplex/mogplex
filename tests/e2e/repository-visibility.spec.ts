@@ -372,3 +372,55 @@ test("project settings open from a repository with no sessions", async ({
     drawer.getByRole("button", { name: "Save variables" })
   ).toBeVisible();
 });
+
+test("the not-connected card waits for filters to clear and shows removal progress", async ({
+  page,
+}) => {
+  await dashboard(page);
+  const notice = page.getByRole("region", {
+    name: "Not connected repositories",
+  });
+  await expect(notice).toBeVisible();
+  await page.getByLabel("Search repositories").fill("alpha");
+  await expect(notice).toHaveCount(0);
+  await page.getByLabel("Search repositories").fill("");
+  await expect(notice).toBeVisible();
+
+  let release = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/api/repos**", async (route) => {
+    if (route.request().method() !== "PATCH") return route.fallback();
+    await held;
+    return route.fallback();
+  });
+  await notice
+    .getByRole("button", { name: "Remove all not-connected repositories" })
+    .click();
+  await page
+    .getByRole("alertdialog", { name: "Remove 1 not-connected repository?" })
+    .getByRole("button", { name: "Remove 1 repository" })
+    .click();
+  await expect(
+    notice.getByRole("button", {
+      name: "Remove all not-connected repositories",
+    })
+  ).toHaveText("Removing 0/1…");
+  release();
+  await expect(notice).toHaveCount(0);
+});
+
+test("Show removed counts only the removed repositories the filters would show", async ({
+  page,
+}) => {
+  await dashboard(page);
+  await page.getByLabel("Owner", { exact: true }).selectOption("team");
+  await expect(page.getByRole("button", { name: /Show removed/ })).toHaveCount(
+    0
+  );
+  await page.getByLabel("Owner", { exact: true }).selectOption("alex");
+  await expect(
+    page.getByRole("button", { name: "Show removed (1)" })
+  ).toBeVisible();
+});

@@ -23,7 +23,6 @@ export function filterRepositories<
     query,
     connected: matches.filter((repo) => !repo.is_hidden),
     removed: matches.filter((repo) => repo.is_hidden),
-    removedTotal: repos.filter((repo) => repo.is_hidden).length,
   };
 }
 
@@ -50,20 +49,20 @@ export function activeOwnerRepos<
 export function splitByAppConnection<
   T extends Pick<
     Repo,
-    "github_app_covered" | "github_prefer_installation_coverage"
+    "github_app_covered" | "github_prefer_installation_coverage" | "is_hidden"
   >,
 >(repos: T[]) {
-  const covered = repos.filter((repo) => repo.github_app_covered);
-  // Like visibleScopedRepos: with no covered repository yet (App installed,
-  // nothing synced through it), every repository stays listed.
+  // Like visibleScopedRepos: with no visible covered repository (App
+  // installed but nothing synced through it, or every covered one removed),
+  // every repository stays listed.
   if (
-    covered.length === 0 ||
-    !repos.some((repo) => repo.github_prefer_installation_coverage)
+    !repos.some((repo) => repo.github_prefer_installation_coverage) ||
+    !repos.some((repo) => repo.github_app_covered && !repo.is_hidden)
   ) {
     return { inventory: repos, notConnected: [] as T[] };
   }
   return {
-    inventory: covered,
+    inventory: repos.filter((repo) => repo.github_app_covered),
     notConnected: repos.filter((repo) => !repo.github_app_covered),
   };
 }

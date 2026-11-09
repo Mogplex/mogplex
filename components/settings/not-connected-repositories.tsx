@@ -14,10 +14,13 @@ const noun = (count: number) => (count === 1 ? "repository" : "repositories");
 export function NotConnectedRepositories({
   repos,
   removing,
+  removingLabel,
   onRemoveAll,
 }: {
   repos: Repo[];
   removing: boolean;
+  /** Progress text shown on the button while a removal runs. */
+  removingLabel: string | null;
   onRemoveAll: () => void;
 }) {
   const count = repos.length;
@@ -38,7 +41,7 @@ export function NotConnectedRepositories({
           </p>
         </div>
         <ConfirmRemoveButton
-          label="Remove all"
+          label={removingLabel ?? "Remove all"}
           ariaLabel="Remove all not-connected repositories"
           title={`Remove ${count} not-connected ${noun(count)}?`}
           confirmLabel={`Remove ${count} ${noun(count)}`}

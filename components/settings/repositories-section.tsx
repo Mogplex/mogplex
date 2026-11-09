@@ -50,12 +50,16 @@ export function RepositoriesSection() {
     () => [...new Set(inventory.map(repoOwner))].sort(),
     [inventory]
   );
-  const { query, connected, removed, removedTotal } = filterRepositories(
+  const { query, connected, removed } = filterRepositories(
     inventory,
     { owner, search }
   );
   const ownerRepos = activeOwnerRepos(inventory, owner);
   const notConnectedRepos = notConnected.filter((repo) => !repo.is_hidden);
+  const { removalProgress } = admin;
+  const removingLabel = removalProgress
+    ? `Removing ${removalProgress.done}/${removalProgress.total}…`
+    : null;
   const openSettings = (repo: Repo) => {
     setSettingsTab("env");
     setSettingsRepoId(repo.id);
@@ -138,14 +142,17 @@ export function RepositoriesSection() {
         ) : null}
         {owner !== "all" && ownerRepos.length > 0 ? (
           <ConfirmRemoveButton
-            label={`Remove all from ${owner}`}
+            label={removingLabel ?? `Remove all from ${owner}`}
+            ariaLabel={`Remove all from ${owner}`}
             title={`Remove all ${ownerRepos.length} ${ownerRepos.length === 1 ? "repository" : "repositories"} from ${owner}?`}
             confirmLabel={`Remove ${ownerRepos.length} ${ownerRepos.length === 1 ? "repository" : "repositories"}`}
             disabled={admin.removingOwner}
-            onConfirm={() => void admin.removeRepos(ownerRepos, owner)}
+            onConfirm={() =>
+              void admin.removeRepos(ownerRepos, `Hidden from ${owner}.`)
+            }
           />
         ) : null}
-        {removedTotal > 0 ? (
+        {removed.length > 0 ? (
           <Button
             type="button"
             variant="ghost"
@@ -153,7 +160,7 @@ export function RepositoriesSection() {
             aria-pressed={showRemoved}
             onClick={() => setShowRemoved((current) => !current)}
           >
-            {showRemoved ? "Hide removed" : `Show removed (${removedTotal})`}
+            {showRemoved ? "Hide removed" : `Show removed (${removed.length})`}
           </Button>
         ) : null}
       </div>
@@ -192,12 +199,22 @@ export function RepositoriesSection() {
         )
       )}
 
-      {!admin.isLoading && !admin.loadError && notConnectedRepos.length > 0 ? (
+      {/* Filters narrow the connected list only, so the card (and its
+          Remove all over every not-connected repository) waits until they clear. */}
+      {!admin.isLoading &&
+      !admin.loadError &&
+      !query &&
+      owner === "all" &&
+      notConnectedRepos.length > 0 ? (
         <NotConnectedRepositories
           repos={notConnectedRepos}
           removing={admin.removingOwner}
+          removingLabel={removingLabel}
           onRemoveAll={() =>
-            void admin.removeRepos(notConnectedRepos, "Not connected repositories")
+            void admin.removeRepos(
+              notConnectedRepos,
+              "Hidden repositories without the GitHub App."
+            )
           }
         />
       ) : null}

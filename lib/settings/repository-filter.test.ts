@@ -30,7 +30,6 @@ describe("filterRepositories", () => {
       "alex/zeta",
     ]);
     expect(result.removed.map((r) => r.full_name)).toEqual(["alex/old"]);
-    expect(result.removedTotal).toBe(1);
   });
 
   it("should filter by owner and case-insensitive search", () => {
@@ -59,11 +58,13 @@ describe("splitByAppConnection", () => {
   const row = (
     full_name: string,
     github_app_covered: boolean,
-    github_prefer_installation_coverage = true
+    github_prefer_installation_coverage = true,
+    is_hidden = false
   ) => ({
     full_name,
     github_app_covered,
     github_prefer_installation_coverage,
+    is_hidden,
   });
 
   it("should keep only App-installed repositories when the account prefers App coverage", () => {
@@ -74,6 +75,16 @@ describe("splitByAppConnection", () => {
 
     expect(inventory.map((r) => r.full_name)).toEqual(["me/app"]);
     expect(notConnected.map((r) => r.full_name)).toEqual(["skhard99/docs"]);
+  });
+
+  it("should keep every repository once every covered repository is removed", () => {
+    const { inventory, notConnected } = splitByAppConnection([
+      row("me/app", true, true, true),
+      row("skhard99/docs", false),
+    ]);
+
+    expect(inventory).toHaveLength(2);
+    expect(notConnected).toEqual([]);
   });
 
   it("should keep every repository while no repository is covered yet", () => {
