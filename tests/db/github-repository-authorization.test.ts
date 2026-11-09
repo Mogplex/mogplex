@@ -45,12 +45,7 @@ afterAll(async () => {
   await db?.close();
 });
 
-it("does not attach an App-wide installation to a user through organization membership discovery", async () => {
-  const member = "00000000-0000-4000-8000-0000000000a1";
-  await db.query(
-    "insert into profiles(id,github_username) values ($1,'member-only')",
-    [member]
-  );
+function stubGithubApp() {
   vi.stubEnv("GITHUB_APP_ID", "1");
   vi.stubEnv("GITHUB_APP_NAME", "fixture");
   vi.stubEnv(
@@ -59,18 +54,44 @@ it("does not attach an App-wide installation to a user through organization memb
       .privateKey.export({ type: "pkcs8", format: "pem" })
       .toString()
   );
+}
+
+async function installationCount(userId: string) {
+  return (
+    await db.query<{ count: number }>(
+      "select count(*)::int as count from github_installations where user_id=$1",
+      [userId]
+    )
+  ).rows[0]?.count;
+}
+
+it("should attach org installations only for orgs GitHub confirms the user belongs to", async () => {
+  const member = "00000000-0000-4000-8000-0000000000a1";
+  await db.query(
+    "insert into profiles(id,github_username) values ($1,'org-member')",
+    [member]
+  );
+  stubGithubApp();
   const requests: string[] = [];
   vi.stubGlobal("fetch", async (url: string) => {
     const path = new URL(url).pathname;
     requests.push(path);
-    if (path === "/user/orgs") return Response.json([{ login: "approved-a" }]);
-    if (path === "/orgs/approved-a/installation")
+    if (path === "/user/orgs")
+      return Response.json([{ login: "member-org" }, { login: "former-org" }]);
+    if (path === "/orgs/member-org/installation")
       return Response.json({
         id: 6001,
-        account: { login: "approved-a", type: "Organization" },
+        account: { login: "member-org", type: "Organization" },
+      });
+    if (path === "/orgs/former-org/installation")
+      return Response.json({
+        id: 6002,
+        account: { login: "former-org", type: "Organization" },
       });
     if (path.endsWith("/access_tokens"))
       return Response.json({ token: "ghs-fixture" });
+    if (path === "/orgs/member-org/members/org-member")
+      return new Response(null, { status: 204 });
     if (path === "/installation/repositories")
       return Response.json({ repositories: [] });
     return new Response(null, { status: 404 });
@@ -78,44 +99,69 @@ it("does not attach an App-wide installation to a user through organization memb
   expect(
     await reconcileGithubInstallationsForUser(
       member,
-      "member-only",
-      "older-oauth-fixture"
+      "org-member",
+      "identity-fixture"
+    )
+  ).toEqual({ discovered: 1 });
+  expect(
+    (
+      await db.query(
+        "select installation_id from github_installations where user_id=$1",
+        [member]
+      )
+    ).rows
+  ).toEqual([{ installation_id: 6001 }]);
+  expect(requests).toContain("/orgs/former-org/members/org-member");
+
+  requests.length = 0;
+  expect(
+    await reconcileGithubInstallationsForUser(
+      member,
+      "org-member",
+      "identity-fixture"
     )
   ).toEqual({ discovered: 0 });
-  expect(
-    (
-      await db.query(
-        "select count(*)::int as count from github_installations where user_id=$1",
-        [member]
-      )
-    ).rows
-  ).toEqual([{ count: 0 }]);
-  expect(requests).toEqual([]);
+  expect(requests).not.toContain("/orgs/member-org/installation");
 });
 
-it("does not attach a previously unowned installation from a webhook sender's login alone", async () => {
-  const member = "00000000-0000-4000-8000-0000000000a2";
+it("should attach a new installation to the Mogplex user who installed it on GitHub", async () => {
+  const installer = "00000000-0000-4000-8000-0000000000a2";
+  const bystander = "00000000-0000-4000-8000-0000000000a3";
   await db.query(
-    "insert into profiles(id,github_username) values ($1,'sender-only')",
-    [member]
+    "insert into profiles(id,github_username,github_user_id) values ($1,'installer',4242),($2,'bystander',4343)",
+    [installer, bystander]
   );
+  stubGithubApp();
+  vi.stubGlobal("fetch", async (url: string) => {
+    const path = new URL(url).pathname;
+    if (path.endsWith("/access_tokens"))
+      return Response.json({ token: "ghs-fixture" });
+    if (path === "/installation/repositories")
+      return Response.json({ repositories: [] });
+    return new Response(null, { status: 404 });
+  });
   const outcome = await syncGithubWebhookState("installation", {
     action: "created",
-    sender: { login: "sender-only" },
+    sender: { login: "renamed-installer", id: 4242 },
     installation: {
       id: 7001,
-      account: { login: "unapproved-org", type: "Organization" },
+      account: { login: "new-org", type: "Organization" },
     },
   });
-  expect(outcome.matchedUsers).toBe(0);
-  expect(
-    (
-      await db.query(
-        "select count(*)::int as count from github_installations where user_id=$1",
-        [member]
-      )
-    ).rows
-  ).toEqual([{ count: 0 }]);
+  expect(outcome.matchedUsers).toBe(1);
+  expect(await installationCount(installer)).toBe(1);
+  expect(await installationCount(bystander)).toBe(0);
+
+  const deleted = await syncGithubWebhookState("installation", {
+    action: "deleted",
+    sender: { login: "bystander", id: 4343 },
+    installation: {
+      id: 7002,
+      account: { login: "other-org", type: "Organization" },
+    },
+  });
+  expect(deleted.matchedUsers).toBe(0);
+  expect(await installationCount(bystander)).toBe(0);
 });
 it("keeps every attached grant user-scoped and never treats an App profile as OAuth repository authorization", async () => {
   const owner = "00000000-0000-4000-8000-000000000071";
@@ -157,7 +203,7 @@ it("keeps every attached grant user-scoped and never treats an App profile as OA
   vi.stubEnv("GITHUB_APP_PRIVATE_KEY", "configured");
   expect(await isGithubOAuthRepositoryAccessAllowed(other)).toBe(false);
   expect(await reconcileGithubInstallationsForUser(owner)).toEqual({
-    discovered: 7,
+    discovered: 0,
   });
   expect(
     await reconcileGithubInstallationsForUser(

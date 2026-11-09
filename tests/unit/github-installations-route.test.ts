@@ -244,3 +244,68 @@ test("GET /api/github/installations omits manage_url when incomplete metadata ca
     },
   ]);
 });
+
+test("GET /api/github/installations discovers new org installations beside existing ones, once per skip window", async () => {
+  const { createGithubInstallationsGetHandler } =
+    await loadGithubInstallationsRoute();
+  const cookies = new Map<string, string>();
+  const reconcileCalls: string[] = [];
+  const existing = {
+    id: "row-1",
+    installation_id: 42,
+    account_login: "acme",
+    account_type: "Organization",
+    target_type: "Organization",
+  };
+  const handler = createGithubInstallationsGetHandler({
+    getCookies: async () =>
+      ({
+        get: (name: string) =>
+          cookies.has(name) ? { value: cookies.get(name) } : undefined,
+        set: (name: string, value: string) => cookies.set(name, value),
+        delete: (name: string) => cookies.delete(name),
+      }) as never,
+    requireUserId: async () => "user-123",
+    hasGithubAppConfig: () => true,
+    loadInstallations: async () => ({
+      data:
+        reconcileCalls.length > 0
+          ? [
+              existing,
+              {
+                ...existing,
+                id: "row-2",
+                installation_id: 43,
+                account_login: "new-org",
+              },
+            ]
+          : [existing],
+      error: null,
+    }),
+    loadRepos: async () => ({ data: [], error: null }),
+    loadProfile: async () => ({
+      data: { github_username: "octocat" },
+      error: null,
+    }),
+    getOAuthToken: async () => "identity-fixture",
+    reconcileGithubInstallationsForUser: async (userId) => {
+      reconcileCalls.push(userId);
+      return { discovered: 1 };
+    },
+    getGithubInstallation: async () => {
+      throw new Error("getGithubInstallation should not be called");
+    },
+    updateInstallationMetadata: async () => ({ error: null }),
+  });
+
+  const first = await handler();
+  const body = (await first.json()) as Array<{ account_login: string }>;
+  assert.deepEqual(
+    body.map((installation) => installation.account_login),
+    ["acme", "new-org"]
+  );
+  assert.equal(cookies.get("github_reconcile_skip"), "1");
+
+  await handler();
+  assert.deepEqual(reconcileCalls, ["user-123"]);
+});

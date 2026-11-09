@@ -13,7 +13,7 @@ import {
   syncGithubReposForUser,
 } from "@/lib/github-sync";
 import { getOAuthToken, storeOAuthToken } from "@/lib/oauth-tokens";
-import { verifyGithubInstallationOwner } from "@/lib/github-installation-owner";
+import { verifyGithubInstallationMember } from "@/lib/github-installation-owner";
 import { getUserId } from "@/lib/auth";
 import { isGithubOAuthRepositoryAccessAllowed } from "@/lib/github-repository-auth";
 
@@ -23,6 +23,32 @@ function requireEnv(name: "GITHUB_CLIENT_ID" | "GITHUB_CLIENT_SECRET") {
     throw new Error(`Missing ${name}`);
   }
   return value;
+}
+
+/** The stored GitHub login, else the one the identity token reports. */
+async function resolveGithubLogin(userId: string) {
+  const { data } = await supabaseAdmin
+    .from("profiles")
+    .select("github_username")
+    .eq("id", userId)
+    .maybeSingle();
+  const stored = (data as { github_username?: string | null } | null)
+    ?.github_username;
+  if (stored) return stored;
+
+  const identityToken = await getOAuthToken(userId, "github");
+  if (!identityToken) return null;
+  const response = await fetch("https://api.github.com/user", {
+    headers: {
+      Authorization: `Bearer ${identityToken}`,
+      Accept: "application/vnd.github+json",
+    },
+    cache: "no-store",
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!response.ok) return null;
+  const identity = (await response.json()) as { login?: unknown };
+  return typeof identity.login === "string" ? identity.login : null;
 }
 
 export async function GET(request: Request) {
@@ -58,9 +84,8 @@ export async function GET(request: Request) {
     if (!userId) {
       return redirect("/login");
     }
-    const installState = cookieStore.get(GITHUB_INSTALL_STATE_COOKIE)?.value;
-    if (!state || !installState || state !== installState)
-      return redirect("/?error=github_installation_state");
+    // Installs started on GitHub carry no state. Membership below is the
+    // authorization, so the state cookie is not required.
     cookieStore.delete(GITHUB_INSTALL_STATE_COOKIE);
 
     const installationId = Number(installationIdParam);
@@ -70,12 +95,9 @@ export async function GET(request: Request) {
 
     try {
       const installation = await getGithubInstallation(installationId);
-      const identityToken = await getOAuthToken(userId, "github");
-      if (
-        !identityToken ||
-        !(await verifyGithubInstallationOwner(installation, identityToken))
-      ) {
-        return redirect("/?error=github_installation_owner_required");
+      const githubLogin = await resolveGithubLogin(userId);
+      if (!(await verifyGithubInstallationMember(installation, githubLogin))) {
+        return redirect("/?error=github_installation_member_required");
       }
 
       const { error: installationError } = await supabaseAdmin

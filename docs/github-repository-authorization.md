@@ -12,13 +12,17 @@ monorepo detection. Installation IDs are checked against the owner's attached
 records before minting a repository credential. Missing account metadata is
 resolved using the same attached installation ID, without discovering and
 attaching another account's installation.
-New attachments require a session-bound installation callback and a verified
-GitHub identity that owns the personal account or is an active organization
-owner. Begin this connection in Mogplex. Accounts without an identity credential
-complete identity authorization before selecting the App installation. Other
-members use repositories explicitly shared through their Mogplex team. Cached
-repository names, org membership discovery, and webhook sender names never
-attach new installation grants. Existing stored grants are retained.
+The App must be installed on an account before anyone can use its
+repositories. A user may attach an installation on their own personal account
+or on an organization they are a member of; the organization decides what
+members see by choosing the installation's repository set. Membership is
+checked with the installation token, so organizations that restrict OAuth apps
+still verify. Three paths attach an installation: the install callback (with or
+without Mogplex's state, since installs started on GitHub carry none),
+discovery across the user's account and GitHub organizations, and a signed
+`installation` or `installation_repositories` webhook, which attaches the
+Mogplex user who made the change on GitHub. Cached repository names never
+attach an installation. Existing stored grants are retained.
 
 The synchronized inventory uses the current App repository IDs. A repository
 transferred outside an installation or left over from OAuth synchronization

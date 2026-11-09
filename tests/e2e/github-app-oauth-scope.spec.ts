@@ -107,8 +107,10 @@ test("GitHub App reconnection requests identity scopes without broad repository 
     await expect(
       page.getByText("Installation callback captured")
     ).toBeVisible();
+    // No state is required, but an installation that cannot be verified
+    // against GitHub is never attached.
     expect(callback?.searchParams.get("error")).toBe(
-      "github_installation_state"
+      "github_installation_fetch"
     );
   } finally {
     if (child.exitCode === null && child.signalCode === null) {

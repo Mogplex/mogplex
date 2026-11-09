@@ -12,7 +12,7 @@ type GithubWebhookInstallation = {
 
 type GithubWebhookBody = Record<string, unknown> & {
   action?: string;
-  sender?: { login?: string };
+  sender?: { login?: string; id?: number };
   installation?: GithubWebhookInstallation;
   repository?: GithubRepoPayload;
   repositories_added?: GithubRepoPayload[];
@@ -26,6 +26,7 @@ export type GithubWebhookSyncPlan =
       action: string;
       installationId: number;
       senderLogin: string | null;
+      senderId: number | null;
       accountLogin: string | null;
       accountType: string | null;
       targetType: string | null;
@@ -36,6 +37,7 @@ export type GithubWebhookSyncPlan =
       action: string;
       installationId: number;
       senderLogin: string | null;
+      senderId: number | null;
       accountLogin: string | null;
       accountType: string | null;
       targetType: string | null;
@@ -48,6 +50,7 @@ export type GithubWebhookSyncPlan =
       action: string;
       installationId: number;
       senderLogin: string | null;
+      senderId: number | null;
       accountLogin: string | null;
       accountType: string | null;
       targetType: string | null;
@@ -62,6 +65,9 @@ function getInstallationBase(body: GithubWebhookBody) {
   return {
     installationId,
     senderLogin: body.sender?.login?.trim() || null,
+    senderId: Number.isSafeInteger(body.sender?.id)
+      ? (body.sender?.id ?? null)
+      : null,
     accountLogin: body.installation?.account?.login?.trim() || null,
     accountType: body.installation?.account?.type?.trim() || null,
     targetType: body.installation?.target_type?.trim() || null,
@@ -110,12 +116,53 @@ export function planGithubWebhookSync(
   return { type: "none" };
 }
 
-async function resolveWebhookUserIds(installationId: number) {
+/**
+ * Installing the App, or changing its repositories, takes an account owner or
+ * App manager on GitHub. A signed event for that change attaches the
+ * installation to the Mogplex user who made it.
+ */
+function grantsSenderAccess(
+  plan: Exclude<GithubWebhookSyncPlan, { type: "none" }>
+) {
+  if (plan.type === "installation")
+    return ["created", "new_permissions", "unsuspend"].includes(plan.action);
+  return plan.type === "installation_repositories" && plan.action === "added";
+}
+
+async function resolveSenderUserIds(
+  plan: Exclude<GithubWebhookSyncPlan, { type: "none" }>
+) {
+  if (!grantsSenderAccess(plan)) return [];
+  const { supabaseAdmin } = await import("@/lib/supabase/admin");
+  const lookups: Array<
+    ["github_user_id" | "github_username", string | number]
+  > = [];
+  if (plan.senderId) lookups.push(["github_user_id", plan.senderId]);
+  if (plan.senderLogin) lookups.push(["github_username", plan.senderLogin]);
+
+  // Prefer the immutable GitHub id; fall back to login for older profiles.
+  for (const [column, value] of lookups) {
+    const { data, error } = await supabaseAdmin
+      .from("profiles")
+      .select("id")
+      .eq(column, value);
+    if (error) {
+      throw new Error(`Failed to load sender profile: ${error.message}`);
+    }
+    const ids = (data || []).map((row) => row.id as string).filter(Boolean);
+    if (ids.length > 0) return ids;
+  }
+  return [];
+}
+
+async function resolveWebhookUserIds(
+  plan: Exclude<GithubWebhookSyncPlan, { type: "none" }>
+) {
   const { supabaseAdmin } = await import("@/lib/supabase/admin");
   const { data: known, error: knownError } = await supabaseAdmin
     .from("github_installations")
     .select("user_id")
-    .eq("installation_id", installationId);
+    .eq("installation_id", plan.installationId);
 
   if (knownError) {
     throw new Error(
@@ -123,12 +170,11 @@ async function resolveWebhookUserIds(installationId: number) {
     );
   }
 
-  // Signed events refresh existing grants; sender metadata cannot attach a
-  // new user's account to an installation's full repository scope.
   return [
-    ...new Set(
-      (known || []).map((row) => row.user_id as string).filter(Boolean)
-    ),
+    ...new Set([
+      ...(known || []).map((row) => row.user_id as string).filter(Boolean),
+      ...(await resolveSenderUserIds(plan)),
+    ]),
   ];
 }
 
@@ -225,7 +271,7 @@ export async function syncGithubWebhookState(
     return { handled: false, matchedUsers: 0 };
   }
 
-  const userIds = await resolveWebhookUserIds(plan.installationId);
+  const userIds = await resolveWebhookUserIds(plan);
   if (userIds.length === 0) {
     return {
       handled: true,
