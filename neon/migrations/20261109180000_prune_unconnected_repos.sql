@@ -1,0 +1,104 @@
+-- Delete a user's personal repository rows that came from the legacy OAuth
+-- sync (every repository the GitHub account could see) and were never used.
+-- Such rows have no GitHub App installation, so GitHub sends no webhooks for
+-- them and App deployments already hide them everywhere.
+--
+-- Only rows nothing refers to are deleted. Several tables cascade from
+-- repos (sandboxes, assignments, connections, external_agent_runs, overrides,
+-- Slack links), so the guard checks every foreign key into repos, the
+-- repo_id columns that have no foreign key (control sessions, orchestration),
+-- the name-based references (control_sessions.project,
+-- review_findings.repo_full_name) and job_runs.metadata->>'repo_id'. Keeping
+-- a row is always safe; deleting one that is still referenced is not.
+--
+-- Expand only: a new function, no change to any table.
+create or replace function public.prune_unconnected_repos(p_user_id uuid)
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_deleted integer;
+begin
+  if p_user_id is null then
+    return 0;
+  end if;
+
+  -- Lock the candidates first. A writer adding a reference holds a key-share
+  -- lock on the repo row, so this waits for it to commit, and the delete
+  -- below (a new statement, so a new snapshot) sees that reference. Later
+  -- writers wait for this transaction and then fail their foreign key check.
+  perform 1
+  from public.repos r
+  where r.owner_type = 'user'
+    and r.owner_user_id = p_user_id
+    and r.product_team_id is null
+    and r.github_installation_id is null
+  for update;
+
+  delete from public.repos r
+  where r.owner_type = 'user'
+    and r.owner_user_id = p_user_id
+    and r.product_team_id is null
+    and r.github_installation_id is null
+    and not exists (select 1 from public.repos x where x.parent_repo_id = r.id)
+    and not exists (select 1 from public.ai_call_events x where x.repo_id = r.id)
+    and not exists (select 1 from public.ai_calls x where x.repo_id = r.id)
+    and not exists (select 1 from public.assignments x where x.repo_id = r.id)
+    and not exists (select 1 from public.automation_dispatch_events x where x.repo_id = r.id)
+    and not exists (select 1 from public.connections x where x.repo_id = r.id)
+    and not exists (
+      select 1 from public.control_sessions x
+      where x.repo_id = r.id or x.project = r.full_name
+    )
+    and not exists (select 1 from public.conversations x where x.repo_id = r.id)
+    and not exists (select 1 from public.decision_events x where x.repo_id = r.id)
+    and not exists (select 1 from public.external_agent_runs x where x.repo_id = r.id)
+    and not exists (select 1 from public.flow_waits x where x.repo_id = r.id)
+    and not exists (
+      select 1 from public.job_runs x where x.metadata->>'repo_id' = r.id::text
+    )
+    and not exists (select 1 from public.limit_events x where x.repo_id = r.id)
+    and not exists (select 1 from public.orchestration_events x where x.repo_id = r.id)
+    and not exists (select 1 from public.orchestration_runs x where x.repo_id = r.id)
+    and not exists (select 1 from public.orchestration_tasks x where x.repo_id = r.id)
+    and not exists (select 1 from public.orchestration_worktrees x where x.repo_id = r.id)
+    and not exists (select 1 from public.repo_connection_overrides x where x.repo_id = r.id)
+    and not exists (select 1 from public.repo_model_overrides x where x.repo_id = r.id)
+    and not exists (select 1 from public.repo_rule_overrides x where x.repo_id = r.id)
+    and not exists (select 1 from public.repo_skill_overrides x where x.repo_id = r.id)
+    and not exists (
+      select 1 from public.review_findings x
+      where x.repo_id = r.id or x.repo_full_name = r.full_name
+    )
+    and not exists (select 1 from public.sandbox_launch_presets x where x.repo_id = r.id)
+    and not exists (select 1 from public.sandboxes x where x.repo_id = r.id)
+    and not exists (select 1 from public.slack_channel_links x where x.repo_id = r.id)
+    and not exists (select 1 from public.slack_connection_requests x where x.repo_id = r.id)
+    and not exists (select 1 from public.team_audit_events x where x.repo_id = r.id);
+
+  get diagnostics v_deleted = row_count;
+  return v_deleted;
+end;
+$$;
+
+revoke all on function public.prune_unconnected_repos(uuid) from public;
+grant execute on function public.prune_unconnected_repos(uuid) to service_role;
+
+-- Default privileges can grant execute to the API roles directly, which the
+-- revoke from public does not undo. Those roles exist only on some databases.
+do $$
+declare
+  v_role text;
+begin
+  foreach v_role in array array['anon', 'authenticated'] loop
+    if exists (select 1 from pg_roles where rolname = v_role) then
+      execute format(
+        'revoke all on function public.prune_unconnected_repos(uuid) from %I',
+        v_role
+      );
+    end if;
+  end loop;
+end;
+$$;

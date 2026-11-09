@@ -17,6 +17,7 @@ import { syncGithubWebhookState } from "@/lib/github-webhook-sync";
 
 let db: PGlite;
 const previousFrom = Object.getOwnPropertyDescriptor(supabaseAdmin, "from");
+const previousRpc = Object.getOwnPropertyDescriptor(supabaseAdmin, "rpc");
 beforeAll(async () => {
   db = await PGlite.create({
     extensions: { vector, pg_trgm, pgcrypto, uuid_ossp },
@@ -34,6 +35,10 @@ beforeAll(async () => {
     configurable: true,
     value: shim.from.bind(shim),
   });
+  Object.defineProperty(supabaseAdmin, "rpc", {
+    configurable: true,
+    value: shim.rpc.bind(shim),
+  });
 }, 120_000);
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -42,6 +47,8 @@ afterEach(() => {
 afterAll(async () => {
   if (previousFrom) Object.defineProperty(supabaseAdmin, "from", previousFrom);
   else Reflect.deleteProperty(supabaseAdmin, "from");
+  if (previousRpc) Object.defineProperty(supabaseAdmin, "rpc", previousRpc);
+  else Reflect.deleteProperty(supabaseAdmin, "rpc");
   await db?.close();
 });
 
@@ -257,7 +264,7 @@ it("keeps every attached grant user-scoped and never treats an App profile as OA
   ).toEqual({ discovered: 0, checked: false });
 });
 
-it("uses the current App repository grant and retains disconnected stored work without exposing it as authorized", async () => {
+it("uses the current App repository grant, retains disconnected stored work without exposing it as authorized, and prunes unused legacy OAuth rows", async () => {
   const owner = "00000000-0000-4000-8000-000000000081";
   const withoutGrant = "00000000-0000-4000-8000-000000000082";
   const workspace = "00000000-0000-4000-8000-000000000083";
@@ -326,14 +333,21 @@ it("uses the current App repository grant and retains disconnected stored work w
       })
     ).matchedUsers
   ).toBe(1);
+  // App-backed rows that left the grant are retained as stored work. The
+  // legacy OAuth row nothing references is pruned after the App sync; the
+  // user without an installation never runs an App sync and keeps theirs.
   expect(
     (
       await db.query(
-        "select count(*)::int as count from repos where user_id=$1",
-        [owner]
+        "select full_name from repos where user_id in ($1,$2) order by full_name",
+        [owner, withoutGrant]
       )
     ).rows
-  ).toEqual([{ count: 3 }]);
+  ).toEqual([
+    { full_name: "approved/app" },
+    { full_name: "unapproved/no-installation" },
+    { full_name: "unapproved/transferred" },
+  ]);
   expect(
     await getGithubAccessTokenForRepo({
       user_id: withoutGrant,
