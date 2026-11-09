@@ -241,7 +241,15 @@ export function useFlowSavePublishHandlers(
             snapshot: draft ? cloneFlowDraftSnapshot(draft) : undefined,
           })
         : true;
-      if (!saved) return;
+      if (!saved) {
+        toast({
+          title: "Publish not run",
+          description:
+            "The draft changed before publishing. Review the latest changes and try again.",
+          variant: "destructive",
+        });
+        return;
+      }
       const response = await fetch(`/api/flows/${selectedFlow.id}/publish`, {
         method: "POST",
         headers: getActiveTeamRequestHeaders(undefined, activeTeamId),

@@ -34,14 +34,10 @@ import {
   isActiveSandboxStatus,
   releaseSandboxBootLimitClaim,
   releasePersistentRestartClaim,
+  failPersistentRestartClaim,
 } from "./_lib/helpers";
 import { handleLegacyRestart } from "./_lib/legacy-restart";
 
-/**
- * Native persistent restart: stop the VM to capture a fresh snapshot,
- * then wake the same sandbox with resume:true and re-run the dev
- * bootstrap. Keeps the DB record and the Vercel sandbox name stable.
- */
 async function handlePersistentRestart(
   request: Request,
   id: string,
@@ -90,8 +86,7 @@ async function handlePersistentRestart(
     limitClaimId = limitDecision.claimId ?? null;
   }
 
-  // Claim before touching the provider: a concurrent loser must never stop
-  // the workspace that the winning restart or resume is bootstrapping.
+  // Claim before provider work so a loser cannot stop the winning workspace.
   let installingRecord: PersistentRestartRecord | null;
   const restartStartedAt = new Date().toISOString();
   try {
@@ -134,10 +129,7 @@ async function handlePersistentRestart(
       restartStartedAt,
     });
 
-  // Stop the current VM when it is already active, then wake it via
-  // resume:true. Stopped/paused persistent VMs skip stop and pass admission
-  // before the wake.
-  let sandbox;
+  let sandbox!: Awaited<ReturnType<typeof deps.getSandbox>>;
   try {
     const currentVm = await deps.getSandbox(
       record.sandbox_id,
@@ -193,8 +185,8 @@ async function handlePersistentRestart(
         deps
       );
     }
-    await releaseRestartClaim();
     if (isNotFoundError(err)) {
+      await releaseRestartClaim();
       console.info(
         "[sandbox/restart] provider sandbox gone; relaunching through legacy restart",
         { sandboxRecordId: record.id, sandboxId: record.sandbox_id }
@@ -207,6 +199,13 @@ async function handlePersistentRestart(
       (err instanceof Error
         ? err.message
         : "Failed to wake sandbox for restart");
+    await failPersistentRestartClaim(deps, {
+      userId: auth.userId,
+      record,
+      limitClaimId,
+      restartStartedAt,
+      message,
+    });
     return NextResponse.json(
       { error: message },
       { status: billingError?.status ?? 502 }
@@ -229,8 +228,16 @@ async function handlePersistentRestart(
       "environment failure",
       deps
     );
-    await releaseRestartClaim();
-    throw error;
+    const message =
+      error instanceof Error ? error.message : "Failed to prepare restart";
+    await failPersistentRestartClaim(deps, {
+      userId: auth.userId,
+      record,
+      limitClaimId,
+      restartStartedAt,
+      message,
+    });
+    return NextResponse.json({ error: message }, { status: 502 });
   }
 
   const encoder = new TextEncoder();
@@ -264,12 +271,7 @@ async function handlePersistentRestart(
         for await (const bevent of deps.bootstrapFromSnapshotStreaming(
           sandbox,
           {
-            // Use the sandbox's snapshot of the launch-time path verbatim.
-            // PERSISTENT_RESTART_SELECT always includes root_directory, and
-            // the 20260425030000 migration backfilled every existing row,
-            // so null here means "explicit repo root", not "missing value".
-            // Falling back to repo.root_directory would silently relocate a
-            // restarted sandbox into the repo's monorepo subdirectory.
+            // Boot in the original workspace, not the repo's subdirectory.
             rootDirectory: record.root_directory,
             devCommand: repo.dev_command,
             devPort: resolveConfiguredDevPort(
@@ -472,8 +474,6 @@ export function createSandboxRestartHandler(
   ) {
     const { id } = await params;
 
-    // Cheap probe to branch persistent vs. legacy without loading the
-    // full repo relation for both paths.
     const probe = await deps.loadOwnedSandboxRouteRecord<{
       id: string;
       sandbox_id: string;

@@ -164,3 +164,31 @@ export async function releasePersistentRestartClaim(
   );
   await releaseSandboxBootLimitClaim(deps, input.userId, input.limitClaimId);
 }
+
+export async function failPersistentRestartClaim(
+  deps: Pick<SandboxRestartDeps, "updateSandboxRecord" | "releaseLimitClaim">,
+  input: {
+    userId: string;
+    record: PersistentRestartRecord;
+    limitClaimId: string | null;
+    restartStartedAt: string;
+    message: string;
+  }
+) {
+  await deps.updateSandboxRecord(
+    input.record.id,
+    {
+      status: "error",
+      health_status: "error",
+      error: input.message,
+      last_boot_error: input.message,
+      limit_claim_id: null,
+    },
+    {
+      expectedSandboxId: input.record.sandbox_id,
+      fromStatuses: "installing",
+      expectedLastBootStartedAt: input.restartStartedAt,
+    }
+  );
+  await releaseSandboxBootLimitClaim(deps, input.userId, input.limitClaimId);
+}
