@@ -195,6 +195,11 @@ export async function toggleModelPreference({
       if (!isNewest()) await applyOptimistic(queue.desired);
       return;
     }
+    // A click during the save owns the next refresh; skip this one.
+    if (!isNewest()) {
+      await applyOptimistic(queue.desired);
+      return;
+    }
     await revalidateModelsWithFeedback(mutate, toastFn, false);
     // A click during the refresh keeps showing its value until its own save.
     if (!isNewest()) await applyOptimistic(queue.desired);

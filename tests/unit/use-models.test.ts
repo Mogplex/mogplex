@@ -340,6 +340,8 @@ test("toggleModelPreference saves a click made during an in-flight save after it
 
   assert.equal(harness.data.catalog[0]?.is_enabled, false);
   assert.equal(harness.toastCalls.length, 0);
+  // Only the newest save refreshes the catalog.
+  assert.equal(revalidationsOf(harness), 1);
 });
 
 test("toggleModelPreference skips saves that a newer click replaced before they started", async () => {
