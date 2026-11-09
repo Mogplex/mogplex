@@ -6,6 +6,7 @@ describe("review verdict merge guards", () => {
   it("rejects a clean report for another pull request", () => {
     expect(
       getPrReviewAutoMergeBlockReason({
+        verdictMissing: false,
         ...reviewed,
         requestedPrNumber: 43,
         reviewOutcome: { hasIssues: false },
@@ -15,15 +16,20 @@ describe("review verdict merge guards", () => {
   it("rejects findings and unavailable verdicts instead of allowing a merge", () => {
     expect(
       getPrReviewAutoMergeBlockReason({
+        verdictMissing: false,
         ...reviewed,
         reviewOutcome: { hasIssues: true },
       })
     ).toBe("Mogplex review reported issues");
     expect(
-      getPrReviewAutoMergeBlockReason({ ...reviewed, reviewOutcome: null })
+      getPrReviewAutoMergeBlockReason({
+        verdictMissing: false,
+        ...reviewed,
+        reviewOutcome: null,
+      })
     ).toBe("Mogplex review did not produce a no-issues verdict");
   });
-  it("rejects a report with a warning even when hasIssues is false", () => {
+  it("follows the verdict: warnings block, suggestions alone merge", () => {
     const finding = {
       title: "Unchecked null",
       body: "Body.",
@@ -32,6 +38,7 @@ describe("review verdict merge guards", () => {
     };
     expect(
       getPrReviewAutoMergeBlockReason({
+        verdictMissing: false,
         ...reviewed,
         reviewOutcome: {
           hasIssues: false,
@@ -41,6 +48,7 @@ describe("review verdict merge guards", () => {
     ).toBe("Mogplex review reported issues");
     expect(
       getPrReviewAutoMergeBlockReason({
+        verdictMissing: false,
         ...reviewed,
         reviewOutcome: {
           hasIssues: false,
@@ -50,13 +58,14 @@ describe("review verdict merge guards", () => {
     ).toBeNull();
     expect(
       getPrReviewAutoMergeBlockReason({
+        verdictMissing: false,
         ...reviewed,
         reviewOutcome: {
           hasIssues: true,
           findings: [{ ...finding, severity: "suggestion" }],
         },
       })
-    ).toBe("Mogplex review reported issues");
+    ).toBeNull();
   });
   it("allows only a matching, filed clean report", () => {
     expect(
@@ -68,6 +77,7 @@ describe("review verdict merge guards", () => {
     ).toBe("Mogplex review finished without a structured verdict");
     expect(
       getPrReviewAutoMergeBlockReason({
+        verdictMissing: false,
         ...reviewed,
         reviewOutcome: { hasIssues: false },
       })

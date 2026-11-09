@@ -197,6 +197,7 @@ test("createAutomationJobTask skips PR review publishing when the PR head change
       review_github_review_url: null,
       review_github_review_error: null,
       review_github_inline_comments_count: 0,
+      review_verdict: "blocking",
       review_check_run_id: 92,
       review_check_run_url: "https://github.com/acme/widgets/runs/92",
       review_check_run_completed: true,

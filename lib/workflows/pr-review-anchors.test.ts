@@ -58,4 +58,15 @@ describe("anchorReviewFindings", () => {
     expect(comments.map((c) => [c.line, c.anchor])).toEqual([[99, "exact"]]);
     expect(unanchored).toEqual([lineless]);
   });
+
+  it("should anchor a finding whose path has stray whitespace", () => {
+    const { comments } = anchorReviewFindings(
+      [finding(" src/a.ts\n", 11)],
+      changed
+    );
+
+    expect(comments).toMatchObject([
+      { path: "src/a.ts", line: 11, anchor: "exact" },
+    ]);
+  });
 });

@@ -30,6 +30,9 @@ run whose inline review already landed would post that review twice.
 The run metadata records the verdict as `review_verdict` beside
 `review_has_issues`, which keeps the model's own flag.
 
+Flow auto-merge follows the same verdict: `blocking` and `incomplete` stop
+the merge, `suggestions` and `clean` let it through.
+
 ## Anchoring
 
 `anchorReviewFindings` (`lib/workflows/pr-review-anchors.ts`) places each

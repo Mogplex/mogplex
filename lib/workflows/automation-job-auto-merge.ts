@@ -38,10 +38,10 @@ export function getPrReviewAutoMergeBlockReason(input: {
     | null;
   /**
    * True when "no issues" is only the default for a run that never filed its
-   * structured report. Optional so an omitted value can never unblock a merge
-   * that the verdict itself would block.
+   * structured report. Required: a caller that forgot it would let an
+   * unreported review through.
    */
-  verdictMissing?: boolean;
+  verdictMissing: boolean;
   requestedPrNumber: number;
   reviewedPrNumber: number | null;
 }) {
@@ -51,18 +51,17 @@ export function getPrReviewAutoMergeBlockReason(input: {
   if (input.verdictMissing) {
     return "Mogplex review finished without a structured verdict";
   }
-  // A warning or critical finding blocks the merge even when the model left
-  // hasIssues false: the check run already treats that report as blocking.
-  // The reverse is deliberately stricter than the check: a report of
-  // suggestions only that the model still flagged hasIssues does not merge
-  // unattended, though its check is green. Relaxing that is a policy call.
-  const blockingFinding = input.reviewOutcome?.findings?.some(
-    (finding) => finding.severity !== "suggestion"
-  );
-  if (input.reviewOutcome?.hasIssues === false && !blockingFinding) return null;
-  return input.reviewOutcome?.hasIssues === true || blockingFinding
-    ? "Mogplex review reported issues"
-    : "Mogplex review did not produce a no-issues verdict";
+  const outcome = input.reviewOutcome;
+  if (!outcome) return "Mogplex review did not produce a no-issues verdict";
+  // The gate follows the review verdict, as the check run does: a warning or
+  // critical finding blocks, suggestions alone do not (whatever the model's
+  // hasIssues flag says), and hasIssues with no findings listed blocks.
+  const findings = outcome.findings ?? [];
+  const blocking =
+    findings.length > 0
+      ? findings.some((finding) => finding.severity !== "suggestion")
+      : outcome.hasIssues;
+  return blocking ? "Mogplex review reported issues" : null;
 }
 
 export function resolveAutoMergeExpectedHeadSha(

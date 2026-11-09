@@ -46,6 +46,7 @@ test("PR review merge requests require an explicit no-issues verdict", async () 
 
   assert.equal(
     getPrReviewAutoMergeBlockReason({
+      verdictMissing: false,
       reviewOutcome: { hasIssues: false },
       requestedPrNumber: 42,
       reviewedPrNumber: 42,
@@ -54,6 +55,7 @@ test("PR review merge requests require an explicit no-issues verdict", async () 
   );
   assert.equal(
     getPrReviewAutoMergeBlockReason({
+      verdictMissing: false,
       reviewOutcome: { hasIssues: true },
       requestedPrNumber: 42,
       reviewedPrNumber: 42,
@@ -62,6 +64,7 @@ test("PR review merge requests require an explicit no-issues verdict", async () 
   );
   assert.equal(
     getPrReviewAutoMergeBlockReason({
+      verdictMissing: false,
       reviewOutcome: null,
       requestedPrNumber: 42,
       reviewedPrNumber: 42,
@@ -70,6 +73,7 @@ test("PR review merge requests require an explicit no-issues verdict", async () 
   );
   assert.equal(
     getPrReviewAutoMergeBlockReason({
+      verdictMissing: false,
       reviewOutcome: { hasIssues: false },
       requestedPrNumber: 43,
       reviewedPrNumber: 42,

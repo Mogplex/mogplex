@@ -139,13 +139,16 @@ export function buildPrReviewCheckText(input: {
     reviewOutcome,
     fallbackText
   );
-  // The check summary is demoted too, so compare the demoted forms.
-  const shownNarrative = narrative
-    ? demoteAgentMarkdownHeadings(narrative)
+  // GitHub shows the check summary above this text, so drop it from the
+  // front of the narrative. The summary is demoted too; compare demoted forms.
+  let shownNarrative = narrative
+    ? demoteAgentMarkdownHeadings(narrative).trim()
     : "";
-  if (shownNarrative && shownNarrative.trim() !== input.shownSummary?.trim()) {
-    parts.push(shownNarrative);
+  const shownSummary = input.shownSummary?.trim();
+  if (shownSummary && shownNarrative.startsWith(shownSummary)) {
+    shownNarrative = shownNarrative.slice(shownSummary.length).trim();
   }
+  if (shownNarrative) parts.push(shownNarrative);
 
   if ((reviewOutcome?.affectedFiles.length ?? 0) > 0) {
     parts.push(

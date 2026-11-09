@@ -103,4 +103,26 @@ describe("buildPrReviewCheckText", () => {
 
     expect(text).not.toContain("The guard is missing.");
   });
+
+  it("should drop the shown summary from the front of a longer narrative", () => {
+    const base = report([]);
+    const harnessResult: PrReviewHarnessResult = {
+      ...base,
+      reviewOutcome: {
+        ...base.reviewOutcome,
+        summary: "Approve-ready.",
+        commentBody: "Approve-ready.\n\nThe retry path is covered.",
+      },
+    };
+
+    const text = buildPrReviewCheckText({
+      harnessResult,
+      fallbackText: null,
+      conclusion: "success",
+      shownSummary: "Approve-ready.",
+    });
+
+    expect(text).not.toContain("Approve-ready.");
+    expect(text).toContain("The retry path is covered.");
+  });
 });

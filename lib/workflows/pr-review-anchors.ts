@@ -33,7 +33,9 @@ export function anchorReviewFindings(
   const comments: AnchoredReviewComment[] = [];
   const unanchored: ReviewFinding[] = [];
   for (const finding of findings) {
-    if (!finding.path) {
+    // Model-written paths can carry stray whitespace.
+    const path = finding.path?.trim();
+    if (!path) {
       unanchored.push(finding);
       continue;
     }
@@ -41,21 +43,21 @@ export function anchorReviewFindings(
       if (finding.line == null) unanchored.push(finding);
       else
         comments.push({
-          path: finding.path,
+          path,
           line: finding.line,
           finding,
           anchor: "exact",
         });
       continue;
     }
-    const lines = changed.get(finding.path) ?? [];
+    const lines = changed.get(path) ?? [];
     if (lines.length === 0) {
       unanchored.push(finding);
       continue;
     }
     if (finding.line != null && lines.includes(finding.line)) {
       comments.push({
-        path: finding.path,
+        path,
         line: finding.line,
         finding,
         anchor: "exact",
@@ -63,7 +65,7 @@ export function anchorReviewFindings(
       continue;
     }
     comments.push({
-      path: finding.path,
+      path,
       line: nearestLine(lines, finding.line),
       finding,
       anchor: finding.line == null ? "file" : "nearest",
