@@ -5,7 +5,7 @@ import {
   getControlStreamTerminalFailure,
   getSandboxStartTerminalFailure,
   updateSandboxStartTerminalFailure,
-} from "../../app/api/control/chat/_lib/lifecycle";
+} from "../../lib/control/chat/lifecycle";
 
 test("Control marks a structured sandbox launch failure as failed", () => {
   const terminalFailure = getSandboxStartTerminalFailure({

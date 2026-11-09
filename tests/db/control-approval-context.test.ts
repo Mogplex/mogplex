@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { expect, it } from "vitest";
 import type { UIMessage } from "ai";
 import { controlTranscriptDatabase } from "../support/control-transcript-database";
-import { restoreControlApprovalContext } from "@/app/api/control/chat/_lib/approval-context";
+import { restoreControlApprovalContext } from "@/lib/control/chat/approval-context";
 
 const decisions: UIMessage[] = [
   {

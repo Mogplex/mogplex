@@ -63,6 +63,7 @@ export type SandboxDeleteRecord = {
   vercel_team_id?: string | null;
   vercel_project_id?: string | null;
   persistent?: boolean | null;
+  last_boot_started_at?: string | null;
 };
 
 export type SandboxDetailGetDeps = {

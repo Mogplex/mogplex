@@ -1,10 +1,8 @@
 "use client";
 import useSWR from "swr";
 import { useCallback, useMemo } from "react";
-import {
-  getActiveTeamRequestHeaders,
-  useActiveTeamId,
-} from "@/components/active-scope-provider";
+import { getActiveTeamRequestHeaders } from "@/lib/active-team-request";
+import { useActiveTeamId } from "@/hooks/use-active-team";
 import { fetchJsonObject } from "@/lib/client-fetch";
 import { toast } from "@/hooks/use-toast";
 import type { AIModel } from "@/lib/types";

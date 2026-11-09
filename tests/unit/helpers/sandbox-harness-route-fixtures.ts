@@ -70,6 +70,13 @@ export function buildHarnessGitDeliveryDeps() {
       autoCommittedFiles: [],
     }),
     updateSandboxWorkingBranch: async () => {},
+    injectClaudeMcpConfig: async () => ({
+      ok: true as const,
+      mcpConfigPath: ".mogplex/mcp.json",
+      serverCount: 0,
+      serverNames: [],
+      mogplexServerName: "mogplex",
+    }),
     // Most route tests run for a user who keeps no skills.
     loadSkillCatalog: async (): Promise<SkillCatalog> => ({ skills: [] }),
     recordSkillUse: async () => {},

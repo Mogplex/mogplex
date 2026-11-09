@@ -2,7 +2,7 @@
 
 import { formatTeamAuditPayload } from "@/lib/team-audit-presentation";
 import { formatDateTime, formatAuditAction } from "./team-settings-helpers";
-import type { TeamAuditEventsResponse } from "@/app/api/teams/[teamId]/audit-events/route";
+import type { TeamAuditEventsResponse } from "@/lib/team-api-types";
 
 type AuditTabContentProps = {
   auditData: TeamAuditEventsResponse | undefined;

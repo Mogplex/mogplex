@@ -1,7 +1,7 @@
 import {
   getActiveSandboxForRepo,
   type SandboxPostDeps,
-} from "@/app/api/sandbox/_lib/deps";
+} from "@/lib/sandbox/collection/_lib/deps";
 import {
   loadMatchingSandboxRecordRow,
   resolveNameCollision,

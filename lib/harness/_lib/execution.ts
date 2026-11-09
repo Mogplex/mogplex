@@ -225,13 +225,13 @@ export function createHarnessStreamBody(
             lane: "episodic",
             content:
               exitResult.exitCode === 0
-                ? `${ctx.harnessId}: ${ctx.trimmedPrompt.slice(0, 160)}`
-                : `${ctx.harnessId} failed (${exitResult.exitCode}): ${ctx.trimmedPrompt.slice(0, 160)}`,
+                ? `${ctx.harnessId} completed`
+                : `${ctx.harnessId} failed (${exitResult.exitCode})`,
             metadata: {
               harness_id: ctx.harnessId,
               kind: "outcome",
               exit_code: exitResult.exitCode,
-              prompt_preview: ctx.trimmedPrompt.slice(0, 240),
+              ai_call_id: ctx.aiCallId,
             },
             scope: ctx.memoryScope,
             source: "harness",

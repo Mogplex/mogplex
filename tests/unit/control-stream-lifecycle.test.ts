@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { wrapControlResponseLifecycle } from "../../app/api/control/chat/_lib/stream-lifecycle";
+import { wrapControlResponseLifecycle } from "../../lib/control/chat/stream-lifecycle";
 
 test("control stream lifecycle reports client cancellation", async () => {
   const closures: string[] = [];

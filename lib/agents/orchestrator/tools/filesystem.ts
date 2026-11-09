@@ -2,7 +2,13 @@
  * Filesystem tools for the orchestrator.
  */
 import { z } from "zod";
+import { createGithubApi, createWriteFile } from "@/lib/agents/tools";
+import { createEditFile } from "@/lib/agents/tools/sandbox-files";
 import type { OrchestratorToolDef } from "../types";
+import {
+  createControlListFiles,
+  createControlReadFile,
+} from "./filesystem-impl";
 
 // --- Tool definitions ---
 
@@ -14,6 +20,7 @@ export const FILESYSTEM_TOOLS: OrchestratorToolDef[] = [
       "Read a file from the live sandbox checkout, or from GitHub when no sandbox is running",
     access: "read",
     implemented: true,
+    build: (ctx, repoDefaults) => createControlReadFile(ctx, repoDefaults),
   },
   {
     name: "write_file",
@@ -21,6 +28,10 @@ export const FILESYSTEM_TOOLS: OrchestratorToolDef[] = [
     description: "Write a whole file in the sandbox and return the diff",
     access: "mutation",
     implemented: true,
+    build: (ctx) =>
+      ctx.sandboxSelectionRequired
+        ? null
+        : createWriteFile(ctx.userId, ctx.sandboxBinding),
   },
   {
     name: "edit_file",
@@ -28,6 +39,10 @@ export const FILESYSTEM_TOOLS: OrchestratorToolDef[] = [
     description: "Replace exact text in a sandbox file and return the diff",
     access: "mutation",
     implemented: true,
+    build: (ctx) =>
+      ctx.sandboxSelectionRequired
+        ? null
+        : createEditFile(ctx.userId, ctx.sandboxBinding),
   },
   {
     name: "search_repo",
@@ -35,6 +50,8 @@ export const FILESYSTEM_TOOLS: OrchestratorToolDef[] = [
     description: "Search repository contents using GitHub code search",
     access: "read",
     implemented: true,
+    build: (ctx, repoDefaults) =>
+      ctx.githubToken ? createGithubApi(ctx.githubToken, repoDefaults) : null,
   },
   {
     name: "list_files",
@@ -43,6 +60,7 @@ export const FILESYSTEM_TOOLS: OrchestratorToolDef[] = [
       "List a directory in the live sandbox checkout, or on GitHub when no sandbox is running",
     access: "read",
     implemented: true,
+    build: (ctx, repoDefaults) => createControlListFiles(ctx, repoDefaults),
   },
   {
     name: "read_repo_map",
@@ -87,11 +105,3 @@ export const deleteFileSchema = z.object({
   path: z.string().describe("File path to delete"),
   reason: z.string().describe("Reason for deletion (for approval)"),
 });
-
-// --- Schema map for stub tools ---
-
-export const FILESYSTEM_SCHEMAS: Record<string, z.ZodType> = {
-  read_repo_map: readRepoMapSchema,
-  copy_files: copyFilesSchema,
-  delete_file: deleteFileSchema,
-};

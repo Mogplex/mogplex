@@ -78,8 +78,7 @@ export async function loadHarnessPromptWithMemoryContext(
 }
 
 /**
- * Persists a memory entry for the harness run. Used to record prompts
- * and outcomes for future memory retrieval.
+ * Persists an outcome-only memory entry for the harness run.
  */
 export async function persistHarnessMemory(input: {
   userId: string;

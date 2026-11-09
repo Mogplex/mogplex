@@ -7,8 +7,8 @@ import {
 } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { afterEach, expect, it, vi } from "vitest";
-import { buildControlTurnTools } from "@/app/api/control/chat/_lib/connection-tools";
-import { verificationMessageMetadata } from "@/app/api/control/chat/_lib/verification-metadata";
+import { buildControlTurnTools } from "@/lib/control/chat/connection-tools";
+import { verificationMessageMetadata } from "@/lib/control/chat/verification-metadata";
 import { toolCompletionEvent } from "@/lib/agents/tool-execution-event";
 import { CHECK_KINDS } from "./plan";
 import type { OrchestratorToolContext } from "../types";

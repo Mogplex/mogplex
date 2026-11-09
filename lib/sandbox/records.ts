@@ -64,11 +64,34 @@ export async function updateSandboxRecord(
 
   if (!data || !hasEmbeddedSelect) return data;
 
-  const { data: reloaded, error: reloadError } = await supabaseAdmin
-    .from("sandboxes")
-    .select(select)
-    .eq("id", id)
-    .maybeSingle();
+  let reloadQuery = supabaseAdmin.from("sandboxes").select(select).eq("id", id);
+  if (expectedSandboxId) {
+    reloadQuery = reloadQuery.eq("sandbox_id", expectedSandboxId);
+  }
+  if (expectedHealthStatus) {
+    reloadQuery = reloadQuery.eq("health_status", expectedHealthStatus);
+  }
+  const reloadedBootStartedAt =
+    typeof updates.last_boot_started_at === "string"
+      ? updates.last_boot_started_at
+      : expectedLastBootStartedAt;
+  if (reloadedBootStartedAt !== undefined) {
+    reloadQuery =
+      reloadedBootStartedAt === null
+        ? reloadQuery.is("last_boot_started_at", null)
+        : reloadQuery.eq("last_boot_started_at", reloadedBootStartedAt);
+  }
+  const reloadedStatus =
+    typeof updates.status === "string" ? updates.status : null;
+  if (reloadedStatus) {
+    reloadQuery = reloadQuery.eq("status", reloadedStatus);
+  } else if (fromStatuses) {
+    reloadQuery = Array.isArray(fromStatuses)
+      ? reloadQuery.in("status", fromStatuses)
+      : reloadQuery.eq("status", fromStatuses);
+  }
+  const { data: reloaded, error: reloadError } =
+    await reloadQuery.maybeSingle();
 
   if (reloadError) {
     throw new Error(`Failed to reload sandbox ${id}: ${reloadError.message}`);
@@ -170,10 +193,16 @@ export async function deleteSandboxRecord(
   options: {
     userId?: string;
     expectedSandboxId?: string;
+    expectedLastBootStartedAt?: string | null;
     select?: string;
   } = {}
 ) {
-  const { userId, expectedSandboxId, select = "id" } = options;
+  const {
+    userId,
+    expectedSandboxId,
+    expectedLastBootStartedAt,
+    select = "id",
+  } = options;
 
   let query = supabaseAdmin.from("sandboxes").delete().eq("id", id);
 
@@ -183,6 +212,12 @@ export async function deleteSandboxRecord(
 
   if (expectedSandboxId) {
     query = query.eq("sandbox_id", expectedSandboxId);
+  }
+  if (expectedLastBootStartedAt !== undefined) {
+    query =
+      expectedLastBootStartedAt === null
+        ? query.is("last_boot_started_at", null)
+        : query.eq("last_boot_started_at", expectedLastBootStartedAt);
   }
 
   const { data, error } = await query.select(select).maybeSingle();

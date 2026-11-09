@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { enableScopedE2EAuth, scopedPath } from "./helpers/auth";
 import { fulfillJson, mockActivationFlow } from "./helpers/activation-fixtures";
 import type { Agent, Assignment, ObservabilityJob } from "@/lib/types";
-import type { AgentRosterItem } from "@/app/api/agents/roster/route";
+import type { AgentRosterItem } from "@/lib/agents/roster-types";
 import type { Session } from "@/hooks/session-types";
 
 test.beforeEach(async ({ page }) => {

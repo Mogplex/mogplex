@@ -30,7 +30,7 @@ import {
   findWorkspaceSession,
   bindSessionToPendingSandboxBranch,
   ensureSessionSandboxBinding,
-} from "@/lib/sandbox/session-retarget";
+} from "@/hooks/session-retarget";
 import { useSandboxLaunchActions } from "@/components/sandbox-launch-provider";
 import { resolvePreviewPaneLaunchContext } from "@/lib/sandbox/preview-launch-context";
 import type { PreviewPaneProps, SelectionRect } from "./types";

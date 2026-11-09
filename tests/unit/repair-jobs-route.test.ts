@@ -11,6 +11,7 @@ function buildPendingJobsClient() {
       created_at: "2026-08-15T10:00:00.000Z",
       started_at: null,
       last_start_attempt_at: null,
+      flow_id: "flow-1",
     },
     {
       id: "job-2",
@@ -18,6 +19,7 @@ function buildPendingJobsClient() {
       created_at: "2026-08-15T10:01:00.000Z",
       started_at: null,
       last_start_attempt_at: null,
+      flow_id: "flow-2",
     },
   ];
   const query = {

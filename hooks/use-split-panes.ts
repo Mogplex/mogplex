@@ -1,14 +1,15 @@
 "use client";
 
-import { useState, useCallback } from "react";
-
+import { useCallback } from "react";
+import { useSessionsStore } from "./use-sessions";
 import {
-  createDefaultTree,
   createPaneNode,
   getPaneSandboxBinding,
   getTerminalSessionKey,
 } from "./split-panes-factories";
 import {
+  detachPane,
+  insertPaneAt,
   movePane,
   splitTreeAt,
   updateSplitNodeSizes,
@@ -21,11 +22,9 @@ import {
 } from "./split-panes-tree-ops";
 import {
   collectPaneIds,
-  collectPanes,
   DEFAULT_PANE_NAMES,
   isPane,
 } from "./split-panes-types";
-
 import type {
   FilePathMutationScope,
   MovePosition,
@@ -36,7 +35,6 @@ import type {
   TreeNode,
 } from "./split-panes-types";
 
-// Re-export all public types
 export type {
   MovePosition,
   PaneNode,
@@ -49,7 +47,6 @@ export type {
   TreeNode,
 } from "./split-panes-types";
 
-// Re-export public functions from factories
 export {
   createDefaultTree,
   createPaneNode,
@@ -59,7 +56,6 @@ export {
   getTerminalSessionKey,
 } from "./split-panes-factories";
 
-// Re-export public functions from tree-ops
 export {
   clearPaneFilePaths,
   collectPaneIds,
@@ -72,7 +68,6 @@ export {
   updatePaneNode,
 } from "./split-panes-tree-ops";
 
-// Re-export public functions from layout
 export {
   detachPane,
   insertPaneAt,
@@ -82,14 +77,29 @@ export {
   updateSplitNodeSizes,
 } from "./split-panes-layout";
 
-export function useSplitPanes() {
-  const [root, setRoot] = useState(createDefaultTree());
-  const [activeId, setActiveId] = useState("p-home");
+type TreeUpdate = { root: TreeNode; activeId: string };
 
-  const findNode = useCallback(
-    (node: TreeNode, id: string) => findTreeNode(node, id),
-    []
+function updateActiveSessionTree(
+  update: (root: TreeNode, activeId: string) => TreeUpdate
+) {
+  const state = useSessionsStore.getState();
+  const session = state.getActiveSession();
+  const next = update(session.paneTree, session.activeId);
+  state.updatePaneTree(next.root, next.activeId, { sessionId: session.id });
+}
+
+export function useSplitPanes() {
+  const root = useSessionsStore((state) => state.getActiveSession().paneTree);
+  const activeId = useSessionsStore(
+    (state) => state.getActiveSession().activeId
   );
+
+  const setActiveId = useCallback((id: string) => {
+    updateActiveSessionTree((currentRoot) => ({
+      root: currentRoot,
+      activeId: id,
+    }));
+  }, []);
 
   const split = useCallback(
     (
@@ -100,69 +110,30 @@ export function useSplitPanes() {
     ) => {
       const newId = `p${crypto.randomUUID().slice(0, 8)}`;
       const newSplitId = `s${crypto.randomUUID().slice(0, 8)}`;
-      setRoot((current) => {
-        const newPane = createPaneNode(current, newId, newType, overrides);
-        return splitTreeAt(current, id, dir, newPane, newSplitId);
-      });
-      setActiveId(newId);
-    },
-    []
-  );
-
-  const getAllPaneIds = useCallback(
-    (node: TreeNode) => collectPaneIds(node),
-    []
-  );
-
-  const closePane = useCallback(
-    (id: string) => {
-      const collapse = (node: TreeNode): TreeNode | null => {
-        if (isPane(node)) return node.id === id ? null : node;
-        const children = node.children
-          .map(collapse)
-          .filter(Boolean) as TreeNode[];
-        if (children.length === 0) return null;
-        if (children.length === 1) return children[0];
+      updateActiveSessionTree((currentRoot) => {
+        const newPane = createPaneNode(currentRoot, newId, newType, overrides);
         return {
-          ...node,
-          children,
-          sizes: children.map(() => 100 / children.length),
+          root: splitTreeAt(currentRoot, id, dir, newPane, newSplitId),
+          activeId: newId,
         };
-      };
-      const newRoot = collapse(root);
-      if (newRoot) {
-        setRoot(newRoot);
-        if (activeId === id) {
-          const remainingIds = getAllPaneIds(newRoot);
-          if (remainingIds.length > 0) {
-            setActiveId(remainingIds[0]);
-          }
-        }
-      }
+      });
     },
-    [root, activeId, getAllPaneIds]
+    []
   );
 
-  const appendLine = useCallback((id: string, line: string) => {
-    const update = (node: TreeNode): TreeNode => {
-      if (isPane(node) && node.id === id) {
-        return { ...node, lines: [...node.lines, line] };
-      }
-      if (!isPane(node))
-        return { ...node, children: node.children.map(update) };
-      return node;
-    };
-    setRoot(update);
-  }, []);
-
-  const setStatus = useCallback((id: string, s: PaneNode["status"]) => {
-    const update = (node: TreeNode): TreeNode => {
-      if (isPane(node) && node.id === id) return { ...node, status: s };
-      if (!isPane(node))
-        return { ...node, children: node.children.map(update) };
-      return node;
-    };
-    setRoot(update);
+  const closePane = useCallback((id: string) => {
+    updateActiveSessionTree((currentRoot, currentActiveId) => {
+      const { next } = detachPane(currentRoot, id);
+      if (!next) return { root: currentRoot, activeId: currentActiveId };
+      const remainingIds = collectPaneIds(next);
+      return {
+        root: next,
+        activeId:
+          currentActiveId === id && remainingIds.length > 0
+            ? remainingIds[0]
+            : currentActiveId,
+      };
+    });
   }, []);
 
   const openFile = useCallback(
@@ -170,113 +141,91 @@ export function useSplitPanes() {
       filePath: string,
       options?: { sandboxId?: string; sandboxBinding?: PaneSandboxBinding }
     ) => {
-      const fileName = filePath.split("/").pop() || filePath;
-      let replaced = false;
-      const activeNode = findTreeNode(root, activeId);
-      const inheritedBinding =
-        activeNode && isPane(activeNode)
-          ? getPaneSandboxBinding(activeNode)
-          : undefined;
-      const editorSandboxBinding =
-        options?.sandboxBinding ??
-        inheritedBinding ??
-        getPaneSandboxBinding({ type: "editor" });
+      updateActiveSessionTree((currentRoot, currentActiveId) => {
+        const fileName = filePath.split("/").pop() || filePath;
+        const activeNode = findTreeNode(currentRoot, currentActiveId);
+        const inheritedBinding =
+          activeNode && isPane(activeNode)
+            ? getPaneSandboxBinding(activeNode)
+            : undefined;
+        const sandboxBinding =
+          options?.sandboxBinding ??
+          inheritedBinding ??
+          getPaneSandboxBinding({ type: "editor" });
 
-      const update = (node: TreeNode): TreeNode => {
-        if (isPane(node) && node.id === activeId && node.type === "editor") {
-          replaced = true;
+        if (activeNode && isPane(activeNode) && activeNode.type === "editor") {
           return {
-            ...node,
-            name: fileName,
-            filePath,
-            sandboxBinding: editorSandboxBinding,
-            sandboxId:
-              editorSandboxBinding === "pinned"
-                ? options?.sandboxId || node.sandboxId
-                : undefined,
-            status: "idle",
+            root: updatePaneNode(currentRoot, currentActiveId, {
+              name: fileName,
+              filePath,
+              sandboxBinding,
+              sandboxId:
+                sandboxBinding === "pinned"
+                  ? options?.sandboxId || activeNode.sandboxId
+                  : undefined,
+              status: "idle",
+            }),
+            activeId: currentActiveId,
           };
         }
-        if (!isPane(node)) {
-          return { ...node, children: node.children.map(update) };
-        }
-        return node;
-      };
 
-      const updatedRoot = update(root);
-      if (replaced) {
-        setRoot(updatedRoot);
-        return;
-      }
-
-      const newId = `p${crypto.randomUUID().slice(0, 8)}`;
-      const newSplitId2 = `s${crypto.randomUUID().slice(0, 8)}`;
-      const insert = (node: TreeNode): TreeNode => {
-        if (isPane(node) && node.id === activeId) {
-          return {
-            id: newSplitId2,
-            dir: "horizontal",
-            sizes: [45, 55],
-            children: [
-              node,
-              {
-                id: newId,
-                type: "editor",
-                name: fileName,
-                lines: [],
-                status: "idle",
-                filePath,
-                sandboxBinding: editorSandboxBinding,
-                sandboxId:
-                  editorSandboxBinding === "pinned"
-                    ? options?.sandboxId
-                    : undefined,
-              },
-            ],
-          };
+        if (!activeNode) {
+          return { root: currentRoot, activeId: currentActiveId };
         }
-        if (!isPane(node)) {
-          return { ...node, children: node.children.map(insert) };
-        }
-        return node;
-      };
-
-      setRoot(insert(root));
-      setActiveId(newId);
+        const newId = `p${crypto.randomUUID().slice(0, 8)}`;
+        const newSplitId = `s${crypto.randomUUID().slice(0, 8)}`;
+        const editor = createPaneNode(currentRoot, newId, "editor", {
+          name: fileName,
+          filePath,
+          sandboxBinding,
+          sandboxId:
+            sandboxBinding === "pinned" ? options?.sandboxId : undefined,
+        });
+        return {
+          root: insertPaneAt(
+            currentRoot,
+            currentActiveId,
+            editor,
+            "right",
+            newSplitId
+          ),
+          activeId: newId,
+        };
+      });
     },
-    [activeId, root]
+    []
   );
 
-  const panes = useCallback((node: TreeNode) => collectPanes(node), []);
-
-  const loadTree = useCallback((tree: TreeNode, active: string) => {
-    setRoot(tree);
-    setActiveId(active);
-  }, []);
-
   const updatePane = useCallback((id: string, updates: Partial<PaneNode>) => {
-    setRoot((current) => updatePaneNode(current, id, updates));
+    updateActiveSessionTree((currentRoot, currentActiveId) => ({
+      root: updatePaneNode(currentRoot, id, updates),
+      activeId: currentActiveId,
+    }));
   }, []);
 
   const retargetFilePath = useCallback(
     (fromPath: string, toPath: string, scope?: FilePathMutationScope) => {
-      setRoot((current) =>
-        retargetPaneFilePaths(current, fromPath, toPath, scope)
-      );
+      updateActiveSessionTree((currentRoot, currentActiveId) => ({
+        root: retargetPaneFilePaths(currentRoot, fromPath, toPath, scope),
+        activeId: currentActiveId,
+      }));
     },
     []
   );
 
   const clearFilePath = useCallback(
     (targetPath: string, scope?: FilePathMutationScope) => {
-      setRoot((current) => clearPaneFilePaths(current, targetPath, scope));
+      updateActiveSessionTree((currentRoot, currentActiveId) => ({
+        root: clearPaneFilePaths(currentRoot, targetPath, scope),
+        activeId: currentActiveId,
+      }));
     },
     []
   );
 
   const updateTerminalSession = useCallback(
     (terminalSessionKey: string, updates: Partial<PaneNode>) => {
-      setRoot((current) => {
+      updateActiveSessionTree((currentRoot, currentActiveId) => {
         const apply = (node: TreeNode): TreeNode => {
           if (isPane(node)) {
             return node.type === "terminal" &&
@@ -286,77 +235,72 @@ export function useSplitPanes() {
           }
           return { ...node, children: node.children.map(apply) };
         };
-
-        return apply(current);
+        return { root: apply(currentRoot), activeId: currentActiveId };
       });
     },
     []
   );
 
   const updateSplitSizes = useCallback((splitId: string, sizes: number[]) => {
-    setRoot((current) => updateSplitNodeSizes(current, splitId, sizes));
+    updateActiveSessionTree((currentRoot, currentActiveId) => ({
+      root: updateSplitNodeSizes(currentRoot, splitId, sizes),
+      activeId: currentActiveId,
+    }));
   }, []);
 
   const movePaneById = useCallback(
     (sourceId: string, targetId: string, position: MovePosition) => {
-      setRoot((current) =>
-        movePane(
-          current,
+      updateActiveSessionTree((currentRoot, currentActiveId) => ({
+        root: movePane(
+          currentRoot,
           sourceId,
           targetId,
           position,
           `s${crypto.randomUUID().slice(0, 8)}`
-        )
-      );
+        ),
+        activeId: currentActiveId,
+      }));
     },
     []
   );
 
   const popOutIDE = useCallback((paneId: string, filePath?: string) => {
-    const uid = crypto.randomUUID().slice(0, 8);
-    const editorId = `p-editor-${uid}`;
-    const update = (node: TreeNode): TreeNode => {
-      if (isPane(node) && node.id === paneId && node.type === "preview") {
-        const sandboxBinding = getPaneSandboxBinding(node);
-        return {
-          id: `s-ide-${uid}`,
-          dir: "horizontal",
-          sizes: [18, 47, 35],
-          children: [
-            {
-              id: `p-files-${uid}`,
-              type: "files",
-              name: DEFAULT_PANE_NAMES.files,
-              lines: [],
-              status: "idle",
-              sandboxBinding,
-              sandboxId:
-                sandboxBinding === "pinned" ? node.sandboxId : undefined,
-            },
-            {
-              id: editorId,
-              type: "editor",
-              name: filePath
-                ? filePath.split("/").pop() || DEFAULT_PANE_NAMES.editor
-                : DEFAULT_PANE_NAMES.editor,
-              lines: [],
-              status: "idle",
-              filePath,
-              sandboxBinding,
-              sandboxId:
-                sandboxBinding === "pinned" ? node.sandboxId : undefined,
-            },
-            node,
-          ],
-        };
-      }
-      if (!isPane(node)) {
-        return { ...node, children: node.children.map(update) };
-      }
-      return node;
-    };
-    setRoot(update);
-    setActiveId(editorId);
+    updateActiveSessionTree((currentRoot) => {
+      const uid = crypto.randomUUID().slice(0, 8);
+      const editorId = `p-editor-${uid}`;
+      const update = (node: TreeNode): TreeNode => {
+        if (isPane(node) && node.id === paneId && node.type === "preview") {
+          const sandboxBinding = getPaneSandboxBinding(node);
+          const sandboxId =
+            sandboxBinding === "pinned" ? node.sandboxId : undefined;
+          return {
+            id: `s-ide-${uid}`,
+            dir: "horizontal",
+            sizes: [18, 47, 35],
+            children: [
+              createPaneNode(node, `p-files-${uid}`, "files", {
+                sandboxBinding,
+                sandboxId,
+              }),
+              createPaneNode(node, editorId, "editor", {
+                name: filePath
+                  ? filePath.split("/").pop() || DEFAULT_PANE_NAMES.editor
+                  : DEFAULT_PANE_NAMES.editor,
+                filePath,
+                sandboxBinding,
+                sandboxId,
+              }),
+              node,
+            ],
+          };
+        }
+        if (!isPane(node)) {
+          return { ...node, children: node.children.map(update) };
+        }
+        return node;
+      };
+      return { root: update(currentRoot), activeId: editorId };
+    });
   }, []);
 
   return {
@@ -365,13 +309,7 @@ export function useSplitPanes() {
     setActiveId,
     split,
     closePane,
-    appendLine,
-    setStatus,
     openFile,
-    findNode,
-    isPane,
-    panes,
-    loadTree,
     updatePane,
     retargetFilePath,
     clearFilePath,

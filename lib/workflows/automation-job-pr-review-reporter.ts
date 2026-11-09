@@ -61,6 +61,7 @@ export type PrReviewReporterInput = {
   reviewCheckDetailsUrl: string;
   reviewCheckRunId: number | null;
   reviewCheckRunUrl: string | null;
+  reviewCheckRunError?: string | null;
 };
 
 /**
@@ -147,7 +148,7 @@ export function createPrReviewReporter(
     reviewCheckRunUrl: input.reviewCheckRunUrl,
     reviewCheckRunCompleted: false,
     reviewCheckRunConclusion: null,
-    reviewCheckRunError: null,
+    reviewCheckRunError: input.reviewCheckRunError ?? null,
     reviewTimelineCommentPublished: false,
     reviewTimelineCommentId: null,
     reviewTimelineCommentUrl: null,

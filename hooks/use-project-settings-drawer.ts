@@ -1,7 +1,15 @@
 "use client";
 
 import { create } from "zustand";
-import type { ProjectSettingsTab } from "@/components/project-settings/project-settings-drawer";
+
+export type ProjectSettingsTab =
+  | "env"
+  | "general"
+  | "secrets"
+  | "skills"
+  | "rules"
+  | "models"
+  | "snapshot";
 
 export type ProjectSettingsRequest = {
   repoId: string;

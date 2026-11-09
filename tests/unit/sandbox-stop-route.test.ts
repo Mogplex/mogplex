@@ -93,13 +93,19 @@ test("POST /api/sandbox/[id]/stop does not hide an unconfirmed VM after sandbox 
   assert.equal(payload.sandbox.runtime_summary.status, "running");
 });
 
-test("POST /api/sandbox/[id]/stop best-effort stops the remote sandbox before updating the row", async () => {
+test("POST /api/sandbox/[id]/stop returns conflict without weakening a failed generation guard", async () => {
   const { createSandboxStopHandler } = await loadSandboxStopRouteModule();
   let remoteStopCount = 0;
+  const stopCalls: Array<{
+    expectedSandboxId?: string;
+    expectedLastBootStartedAt?: string | null;
+  }> = [];
 
   const handler = createSandboxStopHandler({
     loadOwnedSandboxRouteRecord: (async () =>
-      buildLoadedSandboxStopRecord()) as never,
+      buildLoadedSandboxStopRecord({
+        last_boot_started_at: "2026-04-01T10:00:00.000Z",
+      })) as never,
     resolveLoadedSandboxRouteContext: async (loaded) =>
       buildResolvedSandboxRouteContext(loaded) as never,
     getSandbox: async () =>
@@ -110,7 +116,13 @@ test("POST /api/sandbox/[id]/stop best-effort stops the remote sandbox before up
           remoteStopCount += 1;
         },
       }) as never,
-    stopSandboxRecord: async () => null,
+    stopSandboxRecord: async (_id, options) => {
+      stopCalls.push({
+        expectedSandboxId: options?.expectedSandboxId,
+        expectedLastBootStartedAt: options?.expectedLastBootStartedAt,
+      });
+      return null;
+    },
   });
 
   const response = await handler(
@@ -118,8 +130,14 @@ test("POST /api/sandbox/[id]/stop best-effort stops the remote sandbox before up
     buildSandboxRouteParams()
   );
 
-  assert.equal(response.status, 200);
+  assert.equal(response.status, 409);
   assert.equal(remoteStopCount, 1);
+  assert.deepEqual(stopCalls, [
+    {
+      expectedSandboxId: "vm_123",
+      expectedLastBootStartedAt: "2026-04-01T10:00:00.000Z",
+    },
+  ]);
 });
 
 test("POST /api/sandbox/[id]/stop explicitly discards a legacy paused sandbox's resources and marks record stopped", async () => {

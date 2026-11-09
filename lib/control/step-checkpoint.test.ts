@@ -4,7 +4,7 @@ import { createControlStepCheckpoint } from "@/lib/control/step-checkpoint";
 import {
   finalizeCancelledControlRun,
   finalizeFinishedControlRun,
-} from "@/app/api/control/chat/_lib/lifecycle";
+} from "@/lib/control/chat/lifecycle";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { buildAiCall } from "@/tests/unit/helpers/sandbox-harness-route-fixtures";
 

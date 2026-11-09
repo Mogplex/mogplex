@@ -14,8 +14,8 @@ import {
 } from "@/lib/observability/automation-run-presentation";
 import { presentSandboxDebug } from "@/lib/sandbox/debug-presenter";
 import type { AiCall } from "@/lib/types";
-import { CostSourceBadge } from "./badges";
-import { formatTokens, hasPositiveTokenCount, timeAgo } from "./formatters";
+import { CostSourceBadge } from "@/components/observability/badges";
+import { formatTokens, hasPositiveTokenCount, timeAgo } from "@/lib/observability/formatters";
 import { GithubEventLinkPanel } from "./github-event-link-panel";
 
 function readAiBillingSource(

@@ -1,4 +1,4 @@
-import { createDefaultTree } from "./use-split-panes";
+import { createDefaultTree } from "./split-panes-factories";
 import { normalizeSessionSandboxFields } from "./session-helpers";
 import type { PersistedSessionsState } from "./session-types";
 

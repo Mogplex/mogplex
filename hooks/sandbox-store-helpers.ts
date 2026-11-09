@@ -2,7 +2,7 @@ import {
   mergeSandboxRecord,
   toSandboxRecord,
 } from "@/lib/sandbox/client-record";
-import { getActiveTeamRequestHeaders } from "@/components/active-scope-provider";
+import { getActiveTeamRequestHeaders } from "@/lib/active-team-request";
 import { parseSandboxErrorCode } from "@/lib/sandbox/error-state";
 import { toast } from "@/hooks/use-toast";
 import type { SandboxError } from "@/lib/sandbox/error-state";

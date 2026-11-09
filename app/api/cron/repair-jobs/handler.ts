@@ -3,6 +3,7 @@ import { requireMachineApiAuth } from "@/lib/internal-api-auth";
 import { withSupabaseAdminConnection } from "@/lib/supabase/admin";
 import { startAutomationJobRun } from "@/lib/workflows/automation-job-workflow";
 import { isRepairablePendingJob } from "@/lib/workflows/job-run-repair";
+import { isExecutableJobRunSource } from "@/lib/job-runs";
 
 type RepairJobsHandlerDeps = {
   requireMachineApiAuth: typeof requireMachineApiAuth;
@@ -37,7 +38,9 @@ export function createRepairJobsGetHandler(
       return await deps.withSupabaseAdminConnection(async (adminClient) => {
         const { data: jobs, error } = await adminClient
           .from("job_runs")
-          .select("id, status, created_at, started_at, last_start_attempt_at")
+          .select(
+            "id, status, flow_id, created_at, started_at, last_start_attempt_at"
+          )
           .eq("status", "pending")
           .order("created_at", { ascending: true })
           .limit(250);
@@ -52,8 +55,9 @@ export function createRepairJobsGetHandler(
           );
         }
 
-        const repairableJobs = (jobs || []).filter((job) =>
-          deps.isRepairablePendingJob(job)
+        const repairableJobs = (jobs || []).filter(
+          (job) =>
+            isExecutableJobRunSource(job) && deps.isRepairablePendingJob(job)
         );
 
         if (repairableJobs.length === 0) {

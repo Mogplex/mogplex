@@ -6,7 +6,7 @@ import {
   capturedUsageAiCallColumns,
 } from "@/lib/observability/usage";
 import { updateAiCallIfActive } from "@/lib/interactive-runs";
-import type { ActiveControlCall } from "@/app/api/control/chat/_lib/types";
+import type { ActiveControlCall } from "@/lib/control/chat/types";
 
 export function createControlStepCheckpoint(call: ActiveControlCall) {
   let usage = EMPTY_CAPTURED_USAGE;

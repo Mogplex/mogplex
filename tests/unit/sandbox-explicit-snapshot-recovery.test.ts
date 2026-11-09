@@ -8,7 +8,7 @@ for (const restoreSnapshotId of ["saved-workspace", "cached-snapshot", null]) {
     const previousBackend = process.env.MOGPLEX_DATA_BACKEND;
     process.env.MOGPLEX_DATA_BACKEND = "supabase";
     const { restoreSandboxFromSnapshotIfAvailable } =
-      await import("../../app/api/sandbox/_lib/provisioning");
+      await import("../../lib/sandbox/collection/_lib/provisioning");
     const originalFetch = globalThis.fetch;
     const originalWarn = console.warn;
     const originalError = console.error;

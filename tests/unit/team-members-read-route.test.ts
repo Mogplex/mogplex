@@ -2,10 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import {
-  createTeamMembersGetHandler,
-  type TeamMembersResponse,
-} from "../../app/api/teams/[teamId]/members/route";
+import { createTeamMembersGetHandler } from "../../app/api/teams/[teamId]/members/route";
+import type { TeamMembersResponse } from "../../lib/team-api-types";
 import type { TeamRole } from "../../lib/team-capabilities";
 
 const teamId = "00000000-0000-4000-8000-000000000001";

@@ -26,11 +26,12 @@ async function findProfileIdByAuthUserId(
   authUserId: string
 ): Promise<string | undefined> {
   const { supabaseAdmin } = await import("@/lib/supabase/admin");
-  const { data: profile } = await supabaseAdmin
+  const { data: profile, error } = await supabaseAdmin
     .from("profiles")
     .select("id")
     .eq("auth_user_id", authUserId)
-    .single();
+    .maybeSingle();
+  if (error) throw new Error(error.message);
   return (profile?.id as string | undefined) ?? undefined;
 }
 

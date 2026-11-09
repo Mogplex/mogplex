@@ -1,13 +1,18 @@
 "use client"
 import { useCallback, useMemo, useState } from "react"
-import { useSelectedAgent, useOutputPaneTab } from "./agent-roster-pane"
+import { useSelectedAgent, useOutputPaneTab } from "@/hooks/use-agent-output"
 import { useAgentRosterSummary } from "@/hooks/use-agent-roster-summary"
+import {
+  RunActionButtons,
+  type ActiveRunActions,
+} from "./run-action-buttons"
+import type { FlowRunAction } from "@/lib/flows/run-presentation"
 import {
   useObservabilityCalls,
   useObservabilityJobs,
   useObservabilityAutomationEvents,
 } from "@/hooks/use-observability"
-import type { AgentRosterItem } from "@/app/api/agents/roster/route"
+import type { AgentRosterItem } from "@/lib/agents/roster-types"
 import type { ObservabilityJob, AutomationDispatchEvent } from "@/lib/types"
 import useSWR from "swr"
 import { mutateJson } from "@/lib/client-fetch"
@@ -17,12 +22,12 @@ import {
   formatDispatchReason,
   getJobAutomationSummary,
   timeAgo,
-} from "@/app/(dashboard)/[scope]/observability/_components/formatters"
+} from "@/lib/observability/formatters"
 import {
   StatusBadge,
   PressureOutcomeBadge,
-} from "@/app/(dashboard)/[scope]/observability/_components/badges"
-import { AutomationInlineCostSummary } from "@/app/(dashboard)/[scope]/observability/_components/automation-presentation-cells"
+} from "@/components/observability/badges"
+import { AutomationInlineCostSummary } from "@/components/observability/automation-presentation-cells"
 import {
   formatAutomationTimeoutBudgetLabel,
   getAutomationStatusPresentation,
@@ -152,16 +157,20 @@ function ActivityTab({ agentId }: { agentId: string }) {
     [agentId]
   )
   const { data, isLoading } = useObservabilityJobs(filters)
-  const [actionId, setActionId] = useState<string | null>(null)
+  const [activeRunActions, setActiveRunActions] = useState<ActiveRunActions>({})
 
-  const runAction = useCallback(async (jobId: string, action: "repair" | "requeue" | "cancel") => {
-    setActionId(jobId)
+  const runAction = useCallback(async (jobId: string, action: FlowRunAction) => {
+    setActiveRunActions((current) => ({ ...current, [jobId]: action }))
     try {
       await mutateJson(`/api/observability/jobs/${jobId}/${action}`, { method: "POST" })
     } catch (error) {
       toast({ title: "Cannot change run", description: error instanceof Error ? error.message : "Action failed", variant: "destructive" })
     } finally {
-      setActionId(null)
+      setActiveRunActions((current) => {
+        const next = { ...current }
+        delete next[jobId]
+        return next
+      })
     }
   }, [])
 
@@ -178,7 +187,7 @@ function ActivityTab({ agentId }: { agentId: string }) {
   return (
     <div className="divide-y divide-border-dim">
       {jobs.map((job) => (
-        <JobRow key={job.id} job={job} actionId={actionId} onAction={runAction} />
+        <JobRow key={job.id} job={job} activeRunActions={activeRunActions} onAction={runAction} />
       ))}
     </div>
   )
@@ -186,17 +195,16 @@ function ActivityTab({ agentId }: { agentId: string }) {
 
 function JobRow({
   job,
-  actionId,
+  activeRunActions,
   onAction,
 }: {
   job: ObservabilityJob
-  actionId: string | null
-  onAction: (jobId: string, action: "repair" | "requeue" | "cancel") => Promise<void>
+  activeRunActions: ActiveRunActions
+  onAction: (jobId: string, action: FlowRunAction) => Promise<void>
 }) {
   const [expanded, setExpanded] = useState(false)
   const automationSummary = getJobAutomationSummary(job)
   const repoName = job.repo.full_name?.split("/").pop() ?? "—"
-  const isActing = actionId === job.id
   const statusPresentation = getAutomationStatusPresentation({
     status: job.status,
     metadata: job.latest_dispatch_event?.metadata,
@@ -259,37 +267,12 @@ function JobRow({
               {job.latest_ai_call.model} · {job.start_attempts} attempt{job.start_attempts !== 1 ? "s" : ""}
             </div>
           )}
-          {(job.repairable || job.requeueable || job.cancelable) && (
-            <div className="flex items-center gap-1.5 pt-0.5">
-              {job.repairable && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); void onAction(job.id, "repair") }}
-                  disabled={isActing}
-                  className="px-2 py-0.5 text-[10px] border border-border rounded hover:bg-secondary disabled:opacity-50"
-                >
-                  Repair
-                </button>
-              )}
-              {job.requeueable && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); void onAction(job.id, "requeue") }}
-                  disabled={isActing}
-                  className="px-2 py-0.5 text-[10px] border border-border rounded hover:bg-secondary disabled:opacity-50"
-                >
-                  Requeue
-                </button>
-              )}
-              {job.cancelable && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); void onAction(job.id, "cancel") }}
-                  disabled={isActing}
-                  className="px-2 py-0.5 text-[10px] border border-border rounded hover:bg-secondary disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-              )}
-            </div>
-          )}
+          <RunActionButtons
+            run={job}
+            activeRunActions={activeRunActions}
+            onRunAction={onAction}
+            className="pt-0.5"
+          />
         </div>
       )}
     </div>

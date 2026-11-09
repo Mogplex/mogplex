@@ -1,4 +1,5 @@
 import { FAILURE_HANDLE_ID } from "@/lib/flows/graph-helpers";
+import { ACTION_OPERATIONS } from "@/lib/flows/capabilities";
 import type {
   FlowActionNodeData,
   FlowActionOperation,
@@ -9,19 +10,12 @@ import type { FlowOperatorDefinition } from "./types";
 
 type ActionNode = Extract<FlowNode, { type: "action" }>;
 
-const ACTION_OPERATIONS: ReadonlySet<FlowActionOperation> = new Set([
-  "sandbox.run_command",
-  "slack.send_message",
-  "github.post_comment",
-  "github.create_issue",
-  "github.update_labels",
-  "github.set_status",
-  "github.submit_review",
-  "github.merge_pull_request",
-]);
+const ACTION_OPERATION_SET: ReadonlySet<FlowActionOperation> = new Set(
+  ACTION_OPERATIONS
+);
 
 function isActionOperation(value: unknown): value is FlowActionOperation {
-  return ACTION_OPERATIONS.has(value as FlowActionOperation);
+  return ACTION_OPERATION_SET.has(value as FlowActionOperation);
 }
 
 function containsTemplateSyntax(value: string) {

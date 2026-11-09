@@ -56,8 +56,16 @@ export function isRepairableJobRun(
   return now - new Date(anchor).getTime() >= staleThresholdMs;
 }
 
-export function isRequeueableJobRun(run: Pick<JobRunStateFields, "status">) {
-  return run.status === "failed";
+export function isExecutableJobRunSource(
+  run: Pick<JobRunStateFields, "flow_id" | "trigger_id">
+) {
+  return Boolean(run.flow_id) && !run.trigger_id;
+}
+
+export function isRequeueableJobRun(
+  run: Pick<JobRunStateFields, "status" | "flow_id" | "trigger_id">
+) {
+  return run.status === "failed" && isExecutableJobRunSource(run);
 }
 
 export function isCancelableJobRun(
@@ -80,6 +88,7 @@ export function summarizeEntityJobRuns<
     last_start_attempt_at?: string | null;
     cancel_requested_at?: string | null;
     cancelled_at?: string | null;
+    flow_id?: string | null;
   },
 >(runs: T[], now = Date.now()) {
   const lastRun =

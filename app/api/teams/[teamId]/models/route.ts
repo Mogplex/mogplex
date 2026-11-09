@@ -6,11 +6,6 @@ import { loadTeamMembershipAuth } from "@/lib/team-management";
 import { recordTeamAuditEvent } from "@/lib/team-audit";
 import { teamModelParamsSchema, teamModelsSchema } from "./schema";
 
-export type TeamModelsResponse = {
-  modelAllowlist: string[] | null;
-  viewer: { canManage: boolean };
-};
-
 const defaultDeps = {
   requireProfileId,
   db: supabaseAdmin,

@@ -34,7 +34,7 @@ async function loadRouteModule() {
   process.env.NEXT_PUBLIC_SUPABASE_URL ||= "https://example.supabase.co";
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||= "test-anon-key";
   process.env.SUPABASE_SERVICE_ROLE_KEY ||= "test-service-role-key";
-  return import("../../app/api/sandbox/[id]/changes/route");
+  return import("../../lib/sandbox/changes-route");
 }
 
 const STATUS_STDOUT = [
@@ -72,6 +72,13 @@ function loadedContext(sandbox: unknown, record: Record<string, unknown> = {}) {
 
 const params = { params: Promise.resolve({ id: "sandbox-record-1" }) };
 const noop = async () => undefined;
+
+test("the changes route adapter exposes both read and mutation handlers", async () => {
+  const adapter = await import("../../app/api/sandbox/[id]/changes/route");
+  const service = await loadRouteModule();
+  assert.equal(adapter.GET, service.GET);
+  assert.equal(adapter.POST, service.POST);
+});
 
 test("workspace snapshots include file patches and fail visibly if a patch cannot be read", async () => {
   const { createSandboxChangesGetHandler } = await loadRouteModule();

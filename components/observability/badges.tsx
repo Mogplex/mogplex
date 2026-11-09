@@ -2,7 +2,7 @@
 
 import type { AutomationDispatchEvent } from "@/lib/types"
 import type { AutomationCostSource } from "@/lib/observability/automation-run-presentation"
-import { formatDispatchOutcome } from "./formatters"
+import { formatDispatchOutcome } from "@/lib/observability/formatters"
 
 const COST_SOURCE_BADGE_STYLES = {
   gateway:

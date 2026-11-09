@@ -236,7 +236,7 @@ test("activated Slack preserves immediate help and short-lived modal/unfurl path
 test("native Slack runtime validation ignores bots/malformed events and preserves conversation identity", async () => {
   await loadSlackWebhookRoute();
   const { parseNativeSlackEvent } =
-    await import("../../app/api/webhooks/slack/_lib/native-input");
+    await import("../../lib/slack/webhooks/native-input");
   const event = {
     type: "event_callback",
     team_id: "T1",

@@ -17,7 +17,7 @@ import {
   buildHarnessResumeRetryNotice,
   isRecoverableHarnessResumeFailure,
 } from "@/lib/harness/resume-recovery";
-import { ensureSessionSandboxBinding } from "@/lib/sandbox/session-retarget";
+import { ensureSessionSandboxBinding } from "@/hooks/session-retarget";
 import type { Repo } from "@/lib/types";
 import type { HarnessId } from "@/lib/harness/config";
 import type { CommandInputAttachment as Attachment } from "@/components/command-input-types";

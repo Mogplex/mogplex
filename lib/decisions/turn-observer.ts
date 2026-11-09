@@ -60,6 +60,7 @@ export function createTurnDecisionObserver(
   deps: TurnObserverDeps = defaultDeps
 ): TurnDecisionObserver {
   let checkedToolCalls = 0;
+  const pendingLoopChecks = new Set<Promise<unknown>>();
 
   return {
     onStep(steps) {
@@ -67,11 +68,16 @@ export function createTurnDecisionObserver(
       if (toolCalls < LOOP_WINDOW_SIZE || toolCalls === checkedToolCalls)
         return;
       checkedToolCalls = toolCalls;
-      deps.checkLoop({ steps: [...steps], scope }).catch((error: unknown) => {
-        console.warn("[decisions] loop check failed", { error });
-      });
+      const check = deps
+        .checkLoop({ steps: [...steps], scope })
+        .catch((error: unknown) => {
+          console.warn("[decisions] loop check failed", { error });
+        });
+      pendingLoopChecks.add(check);
+      void check.finally(() => pendingLoopChecks.delete(check));
     },
     async onEnd(steps) {
+      await Promise.allSettled(pendingLoopChecks);
       try {
         const result = await deps.verifyClaims({ steps, scope });
         if (!result || !scope.aiCallId || !scope.userId) return;

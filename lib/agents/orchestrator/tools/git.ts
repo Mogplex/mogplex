@@ -2,7 +2,15 @@
  * Git tools for the orchestrator.
  */
 import { z } from "zod";
+import {
+  createGithubPullRequestTool,
+  createScopedGithubIssueTool,
+} from "@/lib/agents/tools";
 import type { OrchestratorToolDef } from "../types";
+import {
+  createDiffWorktreeTool,
+  createRebaseWorktreeTool,
+} from "./worktree-impl";
 
 // --- Tool definitions ---
 
@@ -42,6 +50,7 @@ export const GIT_TOOLS: OrchestratorToolDef[] = [
     description: "Rebase a worktree branch onto the latest base",
     access: "approval",
     implemented: true,
+    build: (ctx) => createRebaseWorktreeTool(ctx),
   },
   {
     name: "cherry_pick",
@@ -70,6 +79,7 @@ export const GIT_TOOLS: OrchestratorToolDef[] = [
     description: "Show the persisted worktree diff from its base branch",
     access: "read",
     implemented: true,
+    build: (ctx) => createDiffWorktreeTool(ctx),
   },
   {
     name: "merge_changeset",
@@ -93,6 +103,10 @@ export const GIT_TOOLS: OrchestratorToolDef[] = [
       "Open a pull request for the current branch (requires approval)",
     access: "approval",
     implemented: true,
+    build: (ctx, repoDefaults) =>
+      ctx.githubToken
+        ? createGithubPullRequestTool(ctx.githubToken, repoDefaults)
+        : null,
   },
   {
     name: "github_create_issue",
@@ -100,6 +114,10 @@ export const GIT_TOOLS: OrchestratorToolDef[] = [
     description: "Create an issue in the current workspace repository",
     access: "mutation",
     implemented: true,
+    build: (ctx, repoDefaults) =>
+      ctx.repoId && repoDefaults.owner && repoDefaults.repo
+        ? createScopedGithubIssueTool({ userId: ctx.userId, repoDefaults })
+        : null,
   },
   {
     name: "comment_inline",
@@ -138,13 +156,7 @@ export const createBranchSchema = z.object({
   base: z.string().optional().describe("Base ref"),
 });
 
-export const rebaseWorktreeSchema = z.object({
-  worktreeId: z.string().describe("Worktree to rebase"),
-});
-
-export const diffWorktreeSchema = z.object({
-  worktreeId: z.string().uuid().describe("Worktree to diff"),
-});
+export { diffWorktreeSchema, rebaseWorktreeSchema } from "./worktree-impl";
 
 export const cherryPickSchema = z.object({
   commitSha: z.string().describe("Commit SHA to cherry-pick"),
@@ -187,21 +199,3 @@ export const requestReviewSchema = z.object({
   prNumber: z.number().describe("PR number"),
   reviewers: z.array(z.string()).describe("GitHub usernames"),
 });
-
-// --- Schema map for stub tools ---
-
-export const GIT_SCHEMAS: Record<string, z.ZodType> = {
-  git_status: gitStatusSchema,
-  git_commit: gitCommitSchema,
-  git_push: gitPushSchema,
-  create_branch: createBranchSchema,
-  rebase_worktree: rebaseWorktreeSchema,
-  cherry_pick: cherryPickSchema,
-  diff_worktrees: diffWorktreesSchema,
-  diff_base: diffBaseSchema,
-  diff_worktree: diffWorktreeSchema,
-  merge_changeset: mergeChangesetSchema,
-  resolve_conflict: resolveConflictSchema,
-  comment_inline: commentInlineSchema,
-  request_review: requestReviewSchema,
-};

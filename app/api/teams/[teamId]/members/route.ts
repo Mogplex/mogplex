@@ -25,28 +25,6 @@ type ProfileJoin =
     }>
   | null;
 
-export type TeamMembersResponse = {
-  team: { id: string; name: string; slug: string; iconUrl: string | null };
-  viewer: { role: TeamRole; canManage: boolean };
-  members: Array<{
-    userId: string;
-    name: string | null;
-    username: string | null;
-    email: string | null;
-    avatarUrl: string | null;
-    role: TeamRole;
-    joinedAt: string;
-    isCurrentUser: boolean;
-  }>;
-  invites: Array<{
-    id: string;
-    email: string;
-    role: "admin" | "developer" | "viewer";
-    expiresAt: string;
-    createdAt: string;
-  }>;
-};
-
 function profileFromJoin(profile: ProfileJoin) {
   return Array.isArray(profile) ? profile[0] : profile;
 }

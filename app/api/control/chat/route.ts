@@ -1,6 +1,6 @@
 import { requireUserId } from "@/lib/auth";
 import { after } from "next/server";
-import { runAuthorizedControlChat } from "./_lib/authorized-request";
+import { runAuthorizedControlChat } from "@/lib/control/chat/authorized-request";
 
 // A coordinator turn plans, starts compute, creates checkouts, launches
 // workers, and saves its handoff. The project default (300s) killed such turns

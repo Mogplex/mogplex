@@ -186,7 +186,7 @@ function collisionInput(rootDirectory: string | null = null) {
 test("a refused legacy collision releases its provisional boot claim", async () => {
   await withSavedWorkspaces(async ({ deps, provider, claims }) => {
     const { maybeReturnNameCollisionResponse } =
-      await import("../../app/api/sandbox/_lib/launch");
+      await import("../../lib/sandbox/collection/_lib/launch");
     const input = collisionInput();
     provider.missing = true;
     await assert.rejects(
@@ -218,7 +218,7 @@ for (const repoRoot of [null, "apps/web"]) {
   test(`omitting the launch root resolves repository default ${repoRoot ?? "root"} before legacy lookup`, async () => {
     await withSavedWorkspaces(async ({ legacy, deps }) => {
       const { resolveLaunchRootDirectory } =
-        await import("../../app/api/sandbox/_lib/utils");
+        await import("../../lib/sandbox/collection/_lib/utils");
       const request = {
         repoId: REPO_ID,
         baseBranch: "main",
@@ -435,7 +435,7 @@ for (const billingSource of [
     await withSavedWorkspaces(
       async ({ legacy, deps, provider, claims, providerNames }) => {
         const { maybeReturnNameCollisionResponse } =
-          await import("../../app/api/sandbox/_lib/launch");
+          await import("../../lib/sandbox/collection/_lib/launch");
         legacy.status = "paused";
         legacy.billing_source = billingSource;
         legacy.billing_project_id = "saved-project";

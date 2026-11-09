@@ -1,12 +1,5 @@
 "use client";
-import {
-  useRef,
-  useEffect,
-  useState,
-  useMemo,
-  useCallback,
-  useReducer,
-} from "react";
+import { useRef, useEffect, useState, useMemo, useCallback, useReducer } from "react";
 import type { PaneNode } from "@/hooks/use-split-panes";
 import { useSandboxStore } from "@/hooks/use-sandbox";
 import { useSessionsStore } from "@/hooks/use-sessions";
@@ -27,6 +20,7 @@ import { usePreviewFeedbackStore } from "@/hooks/use-preview-feedback";
 import { buildChatRequestBody } from "@/lib/agents/chat-request-body";
 import type { Repo } from "@/lib/types";
 import { useHarnessRun } from "./use-harness-run";
+import { restoreConversationSession } from "@/hooks/session-retarget";
 import { EMPTY_LOCAL_MESSAGES } from "../utils";
 import { AgentHeader } from "./agent-header";
 import { ConversationHistory } from "./conversation-history";
@@ -411,6 +405,10 @@ export function AgentPane({
         activeRepo?.id ?? null
       );
       if (!conv) return;
+      restoreConversationSession({
+        workspaceSessionId: conv.workspaceSessionId,
+        sandboxId: conv.sandboxId ?? null,
+      });
       onUpdatePane?.({ conversationId: conv.id });
       setMessages(conv.messages);
       setShowHistory(false);
@@ -425,7 +423,6 @@ export function AgentPane({
     setShowHistory((v) => !v);
   }, [activeRepo?.id, showHistory, fetchConversationList]);
 
-  // Filter out current pane and empty conversations
   const historyItems = conversationList.filter(
     (c) => c.id !== activeConversationId && c.updated_at
   );

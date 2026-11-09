@@ -2,7 +2,7 @@ import { buildInternalApiHeaders } from "@/lib/internal-api-auth";
 import { redactSecretsInValue } from "@/lib/ai-telemetry";
 import { mergeAiCallMetadata } from "@/lib/interactive-runs";
 import { workspaceSnapshotSchema } from "./workspace-snapshot";
-import type { ActiveControlCall } from "@/app/api/control/chat/_lib/types";
+import type { ActiveControlCall } from "@/lib/control/chat/types";
 
 export function createWorkspaceCheckpoint(
   call: ActiveControlCall,
@@ -19,7 +19,7 @@ export function createWorkspaceCheckpoint(
     )
       return;
     try {
-      const { GET } = await import("@/app/api/sandbox/[id]/changes/route");
+      const { GET } = await import("@/lib/sandbox/changes-route");
       const response = await GET(
         new Request(
           `https://internal.mogplex/api/sandbox/${binding.sandboxId}/changes?snapshot=1`,

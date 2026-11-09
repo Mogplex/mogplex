@@ -3,6 +3,17 @@
  */
 import { z } from "zod";
 import type { OrchestratorToolDef } from "../types";
+import {
+  createListAgentsTool,
+  createPlanMissionTool,
+  createSpawnSubagentTool,
+} from "./planning-impl";
+import {
+  createArchiveWorktreeTool,
+  createListWorktreesTool,
+  createPruneWorktreeTool,
+  createSpawnWorktreeTool,
+} from "./worktree-impl";
 
 // --- Tool definitions ---
 
@@ -14,6 +25,7 @@ export const PLANNING_TOOLS: OrchestratorToolDef[] = [
       "Resume the coordinator automatically after the mission's exact worker set finishes",
     access: "mutation",
     implemented: true,
+    build: (ctx) => ctx.workerHandoffTool ?? null,
   },
   {
     name: "plan_mission",
@@ -21,6 +33,7 @@ export const PLANNING_TOOLS: OrchestratorToolDef[] = [
     description: "Create a structured mission plan from a high-level objective",
     access: "mutation",
     implemented: true,
+    build: (ctx) => createPlanMissionTool(ctx),
   },
   {
     name: "spawn_worktree",
@@ -29,6 +42,8 @@ export const PLANNING_TOOLS: OrchestratorToolDef[] = [
       "Create an isolated Git worktree for a subagent with its own branch",
     access: "mutation",
     implemented: true,
+    build: (ctx) =>
+      ctx.sandboxSelectionRequired ? null : createSpawnWorktreeTool(ctx),
   },
   {
     name: "list_worktrees",
@@ -36,6 +51,7 @@ export const PLANNING_TOOLS: OrchestratorToolDef[] = [
     description: "List persisted Git worktrees for the active mission",
     access: "read",
     implemented: true,
+    build: (ctx) => createListWorktreesTool(ctx),
   },
   {
     name: "archive_worktree",
@@ -43,6 +59,7 @@ export const PLANNING_TOOLS: OrchestratorToolDef[] = [
     description: "Archive a worktree while preserving its checkout and branch",
     access: "mutation",
     implemented: true,
+    build: (ctx) => createArchiveWorktreeTool(ctx),
   },
   {
     name: "prune_worktree",
@@ -50,6 +67,7 @@ export const PLANNING_TOOLS: OrchestratorToolDef[] = [
     description: "Remove an archived worktree checkout and retire its record",
     access: "approval",
     implemented: true,
+    build: (ctx) => createPruneWorktreeTool(ctx),
   },
   {
     name: "list_agents",
@@ -58,6 +76,7 @@ export const PLANNING_TOOLS: OrchestratorToolDef[] = [
       "List roster agents (own, team-shared, and presets) a worker can run as",
     access: "read",
     implemented: true,
+    build: (ctx) => createListAgentsTool(ctx),
   },
   {
     name: "spawn_subagent",
@@ -66,6 +85,7 @@ export const PLANNING_TOOLS: OrchestratorToolDef[] = [
       "Launch a worker agent in an isolated worktree to execute a task",
     access: "mutation",
     implemented: true,
+    build: (ctx) => createSpawnSubagentTool(ctx),
   },
   {
     name: "steer_agent",
@@ -108,76 +128,17 @@ export const PLANNING_TOOLS: OrchestratorToolDef[] = [
 
 // --- Schemas ---
 
-export const planMissionSchema = z.object({
-  objective: z.string().min(1).describe("High-level objective for the mission"),
-  constraints: z
-    .array(z.string())
-    .optional()
-    .describe("Constraints or requirements for the plan"),
-  context: z.string().optional().describe("Additional context for planning"),
-  tasks: z
-    .array(
-      z.object({
-        slug: z
-          .string()
-          .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
-          .refine((slug) => slug !== "master", {
-            message: '"master" is reserved for the mission spec',
-          })
-          .describe("Stable lowercase task slug"),
-        title: z.string().min(1).max(500),
-        prompt: z.string().min(1),
-        harness: z.enum(["codex", "claude-code"]).default("codex"),
-        ownedPaths: z.array(z.string()).min(1),
-        blockedPaths: z.array(z.string()).optional(),
-        dependsOn: z.array(z.string()).optional(),
-        acceptanceCriteria: z.array(z.string()).optional(),
-        validationCommands: z.array(z.string()).optional(),
-      })
-    )
-    .min(1)
-    .describe("Concrete tasks that can each receive a worktree"),
-});
-
-export const spawnWorktreeSchema = z.object({
-  taskId: z
-    .string()
-    .uuid()
-    .describe("Orchestration task assigned to the checkout"),
-});
-
-export const listWorktreesSchema = z.object({
-  includePruned: z.boolean().optional().describe("Include retired records"),
-});
-
-export const archiveWorktreeSchema = z.object({
-  worktreeId: z.string().uuid().describe("Worktree to archive"),
-});
-
-export const pruneWorktreeSchema = z.object({
-  worktreeId: z.string().uuid().describe("Archived worktree to remove"),
-  force: z.boolean().optional().describe("Remove a dirty checkout"),
-});
-
-export const spawnSubagentSchema = z.object({
-  worktreeId: z.string().uuid().describe("Persisted worktree to use"),
-  taskPrompt: z
-    .string()
-    .min(1)
-    .describe(
-      "Task instructions for this single worker. Never tell it to delegate or spawn other agents."
-    ),
-  agentType: z.enum(["codex", "claude-code"]).default("codex"),
-  agentId: z
-    .string()
-    .min(1)
-    .optional()
-    .describe(
-      "Roster agent id or preset:<NAME> from list_agents. The worker loads that agent's system prompt, rules, and skills."
-    ),
-});
-
-export const listAgentsSchema = z.object({});
+export {
+  listAgentsSchema,
+  planMissionSchema,
+  spawnSubagentSchema,
+} from "./planning-impl";
+export {
+  archiveWorktreeSchema,
+  listWorktreesSchema,
+  pruneWorktreeSchema,
+  spawnWorktreeSchema,
+} from "./worktree-impl";
 
 export const steerAgentSchema = z.object({
   agentId: z.string().describe("ID of the agent to steer"),
@@ -206,19 +167,3 @@ export const scoreImplementationsSchema = z.object({
   worktreeIds: z.array(z.string()).describe("IDs of worktrees to compare"),
   criteria: z.array(z.string()).optional().describe("Scoring criteria"),
 });
-
-// --- Schema map for stub tools ---
-
-export const PLANNING_SCHEMAS: Record<string, z.ZodType> = {
-  plan_mission: planMissionSchema,
-  spawn_worktree: spawnWorktreeSchema,
-  list_worktrees: listWorktreesSchema,
-  archive_worktree: archiveWorktreeSchema,
-  prune_worktree: pruneWorktreeSchema,
-  spawn_subagent: spawnSubagentSchema,
-  steer_agent: steerAgentSchema,
-  cancel_run: cancelRunSchema,
-  retry_run: retryRunSchema,
-  request_reasoning: requestReasoningSchema,
-  score_implementations: scoreImplementationsSchema,
-};

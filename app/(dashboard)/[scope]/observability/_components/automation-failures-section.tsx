@@ -15,7 +15,7 @@ import type {
 } from "@/hooks/use-observability"
 import type { AutomationFailureBreakdown, AutomationFailureRecord } from "@/lib/automation-failure-observability"
 import { FilterSelect } from "./filter-select"
-import { formatDuration, timeAgo } from "./formatters"
+import { formatDuration, timeAgo } from "@/lib/observability/formatters"
 import { GithubEventLinkPanel } from "./github-event-link-panel"
 import { PaginationControls } from "./pagination-controls"
 

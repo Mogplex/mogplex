@@ -1,10 +1,7 @@
-import {
-  collectPaneIds,
-  createDefaultTree,
-  findFirstPaneIdByType,
-  updatePaneNode,
-} from "./use-split-panes";
-import type { PaneType, PreviewPaneTab, TreeNode } from "./use-split-panes";
+import { createDefaultTree } from "./split-panes-factories";
+import { collectPaneIds } from "./split-panes-types";
+import { findFirstPaneIdByType, updatePaneNode } from "./split-panes-tree-ops";
+import type { PaneType, PreviewPaneTab, TreeNode } from "./split-panes-types";
 import type { Repo } from "@/lib/types";
 import {
   SESSION_COLORS,

@@ -3,7 +3,7 @@ import test from "node:test";
 import {
   resolveControlPromptSandboxContext,
   resolveControlToolSandboxId,
-} from "../../app/api/control/chat/_lib/context";
+} from "../../lib/control/chat/context";
 
 const request = new Request("https://app.mogplex.com/api/control/chat");
 

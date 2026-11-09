@@ -1,9 +1,7 @@
 "use client";
 import useSWR from "swr";
-import {
-  getActiveTeamRequestHeaders,
-  useActiveTeamId,
-} from "@/components/active-scope-provider";
+import { getActiveTeamRequestHeaders } from "@/lib/active-team-request";
+import { useActiveTeamId } from "@/hooks/use-active-team";
 import { fetchJsonArray } from "@/lib/client-fetch";
 import type { Agent } from "@/lib/types";
 

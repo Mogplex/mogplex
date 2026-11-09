@@ -154,10 +154,10 @@ test("Mogplex OAuth verifier reports operational failures without the bearer", a
   });
 
   try {
-    assert.deepEqual(await resolveMogplexOAuthToken("Bearer oauth.jwt.token"), {
-      ok: false,
-      reason: "invalid",
-    });
+    await assert.rejects(
+      resolveMogplexOAuthToken("Bearer oauth.jwt.token"),
+      /database unavailable/
+    );
     assert.equal(captured.length, 1);
     assert.equal(JSON.stringify(captured).includes("oauth.jwt.token"), false);
   } finally {

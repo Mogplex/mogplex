@@ -31,6 +31,8 @@ export type FlowSavePublishHandlersDeps = {
     typeof setTimeout
   > | null>;
   autosaveAttemptSignatureRef: React.MutableRefObject<string | null>;
+  hydratedFlowIdRef: React.MutableRefObject<string | null>;
+  draftSignatureRef: React.MutableRefObject<string | null>;
   historyMergeRef: React.MutableRefObject<{
     mergeKey: string | null;
     lastAt: number;
@@ -76,6 +78,8 @@ export function useFlowSavePublishHandlers(
     autosaveTimeoutRef,
     publishStateTimeoutRef,
     autosaveAttemptSignatureRef,
+    hydratedFlowIdRef,
+    draftSignatureRef,
     historyMergeRef,
     selectedFlow,
     draft,
@@ -133,13 +137,17 @@ export function useFlowSavePublishHandlers(
 
       const snapshot = cloneFlowDraftSnapshot(options?.snapshot ?? draft);
       const snapshotSignature = serializePersistedFlowDraft(snapshot);
+      const flowId = selectedFlow.id;
       autosaveAttemptSignatureRef.current = snapshotSignature;
+      const isStale = () =>
+        hydratedFlowIdRef.current !== flowId ||
+        draftSignatureRef.current !== snapshotSignature;
 
       setSaving(true);
       setSaveStatus("saving");
       setSaveError(null);
       try {
-        const response = await fetch(`/api/flows/${selectedFlow.id}`, {
+        const response = await fetch(`/api/flows/${flowId}`, {
           method: "PUT",
           headers: getActiveTeamRequestHeaders(
             { "Content-Type": "application/json" },
@@ -158,11 +166,14 @@ export function useFlowSavePublishHandlers(
           throw new Error(payload.error || "Failed to save flow");
         }
 
-        setBaselineDraft(cloneFlowDraftSnapshot(snapshot));
-        setSavedInSessionFlowId(selectedFlow.id);
-        setSaveStatus("saved");
-        autosaveAttemptSignatureRef.current = null;
+        const stale = isStale();
+        if (!stale) {
+          setBaselineDraft(cloneFlowDraftSnapshot(snapshot));
+          setSavedInSessionFlowId(flowId);
+          setSaveStatus("saved");
+        }
         await Promise.all([mutateSelectedFlow(), mutateFlows()]);
+        if (stale) return false;
         if (!options?.silentSuccess) {
           toast({
             variant: "success",
@@ -172,6 +183,7 @@ export function useFlowSavePublishHandlers(
         }
         return true;
       } catch (error) {
+        if (isStale()) return false;
         const description =
           error instanceof Error ? error.message : "Failed to save flow";
         setSaveStatus("error");
@@ -183,7 +195,10 @@ export function useFlowSavePublishHandlers(
         });
         return false;
       } finally {
-        setSaving(false);
+        if (autosaveAttemptSignatureRef.current === snapshotSignature) {
+          autosaveAttemptSignatureRef.current = null;
+          setSaving(false);
+        }
       }
     },
     [
@@ -191,6 +206,8 @@ export function useFlowSavePublishHandlers(
       autosaveAttemptSignatureRef,
       autosaveTimeoutRef,
       draft,
+      draftSignatureRef,
+      hydratedFlowIdRef,
       mutateFlows,
       mutateSelectedFlow,
       selectedFlow,

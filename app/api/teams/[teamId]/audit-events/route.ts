@@ -3,34 +3,15 @@ import { requireProfileId } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { loadTeamMembershipAuth } from "@/lib/team-management";
 import type { TeamAuditPayload } from "@/lib/team-audit";
+import type {
+  TeamAuditEvent,
+  TeamAuditEventsResponse,
+} from "@/lib/team-api-types";
 
 const PAGE_SIZE = 25;
 const MAX_UUID_CURSOR = "ffffffff-ffff-ffff-ffff-ffffffffffff";
 const ISO_CURSOR_DATE_PATTERN =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/u;
-
-export type TeamAuditEvent = {
-  id: string;
-  action: string;
-  decisionCode: string | null;
-  targetType: string;
-  targetId: string | null;
-  actorUserId: string | null;
-  repoId: string | null;
-  sandboxRecordId: string | null;
-  aiCallId: string | null;
-  jobRunId: string | null;
-  requestId: string | null;
-  authSource: string | null;
-  payload: TeamAuditPayload;
-  createdAt: string;
-};
-
-export type TeamAuditEventsResponse = {
-  events: TeamAuditEvent[];
-  nextCursor: string | null;
-  viewer: { canManage: boolean };
-};
 
 type AuditRow = {
   id: string;

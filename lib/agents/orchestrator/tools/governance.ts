@@ -2,6 +2,7 @@
  * Governance and approval tools for the orchestrator.
  */
 import { z } from "zod";
+import { createRequestApprovalTool } from "./governance-impl";
 import type { OrchestratorToolDef } from "../types";
 
 // --- Tool definitions ---
@@ -13,6 +14,7 @@ export const GOVERNANCE_TOOLS: OrchestratorToolDef[] = [
     description: "Request operator approval for a protected action",
     access: "read",
     implemented: true,
+    build: (ctx) => createRequestApprovalTool(ctx),
   },
   {
     name: "check_budget",
@@ -79,13 +81,3 @@ export const writeAuditEventSchema = z.object({
   eventType: z.string().describe("Audit event type"),
   details: z.record(z.string(), z.unknown()).describe("Event details"),
 });
-
-// --- Schema map for stub tools ---
-
-export const GOVERNANCE_SCHEMAS: Record<string, z.ZodType> = {
-  request_approval: requestApprovalSchema,
-  check_budget: checkBudgetSchema,
-  pause_on_budget: pauseOnBudgetSchema,
-  check_policy: checkPolicySchema,
-  write_audit_event: writeAuditEventSchema,
-};

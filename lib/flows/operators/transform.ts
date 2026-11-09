@@ -1,4 +1,5 @@
 import { FAILURE_HANDLE_ID } from "@/lib/flows/graph-helpers";
+import { TRANSFORM_OPERATIONS } from "@/lib/flows/capabilities";
 import type {
   FlowNode,
   FlowTransformAssignment,
@@ -11,17 +12,9 @@ type TransformNode = Extract<FlowNode, { type: "transform" }>;
 
 const KEY_PATTERN = /^[a-zA-Z_]\w*$/;
 const SOURCE_PATTERN = /^[a-zA-Z_]\w*(?:\.\w+)*$/;
-const TRANSFORM_OPERATIONS: ReadonlySet<FlowTransformOperation> = new Set([
-  "copy",
-  "string_contains",
-  "string_split",
-  "array_join",
-  "array_length",
-  "array_includes",
-  "files_match_glob",
-  "cast_boolean",
-  "cast_number",
-]);
+const TRANSFORM_OPERATION_SET: ReadonlySet<FlowTransformOperation> = new Set(
+  TRANSFORM_OPERATIONS
+);
 const OPERATIONS_REQUIRING_ARGUMENT: ReadonlySet<FlowTransformOperation> =
   new Set([
     "string_contains",
@@ -42,7 +35,7 @@ type GlobToken =
   | { kind: "globstar_slash_segment" };
 
 function isTransformOperation(value: unknown): value is FlowTransformOperation {
-  return TRANSFORM_OPERATIONS.has(value as FlowTransformOperation);
+  return TRANSFORM_OPERATION_SET.has(value as FlowTransformOperation);
 }
 
 function coerceAssignments(raw: unknown): FlowTransformAssignment[] {

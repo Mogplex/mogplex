@@ -1,4 +1,4 @@
-import { getActiveTeamRequestHeaders } from "@/components/active-scope-provider";
+import { getActiveTeamRequestHeaders } from "@/lib/active-team-request";
 import type {
   Memory,
   MemoryCounts,

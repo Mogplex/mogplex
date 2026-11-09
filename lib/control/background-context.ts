@@ -8,7 +8,7 @@ export type ControlBackgroundExecution = {
   systemContext: string;
   sandboxExecution: SandboxCommandExecution;
   expectedContext: Pick<
-    import("@/app/api/control/chat/_lib/types").ControlChatRequestBody,
+    import("@/lib/control/chat/types").ControlChatRequestBody,
     "repoId" | "missionId" | "model"
   >;
   onTranscriptComplete: (

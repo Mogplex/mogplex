@@ -58,7 +58,7 @@ async function loadStores() {
     bindSessionToPendingSandboxBranch,
     ensureSessionSandboxBinding,
     retargetSessionToSandbox,
-  } = await import("../../lib/sandbox/session-retarget");
+  } = await import("../../hooks/session-retarget");
 
   useSessionsStore.setState({
     sessions: [],

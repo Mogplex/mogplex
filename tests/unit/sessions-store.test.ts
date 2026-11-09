@@ -198,6 +198,22 @@ test("updatePaneTree can flush a specific inactive workspace session", async () 
   assert.equal(state.activeSessionId, activeSessionId);
 });
 
+test("updatePaneTree ignores an identical tree and active id", async () => {
+  const useSessionsStore = await resetSessionsStore();
+  const current = useSessionsStore.getState().getActiveSession();
+  let notifications = 0;
+  const unsubscribe = useSessionsStore.subscribe(() => {
+    notifications += 1;
+  });
+
+  useSessionsStore
+    .getState()
+    .updatePaneTree(current.paneTree, current.activeId);
+
+  assert.equal(notifications, 0);
+  unsubscribe();
+});
+
 test("resetSessionLayout preserves repo context for workspace sessions", async () => {
   const useSessionsStore = await resetSessionsStore();
   const repo = buildRepo({ root_directory: "apps/web" });

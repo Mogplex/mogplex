@@ -154,42 +154,12 @@ export async function routeGithubLabeledEventToFlowWaits(
   // continues to the CAS as before.
   await emitWaitDualReadParityLog(event, matches, loadStartFilters);
 
-  let resumed = 0;
-  let alreadyResumed = 0;
-  let completeFailed = 0;
-  let rollbackFailed = false;
-  const failures: string[] = [];
-
-  for (const candidate of matches) {
-    try {
-      const outcome = await resumeWait({
-        candidate,
-        payload: event.payload,
-        deliveryId: event.deliveryId,
-      });
-      if (outcome.resumed) {
-        resumed += 1;
-      } else if (outcome.reason === "already_resumed") {
-        alreadyResumed += 1;
-      } else {
-        completeFailed += 1;
-        rollbackFailed ||= outcome.rollbackFailed === true;
-        if (outcome.message) failures.push(outcome.message);
-      }
-    } catch (error) {
-      completeFailed += 1;
-      failures.push(error instanceof Error ? error.message : String(error));
-    }
-  }
-
-  return {
-    matched: matches.length,
-    resumed,
-    alreadyResumed,
-    completeFailed,
-    failures,
-    ...(rollbackFailed ? { rollbackFailed: true as const } : {}),
-  };
+  return resumeMatchingFlowWaits({
+    matches,
+    payload: event.payload,
+    deliveryId: event.deliveryId,
+    resumeWait,
+  });
 }
 
 export type GithubCommentAddedEvent = {

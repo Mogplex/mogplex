@@ -3,7 +3,7 @@ import {
   type StatTone,
 } from "@/lib/observability/stat-card-tone";
 import { MetricLabel, SignalButton } from "./observability-metric-components";
-import { formatDuration } from "./formatters";
+import { formatDuration } from "@/lib/observability/formatters";
 
 export type PressureOutcome = "suppressed" | "deferred" | "start_failed";
 export type RunDrilldown = "failed" | "pending" | "repairable_pending";

@@ -99,7 +99,7 @@ test("requeue defaults flow-backed runs to latest_published", async () => {
   );
 });
 
-test("requeue honors explicit same_version and defaults legacy runs to it", async () => {
+test("requeue honors same_version for flows and rejects unsupported legacy runs", async () => {
   const { createObservabilityJobRequeuePostHandler } =
     await loadObservabilityJobRequeueRoute();
   const modes: string[] = [];
@@ -128,14 +128,15 @@ test("requeue honors explicit same_version and defaults legacy runs to it", asyn
     }),
     { params: Promise.resolve({ id: "flow-job" }) }
   );
-  await handler(
+  const legacyResponse = await handler(
     new Request("http://localhost/api/observability/jobs/legacy-job/requeue", {
       method: "POST",
     }),
     { params: Promise.resolve({ id: "legacy-job" }) }
   );
 
-  assert.deepEqual(modes, ["same_version", "same_version"]);
+  assert.equal(legacyResponse.status, 400);
+  assert.deepEqual(modes, ["same_version"]);
 });
 
 test("requeue reuses and starts an idempotent duplicate job", async () => {

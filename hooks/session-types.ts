@@ -1,4 +1,4 @@
-import type { PaneType, PreviewPaneTab, TreeNode } from "./use-split-panes";
+import type { PaneType, PreviewPaneTab, TreeNode } from "./split-panes-types";
 import type { Repo } from "@/lib/types";
 
 export const SESSION_COLORS = [

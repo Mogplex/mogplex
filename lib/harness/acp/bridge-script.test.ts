@@ -92,7 +92,8 @@ process.stdin.on("data", (chunk) => {
     } else if (message.method === "session/new") {
       send({ id: message.id, result: { sessionId: "fresh-session", configOptions: [{ id: "mode" }] } });
     } else if (message.method === "session/set_config_option") {
-      send({ id: message.id, result: {} });
+      if (process.env.FAKE_MODE_FAIL) send({ id: message.id, error: { code: -32003, message: "mode rejected" } });
+      else send({ id: message.id, result: {} });
     } else if (message.method === "session/prompt") {
       prompt(message.id, message.params);
     } else if (message.method === "session/cancel") {
@@ -284,6 +285,29 @@ describe("ACP bridge script", () => {
     });
   });
 
+  it("should fail before prompting when the execution mode cannot be applied", async () => {
+    const run = await runBridge({}, { env: { FAKE_MODE_FAIL: "1" } });
+
+    expect(run.exitCode).toBe(1);
+    expect(run.events.at(-1)).toMatchObject({
+      type: "error",
+      message: "Could not set execution mode workspace-write: mode rejected",
+    });
+    expect(requestParams(run, "session/prompt")).toBeUndefined();
+  });
+
+  it("should fail before opening a session when MCP config cannot be read", async () => {
+    const run = await runBridge({ mcpConfigPath: "/nonexistent/mcp.json" });
+
+    expect(run.exitCode).toBe(1);
+    expect(run.events.at(-1)?.type).toBe("error");
+    expect(String(run.events.at(-1)?.message)).toContain(
+      "Could not read MCP config /nonexistent/mcp.json"
+    );
+    expect(requestParams(run, "session/new")).toBeUndefined();
+    expect(requestParams(run, "session/prompt")).toBeUndefined();
+  });
+
   it("should approve MCP tools and decline other requests without ending the turn in AUTO", async () => {
     const run = await runBridge({});
 
@@ -402,16 +426,6 @@ describe("ACP bridge script", () => {
       type: "session",
       sessionId: "fresh-session",
     });
-  });
-
-  it("should warn and start without MCP servers when the MCP config cannot be read", async () => {
-    const run = await runBridge({ mcpConfigPath: "/nonexistent/mcp.json" });
-
-    expect(run.exitCode).toBe(0);
-    expect(requestParams(run, "session/new")).toMatchObject({ mcpServers: [] });
-    expect(run.stderr).toContain(
-      "[acp-bridge] could not read MCP config /nonexistent/mcp.json"
-    );
   });
 
   it("should cancel the ACP turn when the harness command is stopped", async () => {

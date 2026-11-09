@@ -177,6 +177,7 @@ async function handlePersistentRestart(
   // Clear stop_reason so a previously-stopped record doesn't carry a
   // stale reason (e.g. "idle_timeout") while it is actively running.
   let installingRecord: PersistentRestartRecord | null;
+  const restartStartedAt = new Date().toISOString();
   try {
     installingRecord = (await deps.updateSandboxRecord(
       record.id,
@@ -188,12 +189,13 @@ async function handlePersistentRestart(
         stopped_at: null,
         // A persistent name survives across provider sessions. The reaper
         // must measure this boot, not the age of a previous stopped VM.
-        last_boot_started_at: new Date().toISOString(),
+        last_boot_started_at: restartStartedAt,
         last_boot_completed_at: null,
         last_active_at: new Date().toISOString(),
       },
       {
         expectedSandboxId: record.sandbox_id,
+        expectedLastBootStartedAt: record.last_boot_started_at ?? null,
         fromStatuses: RESTART_INSTALLING_FROM_STATUSES,
         select: PERSISTENT_RESTART_SELECT,
       }
@@ -309,6 +311,7 @@ async function handlePersistentRestart(
                 },
                 {
                   expectedSandboxId: record.sandbox_id,
+                  expectedLastBootStartedAt: restartStartedAt,
                   fromStatuses: ["installing", "running"],
                   select: PERSISTENT_RESTART_SELECT,
                 }
@@ -354,6 +357,7 @@ async function handlePersistentRestart(
                   },
                   {
                     expectedSandboxId: record.sandbox_id,
+                    expectedLastBootStartedAt: restartStartedAt,
                     fromStatuses: ["installing", "running"],
                     select: PERSISTENT_RESTART_SELECT,
                   }
@@ -413,6 +417,7 @@ async function handlePersistentRestart(
           },
           {
             expectedSandboxId: record.sandbox_id,
+            expectedLastBootStartedAt: restartStartedAt,
             fromStatuses: ["installing", "running"],
           }
         );

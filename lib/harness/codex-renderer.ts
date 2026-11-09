@@ -1,4 +1,4 @@
-import type { LocalToolCall } from "@/hooks/use-conversations";
+import type { LocalToolCall } from "@/lib/harness/output-types";
 import type { HarnessRenderChunk } from "./segment-store";
 import {
   createSegmentStore,

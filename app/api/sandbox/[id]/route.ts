@@ -185,7 +185,7 @@ export function createSandboxDeleteHandler(
       id,
       {
         select:
-          "id, user_id, repo_id, sandbox_id, base_branch, working_branch, status, persistent, billing_source, billing_team_id, billing_project_id, vercel_team_id, vercel_project_id",
+          "id, user_id, repo_id, sandbox_id, base_branch, working_branch, status, persistent, last_boot_started_at, billing_source, billing_team_id, billing_project_id, vercel_team_id, vercel_project_id",
         notFoundMessage: "Sandbox not found",
         requireCapability: "tools.bash",
       }
@@ -235,6 +235,8 @@ export function createSandboxDeleteHandler(
           },
           {
             expectedSandboxId: loaded.record.sandbox_id,
+            expectedLastBootStartedAt:
+              loaded.record.last_boot_started_at ?? null,
             fromStatuses: DELETE_ACTIVE_FROM_STATUSES,
           }
         );
@@ -267,6 +269,8 @@ export function createSandboxDeleteHandler(
               },
           {
             expectedSandboxId: loaded.record.sandbox_id,
+            expectedLastBootStartedAt:
+              loaded.record.last_boot_started_at ?? null,
             fromStatuses: DELETE_ACTIVE_FROM_STATUSES,
           }
         );
@@ -301,11 +305,17 @@ export function createSandboxDeleteHandler(
     const deleted = await deps.deleteSandboxRecord(id, {
       userId: loaded.auth.userId,
       expectedSandboxId: loaded.record.sandbox_id,
+      expectedLastBootStartedAt: loaded.record.last_boot_started_at ?? null,
     });
     if (!deleted) {
-      await deps.deleteSandboxRecord(id, {
-        userId: loaded.auth.userId,
-      });
+      return NextResponse.json(
+        {
+          error:
+            "Sandbox changed before the deletion could be recorded. Refresh and retry.",
+          code: "sandbox_lifecycle_conflict",
+        },
+        { status: 409 }
+      );
     }
 
     return NextResponse.json({ ok: true, sandboxId: id });

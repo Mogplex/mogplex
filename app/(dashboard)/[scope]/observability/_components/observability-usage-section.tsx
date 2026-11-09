@@ -11,7 +11,7 @@ import {
   formatDuration,
   formatSandboxTime,
   formatTokens,
-} from "./formatters";
+} from "@/lib/observability/formatters";
 
 // Tooltip copy below hardcodes tunable operational constants. If one of these
 // changes, update the matching tooltip text:

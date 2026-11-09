@@ -1,5 +1,4 @@
 import { logger, metadata, schedules } from "@trigger.dev/sdk/v3";
-import { supabaseAdmin } from "@/lib/supabase/admin";
 import {
   loadBaselineReaperCandidates,
   readBaselineReaperConfigFromEnv,
@@ -9,6 +8,7 @@ import {
 import { clearRepoSnapshotIfCurrent } from "@/lib/repo-snapshots";
 import { getPlatformSandboxCredentials } from "@/lib/sandbox/get-user-credentials";
 import { Snapshot } from "@vercel/sandbox";
+import { isNotFoundError } from "@/lib/sandbox/sdk-adapter";
 import { TRIGGER_TASK_IDS } from "@/lib/trigger/task-ids";
 
 async function resolveSnapshotCredentials(repo: BaselineReaperCandidate) {
@@ -24,15 +24,8 @@ export async function runScheduledBaselineSnapshotReaper() {
   const config = readBaselineReaperConfigFromEnv();
   const summary = await runBaselineSnapshotReaper(config, {
     loadCandidates: loadBaselineReaperCandidates,
-    clearRepoSnapshot: async (repoId: string) => {
-      const { data } = await supabaseAdmin
-        .from("repos")
-        .select("snapshot_id")
-        .eq("id", repoId)
-        .maybeSingle();
-      if (data?.snapshot_id) {
-        await clearRepoSnapshotIfCurrent(repoId, data.snapshot_id);
-      }
+    clearRepoSnapshot: async (repoId: string, snapshotId: string) => {
+      await clearRepoSnapshotIfCurrent(repoId, snapshotId);
     },
     deleteSnapshot: async ({ snapshotId, token, teamId }) => {
       try {
@@ -42,8 +35,8 @@ export async function runScheduledBaselineSnapshotReaper() {
           ...(teamId ? { teamId } : {}),
         });
         await snapshot.delete();
-      } catch {
-        // Already gone.
+      } catch (error) {
+        if (!isNotFoundError(error)) throw error;
       }
     },
     resolveSnapshotCredentials,

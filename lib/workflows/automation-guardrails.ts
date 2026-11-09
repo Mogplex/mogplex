@@ -305,20 +305,25 @@ export async function loadAutomationScopesByStatus(
 ) {
   if (statuses.length === 0) return [] as AutomationScope[];
 
-  const { data: rows, error } = await supabaseAdmin
-    .from("job_runs")
-    .select(
-      "id, assignment_id, trigger_id, flow_id, status, created_at, metadata"
-    )
-    .in("status", statuses)
-    .order("created_at", { ascending: true })
-    .limit(500);
+  const typedRows: JobRunScopeRow[] = [];
+  const pageSize = 500;
+  for (let offset = 0; ; offset += pageSize) {
+    const { data: rows, error } = await supabaseAdmin
+      .from("job_runs")
+      .select(
+        "id, assignment_id, trigger_id, flow_id, status, created_at, metadata"
+      )
+      .in("status", statuses)
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
+      .range(offset, offset + pageSize - 1);
 
-  if (error) {
-    throw new Error(`Failed to load active job scopes: ${error.message}`);
+    if (error) {
+      throw new Error(`Failed to load active job scopes: ${error.message}`);
+    }
+    typedRows.push(...((rows || []) as JobRunScopeRow[]));
+    if (!rows || rows.length < pageSize) break;
   }
-
-  const typedRows = (rows || []) as JobRunScopeRow[];
   const refs = await loadScopeRefs(typedRows);
   return typedRows.map((row) => resolveScopeForStoredRun(row, refs));
 }

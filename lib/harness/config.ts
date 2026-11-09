@@ -4,7 +4,6 @@ import { buildCodexPermissionArgs } from "@/lib/harness/codex-permissions";
 import type { FlowAgentHarness } from "@/lib/types";
 
 export type HarnessId = Exclude<FlowAgentHarness, "mogplex">;
-export type HarnessProvider = "anthropic" | "openai";
 
 /**
  * The Agent Client Protocol server Mogplex drives this harness through. When
@@ -22,7 +21,6 @@ export type HarnessAcpAgent = {
 export type HarnessConfig = {
   id: HarnessId;
   name: string;
-  provider: HarnessProvider;
   package: string;
   version: string;
   binary: string;
@@ -38,7 +36,6 @@ export type HarnessConfig = {
       mogplexServerName?: string;
     }
   ) => { cmd: string; args: string[] };
-  timeoutMs: number;
   acp?: HarnessAcpAgent;
 };
 
@@ -46,7 +43,6 @@ export const HARNESSES: Record<HarnessId, HarnessConfig> = {
   "claude-code": {
     id: "claude-code",
     name: "Claude Code",
-    provider: "anthropic",
     package: "@anthropic-ai/claude-code",
     version: "2.1.222",
     binary: "claude",
@@ -85,12 +81,10 @@ export const HARNESSES: Record<HarnessId, HarnessConfig> = {
       ];
       return { cmd: "claude", args };
     },
-    timeoutMs: 5 * 60 * 1000,
   },
   codex: {
     id: "codex",
     name: "Codex",
-    provider: "openai",
     package: "@openai/codex",
     version: "0.146.1",
     binary: "codex",
@@ -104,7 +98,6 @@ export const HARNESSES: Record<HarnessId, HarnessConfig> = {
           : ["exec", "--json", prompt]),
       ],
     }),
-    timeoutMs: 5 * 60 * 1000,
     // Bundles its own compatible @openai/codex, which it runs as an app server.
     acp: {
       package: "@agentclientprotocol/codex-acp",

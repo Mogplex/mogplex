@@ -2,7 +2,7 @@ import {
   resolveSandboxLaunchIntentFromUiState,
   type SandboxLaunchIntent,
 } from "@/lib/sandbox/launch-intent";
-import type { Session } from "@/hooks/use-sessions";
+import type { SandboxUiSession } from "@/lib/sandbox/ui-state-resolver";
 import {
   resolveSandboxUiBundle,
   type SandboxUiBundle,
@@ -26,7 +26,7 @@ export function resolvePreviewPaneLaunchContext({
   liveProbe,
 }: {
   trigger: PreviewPaneLaunchTrigger;
-  session?: Session | null;
+  session?: SandboxUiSession | null;
   record: SandboxRecord | null;
   sandboxRecordId: string | undefined;
   liveProbe?: SandboxHealthStatus;

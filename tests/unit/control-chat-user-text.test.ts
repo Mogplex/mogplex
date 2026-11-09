@@ -3,7 +3,7 @@ import test from "node:test";
 import {
   normalizeControlChatMessages,
   readLatestControlUserText,
-} from "../../app/api/control/chat/_lib/messages";
+} from "../../lib/control/chat/messages";
 
 test("control chat diagnostics follow only the latest user request", () => {
   const messages = normalizeControlChatMessages([

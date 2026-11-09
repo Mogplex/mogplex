@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import { CursorPointer } from "iconoir-react";
 import { useSandboxStore } from "@/hooks/use-sandbox";
 import { resolveSandboxLaunchIntentFromUiState } from "@/lib/sandbox/launch-intent";
-import { ensureSessionSandboxBinding } from "@/lib/sandbox/session-retarget";
+import { ensureSessionSandboxBinding } from "@/hooks/session-retarget";
 import { useSandboxLaunchActions } from "@/components/sandbox-launch-provider";
 import type { Repo } from "@/lib/types";
 import type { PreviewPaneProps } from "./types";

@@ -1,11 +1,11 @@
 import { consumeStream } from "ai";
 import { buildInternalApiHeaders } from "@/lib/internal-api-auth";
-import { executeControlChatRequest } from "@/app/api/control/chat/_lib/execute";
-import { resolveControlChatSessionContext } from "@/app/api/control/chat/_lib/context";
+import { executeControlChatRequest } from "@/lib/control/chat/execute";
+import { resolveControlChatSessionContext } from "@/lib/control/chat/context";
 import {
   readLatestControlUserText,
   validateControlChatMessages,
-} from "@/app/api/control/chat/_lib/messages";
+} from "@/lib/control/chat/messages";
 import { resolveInfrastructureDiagnosticScope } from "@/lib/agents/user-facing-output";
 import { createControlNativeExecution } from "./native-execution";
 import { createTableEventListener } from "@/lib/db/table-event-listener";

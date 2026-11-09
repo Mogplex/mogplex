@@ -3,7 +3,7 @@
  *
  * This is the main entry module for automation job execution. It exports
  * the public surface for job execution (createAutomationJobExecutor,
- * executeAutomationJobRun, createAutomationJobTask, automationJobTask)
+ * executeAutomationJobRun, createAutomationJobTask)
  * and re-exports types/utilities from extracted modules.
  *
  * Implementation is delegated to:
@@ -112,8 +112,3 @@ export function createAutomationJobTask(
     return execute(input);
   };
 }
-
-/**
- * Default automation job task with standard dependencies.
- */
-export const automationJobTask = createAutomationJobTask();

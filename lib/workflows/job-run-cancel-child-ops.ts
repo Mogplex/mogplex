@@ -3,13 +3,9 @@ import {
   requestAiCallCancellationIfActive,
 } from "@/lib/interactive-runs";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import {
-  loadAutomationScopeForJobRun,
-  loadAutomationScopesByStatus,
-  selectQueuedJobsToStart,
-} from "@/lib/workflows/automation-guardrails";
+import { loadAutomationScopeForJobRun } from "@/lib/workflows/automation-guardrails";
+import { releaseQueuedAutomationJobs } from "@/lib/workflows/queue-release";
 import { startAutomationJobRun } from "@/lib/workflows/automation-job-workflow";
-import type { AutomationScope } from "@/lib/workflows/automation-guardrails";
 import type { ActiveAiCallRow } from "./job-run-cancel-types";
 
 export async function cancelActiveAiCallsForJobRun(
@@ -138,50 +134,13 @@ export async function cancelPendingFlowWaits(
 
 export async function releaseQueuedJobsAfterTerminalRun(jobRunId: string) {
   const releasedScope = await loadAutomationScopeForJobRun(jobRunId);
-  if (!releasedScope?.repoId && releasedScope?.installationId == null) {
-    return [];
-  }
-
-  const scopes = await loadAutomationScopesByStatus(["pending", "running"]);
-  const pendingScopes = scopes.filter(
-    (scope) => scope.status === "pending" && scope.jobRunId !== jobRunId
-  );
-  const runningScopes = scopes.filter(
-    (scope) => scope.status === "running" && scope.jobRunId !== jobRunId
-  );
-
-  const nextJobIds = selectQueuedJobsToStart({
+  if (!releasedScope) return [];
+  return releaseQueuedAutomationJobs({
     releasedScope: {
-      ...(releasedScope as AutomationScope),
+      ...releasedScope,
       jobRunId,
       status: "cancelled",
     },
-    pendingScopes,
-    runningScopes,
+    startAutomationJobRun,
   });
-
-  return Promise.all(
-    nextJobIds.map(async (nextJobRunId) => {
-      try {
-        const started = await startAutomationJobRun(
-          nextJobRunId,
-          "queue_release"
-        );
-        return {
-          jobRunId: nextJobRunId,
-          started: started.started,
-          reason: started.reason ?? null,
-        };
-      } catch (error) {
-        return {
-          jobRunId: nextJobRunId,
-          started: false,
-          reason:
-            error instanceof Error
-              ? error.message
-              : "Failed to start released queued job",
-        };
-      }
-    })
-  );
 }

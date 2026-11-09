@@ -10,6 +10,8 @@ import {
 import type { UIMessage } from "ai";
 import { mergeControlSessionLists } from "@/lib/control/session-list-merge";
 import {
+  ControlSessionMutationError,
+  mutateControlSession,
   persistBackedControlSessionMessages,
   type ControlSessionRecord,
 } from "@/lib/control/session-persistence";
@@ -316,63 +318,55 @@ export function useControlSessions({
     []
   );
 
-  /** Rename/pin/archive with optimistic concurrency and one rebase retry on 409. */
+  const removeSessionLocally = useCallback(
+    (targetSessionId: string) => {
+      clearSelectionFailure(targetSessionId);
+      removedSessionIdsRef.current.add(targetSessionId);
+      updatedAtBySessionRef.current.delete(targetSessionId);
+      setSessions((current) =>
+        current.filter((entry) => entry.id !== targetSessionId)
+      );
+      removeSessionMessages(targetSessionId);
+      if (
+        selectedIdRef.current === targetSessionId ||
+        sessionId === targetSessionId
+      ) {
+        setSessionId(null);
+      }
+      if (
+        window.localStorage.getItem(LAST_CONTROL_SESSION_KEY) ===
+        targetSessionId
+      ) {
+        window.localStorage.removeItem(LAST_CONTROL_SESSION_KEY);
+      }
+    },
+    [clearSelectionFailure, removeSessionMessages, sessionId, setSessionId]
+  );
+
   const updateSession = useCallback(
     async (fields: {
       title?: string;
       model_id?: string | null;
       pinned?: boolean;
-      archived?: boolean;
     }): Promise<boolean> => {
       const expected = sessionId
         ? updatedAtBySessionRef.current.get(sessionId)
         : null;
       if (!sessionId || !expected) return false;
 
-      const put = (expectedUpdatedAt: string) =>
-        fetch("/api/control/sessions", {
-          method: "PUT",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            id: sessionId,
-            ...fields,
-            expected_updated_at: expectedUpdatedAt,
-          }),
+      let session: ControlSessionRecord;
+      try {
+        session = await mutateControlSession({
+          sessionId,
+          fields,
+          expectedUpdatedAt: expected,
         });
-
-      let res = await put(expected);
-      if (res.status === 409) {
-        const fresh = await fetch(`/api/control/sessions?id=${sessionId}`);
-        if (!fresh.ok) return false;
-        const record = (await fresh.json()) as ControlSessionRecord;
-        res = await put(record.updated_at);
+      } catch {
+        return false;
       }
-      if (!res.ok) return false;
 
-      const { session } = (await res.json()) as {
-        session: ControlSessionRecord;
-      };
       mutationRevisionRef.current += 1;
       updatedAtBySessionRef.current.set(sessionId, session.updated_at);
-      if (fields.archived) {
-        clearSelectionFailure(sessionId);
-        removedSessionIdsRef.current.add(sessionId);
-        updatedAtBySessionRef.current.delete(sessionId);
-        setSessions((current) =>
-          current.filter((entry) => entry.id !== sessionId)
-        );
-        removeSessionMessages(sessionId);
-        setSessionId(null);
-        if (
-          window.localStorage.getItem(LAST_CONTROL_SESSION_KEY) === sessionId
-        ) {
-          window.localStorage.removeItem(LAST_CONTROL_SESSION_KEY);
-        }
-        return true;
-      }
-      if (fields.archived === false) {
-        removedSessionIdsRef.current.delete(sessionId);
-      }
       setSessions((current) =>
         current.map((entry) =>
           entry.id === sessionId
@@ -388,7 +382,7 @@ export function useControlSessions({
       );
       return true;
     },
-    [clearSelectionFailure, removeSessionMessages, sessionId, setSessionId]
+    [sessionId]
   );
 
   const deleteSession = useCallback(
@@ -406,23 +400,10 @@ export function useControlSessions({
 
       mutationRevisionRef.current += 1;
       selectionRevisionRef.current += 1;
-      clearSelectionFailure(targetSessionId);
-      removedSessionIdsRef.current.add(targetSessionId);
-      updatedAtBySessionRef.current.delete(targetSessionId);
-      setSessions((current) =>
-        current.filter((entry) => entry.id !== targetSessionId)
-      );
-      removeSessionMessages(targetSessionId);
-      if (targetSessionId === sessionId) setSessionId(null);
-      if (
-        window.localStorage.getItem(LAST_CONTROL_SESSION_KEY) ===
-        targetSessionId
-      ) {
-        window.localStorage.removeItem(LAST_CONTROL_SESSION_KEY);
-      }
+      removeSessionLocally(targetSessionId);
       return true;
     },
-    [clearSelectionFailure, removeSessionMessages, sessionId, setSessionId]
+    [removeSessionLocally]
   );
 
   const setSessionArchived = useCallback(
@@ -430,38 +411,30 @@ export function useControlSessions({
       target: ControlSessionSummary,
       archived: boolean
     ): Promise<ControlSessionSummary | null> => {
-      const response = await fetch("/api/control/sessions?summary=true", {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          id: target.id,
-          archived,
-          expected_updated_at: target.updated_at,
-        }),
-      });
-      if (!response.ok) {
-        if (response.status === 409) await refreshList();
+      let session: ControlSessionSummary;
+      try {
+        session = await mutateControlSession({
+          sessionId: target.id,
+          fields: { archived },
+          expectedUpdatedAt: target.updated_at,
+          summary: true,
+          rebaseOnConflict: false,
+        });
+      } catch (error) {
+        if (
+          error instanceof ControlSessionMutationError &&
+          error.status === 409
+        ) {
+          await refreshList();
+        }
         return null;
       }
-      const { session } = (await response.json()) as {
-        session: ControlSessionSummary;
-      };
+
       mutationRevisionRef.current++;
-      updatedAtBySessionRef.current.set(target.id, session.updated_at);
       if (archived) {
-        clearSelectionFailure(target.id);
-        removedSessionIdsRef.current.add(target.id);
-        setSessions((current) =>
-          current.filter((entry) => entry.id !== target.id)
-        );
-        removeSessionMessages(target.id);
-        if (selectedIdRef.current === target.id) setSessionId(null);
-        if (
-          window.localStorage.getItem(LAST_CONTROL_SESSION_KEY) === target.id
-        ) {
-          window.localStorage.removeItem(LAST_CONTROL_SESSION_KEY);
-        }
+        removeSessionLocally(target.id);
       } else {
+        updatedAtBySessionRef.current.set(target.id, session.updated_at);
         removedSessionIdsRef.current.delete(target.id);
         setSessions((current) => [
           session,
@@ -470,7 +443,7 @@ export function useControlSessions({
       }
       return session;
     },
-    [clearSelectionFailure, refreshList, removeSessionMessages, setSessionId]
+    [refreshList, removeSessionLocally]
   );
 
   return {

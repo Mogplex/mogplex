@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import type { ActiveRunActions } from "../flow-run-details";
+import type { ActiveRunActions } from "../run-action-buttons";
 
 export type FlowRunActionsState = {
   // Run actions (requeue, repair, cancel)

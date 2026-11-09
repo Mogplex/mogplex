@@ -22,7 +22,7 @@ import {
 import type { SandboxRestartDeps } from "./types";
 
 export const PERSISTENT_RESTART_SELECT =
-  "id, repo_id, user_id, sandbox_id, base_branch, working_branch, status, stop_reason, health_status, preview_url, snapshot_id, runtime, terminal_cwd, root_directory, persistent, created_at, last_active_at, billing_source, billing_team_id, billing_project_id, vercel_team_id, vercel_project_id, repo:repos(*, workspace:workspaces(*))";
+  "id, repo_id, user_id, sandbox_id, base_branch, working_branch, status, stop_reason, health_status, preview_url, snapshot_id, runtime, terminal_cwd, root_directory, persistent, created_at, last_active_at, last_boot_started_at, billing_source, billing_team_id, billing_project_id, vercel_team_id, vercel_project_id, repo:repos(*, workspace:workspaces(*))";
 
 export const RESTART_INSTALLING_FROM_STATUSES = [
   "creating",

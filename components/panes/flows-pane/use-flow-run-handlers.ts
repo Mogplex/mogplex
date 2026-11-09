@@ -2,7 +2,7 @@ import { useCallback, type RefObject } from "react";
 import { toast } from "@/hooks/use-toast";
 import type { Flow, FlowRunDetail, FlowRunRecord } from "@/lib/types";
 import type { FlowRunAction } from "@/lib/flows/run-presentation";
-import type { ActiveRunActions } from "../flow-run-details";
+import type { ActiveRunActions } from "../run-action-buttons";
 
 export type FlowRunHandlersDeps = {
   // Run actions state

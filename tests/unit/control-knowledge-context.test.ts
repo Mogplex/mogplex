@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { ControlKnowledgeDeps } from "../../app/api/control/chat/_lib/knowledge-context";
+import type { ControlKnowledgeDeps } from "../../lib/control/chat/knowledge-context";
 import type { CatalogSkill } from "../../lib/skill-catalog/types";
 
 process.env.NEXT_PUBLIC_SUPABASE_URL ||= "https://example.supabase.co";
@@ -22,10 +22,10 @@ function userMessage(text: string) {
 }
 
 type KnowledgeModule =
-  typeof import("../../app/api/control/chat/_lib/knowledge-context");
+  typeof import("../../lib/control/chat/knowledge-context");
 
 function importKnowledge(): Promise<KnowledgeModule> {
-  return import("../../app/api/control/chat/_lib/knowledge-context");
+  return import("../../lib/control/chat/knowledge-context");
 }
 
 function load(
@@ -113,7 +113,7 @@ test("Control starts both loads together rather than one after the other", async
 
 test("the Control prompt context carries the loaded skills to the system prompt", async () => {
   const { buildControlPromptContext } =
-    await import("../../app/api/control/chat/_lib/prompt-context");
+    await import("../../lib/control/chat/prompt-context");
   const context = buildControlPromptContext({
     body: { messages: [] } as never,
     missionId: null,

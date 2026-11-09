@@ -77,7 +77,7 @@ export type BaselineReaperSummary = {
 
 type BaselineReaperDeps = {
   loadCandidates: () => Promise<BaselineReaperCandidate[]>;
-  clearRepoSnapshot: (repoId: string) => Promise<void>;
+  clearRepoSnapshot: (repoId: string, snapshotId: string) => Promise<void>;
   deleteSnapshot: DeleteSnapshotFn;
   resolveSnapshotCredentials: (
     repo: BaselineReaperCandidate
@@ -109,17 +109,18 @@ export async function runBaselineSnapshotReaper(
     reasons[decision.reason] += 1;
     if (!decision.reap) continue;
 
-    if (repo.snapshot_id) {
+    const snapshotId = repo.snapshot_id;
+    if (!snapshotId) continue;
+    {
       const creds = await deps.resolveSnapshotCredentials(repo);
-      if (creds) {
-        await deps.deleteSnapshot({
-          snapshotId: repo.snapshot_id,
-          token: creds.token,
-          teamId: creds.teamId,
-        });
-      }
+      if (!creds) continue;
+      await deps.deleteSnapshot({
+        snapshotId,
+        token: creds.token,
+        teamId: creds.teamId,
+      });
     }
-    await deps.clearRepoSnapshot(repo.id);
+    await deps.clearRepoSnapshot(repo.id, snapshotId);
     reaped += 1;
   }
 

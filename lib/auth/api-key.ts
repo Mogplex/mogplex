@@ -168,7 +168,8 @@ export async function resolveApiKey(
     .is("revoked_at", null)
     .maybeSingle();
 
-  if (error || !data) {
+  if (error) throw new Error(error.message);
+  if (!data) {
     return { ok: false, reason: "invalid" };
   }
 

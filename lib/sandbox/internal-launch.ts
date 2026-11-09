@@ -14,7 +14,8 @@ export type LaunchedSandbox = {
 type PostSandbox = (request: Request) => Promise<Response>;
 
 const defaultPost: PostSandbox = async (request) => {
-  const { createSandboxPostHandler } = await import("@/app/api/sandbox/route");
+  const { createSandboxPostHandler } =
+    await import("@/lib/sandbox/collection/route");
   return createSandboxPostHandler()(request);
 };
 

@@ -163,10 +163,7 @@ export async function findReviewFormatProblems(
 }
 
 function judgedTheText(format: Pick<DecisionHandle, "status" | "mode">) {
-  return (
-    format.status === "ok" &&
-    (format.mode === "enforce" || format.mode === "advise")
-  );
+  return format.status === "ok" && format.mode === "enforce";
 }
 
 /** Titles, paths, lines, and severities stay the reviewer's own. */
@@ -246,7 +243,9 @@ export async function polishPrReviewForPublish(
       scope,
       { metadata: { ...metadata, problems, rewrite: rewritten.usage } }
     );
-    return faithful.act ? candidate : harnessResult;
+    return faithful.act && faithful.mode === "enforce"
+      ? candidate
+      : harnessResult;
   } catch (error) {
     console.warn("[pr-review] format check failed open", { error });
     return harnessResult;

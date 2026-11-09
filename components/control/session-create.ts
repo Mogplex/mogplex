@@ -1,5 +1,5 @@
 import type { ControlSessionRecord } from "@/lib/control/session-types";
-import { getActiveTeamRequestHeaders } from "@/components/active-scope-provider";
+import { getActiveTeamRequestHeaders } from "@/lib/active-team-request";
 
 export async function createControlSessionRecord(input: {
   title: string;

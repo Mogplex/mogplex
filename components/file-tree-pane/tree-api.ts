@@ -1,4 +1,4 @@
-import { getActiveTeamRequestHeaders } from "@/components/active-scope-provider";
+import { getActiveTeamRequestHeaders } from "@/lib/active-team-request";
 import { readJsonResponse } from "./helpers";
 
 export interface TreeMove {

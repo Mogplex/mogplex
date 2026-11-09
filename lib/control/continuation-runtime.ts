@@ -4,8 +4,8 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { buildInternalApiHeaders } from "@/lib/internal-api-auth";
 import { redactSecretsInValue } from "@/lib/ai-telemetry";
 import { createNativeSandboxExecution } from "@/lib/mogplex-api/native-sandbox-execution";
-import { runAuthorizedControlChat } from "@/app/api/control/chat/_lib/authorized-request";
-import { validateControlChatMessages } from "@/app/api/control/chat/_lib/messages";
+import { runAuthorizedControlChat } from "@/lib/control/chat/authorized-request";
+import { validateControlChatMessages } from "@/lib/control/chat/messages";
 import {
   assertControlContinuationCurrent,
   claimControlContinuation,

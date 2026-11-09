@@ -2,10 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import {
-  createTeamModelHandlers,
-  type TeamModelsResponse,
-} from "../../app/api/teams/[teamId]/models/route";
+import { createTeamModelHandlers } from "../../app/api/teams/[teamId]/models/route";
+import type { TeamModelsResponse } from "../../lib/team-api-types";
 import type { TeamRole } from "../../lib/team-capabilities";
 import type { RecordTeamAuditEventInput } from "../../lib/team-audit";
 

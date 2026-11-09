@@ -252,6 +252,9 @@ test("POST /api/sandbox/[id]/restart guards bootstrap error writes after late st
   );
   assert.deepEqual(errorWrite?.options, {
     expectedSandboxId: "vm_123",
+    expectedLastBootStartedAt: updateCalls.find(
+      (call) => call.updates.status === "installing"
+    )?.updates.last_boot_started_at,
     fromStatuses: ["installing", "running"],
   });
   assert.match(body, /"type":"cancelled"/);

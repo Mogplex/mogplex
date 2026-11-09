@@ -27,7 +27,7 @@ export function RunDetailsHeader({
   runSummary: FlowRunRecord | null
 }) {
   const run = runDetail ?? runSummary
-  const statusLabel = runDetail ? flowRunStatusLabel(runDetail) : run?.status
+  const statusLabel = run ? flowRunStatusLabel(run) : undefined
 
   return (
     <DialogHeader className="border-b border-border px-6 py-5">

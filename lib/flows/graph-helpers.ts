@@ -7,6 +7,7 @@ import type {
   FlowNodeType,
   TriggerEvent,
 } from "@/lib/types";
+import { CONDITION_OPERATORS } from "./capabilities";
 
 export const CONDITION_HANDLE_IDS = {
   true: "true",
@@ -203,21 +204,7 @@ export function conditionOperatorLabel(operator: FlowConditionOperator) {
   }
 }
 
-export const CONDITION_OPERATORS: ReadonlyArray<FlowConditionOperator> = [
-  "exists",
-  "equals",
-  "not_equals",
-  "contains",
-  "not_contains",
-  "starts_with",
-  "ends_with",
-  "greater_than",
-  "less_than",
-  "in",
-  "not_in",
-  "is_empty",
-  "is_not_empty",
-];
+export { CONDITION_OPERATORS } from "./capabilities";
 
 // Operators that ignore their value field. UI hides the value input for these,
 // and validation does not require a non-empty value.

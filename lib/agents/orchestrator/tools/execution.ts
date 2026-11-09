@@ -2,8 +2,10 @@
  * Execution tools for the orchestrator.
  */
 import { z } from "zod";
+import { createTerminalExec } from "@/lib/agents/tools";
+import { createRunChecksTool } from "../checks/tool";
+import { controlDecisionScope } from "../decision-scope";
 import type { OrchestratorToolDef } from "../types";
-import { CHECK_KINDS } from "../checks/plan";
 
 // --- Tool definitions ---
 
@@ -14,6 +16,17 @@ export const EXECUTION_TOOLS: OrchestratorToolDef[] = [
     description: "Execute a shell command in the sandbox",
     access: "mutation",
     implemented: true,
+    build: (ctx) => {
+      if (ctx.sandboxSelectionRequired) return null;
+      return createTerminalExec(
+        ctx.sandboxBinding?.sandboxId ?? undefined,
+        ctx.userId,
+        ctx.repoId ?? undefined,
+        ctx.sandboxBinding,
+        ctx.sandboxExecution,
+        { ...controlDecisionScope(ctx), riskGate: false }
+      );
+    },
   },
   {
     name: "run_checks",
@@ -22,6 +35,8 @@ export const EXECUTION_TOOLS: OrchestratorToolDef[] = [
       "Run full repository typecheck, lint, build, and test commands",
     access: "mutation",
     implemented: true,
+    build: (ctx) =>
+      ctx.sandboxSelectionRequired ? null : createRunChecksTool(ctx),
   },
   {
     name: "run_bench",
@@ -55,16 +70,6 @@ export const EXECUTION_TOOLS: OrchestratorToolDef[] = [
 
 // --- Schemas ---
 
-export const runChecksSchema = z
-  .object({
-    skip: z.array(z.enum(CHECK_KINDS)).optional(),
-    reason: z.string().trim().min(1).optional(),
-  })
-  .refine(
-    (input) => !input.skip?.length || Boolean(input.reason),
-    "Explain the operator's explicit request to skip checks."
-  );
-
 export const runBenchSchema = z.object({
   benchmark: z.string().describe("Benchmark name or path"),
   iterations: z.number().optional().describe("Number of iterations"),
@@ -91,12 +96,4 @@ export const httpProbeSchema = z.object({
   body: z.string().optional().describe("Request body"),
 });
 
-// --- Schema map for stub tools ---
-
-export const EXECUTION_SCHEMAS: Record<string, z.ZodType> = {
-  run_checks: runChecksSchema,
-  run_bench: runBenchSchema,
-  replay_span: replaySpanSchema,
-  start_dev_server: startDevServerSchema,
-  http_probe: httpProbeSchema,
-};
+export { runChecksSchema } from "../checks/tool";

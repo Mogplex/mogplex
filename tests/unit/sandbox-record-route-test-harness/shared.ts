@@ -27,6 +27,7 @@ export type SandboxBaseRecordFixture = {
   vercel_team_id: string | null;
   vercel_project_id: string | null;
   persistent?: boolean | null;
+  last_boot_started_at?: string | null;
 };
 
 export type SandboxDetailRecordFixture = SandboxBaseRecordFixture & {
@@ -57,6 +58,7 @@ export type SandboxRestartRecordFixture = {
   billing_project_id: string | null;
   vercel_team_id: string | null;
   vercel_project_id: string | null;
+  last_boot_started_at?: string | null;
 };
 
 export type SandboxRouteRepoFixture = {

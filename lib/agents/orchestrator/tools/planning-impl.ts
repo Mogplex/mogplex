@@ -22,11 +22,57 @@ import type { AgentRuntimeRow } from "@/lib/agents/runtime/types";
 import { defineTool } from "../helpers";
 import type { HarnessExecutionMode } from "@/lib/harness/claude-permissions";
 import type { OrchestratorToolContext } from "../types";
-import {
-  listAgentsSchema,
-  planMissionSchema,
-  spawnSubagentSchema,
-} from "./planning";
+
+export const planMissionSchema = z.object({
+  objective: z.string().min(1).describe("High-level objective for the mission"),
+  constraints: z
+    .array(z.string())
+    .optional()
+    .describe("Constraints or requirements for the plan"),
+  context: z.string().optional().describe("Additional context for planning"),
+  tasks: z
+    .array(
+      z.object({
+        slug: z
+          .string()
+          .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
+          .refine((slug) => slug !== "master", {
+            message: '"master" is reserved for the mission spec',
+          })
+          .describe("Stable lowercase task slug"),
+        title: z.string().min(1).max(500),
+        prompt: z.string().min(1),
+        harness: z.enum(["codex", "claude-code"]).default("codex"),
+        ownedPaths: z.array(z.string()).min(1),
+        blockedPaths: z.array(z.string()).optional(),
+        dependsOn: z.array(z.string()).optional(),
+        acceptanceCriteria: z.array(z.string()).optional(),
+        validationCommands: z.array(z.string()).optional(),
+      })
+    )
+    .min(1)
+    .describe("Concrete tasks that can each receive a worktree"),
+});
+
+export const spawnSubagentSchema = z.object({
+  worktreeId: z.string().uuid().describe("Persisted worktree to use"),
+  taskPrompt: z
+    .string()
+    .min(1)
+    .describe(
+      "Task instructions for this single worker. Never tell it to delegate or spawn other agents."
+    ),
+  agentType: z.enum(["codex", "claude-code"]).default("codex"),
+  agentId: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      "Roster agent id or preset:<NAME> from list_agents. The worker loads that agent's system prompt, rules, and skills."
+    ),
+});
+
+export const listAgentsSchema = z.object({});
 
 type PlanMissionDeps = {
   getRunDetails: typeof getOrchestrationRunDetails;

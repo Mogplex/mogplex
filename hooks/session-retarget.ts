@@ -74,6 +74,24 @@ export function ensureSessionSandboxBinding(
   return true;
 }
 
+export function restoreConversationSession(input: {
+  workspaceSessionId: string | null;
+  sandboxId: string | null;
+}) {
+  if (!input.workspaceSessionId) return;
+  const sessions = useSessionsStore.getState();
+  if (sessions.activeSessionId === input.workspaceSessionId) return;
+  const target = findWorkspaceSession(input.workspaceSessionId);
+  if (!target) return;
+
+  sessions.switchSession(target.id);
+  ensureSessionSandboxBinding(
+    target.id,
+    target.activeSandboxId,
+    input.sandboxId
+  );
+}
+
 export function bindSessionToPendingSandboxBranch(
   sessionId: string | null | undefined,
   pendingSandboxBranch: string | null | undefined

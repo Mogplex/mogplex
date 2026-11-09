@@ -160,7 +160,7 @@ async function checkRunDialog(page: Page, draftTest: boolean) {
       started_at: "2026-03-28T11:01:05.000Z",
     },
     cancelable: false,
-    repairable: true,
+    repairable: false,
     requeueable: true,
     latest_dispatch_event: {
       outcome: "start_failed",
@@ -425,7 +425,7 @@ async function checkRunDialog(page: Page, draftTest: boolean) {
   await expect(runCard).not.toContainText("run_123");
   await expect(runCard).not.toContainText("trigger · run_123");
   await expect(runCard.getByRole("button", { name: "Retry" })).toBeVisible();
-  await expect(runCard.getByRole("button", { name: "Repair" })).toBeVisible();
+  await expect(runCard.getByRole("button", { name: "Repair" })).toHaveCount(0);
   await expect(runCard.getByRole("button", { name: "Cancel" })).toHaveCount(0);
 
   await runCard.click();
@@ -485,7 +485,7 @@ async function checkRunDialog(page: Page, draftTest: boolean) {
       .filter({ hasText: "export const widget = 'new'" })
   ).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Retry" })).toBeVisible();
-  await expect(dialog.getByRole("button", { name: "Repair" })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Repair" })).toHaveCount(0);
   await expect(dialog.getByRole("button", { name: "Cancel" })).toHaveCount(0);
   await expect(
     dialog

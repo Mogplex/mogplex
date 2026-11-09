@@ -12,7 +12,7 @@ import type { AiCall } from "@/lib/types"
 import {
   AutomationCostCell,
   AutomationStatusCell,
-} from "./automation-presentation-cells"
+} from "@/components/observability/automation-presentation-cells"
 import { CallExpandedRow } from "./call-expanded-row"
 import { FilterSelect } from "./filter-select"
 import {
@@ -23,7 +23,7 @@ import {
   hasPositiveTokenCount,
   repoShortName,
   timeAgo,
-} from "./formatters"
+} from "@/lib/observability/formatters"
 import { PaginationControls } from "./pagination-controls"
 
 const IO_TOOLTIP_LABELS = {

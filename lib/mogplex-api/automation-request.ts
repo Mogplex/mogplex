@@ -4,6 +4,7 @@ import {
   AGENT_ROLES,
   TRIGGER_EVENTS,
 } from "@/lib/flows/assistant-tools-constants";
+import { FLOW_NODE_TYPES } from "@/lib/flows/capabilities";
 
 const finiteNumber = z.number().finite();
 
@@ -47,20 +48,7 @@ const agentDataSchema = z
 const flowNodeSchema = z
   .object({
     id: z.string().trim().min(1),
-    type: z.enum([
-      "start",
-      "agent",
-      "action",
-      "condition",
-      "classify",
-      "parallel",
-      "join",
-      "delay",
-      "await_event",
-      "set_variable",
-      "transform",
-      "end",
-    ]),
+    type: z.enum(FLOW_NODE_TYPES),
     position: z.object({ x: finiteNumber, y: finiteNumber }).strict(),
     data: z.record(z.string(), z.unknown()),
   })

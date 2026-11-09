@@ -1,5 +1,8 @@
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { listUsableModelIdsForScope } from "@/lib/models/default-model";
+import {
+  listUsableModelIdsForScope,
+  resolveStoredUserDefaultModelId,
+} from "@/lib/models/default-model";
 import { ACCOUNT_FALLBACK_MODEL_MAX_COUNT } from "@/lib/models/fallback-limits";
 
 export function parseFallbackModelIds(value: unknown): string[] | null {
@@ -54,6 +57,18 @@ export async function saveFallbackModelPreference(
   userId: string,
   modelIds: string[]
 ) {
+  const primary = await resolveStoredUserDefaultModelId(userId);
+  if (primary && !modelIds.includes(primary)) {
+    const { error } = await supabaseAdmin.rpc("save_model_chain", {
+      p_user_id: userId,
+      p_primary: primary,
+      p_fallbacks: modelIds,
+      p_previous_resolved: primary,
+    });
+    if (error) throw new Error("Unable to save fallback models");
+    return;
+  }
+
   const { error } = await supabaseAdmin
     .from("profiles")
     .update({ fallback_model_ids: modelIds })

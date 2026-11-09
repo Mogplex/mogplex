@@ -13,7 +13,7 @@ import {
 } from "@/lib/flows/run-presentation"
 import { flowAgentRoleLabel } from "@/lib/flows/graph"
 import type { FlowRunRecord } from "@/lib/types"
-import { RunActionButtons, type ActiveRunActions } from "../flow-run-details"
+import { RunActionButtons, type ActiveRunActions } from "../run-action-buttons"
 import { getRoleTheme } from "./node-shells"
 
 export interface RunsTabContentProps {

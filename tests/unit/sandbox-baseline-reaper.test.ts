@@ -130,3 +130,94 @@ test("runBaselineSnapshotReaper deletes vercel snapshot and clears row", async (
   assert.deepEqual(clearedRepos, ["r2"]);
   assert.equal(summary.reasons.stale_age, 1);
 });
+
+test("runBaselineSnapshotReaper keeps the snapshot reference when credentials are unavailable", async () => {
+  const { runBaselineSnapshotReaper } = await loadReaper();
+  let cleared = false;
+
+  const summary = await runBaselineSnapshotReaper(
+    { maxAgeDays: 14, idleDays: 30 },
+    {
+      loadCandidates: async () => [
+        makeRepo({
+          snapshot_created_at: new Date(
+            now.getTime() - 100 * DAY_MS
+          ).toISOString(),
+        }),
+      ],
+      clearRepoSnapshot: async () => {
+        cleared = true;
+      },
+      deleteSnapshot: async () => {
+        throw new Error("delete must not run without credentials");
+      },
+      resolveSnapshotCredentials: async () => null,
+      now: () => now,
+    }
+  );
+
+  assert.equal(summary.reaped, 0);
+  assert.equal(cleared, false);
+});
+
+test("runBaselineSnapshotReaper propagates deletion failures without clearing the reference", async () => {
+  const { runBaselineSnapshotReaper } = await loadReaper();
+  let cleared = false;
+
+  await assert.rejects(
+    runBaselineSnapshotReaper(
+      { maxAgeDays: 14, idleDays: 30 },
+      {
+        loadCandidates: async () => [
+          makeRepo({
+            snapshot_created_at: new Date(
+              now.getTime() - 100 * DAY_MS
+            ).toISOString(),
+          }),
+        ],
+        clearRepoSnapshot: async () => {
+          cleared = true;
+        },
+        deleteSnapshot: async () => {
+          throw new Error("provider unavailable");
+        },
+        resolveSnapshotCredentials: async () => ({
+          token: "tok",
+          teamId: null,
+        }),
+        now: () => now,
+      }
+    ),
+    /provider unavailable/
+  );
+  assert.equal(cleared, false);
+});
+
+test("runBaselineSnapshotReaper clears the original snapshot id after deletion", async () => {
+  const { runBaselineSnapshotReaper } = await loadReaper();
+  const cleared: Array<{ repoId: string; snapshotId: string }> = [];
+
+  await runBaselineSnapshotReaper(
+    { maxAgeDays: 14, idleDays: 30 },
+    {
+      loadCandidates: async () => [
+        makeRepo({
+          snapshot_id: "original-snapshot",
+          snapshot_created_at: new Date(
+            now.getTime() - 100 * DAY_MS
+          ).toISOString(),
+        }),
+      ],
+      clearRepoSnapshot: async (repoId, snapshotId) => {
+        cleared.push({ repoId, snapshotId });
+      },
+      deleteSnapshot: async () => {},
+      resolveSnapshotCredentials: async () => ({ token: "tok", teamId: null }),
+      now: () => now,
+    }
+  );
+
+  assert.deepEqual(cleared, [
+    { repoId: "r1", snapshotId: "original-snapshot" },
+  ]);
+});

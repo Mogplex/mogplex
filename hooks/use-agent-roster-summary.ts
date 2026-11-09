@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import useSWR from "swr";
 import { useRealtimeRouteRefresh } from "@/hooks/use-realtime-route-refresh";
-import type { AgentRosterSummaryResponse } from "@/app/api/agents/roster/summary/route";
+import type { AgentRosterSummaryResponse } from "@/lib/agents/roster-types";
 
 const fetcher = async (url: string): Promise<AgentRosterSummaryResponse> => {
   const r = await fetch(url);

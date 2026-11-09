@@ -5,7 +5,7 @@ import { defineTool } from "./shared";
 export type MemoryToolContext = {
   workspaceSessionId?: string | null;
   conversationId?: string | null;
-  sandboxId?: string | null;
+  sandboxId?: string | null | (() => string | null);
 };
 
 const MEMORY_LANES = ["session", "semantic", "episodic", "procedural"] as const;
@@ -85,7 +85,11 @@ export function createMemoryTools(
     repoId: repoId ?? null,
     workspaceSessionId: context.workspaceSessionId ?? null,
     conversationId: context.conversationId ?? null,
-    sandboxId: context.sandboxId ?? null,
+    get sandboxId() {
+      return typeof context.sandboxId === "function"
+        ? context.sandboxId()
+        : (context.sandboxId ?? null);
+    },
   };
 
   // Memoise the dynamic import + client. `import()` is already module-cached,

@@ -155,7 +155,7 @@ function ensureSandboxServiceRouteTestEnv() {
 
 export async function loadSandboxExecRouteModule() {
   ensureSandboxServiceRouteTestEnv();
-  const route = await import("../../app/api/sandbox/[id]/exec/route");
+  const route = await import("../../lib/sandbox/exec/route");
   return {
     ...route,
     createSandboxExecPostHandler: (

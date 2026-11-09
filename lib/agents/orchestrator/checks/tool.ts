@@ -1,4 +1,5 @@
 import type { Tool } from "ai";
+import { z } from "zod";
 import { defineTool } from "@/lib/agents/tools/shared";
 import {
   createTerminalExec,
@@ -17,7 +18,16 @@ import {
 import { runRepositoryChecks } from "./runner";
 import { repositoryChecksModelOutput } from "./model-output";
 import type { RepositoryCheckReceipt } from "./receipt";
-import { runChecksSchema } from "../tools/execution";
+
+export const runChecksSchema = z
+  .object({
+    skip: z.array(z.enum(CHECK_KINDS)).optional(),
+    reason: z.string().trim().min(1).optional(),
+  })
+  .refine(
+    (input) => !input.skip?.length || Boolean(input.reason),
+    "Explain the operator's explicit request to skip checks."
+  );
 
 export type { RepositoryCheckReceipt } from "./receipt";
 

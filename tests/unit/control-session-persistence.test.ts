@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { UIMessage } from "ai";
 import {
+  mutateControlSession,
   persistBackedControlSessionMessages,
   persistControlSessionMessages,
 } from "../../lib/control/session-persistence";
@@ -95,5 +96,32 @@ test("persistControlSessionMessages retries a conflict with the fresh revision",
       (body) => (body as { expected_updated_at: string }).expected_updated_at
     ),
     ["revision-1", "revision-2"]
+  );
+});
+
+test("mutateControlSession can reject an archive conflict without rebasing", async () => {
+  const inputs: string[] = [];
+  const bodies: Array<Record<string, unknown>> = [];
+
+  await assert.rejects(
+    mutateControlSession({
+      sessionId: "session-a",
+      fields: { archived: true },
+      expectedUpdatedAt: "revision-1",
+      summary: true,
+      rebaseOnConflict: false,
+      fetcher: async (input, init) => {
+        inputs.push(input);
+        if (init?.body) bodies.push(JSON.parse(String(init.body)));
+        return jsonResponse(409, {});
+      },
+    }),
+    /Failed to persist control session \(409\)/
+  );
+
+  assert.deepEqual(inputs, ["/api/control/sessions?summary=true"]);
+  assert.deepEqual(
+    bodies.map((body) => [body.archived, body.expected_updated_at]),
+    [[true, "revision-1"]]
   );
 });
