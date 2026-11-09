@@ -60,11 +60,13 @@ export function createRepairJobsGetHandler(
         const staleJobs = (jobs || []).filter((job) =>
           deps.isRepairablePendingJob(job)
         );
-        const repairableJobs = staleJobs.filter((job) =>
-          deps.isExecutableJobRunSource(job)
+        // Assignments retain the original starter. Only trigger-only rows are
+        // legacy display history that cannot execute.
+        const repairableJobs = staleJobs.filter(
+          (job) => !job.trigger_id || deps.isExecutableJobRunSource(job)
         );
         const unsupportedJobs = staleJobs.filter(
-          (job) => !deps.isExecutableJobRunSource(job)
+          (job) => job.trigger_id && !deps.isExecutableJobRunSource(job)
         );
         const scanned = jobs?.length ?? 0;
         const skippedNotStale = scanned - staleJobs.length;
@@ -76,7 +78,7 @@ export function createRepairJobsGetHandler(
         if (unsupportedJobs.length > 0) {
           try {
             const message = "Legacy job run source is not executable";
-            const { error: updateError } = await adminClient
+            const { data: retiredRows, error: updateError } = await adminClient
               .from("job_runs")
               .update({
                 status: "failed",
@@ -88,9 +90,10 @@ export function createRepairJobsGetHandler(
                 "id",
                 unsupportedJobs.map((job) => job.id)
               )
-              .eq("status", "pending");
+              .eq("status", "pending")
+              .select("id");
             if (updateError) throw new Error(updateError.message);
-            retiredLegacy = unsupportedJobs.length;
+            retiredLegacy = retiredRows?.length ?? 0;
           } catch (error) {
             retireErrors = unsupportedJobs.length;
             console.error("[job-repair] failed to retire legacy pending runs", {

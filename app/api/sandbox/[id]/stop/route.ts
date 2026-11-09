@@ -342,23 +342,13 @@ export function createSandboxStopHandler(
         }
       }
       if (confirmedStopped) {
-        let stopped = await deps.stopSandboxRecord(id, {
+        const stopped = await deps.stopSandboxRecord(id, {
           expectedSandboxId: loaded.record.sandbox_id,
           expectedLastBootStartedAt: loaded.record.last_boot_started_at ?? null,
           healthStatus: "stopped",
           fromStatuses: STOPPABLE_SANDBOX_STATUSES,
           stopReason: automatic ? "auto_pause" : "manual",
         });
-        if (!stopped) {
-          // The provider is already stopped, so converge the record without
-          // rejecting it merely because a newer boot generation exists.
-          stopped = await deps.stopSandboxRecord(id, {
-            expectedSandboxId: loaded.record.sandbox_id,
-            healthStatus: "stopped",
-            fromStatuses: STOPPABLE_SANDBOX_STATUSES,
-            stopReason: automatic ? "auto_pause" : "manual",
-          });
-        }
         if (!stopped) {
           return NextResponse.json(
             {

@@ -93,7 +93,7 @@ test("POST /api/sandbox/[id]/stop does not hide an unconfirmed VM after sandbox 
   assert.equal(payload.sandbox.runtime_summary.status, "running");
 });
 
-test("POST /api/sandbox/[id]/stop converges the record after the VM stops despite generation drift", async () => {
+test("POST /api/sandbox/[id]/stop returns conflict without weakening a failed generation guard", async () => {
   const { createSandboxStopHandler } = await loadSandboxStopRouteModule();
   let remoteStopCount = 0;
   const stopCalls: Array<{
@@ -121,7 +121,7 @@ test("POST /api/sandbox/[id]/stop converges the record after the VM stops despit
         expectedSandboxId: options?.expectedSandboxId,
         expectedLastBootStartedAt: options?.expectedLastBootStartedAt,
       });
-      return stopCalls.length === 1 ? null : ({ id: "sandbox-1" } as never);
+      return null;
     },
   });
 
@@ -130,15 +130,14 @@ test("POST /api/sandbox/[id]/stop converges the record after the VM stops despit
     buildSandboxRouteParams()
   );
 
-  assert.equal(response.status, 200);
+  assert.equal(response.status, 409);
   assert.equal(remoteStopCount, 1);
-  assert.equal(stopCalls.length, 2);
-  assert.deepEqual(stopCalls[0], {
-    expectedSandboxId: "vm_123",
-    expectedLastBootStartedAt: "2026-04-01T10:00:00.000Z",
-  });
-  assert.equal(stopCalls[1]?.expectedSandboxId, "vm_123");
-  assert.equal(stopCalls[1]?.expectedLastBootStartedAt, undefined);
+  assert.deepEqual(stopCalls, [
+    {
+      expectedSandboxId: "vm_123",
+      expectedLastBootStartedAt: "2026-04-01T10:00:00.000Z",
+    },
+  ]);
 });
 
 test("POST /api/sandbox/[id]/stop explicitly discards a legacy paused sandbox's resources and marks record stopped", async () => {

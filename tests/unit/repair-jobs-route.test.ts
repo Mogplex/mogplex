@@ -57,8 +57,10 @@ function buildPendingJobsClient(
     in: () => query,
     order: () => query,
     limit: async () => ({ data: jobs, error: null }),
-    then: (resolve: (result: { error: null }) => unknown) =>
-      Promise.resolve({ error: null }).then(resolve),
+    then: (
+      resolve: (result: { error: null; data: Array<{ id: string }> }) => unknown
+    ) =>
+      Promise.resolve({ error: null, data: [{ id: "legacy" }] }).then(resolve),
   };
   return {
     from: (table: string) => {
@@ -117,7 +119,13 @@ test("repair-jobs keeps loading and nested starts inside one admin connection", 
 test("repair-jobs retires stale legacy rows and reports skip reasons", async () => {
   const jobs = [
     defaultPendingJobs[0]!,
-    { ...defaultPendingJobs[1]!, id: "legacy", flow_id: null },
+    {
+      ...defaultPendingJobs[1]!,
+      id: "legacy",
+      flow_id: null,
+      trigger_id: "legacy-trigger",
+    },
+    { ...defaultPendingJobs[1]!, id: "assignment", flow_id: null },
     {
       ...defaultPendingJobs[1]!,
       id: "trigger-flow",
@@ -125,13 +133,13 @@ test("repair-jobs retires stale legacy rows and reports skip reasons", async () 
     },
     { ...defaultPendingJobs[1]!, id: "fresh-flow" },
   ];
-  let selectedColumns = "";
+  const selectedColumns: string[] = [];
   const notFilters: string[] = [];
   const updates: Record<string, unknown>[] = [];
   const adminClient = buildPendingJobsClient(
     jobs,
     (columns) => {
-      selectedColumns = columns;
+      selectedColumns.push(columns);
     },
     (column, operator, value) => {
       notFilters.push(`${column}:${operator}:${String(value)}`);
@@ -156,14 +164,17 @@ test("repair-jobs retires stale legacy rows and reports skip reasons", async () 
   );
   const body = await response.json();
 
-  assert.match(selectedColumns, /\btrigger_id\b/);
+  assert.equal(
+    selectedColumns.some((columns) => /\btrigger_id\b/.test(columns)),
+    true
+  );
   assert.deepEqual(notFilters, []);
-  assert.deepEqual(startedJobIds, ["job-1", "trigger-flow"]);
-  assert.equal(body.scanned, 4);
+  assert.deepEqual(startedJobIds, ["job-1", "assignment", "trigger-flow"]);
+  assert.equal(body.scanned, 5);
   assert.equal(body.skippedNotStale, 1);
   assert.equal(body.retireErrors, 0);
   assert.equal(body.retiredLegacy, 1);
-  assert.equal(body.started, 2);
+  assert.equal(body.started, 3);
   assert.equal(updates.length, 1);
   assert.equal(updates[0]?.status, "failed");
   assert.equal(updates[0]?.error, "Legacy job run source is not executable");

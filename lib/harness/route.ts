@@ -45,9 +45,6 @@ import { setupSkillCatalog } from "./_lib/skill-catalog";
 import { observeHarnessSkills } from "./_lib/skill-observation";
 import { buildHarnessFailureResponse } from "./_lib/failure";
 
-// Re-export for tests that import directly from route
-export { isClosedSandboxStreamError } from "./_lib/stream";
-
 export function createSandboxHarnessPostHandler(
   overrides: Partial<SandboxHarnessPostDeps> = {}
 ) {
