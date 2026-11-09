@@ -70,8 +70,8 @@ export function useConnections(opts: { repoId?: string } = {}) {
         },
         {
           // Revalidate after PATCH so server-computed fields like
-          // `resolved_mcp_count` refresh — otherwise the repo cap stays
-          // stale after a toggle (see PR #220 review).
+          // `resolved_mcp_count` refresh; the connections pane reads its MCP
+          // count from this same SWR key.
           revalidate: true,
           rollbackOnError: true,
           optimisticData: (
@@ -190,7 +190,6 @@ export function useConnections(opts: { repoId?: string } = {}) {
     connections,
     mcpServers,
     overrides: data?.overrides ?? [],
-    resolvedMcpCount: data?.resolved_mcp_count,
     isLoading,
     error: error as Error | undefined,
     refresh: () => mutate(),

@@ -254,7 +254,12 @@ test("should create an MCP connection however many the user already has", async 
     })
   );
   assert.equal(response.status, 201);
-  assert.equal(f.writes().length, 1);
+  // No read of existing connections: a count-then-reject check of any shape
+  // would have to query them first.
+  assert.deepEqual(
+    f.calls.map((call) => call.method),
+    ["POST"]
+  );
 });
 
 for (const method of ["PATCH", "DELETE"] as const) {
