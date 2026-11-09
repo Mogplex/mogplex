@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ReviewFinding } from "@/lib/types";
 import {
+  buildPrReviewCheckSummary,
   buildPrReviewCheckText,
   buildPrReviewCheckTitle,
   buildPrReviewStatusHeading,
@@ -76,5 +77,30 @@ describe("buildPrReviewCheckText", () => {
 
     expect(text).not.toContain("One-line verdict.");
     expect(text).toContain("**Warnings**");
+  });
+
+  it("should not repeat a summary that starts with a markdown heading", () => {
+    const base = report([finding("warning")]);
+    const harnessResult: PrReviewHarnessResult = {
+      ...base,
+      reviewOutcome: {
+        ...base.reviewOutcome,
+        summary: "## Verdict\n\nThe guard is missing.",
+      },
+    };
+    const shownSummary = buildPrReviewCheckSummary({
+      harnessResult,
+      fallbackText: null,
+      conclusion: "neutral",
+    });
+
+    const text = buildPrReviewCheckText({
+      harnessResult,
+      fallbackText: null,
+      conclusion: "neutral",
+      shownSummary,
+    });
+
+    expect(text).not.toContain("The guard is missing.");
   });
 });

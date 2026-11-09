@@ -53,6 +53,9 @@ export function getPrReviewAutoMergeBlockReason(input: {
   }
   // A warning or critical finding blocks the merge even when the model left
   // hasIssues false: the check run already treats that report as blocking.
+  // The reverse is deliberately stricter than the check: a report of
+  // suggestions only that the model still flagged hasIssues does not merge
+  // unattended, though its check is green. Relaxing that is a policy call.
   const blockingFinding = input.reviewOutcome?.findings?.some(
     (finding) => finding.severity !== "suggestion"
   );

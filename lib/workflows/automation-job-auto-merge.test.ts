@@ -48,6 +48,15 @@ describe("review verdict merge guards", () => {
         },
       })
     ).toBeNull();
+    expect(
+      getPrReviewAutoMergeBlockReason({
+        ...reviewed,
+        reviewOutcome: {
+          hasIssues: true,
+          findings: [{ ...finding, severity: "suggestion" }],
+        },
+      })
+    ).toBe("Mogplex review reported issues");
   });
   it("allows only a matching, filed clean report", () => {
     expect(

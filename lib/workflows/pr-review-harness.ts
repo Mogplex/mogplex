@@ -139,8 +139,12 @@ export function buildPrReviewCheckText(input: {
     reviewOutcome,
     fallbackText
   );
-  if (narrative && narrative.trim() !== input.shownSummary?.trim()) {
-    parts.push(demoteAgentMarkdownHeadings(narrative));
+  // The check summary is demoted too, so compare the demoted forms.
+  const shownNarrative = narrative
+    ? demoteAgentMarkdownHeadings(narrative)
+    : "";
+  if (shownNarrative && shownNarrative.trim() !== input.shownSummary?.trim()) {
+    parts.push(shownNarrative);
   }
 
   if ((reviewOutcome?.affectedFiles.length ?? 0) > 0) {

@@ -9,10 +9,7 @@ import {
   toCheckSummary,
   toCheckText,
 } from "./github-check-runs.internals";
-import {
-  parsePatchRightLines,
-  type PrChangedLines,
-} from "./workflows/pr-review-anchors";
+import { parsePatchRightLines, type PrChangedLines } from "./github-diff-lines";
 
 export const MOGPLEX_PR_REVIEW_CHECK_NAME = "Mogplex PR Review";
 export const MOGPLEX_PR_REVIEW_RERUN_ACTION = "rerun-pr-review";
