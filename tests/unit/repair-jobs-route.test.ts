@@ -54,6 +54,7 @@ function buildPendingJobsClient(
       onUpdate?.(updates);
       return query;
     },
+    in: () => query,
     order: () => query,
     limit: async () => ({ data: jobs, error: null }),
     then: (resolve: (result: { error: null }) => unknown) =>
@@ -159,9 +160,9 @@ test("repair-jobs retires stale legacy rows and reports skip reasons", async () 
   assert.deepEqual(notFilters, []);
   assert.deepEqual(startedJobIds, ["job-1", "trigger-flow"]);
   assert.equal(body.scanned, 4);
-  assert.equal(body.skipped, 1);
   assert.equal(body.skippedNotStale, 1);
-  assert.equal(body.failedUnsupported, 1);
+  assert.equal(body.retireErrors, 0);
+  assert.equal(body.retiredLegacy, 1);
   assert.equal(body.started, 2);
   assert.equal(updates.length, 1);
   assert.equal(updates[0]?.status, "failed");
@@ -194,9 +195,9 @@ test("repair-jobs returns consistent counters for an empty batch", async () => {
     started: 0,
     deferred: 0,
     failed: 0,
-    skipped: 0,
     skippedNotStale: 0,
-    failedUnsupported: 0,
+    retireErrors: 0,
+    retiredLegacy: 0,
   });
 });
 

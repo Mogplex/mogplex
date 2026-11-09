@@ -51,7 +51,8 @@ export function isRepairableJobRun(
 }
 
 // Trigger-only rows are display history, not restartable runs. Executable
-// runs carry flow_id, including flows launched by a trigger.
+// runs carry flow_id, including trigger-launched flows and manual retries,
+// which always copy it from their source before enqueue.
 export function isExecutableJobRunSource(
   run: Pick<JobRunStateFields, "flow_id" | "trigger_id">
 ) {

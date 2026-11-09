@@ -10,6 +10,7 @@ type RepairJobsHandlerDeps = {
   withSupabaseAdminConnection: typeof withSupabaseAdminConnection;
   startAutomationJobRun: typeof startAutomationJobRun;
   isRepairablePendingJob: typeof isRepairablePendingJob;
+  isExecutableJobRunSource: typeof isExecutableJobRunSource;
 };
 
 const defaultRepairJobsHandlerDeps: RepairJobsHandlerDeps = {
@@ -17,6 +18,7 @@ const defaultRepairJobsHandlerDeps: RepairJobsHandlerDeps = {
   withSupabaseAdminConnection,
   startAutomationJobRun,
   isRepairablePendingJob,
+  isExecutableJobRunSource,
 };
 
 export function createRepairJobsGetHandler(
@@ -59,19 +61,19 @@ export function createRepairJobsGetHandler(
           deps.isRepairablePendingJob(job)
         );
         const repairableJobs = staleJobs.filter((job) =>
-          isExecutableJobRunSource(job)
+          deps.isExecutableJobRunSource(job)
         );
         const unsupportedJobs = staleJobs.filter(
-          (job) => !isExecutableJobRunSource(job)
+          (job) => !deps.isExecutableJobRunSource(job)
         );
         const scanned = jobs?.length ?? 0;
         const skippedNotStale = scanned - staleJobs.length;
-        let failedUnsupported = 0;
-        let unsupportedErrors = 0;
+        let retiredLegacy = 0;
+        let retireErrors = 0;
 
         // Legacy rows cannot execute. Retire them so they leave pending queues
         // instead of accumulating ahead of repairable flow runs.
-        for (const job of unsupportedJobs) {
+        if (unsupportedJobs.length > 0) {
           try {
             const message = "Legacy job run source is not executable";
             const { error: updateError } = await adminClient
@@ -82,14 +84,17 @@ export function createRepairJobsGetHandler(
                 last_start_error: message,
                 completed_at: new Date().toISOString(),
               })
-              .eq("id", job.id)
+              .in(
+                "id",
+                unsupportedJobs.map((job) => job.id)
+              )
               .eq("status", "pending");
             if (updateError) throw new Error(updateError.message);
-            failedUnsupported += 1;
+            retiredLegacy = unsupportedJobs.length;
           } catch (error) {
-            unsupportedErrors += 1;
-            console.error("[job-repair] failed to retire legacy pending run", {
-              jobRunId: job.id,
+            retireErrors = unsupportedJobs.length;
+            console.error("[job-repair] failed to retire legacy pending runs", {
+              jobRunIds: unsupportedJobs.map((job) => job.id),
               error: error instanceof Error ? error.message : "Unknown error",
             });
           }
@@ -101,10 +106,10 @@ export function createRepairJobsGetHandler(
             scanned,
             started: 0,
             deferred: 0,
-            failed: unsupportedErrors,
-            skipped: skippedNotStale,
+            failed: retireErrors,
             skippedNotStale,
-            failedUnsupported,
+            retireErrors,
+            retiredLegacy,
           });
         }
 
@@ -157,15 +162,15 @@ export function createRepairJobsGetHandler(
         );
 
         return NextResponse.json({
-          message: `Scanned ${scanned} stale pending job(s)`,
+          message: `Scanned ${scanned} pending job(s); ${staleJobs.length} stale`,
           scanned,
           started: results.filter((result) => result.started).length,
           deferred: results.filter((result) => result.deferred).length,
           failed:
-            results.filter((result) => result.error).length + unsupportedErrors,
-          skipped: skippedNotStale,
+            results.filter((result) => result.error).length + retireErrors,
           skippedNotStale,
-          failedUnsupported,
+          retireErrors,
+          retiredLegacy,
           results,
         });
       });
