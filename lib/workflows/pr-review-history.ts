@@ -44,9 +44,9 @@ export type PrReviewHistory = {
 
 const STATE_PREFIX = "<!-- mogplex-review-state:";
 const STATE_PATTERN =
-  /<!-- mogplex-review-state:([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+) -->/;
+  /<!-- mogplex-review-state:([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+) -->/g;
 const FINDING_PATTERN =
-  /<!-- mogplex-finding:([a-f0-9]{8,64})\.([A-Za-z0-9_-]+) -->/;
+  /<!-- mogplex-finding:([a-f0-9]{8,64})\.([A-Za-z0-9_-]+) -->/g;
 const MOGPLEX_MARKER = "<!-- mogplex-";
 
 /**
@@ -76,15 +76,35 @@ function isStateFinding(value: unknown): value is PrReviewStateFinding {
   );
 }
 
+/**
+ * The first marker in `body` whose signature verifies. Marker-shaped text
+ * can appear earlier (a finding quoting one), so a non-verifying match is
+ * skipped rather than ending the search.
+ */
+function firstVerified(
+  body: string,
+  pattern: RegExp,
+  verify: (value: string, signature: string) => boolean
+) {
+  for (const match of body.matchAll(pattern)) {
+    if (verify(match[1], match[2])) return match[1];
+  }
+  return null;
+}
+
 export function parsePrReviewState(
   body: string | null,
   signer: PrReviewSigner
 ): PrReviewState | null {
-  const match = body ? STATE_PATTERN.exec(body) : null;
-  if (!match || !signer.verify(`state:${match[1]}`, match[2])) return null;
+  const encoded = body
+    ? firstVerified(body, STATE_PATTERN, (value, signature) =>
+        signer.verify(`state:${value}`, signature)
+      )
+    : null;
+  if (!encoded) return null;
   try {
     const value = JSON.parse(
-      Buffer.from(match[1], "base64url").toString("utf8")
+      Buffer.from(encoded, "base64url").toString("utf8")
     ) as Partial<PrReviewState>;
     if (typeof value.sha !== "string" || typeof value.reviewedAt !== "string")
       return null;
@@ -105,21 +125,41 @@ export function parsePrReviewState(
  * marked comment, even a copy of an earlier signed state from this PR, so
  * the latest review time wins rather than the latest comment.
  */
+/** A comment carrying the summary marker, as GitHub returned it. */
+export type PrReviewSummaryComment = { body: string; author: string | null };
+
+/**
+ * The newest verified state among the marked comments, with the author of
+ * the comment that holds it. Anyone can post a marked comment, even a copy
+ * of an earlier signed state from this PR, so the latest review time wins
+ * rather than the latest comment.
+ */
 export function newestPrReviewState(
-  bodies: string[],
+  comments: PrReviewSummaryComment[],
   signer: PrReviewSigner
-): PrReviewState | null {
-  let newest: PrReviewState | null = null;
-  for (const body of bodies) {
-    const state = parsePrReviewState(body, signer);
+): { state: PrReviewState; author: string | null } | null {
+  let newest: { state: PrReviewState; author: string | null } | null = null;
+  for (const comment of comments) {
+    const state = parsePrReviewState(comment.body, signer);
     if (
       state &&
-      (!newest || Date.parse(state.reviewedAt) > Date.parse(newest.reviewedAt))
+      (!newest ||
+        Date.parse(state.reviewedAt) > Date.parse(newest.state.reviewedAt))
     ) {
-      newest = state;
+      newest = { state, author: comment.author };
     }
   }
   return newest;
+}
+
+/** GitHub names an App "x[bot]" over REST and "x" over GraphQL. */
+function sameAccount(a: string | null | undefined, b: string | null) {
+  const login = (value: string | null | undefined) =>
+    (value ?? "")
+      .trim()
+      .toLowerCase()
+      .replace(/\[bot\]$/, "");
+  return login(a) !== "" && login(a) === login(b);
 }
 
 export function findingMarker(key: string, signer: PrReviewSigner) {
@@ -131,9 +171,9 @@ export function findingKeyOf(
   body: string,
   signer: PrReviewSigner
 ): string | null {
-  const match = FINDING_PATTERN.exec(body);
-  if (!match || !signer.verify(`finding:${match[1]}`, match[2])) return null;
-  return match[1];
+  return firstVerified(body, FINDING_PATTERN, (value, signature) =>
+    signer.verify(`finding:${value}`, signature)
+  );
 }
 
 const SEVERITY_LABEL = /^\*\*(Critical|Warning|Suggestion):\*\*\s*/i;
@@ -163,11 +203,17 @@ function threadSeverity(body: string): PrReviewStateFinding["severity"] {
 export function collectPriorFindings(
   state: PrReviewState,
   threads: PrReviewThread[],
-  signer: PrReviewSigner
+  signer: PrReviewSigner,
+  /** Who wrote the summary comment; only their threads are Mogplex's. */
+  owner: string | null
 ): PriorFinding[] {
   const threadsByKey = new Map<string, PrReviewThread>();
   for (const thread of threads) {
-    const key = findingKeyOf(thread.comments[0]?.body ?? "", signer);
+    const root = thread.comments[0];
+    // A signed marker can be copied into anyone's comment; the account
+    // that posts the reviews is what makes a thread ours.
+    if (!root || !sameAccount(root.author, owner)) continue;
+    const key = findingKeyOf(root.body, signer);
     if (!key) continue;
     // A key can own two threads: one a person resolved, and a newer one
     // posted when the finding came back. The open one is the live thread.
@@ -215,7 +261,7 @@ export function collectPriorFindings(
 
 export type LoadPrReviewHistoryDeps = {
   signer: PrReviewSigner;
-  readSummaryComments: () => Promise<string[]>;
+  readSummaryComments: () => Promise<PrReviewSummaryComment[]>;
   listThreads: () => Promise<PrReviewThread[]>;
   compare: (
     base: string
@@ -233,17 +279,18 @@ export async function loadPrReviewHistory(
   headSha: string,
   deps: LoadPrReviewHistoryDeps
 ): Promise<PrReviewHistory | null> {
-  const state = newestPrReviewState(
+  const latest = newestPrReviewState(
     await deps.readSummaryComments().catch((error: unknown) => {
       console.warn("[pr-review] history lookup failed", {
         lookup: "summary",
         error: error instanceof Error ? error.message : String(error),
       });
-      return [] as string[];
+      return [] as PrReviewSummaryComment[];
     }),
     deps.signer
   );
-  if (!state) return null;
+  if (!latest) return null;
+  const { state } = latest;
 
   // Each lookup that fails narrows the history; say so, or review memory
   // could degrade with no signal.
@@ -269,7 +316,12 @@ export async function loadPrReviewHistory(
     reviewedAt: state.reviewedAt,
     mode,
     changedFiles: incremental ? comparison.files : [],
-    findings: collectPriorFindings(state, threads ?? [], deps.signer),
+    findings: collectPriorFindings(
+      state,
+      threads ?? [],
+      deps.signer,
+      latest.author
+    ),
     conversation: (conversation ?? []).filter(
       (comment) => !comment.isBot && !comment.body.includes(MOGPLEX_MARKER)
     ),

@@ -19,6 +19,7 @@ export type IssueCommentResponse = {
   id?: number;
   html_url?: string | null;
   body?: string | null;
+  user?: { login?: string | null } | null;
 };
 
 export type TimelineCommentMatch = IssueCommentResponse & {
@@ -301,7 +302,7 @@ export async function findExistingTimelineComment(
 }
 
 /**
- * The bodies of every comment on a PR that carries `marker`, oldest first.
+ * Every comment on a PR that carries `marker`, oldest first, with its author.
  * Anyone can write the marker, so callers must check what they read.
  */
 export async function listTimelineCommentBodies(
@@ -312,8 +313,8 @@ export async function listTimelineCommentBodies(
     prNumber: number;
   },
   marker: string
-): Promise<string[]> {
-  const bodies: string[] = [];
+): Promise<Array<{ body: string; author: string | null }>> {
+  const bodies: Array<{ body: string; author: string | null }> = [];
   let lastPage = 1;
   for (let page = 1; page <= lastPage; page += 1) {
     const result = await listIssueCommentsPage({ ...input, page });
@@ -321,7 +322,10 @@ export async function listTimelineCommentBodies(
     if (page === 1) lastPage = result.lastPage;
     for (const comment of result.comments) {
       if (typeof comment.body === "string" && comment.body.includes(marker)) {
-        bodies.push(comment.body);
+        bodies.push({
+          body: comment.body,
+          author: comment.user?.login ?? null,
+        });
       }
     }
   }

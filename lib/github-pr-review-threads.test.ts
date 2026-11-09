@@ -84,6 +84,19 @@ describe("listPrReviewThreads", () => {
     });
   });
 
+  it("should stop when GitHub hands back the cursor it was given", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json(threadsPage(["t1"], "cursor-1")))
+      .mockResolvedValue(Response.json(threadsPage(["t2"], "cursor-1")));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const threads = await listPrReviewThreads(target);
+
+    expect(threads.map((thread) => thread.id)).toEqual(["t1", "t2"]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("should keep the root comment and the latest replies of a long thread", async () => {
     const long = {
       ...threadNode("t1"),

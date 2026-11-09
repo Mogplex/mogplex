@@ -7,7 +7,8 @@ export const MOGPLEX_REPLY_MARKER = "<!-- mogplex-reply -->";
 /** The most findings one native review report may carry. */
 export const PR_REVIEW_MAX_FINDINGS = 20;
 
-function newFindingKey(finding: ReviewFinding) {
+/** A key from the finding's own content. */
+export function newFindingKey(finding: ReviewFinding) {
   return createHash("sha256")
     .update(
       JSON.stringify([

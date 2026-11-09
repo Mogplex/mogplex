@@ -100,7 +100,10 @@ async function runReReview() {
       ]),
     reviewThreads: {
       readPrReviewTimelineComments: async () => [
-        `<!-- mogplex-pr-review -->\nOld review\n${serializePrReviewState(previousState, signer)}`,
+        {
+          body: `<!-- mogplex-pr-review -->\nOld review\n${serializePrReviewState(previousState, signer)}`,
+          author: "mogplex[bot]",
+        },
       ],
       listPrReviewThreads: async () => [
         thread("aaaaaaaaaaaa", "src/widget.ts", 14),

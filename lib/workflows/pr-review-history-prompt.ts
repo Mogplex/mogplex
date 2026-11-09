@@ -40,7 +40,7 @@ function describeState(finding: PriorFinding) {
 
 function describeFinding(finding: PriorFinding) {
   const location = finding.path
-    ? ` \`${finding.path}${finding.line == null ? "" : `:${finding.line}`}\``
+    ? ` \`${neutralize(finding.path)}${finding.line == null ? "" : `:${finding.line}`}\``
     : "";
   const lines = [
     `- ${finding.id} (${finding.severity}, ${describeState(finding)})${location}: ${neutralize(finding.title)}`,
@@ -76,7 +76,7 @@ export function buildPrReviewHistoryBlock(history: PrReviewHistory) {
       history.changedFiles.length > 0
         ? [
             `Since then, these files changed:`,
-            ...history.changedFiles.map((file) => `- \`${file}\``),
+            ...history.changedFiles.map((file) => `- \`${neutralize(file)}\``),
           ].join("\n")
         : "Since then, no files changed.",
       `Review those changes for new findings. Code that has not changed since ${sha} was already reviewed: report a new finding there only if it is critical.`

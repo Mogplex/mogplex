@@ -135,8 +135,12 @@ export async function listPrReviewThreads(input: {
         })),
       });
     }
-    if (!connection.pageInfo.hasNextPage) return threads;
-    after = connection.pageInfo.endCursor;
+    const next = connection.pageInfo.endCursor;
+    // A next page needs a new cursor; anything else would loop on one page.
+    if (!connection.pageInfo.hasNextPage || !next || next === after) {
+      return threads;
+    }
+    after = next;
   }
 }
 

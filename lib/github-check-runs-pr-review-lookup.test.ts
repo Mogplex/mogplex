@@ -206,11 +206,16 @@ describe("readPrReviewTimelineComments", () => {
   it("returns every comment carrying the review marker, oldest first", async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
       Response.json([
-        { id: 1, body: `${MOGPLEX_PR_REVIEW_TIMELINE_MARKER}\nOld review` },
+        {
+          id: 1,
+          body: `${MOGPLEX_PR_REVIEW_TIMELINE_MARKER}\nOld review`,
+          user: { login: "mogplex[bot]" },
+        },
         { id: 2, body: "A person's comment" },
         {
           id: 3,
           body: `> ${MOGPLEX_PR_REVIEW_TIMELINE_MARKER}\nA quoted copy`,
+          user: { login: "someone" },
         },
       ])
     );
@@ -223,8 +228,14 @@ describe("readPrReviewTimelineComments", () => {
     });
 
     expect(bodies).toEqual([
-      `${MOGPLEX_PR_REVIEW_TIMELINE_MARKER}\nOld review`,
-      `> ${MOGPLEX_PR_REVIEW_TIMELINE_MARKER}\nA quoted copy`,
+      {
+        body: `${MOGPLEX_PR_REVIEW_TIMELINE_MARKER}\nOld review`,
+        author: "mogplex[bot]",
+      },
+      {
+        body: `> ${MOGPLEX_PR_REVIEW_TIMELINE_MARKER}\nA quoted copy`,
+        author: "someone",
+      },
     ]);
   });
 
@@ -251,7 +262,9 @@ describe("readPrReviewTimelineComments", () => {
       prNumber: 12,
     });
 
-    expect(bodies).toEqual([`${MOGPLEX_PR_REVIEW_TIMELINE_MARKER}\nReview`]);
+    expect(bodies).toEqual([
+      { body: `${MOGPLEX_PR_REVIEW_TIMELINE_MARKER}\nReview`, author: null },
+    ]);
     expect(String(fetchMock.mock.calls[1]?.[0])).toContain("page=2");
   });
 });

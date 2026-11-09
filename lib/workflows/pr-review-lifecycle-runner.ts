@@ -20,6 +20,7 @@ import { createPrReviewSigner } from "./pr-review-signing";
 import {
   PR_REVIEW_MAX_FINDINGS,
   assignFindingKeys,
+  newFindingKey,
   planPrReviewThreads,
   type PrReviewThreadPlan,
 } from "./pr-review-lifecycle";
@@ -90,9 +91,9 @@ export function createPrReviewLifecycle(input: {
       history = await loadPrReviewHistory(headSha, {
         signer,
         readSummaryComments: async () => {
-          const bodies = await deps.readPrReviewTimelineComments(target);
-          previousState = newestPrReviewState(bodies, signer);
-          return bodies;
+          const comments = await deps.readPrReviewTimelineComments(target);
+          previousState = newestPrReviewState(comments, signer)?.state ?? null;
+          return comments;
         },
         listThreads: () => deps.listPrReviewThreads(target),
         compare: (base) =>
@@ -189,7 +190,7 @@ export function createPrReviewLifecycle(input: {
           reviewedAt: (startedAt ?? now()).toISOString(),
           findings: [
             ...report.findings.map((finding) => ({
-              key: keys.get(finding) ?? "",
+              key: keys.get(finding) ?? newFindingKey(finding),
               severity: finding.severity,
               title: finding.title,
               path: finding.path,

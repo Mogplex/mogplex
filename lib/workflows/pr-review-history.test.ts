@@ -60,6 +60,8 @@ const thread = (
   ...overrides,
 });
 
+const OWNER = "mogplex[bot]";
+
 const summaryWith = (value: PrReviewState) =>
   `<!-- mogplex-pr-review -->\nReview text\n${serializePrReviewState(value, signer)}`;
 
@@ -103,6 +105,23 @@ describe("PR review state", () => {
     expect(parsePrReviewState(summaryWith(state), otherSecret)).toBeNull();
   });
 
+  it("should skip marker-shaped text that precedes the signed marker", () => {
+    const decoyState =
+      "<!-- mogplex-review-state:e30.AAAAAAAAAAAAAAAAAAAAAA -->";
+    const decoyKey =
+      "<!-- mogplex-finding:ffffffffffff.AAAAAAAAAAAAAAAAAAAAAA -->";
+
+    expect(
+      parsePrReviewState(`${decoyState}\n${summaryWith(state)}`, signer)
+    ).toEqual(state);
+    expect(
+      findingKeyOf(
+        `${decoyKey}\n${findingMarker("aaaaaaaaaaaa", signer)}`,
+        signer
+      )
+    ).toBe("aaaaaaaaaaaa");
+  });
+
   it("should drop state findings with an unknown severity", () => {
     const parsed = parsePrReviewState(
       serializePrReviewState(
@@ -140,7 +159,12 @@ describe("PR review state", () => {
       "<!-- mogplex-pr-review -->\nno state",
     ];
 
-    expect(newestPrReviewState(bodies, signer)?.sha).toBe(state.sha);
+    const comments = bodies.map((body) => ({ body, author: "mogplex[bot]" }));
+
+    expect(newestPrReviewState(comments, signer)).toEqual({
+      state,
+      author: "mogplex[bot]",
+    });
     expect(newestPrReviewState([], signer)).toBeNull();
   });
 
@@ -193,7 +217,7 @@ describe("collectPriorFindings", () => {
       ],
     });
 
-    const findings = collectPriorFindings(state, [withReplies], signer);
+    const findings = collectPriorFindings(state, [withReplies], signer, OWNER);
 
     expect(findings.map((finding) => finding.id)).toEqual(["F1", "F2"]);
     expect(findings[0].thread?.id).toBe("thread-aaaaaaaaaaaa");
@@ -211,7 +235,7 @@ describe("collectPriorFindings", () => {
       [resolved, reopened],
       [reopened, resolved],
     ]) {
-      const [first] = collectPriorFindings(state, order, signer);
+      const [first] = collectPriorFindings(state, order, signer, OWNER);
       expect(first.thread?.id).toBe("new");
     }
   });
@@ -227,7 +251,7 @@ describe("collectPriorFindings", () => {
       ],
     });
 
-    const findings = collectPriorFindings(state, [critical], signer);
+    const findings = collectPriorFindings(state, [critical], signer, OWNER);
 
     expect(findings[2]).toMatchObject({
       severity: "critical",
@@ -246,7 +270,7 @@ describe("collectPriorFindings", () => {
       ],
     });
 
-    const findings = collectPriorFindings(state, [forged], signer);
+    const findings = collectPriorFindings(state, [forged], signer, OWNER);
 
     expect(findings.map((finding) => finding.key)).toEqual([
       "aaaaaaaaaaaa",
@@ -254,11 +278,36 @@ describe("collectPriorFindings", () => {
     ]);
   });
 
+  it("should ignore a signed marker copied into someone else's thread", () => {
+    const copied = thread("aaaaaaaaaaaa", { id: "copy" });
+    copied.comments[0] = { ...copied.comments[0], author: "someone" };
+
+    const [first] = collectPriorFindings(state, [copied], signer, OWNER);
+
+    expect(first.thread).toBeNull();
+  });
+
+  it("should match the app across REST and GraphQL login spellings", () => {
+    const [first] = collectPriorFindings(
+      state,
+      [thread("aaaaaaaaaaaa")],
+      signer,
+      "Mogplex[bot]"
+    );
+
+    expect(first.thread?.id).toBe("thread-aaaaaaaaaaaa");
+    expect(
+      collectPriorFindings(state, [thread("aaaaaaaaaaaa")], signer, null)[0]
+        .thread
+    ).toBeNull();
+  });
+
   it("should add Mogplex threads the state does not list so they can be closed", () => {
     const findings = collectPriorFindings(
       state,
       [thread("cccccccccccc"), thread("dddddddddddd", { comments: [] })],
-      signer
+      signer,
+      OWNER
     );
 
     expect(findings).toHaveLength(3);
@@ -275,7 +324,9 @@ const deps = (
   overrides: Partial<LoadPrReviewHistoryDeps> = {}
 ): LoadPrReviewHistoryDeps => ({
   signer,
-  readSummaryComments: async () => [summaryWith(state)],
+  readSummaryComments: async () => [
+    { body: summaryWith(state), author: OWNER },
+  ],
   listThreads: async () => [thread("aaaaaaaaaaaa")],
   compare: async () => ({
     status: "ahead",

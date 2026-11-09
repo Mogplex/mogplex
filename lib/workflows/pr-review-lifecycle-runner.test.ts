@@ -70,7 +70,10 @@ const threadDeps = (
   overrides: Partial<PrReviewThreadsDeps> = {}
 ): PrReviewThreadsDeps => ({
   readPrReviewTimelineComments: async () => [
-    `review\n${serializePrReviewState(previousState, signer)}`,
+    {
+      body: `review\n${serializePrReviewState(previousState, signer)}`,
+      author: "mogplex[bot]",
+    },
   ],
   listPrReviewThreads: async () => [
     thread("aaaaaaaaaaaa"),

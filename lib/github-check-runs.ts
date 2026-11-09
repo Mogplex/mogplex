@@ -249,15 +249,15 @@ export async function loadPullRequestChangedLines(input: {
 }
 
 /**
- * The bodies of every comment carrying the Mogplex review marker, oldest
- * first. Anyone can post the marker; readers pick the one whose signed state
+ * Every comment carrying the Mogplex review marker, oldest first, with its
+ * author. Anyone can post the marker; readers pick the one whose signed state
  * verifies and is newest.
  */
 export async function readPrReviewTimelineComments(input: {
   githubToken: string;
   repoFullName: string;
   prNumber: number;
-}): Promise<string[]> {
+}): Promise<Array<{ body: string; author: string | null }>> {
   const { owner, repo } = parseRepoFullName(input.repoFullName);
   return listTimelineCommentBodies(
     { githubToken: input.githubToken, owner, repo, prNumber: input.prNumber },

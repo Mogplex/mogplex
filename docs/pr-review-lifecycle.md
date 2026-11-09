@@ -48,7 +48,13 @@ another PR, means a first review, and a forged finding marker makes a
 thread someone else's. A copy within the same PR still verifies, so the
 reader looks at every comment carrying the summary marker and takes the
 verified state with the newest review time; an old copy cannot stand in for
-the latest review. Without the key, the lifecycle stays off and every
+the latest review. Within a comment the reader skips marker-shaped text that
+does not verify and takes the first marker that does, so text quoted ahead
+of the real marker cannot hide it. A signed finding marker can also be
+copied into another person's comment, so a thread counts as Mogplex's only
+when its first comment comes from the account that posted the summary
+holding the verified state (`x[bot]` over REST and `x` over GraphQL are the
+same account). Without the key, the lifecycle stays off and every
 review is a first review. Rotating the App private key resets review
 memory the same way: existing markers stop verifying, and the next review
 on each PR may post its findings inline again.
