@@ -85,14 +85,22 @@ function buildOptimisticModelsResponse(
   };
 }
 
+/**
+ * How long one save may take before it fails. Saves for a model run in order,
+ * so a request that never settles would otherwise hold back every later click.
+ */
+export const MODEL_PREFERENCE_SAVE_TIMEOUT_MS = 30_000;
+
 async function patchModelPreference(
   fetchFn: ModelsFetch,
   modelId: string,
   isEnabled: boolean,
-  activeTeamId: string | null
+  activeTeamId: string | null,
+  timeoutMs: number
 ) {
   const response = await fetchFn("/api/models", {
     method: "PATCH",
+    signal: AbortSignal.timeout(timeoutMs),
     headers: getActiveTeamRequestHeaders(
       {
         "Content-Type": "application/json",
@@ -143,6 +151,7 @@ export async function toggleModelPreference({
   activeTeamId = null,
   fetchFn = fetch,
   toastFn = toast,
+  saveTimeoutMs = MODEL_PREFERENCE_SAVE_TIMEOUT_MS,
 }: {
   modelId: string;
   enabled: boolean;
@@ -151,6 +160,7 @@ export async function toggleModelPreference({
   activeTeamId?: string | null;
   fetchFn?: ModelsFetch;
   toastFn?: ModelsToast;
+  saveTimeoutMs?: number;
 }) {
   const current = catalog.find((model) => model.id === modelId);
   if (current?.is_hidden === true) return;
@@ -160,8 +170,8 @@ export async function toggleModelPreference({
       (previous) => buildOptimisticModelsResponse(previous, modelId, value),
       false
     );
-  await applyOptimistic(enabled);
 
+  // Claim a place in line before any await, so click order decides it.
   const key = `${activeTeamId ?? "personal"}:${modelId}`;
   const queue = preferenceQueues.get(key) ?? {
     latest: 0,
@@ -172,11 +182,18 @@ export async function toggleModelPreference({
   const generation = ++queue.latest;
   queue.desired = enabled;
   const isNewest = () => generation === queue.latest;
+  const shown = applyOptimistic(enabled);
 
-  const step = queue.tail.then(async () => {
+  const step = Promise.all([queue.tail, shown]).then(async () => {
     if (!isNewest()) return;
     try {
-      await patchModelPreference(fetchFn, modelId, enabled, activeTeamId);
+      await patchModelPreference(
+        fetchFn,
+        modelId,
+        enabled,
+        activeTeamId,
+        saveTimeoutMs
+      );
     } catch (error) {
       if (!isNewest()) return;
       const rolledBack = await revalidateModelsWithFeedback(
