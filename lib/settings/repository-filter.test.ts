@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  activeOwnerRepos,
   filterRepositories,
   groupRepositoriesByOwner,
   repoOwner,
@@ -41,14 +42,11 @@ describe("filterRepositories", () => {
     expect(result.connected.map((r) => r.full_name)).toEqual(["alex/alpha"]);
   });
 
-  it("should count every connected repository of the owner regardless of search", () => {
-    const result = filterRepositories(REPOS, {
-      owner: "alex",
-      search: "no-such-repo",
-    });
-
-    expect(result.connected).toEqual([]);
-    expect(result.ownerConnectedCount).toBe(2);
+  it("should return every connected repository of the owner regardless of search", () => {
+    expect(activeOwnerRepos(REPOS, "alex").map((r) => r.full_name)).toEqual([
+      "alex/zeta",
+      "alex/alpha",
+    ]);
   });
 
   it("should prefer the stored owner over the name prefix", () => {
@@ -76,6 +74,16 @@ describe("splitByAppConnection", () => {
 
     expect(inventory.map((r) => r.full_name)).toEqual(["me/app"]);
     expect(notConnected.map((r) => r.full_name)).toEqual(["skhard99/docs"]);
+  });
+
+  it("should keep every repository while no repository is covered yet", () => {
+    const { inventory, notConnected } = splitByAppConnection([
+      row("me/app", false),
+      row("me/other", false),
+    ]);
+
+    expect(inventory).toHaveLength(2);
+    expect(notConnected).toEqual([]);
   });
 
   it("should keep every repository on an OAuth-only deployment", () => {

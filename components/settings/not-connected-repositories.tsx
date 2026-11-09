@@ -9,7 +9,7 @@ const noun = (count: number) => (count === 1 ? "repository" : "repositories");
  * Repositories without a GitHub App installation, kept out of the main list.
  * They came from the legacy OAuth sync of every repository the account could
  * see; GitHub sends Mogplex no webhooks for them, and the rest of the app
- * already hides them.
+ * hides them once any repository is covered (see `visibleScopedRepos`).
  */
 export function NotConnectedRepositories({
   repos,
@@ -42,6 +42,7 @@ export function NotConnectedRepositories({
           ariaLabel="Remove all not-connected repositories"
           title={`Remove ${count} not-connected ${noun(count)}?`}
           confirmLabel={`Remove ${count} ${noun(count)}`}
+          description="Nothing changes on GitHub. They stay hidden, and if you later install the GitHub App for these owners and sync, you can restore them from Show removed."
           disabled={removing}
           onConfirm={onRemoveAll}
         />

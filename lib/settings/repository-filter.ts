@@ -8,8 +8,6 @@ export function repoOwner(repo: Pick<Repo, "owner" | "full_name">) {
 /**
  * Split repositories for Settings → Repositories: those matching the owner
  * and search filters, sorted by name, into connected and removed lists.
- * `ownerConnectedCount` counts every connected repository of the selected
- * owner regardless of search, because bulk removal acts on all of them.
  */
 export function filterRepositories<
   T extends Pick<Repo, "owner" | "full_name" | "is_hidden">,
@@ -26,10 +24,17 @@ export function filterRepositories<
     connected: matches.filter((repo) => !repo.is_hidden),
     removed: matches.filter((repo) => repo.is_hidden),
     removedTotal: repos.filter((repo) => repo.is_hidden).length,
-    ownerConnectedCount: repos.filter(
-      (repo) => repoOwner(repo) === filters.owner && !repo.is_hidden
-    ).length,
   };
+}
+
+/**
+ * Every connected repository of `owner`, regardless of search: the set the
+ * owner-wide Remove all counts, confirms, and hides.
+ */
+export function activeOwnerRepos<
+  T extends Pick<Repo, "owner" | "full_name" | "is_hidden">,
+>(repos: T[], owner: string) {
+  return repos.filter((repo) => !repo.is_hidden && repoOwner(repo) === owner);
 }
 
 /**
@@ -39,7 +44,8 @@ export function filterRepositories<
  * every other surface already hides repositories without an installation
  * (see `visibleScopedRepos`); those came from the legacy OAuth sync of every
  * repository the account could see and never receive webhooks, so Settings
- * lists them apart. OAuth-only deployments keep every repository.
+ * lists them apart. OAuth-only deployments, and accounts with no covered
+ * repository yet, keep every repository, matching that fallback.
  */
 export function splitByAppConnection<
   T extends Pick<
@@ -47,11 +53,17 @@ export function splitByAppConnection<
     "github_app_covered" | "github_prefer_installation_coverage"
   >,
 >(repos: T[]) {
-  if (!repos.some((repo) => repo.github_prefer_installation_coverage)) {
+  const covered = repos.filter((repo) => repo.github_app_covered);
+  // Like visibleScopedRepos: with no covered repository yet (App installed,
+  // nothing synced through it), every repository stays listed.
+  if (
+    covered.length === 0 ||
+    !repos.some((repo) => repo.github_prefer_installation_coverage)
+  ) {
     return { inventory: repos, notConnected: [] as T[] };
   }
   return {
-    inventory: repos.filter((repo) => repo.github_app_covered),
+    inventory: covered,
     notConnected: repos.filter((repo) => !repo.github_app_covered),
   };
 }

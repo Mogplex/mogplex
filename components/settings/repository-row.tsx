@@ -21,6 +21,7 @@ export function ConfirmRemoveButton({
   ariaLabel,
   title,
   confirmLabel,
+  description = "Removed repositories disappear from Command Center and project pickers. Nothing changes on GitHub, and you can restore them from Show removed.",
   disabled,
   onConfirm,
 }: {
@@ -28,6 +29,8 @@ export function ConfirmRemoveButton({
   ariaLabel?: string;
   title: string;
   confirmLabel: string;
+  /** What removal means for this set, including how to undo it. */
+  description?: string;
   disabled?: boolean;
   onConfirm: () => void;
 }) {
@@ -48,11 +51,7 @@ export function ConfirmRemoveButton({
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
-          <AlertDialogDescription>
-            Removed repositories disappear from Command Center and project
-            pickers. Nothing changes on GitHub, and you can restore them from
-            Show removed.
-          </AlertDialogDescription>
+          <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>

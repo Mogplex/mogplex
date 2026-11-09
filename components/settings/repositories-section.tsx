@@ -14,6 +14,7 @@ import { scopedHref } from "@/lib/scoped-href";
 import { trackActivation } from "@/lib/activation-tracking";
 import { useUser } from "@/hooks/use-user";
 import {
+  activeOwnerRepos,
   filterRepositories,
   groupRepositoriesByOwner,
   repoOwner,
@@ -53,9 +54,7 @@ export function RepositoriesSection() {
     inventory,
     { owner, search }
   );
-  const ownerRepos = inventory.filter(
-    (repo) => !repo.is_hidden && repoOwner(repo) === owner
-  );
+  const ownerRepos = activeOwnerRepos(inventory, owner);
   const notConnectedRepos = notConnected.filter((repo) => !repo.is_hidden);
   const openSettings = (repo: Repo) => {
     setSettingsTab("env");

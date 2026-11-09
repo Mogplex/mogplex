@@ -166,10 +166,13 @@ test("repositories without the GitHub App stay out of the list and can be remove
   await notice
     .getByRole("button", { name: "Remove all not-connected repositories" })
     .click();
-  await page
-    .getByRole("alertdialog", { name: "Remove 1 not-connected repository?" })
-    .getByRole("button", { name: "Remove 1 repository" })
-    .click();
+  const dialog = page.getByRole("alertdialog", {
+    name: "Remove 1 not-connected repository?",
+  });
+  await expect(dialog).toContainText(
+    "if you later install the GitHub App for these owners and sync"
+  );
+  await dialog.getByRole("button", { name: "Remove 1 repository" }).click();
   await expect(notice).toHaveCount(0);
   expect(writes).toEqual([{ id: "fork", is_hidden: true }]);
 });
