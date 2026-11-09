@@ -1,1 +1,1 @@
-export * from "@/lib/sandbox/resume/route";
+export { POST } from "@/lib/sandbox/resume/route";

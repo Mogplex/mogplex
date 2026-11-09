@@ -98,7 +98,11 @@ test("POST /api/sandbox/[id]/restart preserves a stopped ephemeral workspace wit
   assert.equal(response.status, 409);
   assert.match((await response.json()).error, /Saved workspace is unavailable/);
   assert.deepEqual(releasedClaims, ["claim-restart-1"]);
-  assert.deepEqual(updates, [{ persistent: false }]);
+  assert.equal(updates.length, 3);
+  assert.equal(updates[0]?.status, "installing");
+  assert.equal(updates[1]?.status, "paused");
+  assert.equal(updates[1]?.limit_claim_id, null);
+  assert.deepEqual(updates[2], { persistent: false });
   assert.deepEqual(fetchBodies, []);
   assert.deepEqual(
     getSandboxOptions.map((option) => option.resume),
@@ -110,6 +114,7 @@ test("POST /api/sandbox/[id]/restart logs when non-persistent demotion loses the
   const { createSandboxRestartHandler } = await loadSandboxRestartRouteModule();
   const warnings: Array<Parameters<typeof console.warn>> = [];
   const originalConsoleWarn = console.warn;
+  let updateCount = 0;
   console.warn = (...args: Parameters<typeof console.warn>) => {
     warnings.push(args);
   };
@@ -155,7 +160,15 @@ test("POST /api/sandbox/[id]/restart logs when non-persistent demotion loses the
           },
           stop: async () => {},
         }) as never) as never,
-      updateSandboxRecord: (async () => null) as never,
+      updateSandboxRecord: (async (
+        _id: string,
+        updates: Record<string, unknown>
+      ) => {
+        updateCount += 1;
+        return updateCount === 3
+          ? null
+          : buildPersistedPersistentRestartRecord(updates);
+      }) as never,
       stopSandboxRecord: (async () => ({ id: "sandbox-1" }) as never) as never,
       fetchImpl: async () =>
         new Response(JSON.stringify({ ok: true }), {
@@ -377,9 +390,10 @@ test("POST /api/sandbox/[id]/restart retains the workspace when Vercel has no re
         { status: 404 }
       );
     }) as never,
-    updateSandboxRecord: (async () => {
-      throw new Error("updateSandboxRecord should not be called");
-    }) as never,
+    updateSandboxRecord: (async (
+      _id: string,
+      updates: Record<string, unknown>
+    ) => buildPersistedPersistentRestartRecord(updates)) as never,
     stopSandboxRecord: (async (
       _id: string,
       options: { stopReason?: unknown }

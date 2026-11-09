@@ -33,6 +33,7 @@ import {
   buildClientSnapshot,
   isActiveSandboxStatus,
   releaseSandboxBootLimitClaim,
+  releasePersistentRestartClaim,
 } from "./_lib/helpers";
 import { handleLegacyRestart } from "./_lib/legacy-restart";
 
@@ -89,93 +90,8 @@ async function handlePersistentRestart(
     limitClaimId = limitDecision.claimId ?? null;
   }
 
-  // Step 1: stop the current VM when it is already active
-  // (auto-snapshots on persistent), then wake it via resume:true to get a
-  // fresh session. Stopped/paused persistent VMs skip stop and must pass
-  // active admission before the wake.
-  let sandbox;
-  try {
-    const currentVm = await deps.getSandbox(
-      record.sandbox_id,
-      context.credentials,
-      {
-        resume: false,
-        onResume: async (resumedSandbox) => {
-          await deps.requireSandboxBillingSession(record.id, resumedSandbox);
-        },
-      }
-    );
-
-    if (isSandboxExplicitlyNonPersistent(currentVm)) {
-      await releaseSandboxBootLimitClaim(deps, auth.userId, limitClaimId);
-      await markSandboxRecordNonPersistent(deps, record);
-      return handleLegacyRestart(request, id, deps);
-    }
-
-    if (!needsWakeAdmission) {
-      // Restart immediately rotates this live provider session. Require the
-      // close barrier before stop so scheduled accrual cannot cross sessions.
-      const billingClose = await deps.prepareSandboxBillingClose(record.id);
-      let stopSucceeded = false;
-      try {
-        await currentVm.stop();
-        stopSucceeded = true;
-      } catch (stopErr) {
-        // Already stopped (e.g. user paused first) is fine; surface anything else.
-        console.warn(
-          `[sandbox/restart] stop() during persistent restart surfaced: ${
-            stopErr instanceof Error ? stopErr.message : String(stopErr)
-          }`
-        );
-      }
-      if (stopSucceeded) {
-        const providerSession = currentVm.currentSession();
-        const providerEndedAt =
-          providerSession.stoppedAt ?? providerSession.updatedAt ?? new Date();
-        // Finalize before waking the replacement so stopped boot time can
-        // never be charged to the predecessor. Failure remains fail-closed:
-        // the VM is stopped and reconciliation can finish this generation.
-        await deps.finalizeSandboxBillingClose(billingClose, providerEndedAt);
-      }
-    }
-
-    sandbox = await deps.getSandbox(record.sandbox_id, context.credentials, {
-      resume: true,
-      onResume: async (resumedSandbox) => {
-        await deps.requireSandboxBillingSession(record.id, resumedSandbox);
-      },
-    });
-    await deps.requireSandboxBillingSession(record.id, sandbox);
-  } catch (err) {
-    await releaseSandboxBootLimitClaim(deps, auth.userId, limitClaimId);
-    if (isNotFoundError(err)) {
-      // Vercel no longer has a resumable sandbox behind this name (its last
-      // session and snapshot expired). Nothing can be woken, so retire the
-      // record and relaunch through the collection route, which reconciles
-      // the stale provider name before creating a replacement.
-      console.info(
-        "[sandbox/restart] provider sandbox gone; relaunching through legacy restart",
-        { sandboxRecordId: record.id, sandboxId: record.sandbox_id }
-      );
-      return handleLegacyRestart(request, id, deps);
-    }
-    const billingError = presentSandboxBillingAdmissionError(err);
-    const message =
-      billingError?.message ??
-      (err instanceof Error
-        ? err.message
-        : "Failed to wake sandbox for restart");
-    return NextResponse.json(
-      { error: message },
-      { status: billingError?.status ?? 502 }
-    );
-  }
-
-  // Step 2: transition the record to installing so UI overlays show
-  // the restart-in-progress state. We accept transitions from any
-  // active status since user can hit Restart on running/error/idle.
-  // Clear stop_reason so a previously-stopped record doesn't carry a
-  // stale reason (e.g. "idle_timeout") while it is actively running.
+  // Claim before touching the provider: a concurrent loser must never stop
+  // the workspace that the winning restart or resume is bootstrapping.
   let installingRecord: PersistentRestartRecord | null;
   const restartStartedAt = new Date().toISOString();
   try {
@@ -187,8 +103,6 @@ async function handlePersistentRestart(
         health_status: "starting",
         stop_reason: null,
         stopped_at: null,
-        // A persistent name survives across provider sessions. The reaper
-        // must measure this boot, not the age of a previous stopped VM.
         last_boot_started_at: restartStartedAt,
         last_boot_completed_at: null,
         last_active_at: new Date().toISOString(),
@@ -207,24 +121,117 @@ async function handlePersistentRestart(
 
   if (!installingRecord) {
     await releaseSandboxBootLimitClaim(deps, auth.userId, limitClaimId);
-    await stopSandboxAfterLifecycleConflict(
-      sandbox,
-      record.id,
-      "restart",
-      deps
-    );
     return buildLifecycleConflictResponse(
       "Sandbox restart was cancelled before it started."
     );
   }
 
+  const releaseRestartClaim = () =>
+    releasePersistentRestartClaim(deps, {
+      userId: auth.userId,
+      record,
+      limitClaimId,
+      restartStartedAt,
+    });
+
+  // Stop the current VM when it is already active, then wake it via
+  // resume:true. Stopped/paused persistent VMs skip stop and pass admission
+  // before the wake.
+  let sandbox;
+  try {
+    const currentVm = await deps.getSandbox(
+      record.sandbox_id,
+      context.credentials,
+      {
+        resume: false,
+        onResume: async (resumedSandbox) => {
+          await deps.requireSandboxBillingSession(record.id, resumedSandbox);
+        },
+      }
+    );
+
+    if (isSandboxExplicitlyNonPersistent(currentVm)) {
+      await releaseRestartClaim();
+      await markSandboxRecordNonPersistent(deps, record);
+      return handleLegacyRestart(request, id, deps);
+    }
+
+    if (!needsWakeAdmission) {
+      const billingClose = await deps.prepareSandboxBillingClose(record.id);
+      let stopSucceeded = false;
+      try {
+        await currentVm.stop();
+        stopSucceeded = true;
+      } catch (stopErr) {
+        console.warn(
+          `[sandbox/restart] stop() during persistent restart surfaced: ${
+            stopErr instanceof Error ? stopErr.message : String(stopErr)
+          }`
+        );
+      }
+      if (stopSucceeded) {
+        const providerSession = currentVm.currentSession();
+        const providerEndedAt =
+          providerSession.stoppedAt ?? providerSession.updatedAt ?? new Date();
+        await deps.finalizeSandboxBillingClose(billingClose, providerEndedAt);
+      }
+    }
+
+    sandbox = await deps.getSandbox(record.sandbox_id, context.credentials, {
+      resume: true,
+      onResume: async (resumedSandbox) => {
+        await deps.requireSandboxBillingSession(record.id, resumedSandbox);
+      },
+    });
+    await deps.requireSandboxBillingSession(record.id, sandbox);
+  } catch (err) {
+    if (sandbox) {
+      await stopSandboxAfterLifecycleConflict(
+        sandbox,
+        record.id,
+        "wake failure",
+        deps
+      );
+    }
+    await releaseRestartClaim();
+    if (isNotFoundError(err)) {
+      console.info(
+        "[sandbox/restart] provider sandbox gone; relaunching through legacy restart",
+        { sandboxRecordId: record.id, sandboxId: record.sandbox_id }
+      );
+      return handleLegacyRestart(request, id, deps);
+    }
+    const billingError = presentSandboxBillingAdmissionError(err);
+    const message =
+      billingError?.message ??
+      (err instanceof Error
+        ? err.message
+        : "Failed to wake sandbox for restart");
+    return NextResponse.json(
+      { error: message },
+      { status: billingError?.status ?? 502 }
+    );
+  }
+
   const repo = record.repo;
-  const envResolution = await deps.resolveRepoSandboxEnv({
-    repo: repo as unknown as Parameters<
-      typeof resolveRepoSandboxEnv
-    >[0]["repo"],
-    userId: auth.userId,
-  });
+  let envResolution: Awaited<ReturnType<typeof resolveRepoSandboxEnv>>;
+  try {
+    envResolution = await deps.resolveRepoSandboxEnv({
+      repo: repo as unknown as Parameters<
+        typeof resolveRepoSandboxEnv
+      >[0]["repo"],
+      userId: auth.userId,
+    });
+  } catch (error) {
+    await stopSandboxAfterLifecycleConflict(
+      sandbox,
+      record.id,
+      "environment failure",
+      deps
+    );
+    await releaseRestartClaim();
+    throw error;
+  }
 
   const encoder = new TextEncoder();
   let cancelled = false;

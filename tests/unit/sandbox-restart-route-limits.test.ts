@@ -82,6 +82,10 @@ test("POST /api/sandbox/[id]/restart releases inactive wake claims when resuming
     getSandbox: async () => {
       throw new Error("vm unavailable");
     },
+    updateSandboxRecord: (async (
+      _id: string,
+      updates: Record<string, unknown>
+    ) => buildPersistedPersistentRestartRecord(updates)) as never,
     releaseLimitClaim: (async (input: { claimId: string }) => {
       releasedClaims.push(input.claimId);
       return true;

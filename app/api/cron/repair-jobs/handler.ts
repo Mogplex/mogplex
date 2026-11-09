@@ -42,7 +42,6 @@ export function createRepairJobsGetHandler(
             "id, status, flow_id, trigger_id, created_at, started_at, last_start_attempt_at"
           )
           .eq("status", "pending")
-          .not("flow_id", "is", null)
           .order("created_at", { ascending: true })
           .limit(250);
 
@@ -56,26 +55,56 @@ export function createRepairJobsGetHandler(
           );
         }
 
-        // Legacy assignment and trigger-only rows are not restartable without
-        // a flow; trigger-launched flows repair through their flow context.
-        const executableJobs = (jobs || []).filter((job) =>
-          isExecutableJobRunSource(job)
-        );
-        const repairableJobs = executableJobs.filter((job) =>
+        const staleJobs = (jobs || []).filter((job) =>
           deps.isRepairablePendingJob(job)
         );
+        const repairableJobs = staleJobs.filter((job) =>
+          isExecutableJobRunSource(job)
+        );
+        const unsupportedJobs = staleJobs.filter(
+          (job) => !isExecutableJobRunSource(job)
+        );
         const scanned = jobs?.length ?? 0;
-        const skippedNotStale = executableJobs.length - repairableJobs.length;
+        const skippedNotStale = scanned - staleJobs.length;
+        let failedUnsupported = 0;
+        let unsupportedErrors = 0;
+
+        // Legacy rows cannot execute. Retire them so they leave pending queues
+        // instead of accumulating ahead of repairable flow runs.
+        for (const job of unsupportedJobs) {
+          try {
+            const message = "Legacy job run source is not executable";
+            const { error: updateError } = await adminClient
+              .from("job_runs")
+              .update({
+                status: "failed",
+                error: message,
+                last_start_error: message,
+                completed_at: new Date().toISOString(),
+              })
+              .eq("id", job.id)
+              .eq("status", "pending");
+            if (updateError) throw new Error(updateError.message);
+            failedUnsupported += 1;
+          } catch (error) {
+            unsupportedErrors += 1;
+            console.error("[job-repair] failed to retire legacy pending run", {
+              jobRunId: job.id,
+              error: error instanceof Error ? error.message : "Unknown error",
+            });
+          }
+        }
 
         if (repairableJobs.length === 0) {
           return NextResponse.json({
-            message: "No stale pending jobs",
+            message: "No repairable pending jobs",
             scanned,
             started: 0,
             deferred: 0,
-            failed: 0,
+            failed: unsupportedErrors,
             skipped: skippedNotStale,
             skippedNotStale,
+            failedUnsupported,
           });
         }
 
@@ -132,9 +161,11 @@ export function createRepairJobsGetHandler(
           scanned,
           started: results.filter((result) => result.started).length,
           deferred: results.filter((result) => result.deferred).length,
-          failed: results.filter((result) => result.error).length,
+          failed:
+            results.filter((result) => result.error).length + unsupportedErrors,
           skipped: skippedNotStale,
           skippedNotStale,
+          failedUnsupported,
           results,
         });
       });

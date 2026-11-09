@@ -37,7 +37,8 @@ const defaultPendingJobs: PendingJob[] = [
 function buildPendingJobsClient(
   jobs: PendingJob[] = defaultPendingJobs,
   onSelect?: (columns: string) => void,
-  onNot?: (column: string, operator: string, value: unknown) => void
+  onNot?: (column: string, operator: string, value: unknown) => void,
+  onUpdate?: (updates: Record<string, unknown>) => void
 ) {
   const query = {
     select: (columns: string) => {
@@ -49,8 +50,14 @@ function buildPendingJobsClient(
       onNot?.(column, operator, value);
       return query;
     },
+    update: (updates: Record<string, unknown>) => {
+      onUpdate?.(updates);
+      return query;
+    },
     order: () => query,
     limit: async () => ({ data: jobs, error: null }),
+    then: (resolve: (result: { error: null }) => unknown) =>
+      Promise.resolve({ error: null }).then(resolve),
   };
   return {
     from: (table: string) => {
@@ -106,7 +113,7 @@ test("repair-jobs keeps loading and nested starts inside one admin connection", 
   assert.equal(body.failed, 0);
 });
 
-test("repair-jobs filters sources in SQL and reports skip reasons", async () => {
+test("repair-jobs retires stale legacy rows and reports skip reasons", async () => {
   const jobs = [
     defaultPendingJobs[0]!,
     { ...defaultPendingJobs[1]!, id: "legacy", flow_id: null },
@@ -119,6 +126,7 @@ test("repair-jobs filters sources in SQL and reports skip reasons", async () => 
   ];
   let selectedColumns = "";
   const notFilters: string[] = [];
+  const updates: Record<string, unknown>[] = [];
   const adminClient = buildPendingJobsClient(
     jobs,
     (columns) => {
@@ -126,6 +134,9 @@ test("repair-jobs filters sources in SQL and reports skip reasons", async () => 
     },
     (column, operator, value) => {
       notFilters.push(`${column}:${operator}:${String(value)}`);
+    },
+    (update) => {
+      updates.push(update);
     }
   );
   const startedJobIds: string[] = [];
@@ -145,12 +156,16 @@ test("repair-jobs filters sources in SQL and reports skip reasons", async () => 
   const body = await response.json();
 
   assert.match(selectedColumns, /\btrigger_id\b/);
-  assert.deepEqual(notFilters, ["flow_id:is:null"]);
+  assert.deepEqual(notFilters, []);
   assert.deepEqual(startedJobIds, ["job-1", "trigger-flow"]);
   assert.equal(body.scanned, 4);
   assert.equal(body.skipped, 1);
   assert.equal(body.skippedNotStale, 1);
+  assert.equal(body.failedUnsupported, 1);
   assert.equal(body.started, 2);
+  assert.equal(updates.length, 1);
+  assert.equal(updates[0]?.status, "failed");
+  assert.equal(updates[0]?.error, "Legacy job run source is not executable");
 });
 
 test("repair-jobs returns consistent counters for an empty batch", async () => {
@@ -174,13 +189,14 @@ test("repair-jobs returns consistent counters for an empty batch", async () => {
   );
 
   assert.deepEqual(await response.json(), {
-    message: "No stale pending jobs",
+    message: "No repairable pending jobs",
     scanned: 0,
     started: 0,
     deferred: 0,
     failed: 0,
     skipped: 0,
     skippedNotStale: 0,
+    failedUnsupported: 0,
   });
 });
 

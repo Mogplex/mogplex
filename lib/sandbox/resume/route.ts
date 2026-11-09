@@ -258,7 +258,11 @@ export function createSandboxResumeHandler(
       async start(controller) {
         const emit = (event: SandboxEvent | SandboxLifecycleConflictEvent) => {
           if (disconnected) return;
-          controller.enqueue(encoder.encode(sseEncode(event)));
+          try {
+            controller.enqueue(encoder.encode(sseEncode(event)));
+          } catch {
+            disconnected = true;
+          }
         };
 
         // Seed the client with the current record so it can bind UI

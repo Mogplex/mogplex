@@ -95,8 +95,7 @@ export async function loadSandboxPauseRouteModule() {
 
 export async function loadSandboxResumeRouteModule() {
   ensureSandboxRouteTestEnv();
-  const routeModule =
-    await import("../../../app/api/sandbox/[id]/resume/route");
+  const routeModule = await import("../../../lib/sandbox/resume/route");
   return {
     ...routeModule,
     createSandboxResumeHandler: (
