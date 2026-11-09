@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { recordInstallationRepoSync } from "@/lib/github-repo-sync-stamp";
 import { isGithubOAuthRepositoryAccessAllowed } from "@/lib/github-repository-auth";
 import { filterVisibleGithubRepos } from "@/lib/github-repo-visibility";
 import { filterAuthorizedTeamGithubRepos } from "@/lib/github-team-repo-visibility";
@@ -405,6 +406,7 @@ export async function syncGithubInstallationReposForUser(
     githubInstallationId: installationId,
     productTeamId: options.productTeamId,
   });
+  await recordInstallationRepoSync(userId, installationId);
 
   if (!options.productTeamId) {
     const rebound = await rebindStaleAutomationInstallationBindingsForUser(

@@ -7,6 +7,12 @@ async function loadGithubSync() {
   return import("../../lib/github-sync");
 }
 
+async function loadSyncStamp() {
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||= "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||= "test-service-role-key";
+  return import("../../lib/github-repo-sync-stamp");
+}
+
 test("rebindStaleAutomationInstallationBindingsForUser updates stale flows and triggers when one current installation remains", async () => {
   const { rebindStaleAutomationInstallationBindingsForUser } =
     await loadGithubSync();
@@ -147,5 +153,39 @@ test("filterVisibleGithubRepos does not restore OAuth-only rows when App coverag
   assert.deepEqual(
     filterVisibleGithubRepos(repos, { preferInstallationCoverage: false }),
     repos
+  );
+});
+
+test("recordInstallationRepoSync stamps the synced installation with the current time", async () => {
+  const { recordInstallationRepoSync } = await loadSyncStamp();
+  const calls: unknown[][] = [];
+
+  await recordInstallationRepoSync("user-123", 42, {
+    markSynced: async (...args) => {
+      calls.push(args);
+      return { error: null };
+    },
+    now: () => new Date("2026-11-09T12:00:00Z"),
+  });
+
+  assert.deepEqual(calls, [["user-123", 42, "2026-11-09T12:00:00.000Z"]]);
+});
+
+test("recordInstallationRepoSync never fails the sync when the stamp cannot be written", async () => {
+  const { recordInstallationRepoSync } = await loadSyncStamp();
+
+  await assert.doesNotReject(
+    recordInstallationRepoSync("user-123", 42, {
+      markSynced: async () => ({ error: { message: "column missing" } }),
+      now: () => new Date(),
+    })
+  );
+  await assert.doesNotReject(
+    recordInstallationRepoSync("user-123", 42, {
+      markSynced: async () => {
+        throw new Error("network");
+      },
+      now: () => new Date(),
+    })
   );
 });

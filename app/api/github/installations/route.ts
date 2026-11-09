@@ -12,6 +12,7 @@ type GithubInstallationRow = {
   account_login: string | null;
   account_type: string | null;
   target_type: string | null;
+  repos_synced_at?: string | null;
 };
 
 type GithubInstallationRepoRow = {
@@ -112,7 +113,9 @@ const defaultGithubInstallationsRouteDeps: GithubInstallationsRouteDeps = {
   async loadInstallations(userId) {
     const { data, error } = await supabaseAdmin
       .from("github_installations")
-      .select("id, installation_id, account_login, account_type, target_type")
+      .select(
+        "id, installation_id, account_login, account_type, target_type, repos_synced_at"
+      )
       .eq("user_id", userId)
       .order("created_at", { ascending: false });
 
