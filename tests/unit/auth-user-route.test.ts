@@ -341,7 +341,8 @@ for (const checked of [false, true]) {
         discovered: 0,
         checked,
       }),
-      getOAuthToken: async () => null,
+      getOAuthToken: async (_userId: string, provider: string) =>
+        provider === "github" ? "github-fixture" : null,
       hasOAuthToken: async () => false,
       migrateLegacyOAuthTokensForUser: async () => {},
       getPlatformVercelServiceState: () => ({
@@ -357,3 +358,52 @@ for (const checked of [false, true]) {
       assert.equal((skip[0]?.options as { sameSite?: string }).sameSite, "lax");
   });
 }
+
+test("GET /api/auth/user skips GitHub discovery for a user with no GitHub token", async () => {
+  const { createAuthUserHandler } = await loadAuthUserRoute();
+  let reconciled = false;
+
+  const response = await createAuthUserHandler({
+    getResolvedAuth: async () => ({
+      profileId: "user-123",
+      authUserId: "auth-123",
+      source: "better-auth",
+    }),
+    getCookies: async () => ({
+      get: () => undefined,
+      set: () => {},
+      delete: () => {},
+    }),
+    loadUserProfile: async () => ({
+      id: "user-123",
+      email: "dev@example.com",
+      username: "dev",
+      name: "Dev User",
+      avatar_url: null,
+      github_username: null,
+      allow_platform_ai: false,
+      allow_platform_sandbox: false,
+    }),
+    loadInstallationCount: async () => 0,
+    loadSyncedRepoCount: async () => 0,
+    loadCoveredRepoCount: async () => 0,
+    loadRepoLinkedProjectCount: async () => 0,
+    loadWorkspaceLinkedProjectCount: async () => 0,
+    loadAccountDefaultVercelProject: async () => null,
+    hasGithubAppConfig: () => true,
+    reconcileGithubInstallationsForUser: async () => {
+      reconciled = true;
+      return { discovered: 0, checked: false };
+    },
+    getOAuthToken: async () => null,
+    hasOAuthToken: async () => false,
+    migrateLegacyOAuthTokensForUser: async () => {},
+    getPlatformVercelServiceState: () => ({
+      platformState: "ready",
+      canUsePlatformOps: true,
+    }),
+  } as never)();
+
+  assert.equal(response.status, 200);
+  assert.equal(reconciled, false);
+});

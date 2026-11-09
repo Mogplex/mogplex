@@ -235,7 +235,9 @@ export function createAuthUserHandler(
     let coveredRepoCount = initialCoveredRepoCount;
     const reconcileSkip =
       cookieStore.get("github_reconcile_skip")?.value === "1";
+    // Discovery needs the user's GitHub token; without one it can find nothing.
     if (
+      githubToken &&
       installationCount === 0 &&
       coveredRepoCount === 0 &&
       githubAppAvailable &&
