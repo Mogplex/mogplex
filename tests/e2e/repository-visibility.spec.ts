@@ -47,21 +47,31 @@ test("repositories without the GitHub App stay out of the list and can be remove
   const notice = page.getByRole("region", {
     name: "Not connected repositories",
   });
-  await expect(notice.getByText("1 repository not connected")).toBeVisible();
-  await notice.getByText("Show repository").click();
-  await expect(notice.getByText("skhard99/docs")).toBeVisible();
+  await expect(notice.getByText("2 repositories not connected")).toBeVisible();
+  await notice.getByText("Show repositories").click();
+  // An owner with the App installed is told the repository isn't selected,
+  // not that the App is missing.
+  await expect(
+    notice.getByRole("listitem").filter({ hasText: "alex/legacy" })
+  ).toContainText("not selected in the GitHub App's repository access");
+  await expect(
+    notice.getByRole("listitem").filter({ hasText: "skhard99/docs" })
+  ).toContainText("GitHub App not installed for this owner");
   await notice
     .getByRole("button", { name: "Remove all not-connected repositories" })
     .click();
   const dialog = page.getByRole("alertdialog", {
-    name: "Remove 1 not-connected repository?",
+    name: "Remove 2 not-connected repositories?",
   });
   await expect(dialog).toContainText(
-    "if you later install the GitHub App for these owners and sync"
+    "add them to an existing installation's repository access"
   );
-  await dialog.getByRole("button", { name: "Remove 1 repository" }).click();
+  await dialog.getByRole("button", { name: "Remove 2 repositories" }).click();
   await expect(notice).toHaveCount(0);
-  expect(writes).toEqual([{ id: "fork", is_hidden: true }]);
+  expect(writes).toEqual([
+    { id: "alex-legacy", is_hidden: true },
+    { id: "fork", is_hidden: true },
+  ]);
 });
 
 test("remove owner persists, and a removed repository can be restored", async ({
@@ -286,14 +296,14 @@ test("the not-connected card waits for filters to clear and shows removal progre
     .getByRole("button", { name: "Remove all not-connected repositories" })
     .click();
   await page
-    .getByRole("alertdialog", { name: "Remove 1 not-connected repository?" })
-    .getByRole("button", { name: "Remove 1 repository" })
+    .getByRole("alertdialog", { name: "Remove 2 not-connected repositories?" })
+    .getByRole("button", { name: "Remove 2 repositories" })
     .click();
   await expect(
     notice.getByRole("button", {
       name: "Remove all not-connected repositories",
     })
-  ).toHaveText("Removing 0/1…");
+  ).toHaveText("Removing 0/2…");
   release();
   await expect(notice).toHaveCount(0);
 });

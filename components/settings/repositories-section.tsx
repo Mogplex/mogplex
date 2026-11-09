@@ -17,6 +17,7 @@ import {
   activeOwnerRepos,
   filterRepositories,
   groupRepositoriesByOwner,
+  notConnectedReasons,
   repoOwner,
   splitByAppConnection,
 } from "@/lib/settings/repository-filter";
@@ -257,7 +258,7 @@ export function RepositoriesSection() {
       owner === "all" &&
       notConnectedRepos.length > 0 ? (
         <NotConnectedRepositories
-          repos={notConnectedRepos}
+          repos={notConnectedReasons(notConnectedRepos, admin.repos)}
           removing={admin.removingOwner}
           removingLabel={removingLabel}
           onRemoveAll={() =>

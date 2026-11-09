@@ -33,6 +33,10 @@ export function RepositoryOwnerGroup({
         <img
           src={`https://github.com/${encodeURIComponent(owner)}.png?size=40`}
           alt=""
+          width={20}
+          height={20}
+          loading="lazy"
+          decoding="async"
           className="bg-accent size-5 shrink-0 rounded-sm"
         />
         <h2 className="text-foreground text-sm font-medium">

@@ -82,6 +82,16 @@ export async function dashboard(
       github_installation_id: 13,
     },
     {
+      // The App is installed for alex, but its repository access leaves
+      // this one out.
+      id: "alex-legacy",
+      name: "legacy",
+      full_name: "alex/legacy",
+      owner: "alex",
+      is_hidden: false,
+      ...legacy,
+    },
+    {
       id: "fork",
       name: "docs",
       full_name: "skhard99/docs",
