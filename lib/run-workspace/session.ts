@@ -2,7 +2,7 @@ import type { Session } from "@/hooks/session-types";
 import { buildWorkspaceSession } from "@/hooks/session-helpers";
 import { createWorkspaceTree } from "@/hooks/split-panes-factories";
 import { collectPanes, type TreeNode } from "@/hooks/split-panes-types";
-import { updatePaneNode } from "@/hooks/use-split-panes";
+import { updatePaneNode } from "@/hooks/split-panes-tree-ops";
 import type { RunWorkspaceContext } from "./types";
 
 /** Navigation binds only. It never starts, resumes, or replaces a sandbox. */

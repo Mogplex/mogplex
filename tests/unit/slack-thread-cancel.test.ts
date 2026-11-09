@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test, { after } from "node:test";
-import { buildSlackThreadConcurrencyKey } from "../../app/api/webhooks/slack/_lib/event-types";
+import { buildSlackThreadConcurrencyKey } from "../../lib/slack/webhooks/event-types";
 import { buildRunRow } from "./helpers/mogplex-api-runs-fixtures";
 import { presentMogplexApiRun } from "../../lib/mogplex-api/runs";
 import {

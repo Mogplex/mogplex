@@ -6,6 +6,7 @@ import {
 import { coerceGraph, getStartConfig } from "@/lib/flows/graph";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import type { JobRunRow } from "@/lib/job-run-service";
+import { isExecutableJobRunSource } from "@/lib/job-runs";
 
 export type JobRunRetryContext = {
   run: JobRunRow;
@@ -320,6 +321,9 @@ export function createEnqueueJobRunRetry(
     versionMode: JobRunRetryVersionMode;
     metadataPatch?: Record<string, unknown>;
   }) {
+    if (!isExecutableJobRunSource(input.retryContext.run)) {
+      throw new Error("Job run source is not executable");
+    }
     const existingMetadata = input.retryContext.metadata ?? undefined;
     const metadataPatch = input.metadataPatch ?? undefined;
     const retryMetadata: Record<string, unknown> = {

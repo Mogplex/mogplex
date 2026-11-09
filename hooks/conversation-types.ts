@@ -1,21 +1,17 @@
 import type { UIMessage } from "ai";
+import type {
+  LocalMessageSegment,
+  LocalToolCall,
+} from "@/lib/harness/output-types";
+
+export type {
+  LocalMessageSegment,
+  LocalToolCall,
+  LocalToolCallState,
+} from "@/lib/harness/output-types";
 
 export type Message = UIMessage;
 export type HarnessId = "claude-code" | "codex";
-
-export type LocalToolCallState = "running" | "done" | "error" | "denied";
-
-export type LocalToolCall = {
-  id: string;
-  name: string;
-  input?: unknown;
-  output?: unknown;
-  state: LocalToolCallState;
-};
-
-export type LocalMessageSegment =
-  | { type: "text"; text: string }
-  | { type: "tool-call"; toolCall: LocalToolCall };
 
 export type LocalMessage = {
   id: string;

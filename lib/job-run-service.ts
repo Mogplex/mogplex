@@ -4,6 +4,7 @@ import {
   isCancelableJobRun,
   isRepairableJobRun,
   isRequeueableJobRun,
+  type JobRunStartSource,
 } from "@/lib/job-runs";
 import { listJobRunReviewFindings } from "@/lib/review-findings";
 import {
@@ -54,13 +55,7 @@ export type JobRunRow = {
   start_attempts: number;
   last_start_attempt_at: string | null;
   last_start_error: string | null;
-  last_start_source:
-    | "webhook"
-    | "cron"
-    | "repair"
-    | "manual_retry"
-    | "queue_release"
-    | null;
+  last_start_source: JobRunStartSource | null;
   cancel_requested_at: string | null;
   cancelled_at: string | null;
   cancel_reason: string | null;

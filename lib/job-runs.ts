@@ -1,4 +1,7 @@
-import { STALE_PENDING_JOB_THRESHOLD_MS } from "@/lib/workflows/job-run-repair";
+import {
+  isRepairablePendingJob,
+  STALE_PENDING_JOB_THRESHOLD_MS,
+} from "@/lib/workflows/job-run-repair";
 
 export const JOB_RUN_START_SOURCES = [
   "webhook",
@@ -39,25 +42,27 @@ export function getJobRunSourceKind(
   return run.trigger_id ? "trigger" : "assignment";
 }
 
-export function getJobRunPendingAnchor(run: JobRunTimingFields): string | null {
-  return run.last_start_attempt_at || run.created_at || run.started_at || null;
-}
-
 export function isRepairableJobRun(
   run: JobRunStateFields,
   now = Date.now(),
   staleThresholdMs = STALE_PENDING_JOB_THRESHOLD_MS
 ) {
-  if (run.status !== "pending") return false;
-
-  const anchor = getJobRunPendingAnchor(run);
-  if (!anchor) return true;
-
-  return now - new Date(anchor).getTime() >= staleThresholdMs;
+  return isRepairablePendingJob(run, now, staleThresholdMs);
 }
 
-export function isRequeueableJobRun(run: Pick<JobRunStateFields, "status">) {
-  return run.status === "failed";
+// Trigger-only rows are display history, not restartable runs. Executable
+// runs carry flow_id, including trigger-launched flows and manual retries,
+// which always copy it from their source before enqueue.
+export function isExecutableJobRunSource(
+  run: Pick<JobRunStateFields, "flow_id" | "trigger_id">
+) {
+  return Boolean(run.flow_id);
+}
+
+export function isRequeueableJobRun(
+  run: Pick<JobRunStateFields, "status" | "flow_id" | "trigger_id">
+) {
+  return run.status === "failed" && isExecutableJobRunSource(run);
 }
 
 export function isCancelableJobRun(
@@ -80,6 +85,7 @@ export function summarizeEntityJobRuns<
     last_start_attempt_at?: string | null;
     cancel_requested_at?: string | null;
     cancelled_at?: string | null;
+    flow_id: string | null;
   },
 >(runs: T[], now = Date.now()) {
   const lastRun =

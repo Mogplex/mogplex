@@ -10,7 +10,7 @@ import {
   buildSandboxServiceRecordRepo,
   buildSandboxServiceRouteAuth,
 } from "./sandbox-service-route-test-harness";
-import { isClosedSandboxStreamError } from "../../app/api/sandbox/[id]/harness/route";
+import { isClosedSandboxStreamError } from "../../lib/harness/_lib/stream";
 import {
   buildAiCall,
   parseSseEvents,

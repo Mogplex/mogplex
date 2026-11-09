@@ -214,7 +214,7 @@ export async function runAutomationHarnessAgent(input: {
   );
   const prompt = buildAutomationHarnessPrompt({ ...input, instructionsSuffix });
   const { createSandboxHarnessPostHandler } =
-    await import("@/app/api/sandbox/[id]/harness/route");
+    await import("@/lib/harness/route");
   const response = await createSandboxHarnessPostHandler()(
     new Request(
       `https://internal.mogplex/api/sandbox/${sandbox.recordId}/harness`,

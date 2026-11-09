@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { resolveSelectedControlSandboxId } from "../../app/api/control/chat/_lib/context";
+import { resolveSelectedControlSandboxId } from "../../lib/control/chat/context";
 import { ORCHESTRATOR_TOOLS } from "../../lib/agents/orchestrator/registry";
 import { buildOrchestratorSystemPrompt } from "../../lib/agents/orchestrator/system-prompt";
 

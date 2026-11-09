@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { supabaseAdmin } from "../../lib/supabase/admin";
-import { runAuthorizedControlChat } from "../../app/api/control/chat/_lib/authorized-request";
+import { runAuthorizedControlChat } from "../../lib/control/chat/authorized-request";
 
 test("concurrent authorized Control requests return 409 to the second conversation turn", async () => {
   const admins = [

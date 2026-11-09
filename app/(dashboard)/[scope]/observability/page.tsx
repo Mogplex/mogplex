@@ -26,7 +26,7 @@ import {
   resolveActivityDateRange,
   type ActivityDateRangeSelection,
 } from "@/lib/observability/activity-date-range"
-import { navigateToSandboxHealth } from "@/lib/sandbox/navigation"
+import { navigateToSandboxHealth } from "@/hooks/sandbox-navigation"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { AiCall } from "@/lib/types"
 import { ActivityDateRangeFilter } from "./_components/activity-date-range-filter"

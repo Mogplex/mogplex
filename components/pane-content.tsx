@@ -11,7 +11,7 @@ import { getActiveTeamRequestHeaders } from "@/components/active-scope-provider"
 import { useSessionsStore } from "@/hooks/use-sessions";
 import { resolveSandboxRootDirectory } from "@/lib/repo-settings";
 import type { SandboxError } from "@/lib/sandbox/error-state";
-import { resolvePaneSandboxId } from "@/lib/sandbox/pane-binding";
+import { resolvePaneSandboxId } from "@/hooks/pane-binding";
 import { resolvePreviewPaneUrl } from "@/lib/sandbox/preview-url";
 import type { Repo } from "@/lib/types";
 import { useState, useMemo, useCallback } from "react";

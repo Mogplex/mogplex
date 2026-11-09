@@ -1,6 +1,6 @@
 import { createNativeSandboxExecution } from "@/lib/mogplex-api/native-sandbox-execution";
 import { updateAiCallIfActive } from "@/lib/interactive-runs";
-import type { ActiveControlCall } from "@/app/api/control/chat/_lib/types";
+import type { ActiveControlCall } from "@/lib/control/chat/types";
 
 export function createControlNativeExecution(
   call: ActiveControlCall,

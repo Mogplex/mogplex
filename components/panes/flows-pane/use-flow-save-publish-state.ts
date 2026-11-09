@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import type { Flow } from "@/lib/types";
 import type { FlowDraftSnapshot } from "@/lib/flows/editor";
 import {
@@ -41,7 +41,7 @@ export type FlowSavePublishState = {
   dirty: boolean;
   canUndo: boolean;
   canRedo: boolean;
-  baselineDraftSignature: string | null;
+  draftSignatureRef: React.MutableRefObject<string | null>;
   // Refs for external consumers
   historyMergeRef: React.MutableRefObject<{
     mergeKey: string | null;
@@ -55,11 +55,6 @@ export type FlowSavePublishState = {
   > | null>;
   autosaveAttemptSignatureRef: React.MutableRefObject<string | null>;
   hydratedFlowIdRef: React.MutableRefObject<string | null>;
-  // Mirror refs for hydration effect reads
-  dirtyRef: React.MutableRefObject<boolean>;
-  historyRef: React.MutableRefObject<FlowDraftHistory | null>;
-  baselineDraftRef: React.MutableRefObject<FlowDraftSnapshot | null>;
-  baselineDraftSignatureRef: React.MutableRefObject<string | null>;
 };
 
 export type FlowSavePublishStateParams = {
@@ -116,39 +111,24 @@ export function useFlowSavePublishState({
   const canUndo = (history?.past.length ?? 0) > 0;
   const canRedo = (history?.future.length ?? 0) > 0;
 
-  // Refs mirror local draft state so the hydration effect can read the latest values
-  // without re-running on every keystroke or on intermediate renders during persistFlow
-  // (e.g. after setBaselineDraft() but before mutateSelectedFlow() refreshes selectedFlow).
-  const dirtyRef = useRef(dirty);
-  const historyRef = useRef(history);
-  const baselineDraftRef = useRef(baselineDraft);
-  const baselineDraftSignatureRef = useRef(baselineDraftSignature);
-
-  // Declaration order is load-bearing: this ref-sync effect MUST stay above the
-  // hydration effect below. React fires effects in declaration order within a commit,
-  // so if a render updates both `selectedFlow` and the mirrored draft state in the same
-  // commit, the hydration effect would read stale ref values if this block were moved
-  // or hoisted beneath it. (First render is safe because `useRef(value)` captures the
-  // current value, but any subsequent co-change would race.)
+  const draftSignatureRef = useRef<string | null>(null);
   useEffect(() => {
-    dirtyRef.current = dirty;
-    historyRef.current = history;
-    baselineDraftRef.current = baselineDraft;
-    baselineDraftSignatureRef.current = baselineDraftSignature;
-  });
+    draftSignatureRef.current = draft
+      ? serializePersistedFlowDraft(draft)
+      : null;
+  }, [draft]);
 
-  // Hydrate draft from server when flow changes or server draft changes
-  useEffect(() => {
+  const hydrateDraft = useEffectEvent(() => {
     if (!selectedFlow) return;
     const nextDraft = createFlowDraftSnapshot(selectedFlow);
     const flowChanged = hydratedFlowIdRef.current !== selectedFlow.id;
     const shouldHydrate = shouldHydrateFlowDraftFromServer({
       currentFlowId: hydratedFlowIdRef.current,
       incomingFlowId: selectedFlow.id,
-      hasDraftHistory: Boolean(historyRef.current),
-      hasBaselineDraft: Boolean(baselineDraftRef.current),
-      dirty: dirtyRef.current,
-      currentBaselineSignature: baselineDraftSignatureRef.current,
+      hasDraftHistory: Boolean(history),
+      hasBaselineDraft: Boolean(baselineDraft),
+      dirty,
+      currentBaselineSignature: baselineDraftSignature,
       incomingSignature: serializePersistedFlowDraft(nextDraft),
     });
     hydratedFlowIdRef.current = selectedFlow.id;
@@ -177,6 +157,9 @@ export function useFlowSavePublishState({
     setSaveError(null);
     autosaveAttemptSignatureRef.current = null;
     historyMergeRef.current = { mergeKey: null, lastAt: 0 };
+  });
+  useEffect(() => {
+    hydrateDraft();
   }, [selectedFlow, setContextMenu]);
 
   // Cleanup timeouts on unmount
@@ -223,15 +206,11 @@ export function useFlowSavePublishState({
     dirty,
     canUndo,
     canRedo,
-    baselineDraftSignature,
+    draftSignatureRef,
     historyMergeRef,
     autosaveTimeoutRef,
     publishStateTimeoutRef,
     autosaveAttemptSignatureRef,
     hydratedFlowIdRef,
-    dirtyRef,
-    historyRef,
-    baselineDraftRef,
-    baselineDraftSignatureRef,
   };
 }

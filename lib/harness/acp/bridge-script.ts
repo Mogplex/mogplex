@@ -61,10 +61,7 @@ function readMcpServers(path) {
   try {
     config = JSON.parse(readFileSync(path, "utf8"));
   } catch (error) {
-    // The run asked for these servers; say so instead of silently starting
-    // the agent without its connections.
-    process.stderr.write("[acp-bridge] could not read MCP config " + path + ": " + errorText(error) + "\n");
-    return [];
+    throw new Error("Could not read MCP config " + path + ": " + errorText(error));
   }
   const pairs = (record) => Object.entries(record || {}).map(([name, value]) => ({ name, value: String(value) }));
   return Object.entries(config.mcpServers || {}).map(([name, server]) =>
@@ -247,9 +244,11 @@ async function applyMode(session) {
       await request("session/set_config_option", { sessionId, configId: "mode", value: run.modeId });
     } else if (session.modes) {
       await request("session/set_mode", { sessionId, modeId: run.modeId });
+    } else {
+      throw new Error("The agent does not expose execution-mode configuration");
     }
   } catch (error) {
-    process.stderr.write("[acp-bridge] could not set mode " + run.modeId + ": " + errorText(error) + "\n");
+    throw new Error("Could not set execution mode " + run.modeId + ": " + errorText(error));
   }
 }
 

@@ -266,7 +266,7 @@ export async function setupMcpConfig(
     },
   });
 
-  return undefined;
+  throw new Error(`MCP config injection failed: ${injection.error}`);
 }
 
 export type SlackAttachmentsSetupResult = {

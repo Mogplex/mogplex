@@ -88,6 +88,31 @@ describe("createTurnDecisionObserver", () => {
     expect(ownerless.notices).toHaveLength(0);
   });
 
+  it("should await pending loop checks before ending the turn", async () => {
+    let finishLoop: ((value: boolean) => void) | undefined;
+    const { deps } = makeDeps({
+      checkLoop: () =>
+        new Promise<boolean>((resolve) => {
+          finishLoop = resolve;
+        }),
+    });
+    const observer = createTurnDecisionObserver(scope, deps);
+    observer.onStep(
+      Array.from({ length: 6 }, (_, index) => toolStep(`c${index}`))
+    );
+
+    let ended = false;
+    const ending = observer.onEnd([toolStep("a")]).then(() => {
+      ended = true;
+    });
+    await Promise.resolve();
+    expect(ended).toBe(false);
+
+    finishLoop?.(false);
+    await ending;
+    expect(ended).toBe(true);
+  });
+
   it("should never reject when a check throws", async () => {
     const { deps } = makeDeps({
       verifyClaims: async () => {

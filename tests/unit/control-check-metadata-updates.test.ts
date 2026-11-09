@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { verificationMessageMetadata } from "../../app/api/control/chat/_lib/verification-metadata";
+import { verificationMessageMetadata } from "../../lib/control/chat/verification-metadata";
 import type { RepositoryVerificationSummary } from "../../lib/agents/orchestrator/checks/receipt";
 import { CHECK_KINDS } from "../../lib/agents/orchestrator/checks/plan";
 

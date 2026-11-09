@@ -64,6 +64,7 @@ test("POST /api/sandbox/[id]/restart denies inactive persistent wake before resu
 test("POST /api/sandbox/[id]/restart releases inactive wake claims when resuming the VM fails", async () => {
   const { createSandboxRestartHandler } = await loadSandboxRestartRouteModule();
   const releasedClaims: string[] = [];
+  const updateStatuses: string[] = [];
 
   const handler = createSandboxRestartHandler({
     loadOwnedSandboxRouteRecord: (async () => ({
@@ -82,6 +83,15 @@ test("POST /api/sandbox/[id]/restart releases inactive wake claims when resuming
     getSandbox: async () => {
       throw new Error("vm unavailable");
     },
+    updateSandboxRecord: (async (
+      _id: string,
+      updates: Record<string, unknown>
+    ) => {
+      if (typeof updates.status === "string") {
+        updateStatuses.push(updates.status);
+      }
+      return buildPersistedPersistentRestartRecord(updates);
+    }) as never,
     releaseLimitClaim: (async (input: { claimId: string }) => {
       releasedClaims.push(input.claimId);
       return true;
@@ -97,6 +107,54 @@ test("POST /api/sandbox/[id]/restart releases inactive wake claims when resuming
   const payload = await response.json();
   assert.match(payload.error, /vm unavailable/);
   assert.deepEqual(releasedClaims, ["claim-restart-1"]);
+  assert.deepEqual(updateStatuses, ["installing", "error"]);
+});
+
+test("POST /api/sandbox/[id]/restart records an error after environment resolution fails", async () => {
+  const { createSandboxRestartHandler } = await loadSandboxRestartRouteModule();
+  const updateStatuses: string[] = [];
+
+  const handler = createSandboxRestartHandler({
+    loadOwnedSandboxRouteRecord: (async () => ({
+      ok: true as const,
+      auth: { userId: "user-1" },
+      repo: null,
+      rootDirectory: undefined,
+      record: { id: "sandbox-1", sandbox_id: "vm_123", persistent: true },
+    })) as never,
+    loadOwnedSandboxRouteContext: (async () =>
+      buildLoadedPersistentRestartContext({ status: "paused" })) as never,
+    enforceSandboxBootLimits: (async () => ({
+      allowed: true,
+      claimId: "claim-restart-1",
+    })) as never,
+    getSandbox: (async () => ({
+      persistent: true,
+      stop: async () => {},
+      currentSession: () => ({ stoppedAt: new Date() }),
+    })) as never,
+    updateSandboxRecord: (async (
+      _id: string,
+      updates: Record<string, unknown>
+    ) => {
+      if (typeof updates.status === "string") {
+        updateStatuses.push(updates.status);
+      }
+      return buildPersistedPersistentRestartRecord(updates);
+    }) as never,
+    resolveRepoSandboxEnv: async () => {
+      throw new Error("environment unavailable");
+    },
+  });
+
+  const response = await handler(
+    buildSandboxRouteRequest({ method: "POST", suffix: "/restart" }),
+    buildSandboxRouteParams()
+  );
+
+  assert.equal(response.status, 502);
+  assert.match((await response.json()).error, /environment unavailable/);
+  assert.deepEqual(updateStatuses, ["installing", "error"]);
 });
 
 test("POST /api/sandbox/[id]/restart releases inactive wake claims when the state transition no-ops", async () => {

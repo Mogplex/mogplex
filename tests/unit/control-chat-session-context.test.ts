@@ -3,7 +3,7 @@ import test from "node:test";
 import {
   ControlChatSessionContextError,
   resolveControlChatSessionContext,
-} from "../../app/api/control/chat/_lib/context";
+} from "../../lib/control/chat/context";
 
 test("control chat rehydrates repository identity from the owned session", async () => {
   const resolved = await resolveControlChatSessionContext(

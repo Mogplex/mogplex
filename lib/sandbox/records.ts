@@ -170,10 +170,16 @@ export async function deleteSandboxRecord(
   options: {
     userId?: string;
     expectedSandboxId?: string;
+    expectedLastBootStartedAt?: string | null;
     select?: string;
   } = {}
 ) {
-  const { userId, expectedSandboxId, select = "id" } = options;
+  const {
+    userId,
+    expectedSandboxId,
+    expectedLastBootStartedAt,
+    select = "id",
+  } = options;
 
   let query = supabaseAdmin.from("sandboxes").delete().eq("id", id);
 
@@ -183,6 +189,12 @@ export async function deleteSandboxRecord(
 
   if (expectedSandboxId) {
     query = query.eq("sandbox_id", expectedSandboxId);
+  }
+  if (expectedLastBootStartedAt !== undefined) {
+    query =
+      expectedLastBootStartedAt === null
+        ? query.is("last_boot_started_at", null)
+        : query.eq("last_boot_started_at", expectedLastBootStartedAt);
   }
 
   const { data, error } = await query.select(select).maybeSingle();

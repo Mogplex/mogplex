@@ -9,7 +9,9 @@ import { useSessionsStore } from "@/hooks/use-sessions";
 import type { Repo } from "@/lib/types";
 
 export function WorkspaceRepoGate({ children }: { children: ReactNode }) {
-  const repoId = useSessionsStore(state => state.getActiveSession().activeRepo?.id);
+  const repoId = useSessionsStore(
+    (state) => state.getActiveSession()?.activeRepo?.id
+  );
   return <RepositoryGate key={repoId ?? "home"} repoId={repoId}>{children}</RepositoryGate>;
 }
 

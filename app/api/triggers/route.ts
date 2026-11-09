@@ -139,7 +139,7 @@ export async function GET() {
   const { data: jobRuns, error: jobRunsError } = await supabaseAdmin
     .from("job_runs")
     .select(
-      "id, trigger_id, status, error, started_at, created_at, last_start_attempt_at"
+      "id, trigger_id, flow_id, status, error, started_at, created_at, last_start_attempt_at"
     )
     .in("trigger_id", triggerIds)
     .order("created_at", { ascending: false })

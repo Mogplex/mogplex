@@ -7,7 +7,7 @@ import { shouldWarnAboutDevServerCommand } from "@/lib/sandbox/dev-server-guard"
 import {
   bindSessionToPendingSandboxBranch,
   ensureSessionSandboxBinding,
-} from "@/lib/sandbox/session-retarget";
+} from "@/hooks/session-retarget";
 import {
   getSandboxUiPreviewUrl,
   resolveSandboxUiState,

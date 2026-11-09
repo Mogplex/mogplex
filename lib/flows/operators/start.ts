@@ -14,6 +14,7 @@ import {
 import type { FlowOperatorDefinition } from "./types";
 import { isValidRunAt } from "../one-time-config";
 import { DEFAULT_FLOW_SCHEDULE } from "../schedule-defaults";
+import { TRIGGER_EVENTS } from "../capabilities";
 
 type StartNode = Extract<FlowNode, { type: "start" }>;
 
@@ -30,22 +31,7 @@ const VALID_AUTHOR_FILTERS: ReadonlySet<FlowStartAuthorFilter> = new Set([
   "dependabot_only",
 ]);
 
-const VALID_TRIGGER_EVENTS: ReadonlySet<TriggerEvent> = new Set([
-  "mention",
-  "pr_opened",
-  "issue_opened",
-  "pr_comment",
-  "issue_comment",
-  "push",
-  "ci_failure",
-  "labeled",
-  "tag_push",
-  "dependabot_alert",
-  "schedule",
-  "webhook",
-  "slack_mention",
-  "api",
-]);
+const VALID_TRIGGER_EVENTS: ReadonlySet<TriggerEvent> = new Set(TRIGGER_EVENTS);
 
 const REPO_BOUND_EXTERNAL_EVENTS: ReadonlySet<TriggerEvent> = new Set([
   "schedule",

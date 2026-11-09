@@ -14,7 +14,7 @@ import {
 } from "@/lib/slack/client";
 import type { SlackBlockActionsPayload } from "@/lib/slack/interactivity";
 import type { SlackEventTaskPayload } from "@/trigger/slack-event-lib/types";
-import { buildSlackThreadConcurrencyKey } from "@/app/api/webhooks/slack/_lib/event-types";
+import { buildSlackThreadConcurrencyKey } from "@/lib/slack/webhooks/event-types";
 import { TRIGGER_TASK_IDS } from "@/lib/trigger/task-ids";
 import {
   checkConnectionRecoveryAccess,

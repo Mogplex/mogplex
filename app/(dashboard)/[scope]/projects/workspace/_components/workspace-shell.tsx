@@ -27,13 +27,9 @@ import { trackActivation } from "@/lib/activation-tracking";
 import {
   bindSessionToPendingSandboxBranch,
   ensureSessionSandboxBinding,
-} from "@/lib/sandbox/session-retarget";
+} from "@/hooks/session-retarget";
 import { useSandboxLaunchActions } from "@/components/sandbox-launch-provider";
 import { getSessionSandboxRestartCandidate } from "@/lib/sandbox/session-auto-restart";
-import {
-  createPaneTreeSessionSync,
-  matchesPaneTreeSession,
-} from "@/lib/pane-tree-session-sync";
 import type { Repo } from "@/lib/types";
 
 import {
@@ -59,7 +55,6 @@ function AvailableWorkspaceShell() {
   const activeSession = useSessionsStore((s) =>
     s.sessions.find((sess) => sess.id === s.activeSessionId)
   );
-  const updatePaneTree = useSessionsStore((s) => s.updatePaneTree);
 
   const activeRepo = useSessionsStore((s) => {
     const session = s.sessions.find((sess) => sess.id === s.activeSessionId);
@@ -133,7 +128,6 @@ function AvailableWorkspaceShell() {
     split,
     closePane,
     openFile,
-    loadTree,
     updatePane,
     retargetFilePath,
     clearFilePath,
@@ -154,52 +148,6 @@ function AvailableWorkspaceShell() {
     [sessions, repos]
   );
   useSandboxPresence(sandboxPresenceEntries);
-
-  // Load session's pane tree when switching sessions
-  const prevSessionRef = useRef<string | null>(null);
-  const justSwitchedRef = useRef(false);
-  useEffect(() => {
-    if (prevSessionRef.current !== activeSessionId) {
-      prevSessionRef.current = activeSessionId;
-      justSwitchedRef.current = true;
-      const session = useSessionsStore.getState().getActiveSession();
-      loadTree(session.paneTree, session.activeId);
-    }
-  }, [activeSessionId, loadTree]);
-
-  // Debounce pane-tree persistence while preserving the originating session.
-  const paneTreeSessionSync = useMemo(
-    () => createPaneTreeSessionSync({ updatePaneTree }),
-    [updatePaneTree]
-  );
-  useEffect(() => {
-    if (justSwitchedRef.current) {
-      justSwitchedRef.current = false;
-      paneTreeSessionSync.flush();
-      return;
-    }
-    const pendingSync = {
-      sessionId: activeSessionId,
-      root,
-      activeId,
-    };
-    const session = useSessionsStore
-      .getState()
-      .sessions.find((candidate) => candidate.id === activeSessionId);
-    if (matchesPaneTreeSession(pendingSync, session)) {
-      paneTreeSessionSync.discard();
-      return;
-    }
-    paneTreeSessionSync.schedule(pendingSync);
-    return paneTreeSessionSync.cancelTimer;
-  }, [root, activeId, activeSessionId, paneTreeSessionSync]);
-
-  useEffect(
-    () => () => {
-      paneTreeSessionSync.flush();
-    },
-    [paneTreeSessionSync]
-  );
 
   const paneCount = countPanes(root);
 

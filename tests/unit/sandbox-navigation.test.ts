@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  buildSandboxObservabilityHref,
-  navigateToSandboxHealth,
-} from "../../lib/sandbox/navigation";
+import { buildSandboxObservabilityHref } from "../../lib/sandbox/navigation";
+import { navigateToSandboxHealth } from "../../hooks/sandbox-navigation";
 import type { Repo } from "../../lib/types";
 
 function buildRepo(overrides: Partial<Repo> = {}): Repo {

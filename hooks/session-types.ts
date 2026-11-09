@@ -1,4 +1,4 @@
-import type { PaneType, PreviewPaneTab, TreeNode } from "./use-split-panes";
+import type { PaneType, PreviewPaneTab, TreeNode } from "./split-panes-types";
 import type { Repo } from "@/lib/types";
 
 export const SESSION_COLORS = [
@@ -69,7 +69,7 @@ export type SessionsState = {
     activeId: string,
     options?: { sessionId?: string }
   ) => void;
-  getActiveSession: () => Session;
+  getActiveSession: () => Session | undefined;
 };
 
 export type PersistedSessionsState = {

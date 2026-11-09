@@ -7,9 +7,11 @@ import { useModels } from "@/hooks/use-models";
 import { useMemberships } from "@/hooks/use-memberships";
 import { fetchTeamSettingsJson } from "./team-settings-helpers";
 import type { TeamKeysResponse } from "./team-settings-types";
-import type { TeamAuditEventsResponse } from "@/app/api/teams/[teamId]/audit-events/route";
-import type { TeamMembersResponse } from "@/app/api/teams/[teamId]/members/route";
-import type { TeamModelsResponse } from "@/app/api/teams/[teamId]/models/route";
+import type {
+  TeamAuditEventsResponse,
+  TeamMembersResponse,
+  TeamModelsResponse,
+} from "@/lib/team-api-types";
 import type { TeamRole } from "@/lib/team-capabilities";
 import type { Provider } from "@/lib/vault";
 

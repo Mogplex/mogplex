@@ -2,8 +2,13 @@ import type { SandboxHealthStatus } from "@/lib/sandbox/health-status";
 import { derivePreviewOverlayStatus } from "@/lib/sandbox/preview-overlay-status";
 import type { PreviewOverlayStatus } from "@/lib/sandbox/preview-overlay-status";
 import type { SandboxRecord } from "@/lib/types";
-import type { Session } from "@/hooks/use-sessions";
-import type { SandboxUiState, SandboxUiBundle } from "./ui-state";
+import type {
+  SandboxUiSession,
+  SandboxUiState,
+  SandboxUiBundle,
+} from "./ui-state-types";
+
+export type { SandboxUiSession } from "./ui-state-types";
 
 const STARTING_RUNTIME_STATUSES: ReadonlySet<string> = new Set([
   "creating",
@@ -14,7 +19,7 @@ const ERROR_RUNTIME_HEALTH_STATUSES: ReadonlySet<SandboxHealthStatus> = new Set(
 );
 
 export type ResolveSandboxUiStateInput = {
-  session: Session | null;
+  session: SandboxUiSession | null;
   record: SandboxRecord | null;
   liveProbe?: SandboxHealthStatus;
 };
@@ -94,7 +99,9 @@ function getFallbackHealthStatus(
   return runtimeStatus === "running" ? "running" : "not_available";
 }
 
-function resolveMissingSandboxUiState(session: Session | null): SandboxUiState {
+function resolveMissingSandboxUiState(
+  session: SandboxUiSession | null
+): SandboxUiState {
   if (!session) return { kind: "no_session" };
   return {
     kind: "no_sandbox",

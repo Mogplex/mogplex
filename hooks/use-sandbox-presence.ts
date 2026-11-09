@@ -1,10 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
-import {
-  getActiveTeamRequestHeaders,
-  useActiveTeamId,
-} from "@/components/active-scope-provider";
+import { getActiveTeamRequestHeaders } from "@/lib/active-team-request";
+import { useActiveTeamId } from "@/hooks/use-active-team";
 
 export type SandboxPresenceEntry = {
   sandboxRecordId: string;

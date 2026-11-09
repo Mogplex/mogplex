@@ -20,7 +20,11 @@ test("POST /api/sandbox/[id]/harness records an episodic outcome but never the t
   const { createSandboxHarnessPostHandler } =
     await loadSandboxHarnessRouteModule();
   const aiCall = buildAiCall();
-  const persisted: Array<{ lane: string; content: string }> = [];
+  const persisted: Array<{
+    lane: string;
+    content: string;
+    metadata?: Record<string, unknown>;
+  }> = [];
   const prompt =
     "You are Codex running a Mogplex automation inside an isolated checkout. Review this repo.";
 
@@ -76,7 +80,11 @@ test("POST /api/sandbox/[id]/harness records an episodic outcome but never the t
     safeAppendAiCallEvent: async () => null,
     loadHarnessPromptWithMemoryContext: async (_userId, text) => text,
     persistHarnessMemory: async (input) => {
-      persisted.push({ lane: input.lane, content: input.content });
+      persisted.push({
+        lane: input.lane,
+        content: input.content,
+        metadata: input.metadata,
+      });
     },
   });
 
@@ -104,6 +112,7 @@ test("POST /api/sandbox/[id]/harness records an episodic outcome but never the t
   );
   const outcomes = persisted.filter((entry) => entry.lane === "episodic");
   assert.equal(outcomes.length, 1);
-  assert.ok(outcomes[0].content.startsWith("codex: "));
-  assert.ok(outcomes[0].content.length <= 200);
+  assert.equal(outcomes[0].content, "codex completed");
+  assert.equal(outcomes[0].metadata?.ai_call_id, aiCall.id);
+  assert.equal(JSON.stringify(outcomes[0]).includes(prompt), false);
 });

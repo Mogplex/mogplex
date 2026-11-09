@@ -169,6 +169,56 @@ describe("runChatAgent", () => {
     });
   });
 
+  it("should reject a provider error part instead of finalizing partial text", async () => {
+    const model = new MockLanguageModelV4({
+      doStream: async () =>
+        streamOf([
+          { type: "stream-start", warnings: [] },
+          { type: "text-start", id: "t1" },
+          { type: "text-delta", id: "t1", delta: "Partial" },
+          { type: "error", error: new Error("Provider unavailable") },
+          {
+            type: "finish",
+            finishReason: { unified: "error", raw: "error" },
+            usage,
+          },
+        ]),
+    });
+    const records: RunChatAiCallRecord[] = [];
+
+    await expect(
+      runChatAgent({
+        userId: "user-1",
+        model: "test/model",
+        messages: [{ role: "user", content: "Fix PR 599" }],
+        latestUserText: "Fix PR 599",
+        deps: {
+          stream: {
+            resolveModel: (async () => ({
+              model,
+              providerOptions: {},
+            })) as never,
+            buildTools: (async () => ({
+              tools: {},
+              connections: [],
+              cleanup: async () => {},
+            })) as never,
+            resolveSkills: async () => NO_CONVERSATION_SKILLS,
+          },
+          recordAiCall: (record) => {
+            records.push(record);
+          },
+        },
+      })
+    ).rejects.toThrow("Provider unavailable");
+
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({
+      status: "failed",
+      error: "Provider unavailable",
+    });
+  });
+
   it("should write the tools a Slack turn called onto its ai_calls row", async () => {
     let step = 0;
     const model = new MockLanguageModelV4({

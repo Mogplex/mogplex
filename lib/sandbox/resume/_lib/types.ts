@@ -64,4 +64,5 @@ export type SandboxResumeDeps = {
   requireSandboxBillingSession: typeof requireSandboxBillingSession;
   prepareSandboxBillingClose: typeof prepareSandboxBillingClose;
   finalizeSandboxBillingClose: typeof finalizeSandboxBillingClose;
+  createReadableStream: typeof ReadableStream;
 };

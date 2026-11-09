@@ -12,13 +12,34 @@ import {
 } from "@/lib/worktrees/service";
 import { defineTool } from "../helpers";
 import type { OrchestratorToolContext } from "../types";
-import {
-  archiveWorktreeSchema,
-  listWorktreesSchema,
-  pruneWorktreeSchema,
-  spawnWorktreeSchema,
-} from "./planning";
-import { diffWorktreeSchema, rebaseWorktreeSchema } from "./git";
+
+export const spawnWorktreeSchema = z.object({
+  taskId: z
+    .string()
+    .uuid()
+    .describe("Orchestration task assigned to the checkout"),
+});
+
+export const listWorktreesSchema = z.object({
+  includePruned: z.boolean().optional().describe("Include retired records"),
+});
+
+export const archiveWorktreeSchema = z.object({
+  worktreeId: z.string().uuid().describe("Worktree to archive"),
+});
+
+export const pruneWorktreeSchema = z.object({
+  worktreeId: z.string().uuid().describe("Archived worktree to remove"),
+  force: z.boolean().optional().describe("Remove a dirty checkout"),
+});
+
+export const rebaseWorktreeSchema = z.object({
+  worktreeId: z.string().describe("Worktree to rebase"),
+});
+
+export const diffWorktreeSchema = z.object({
+  worktreeId: z.string().uuid().describe("Worktree to diff"),
+});
 
 function missingRun() {
   return {

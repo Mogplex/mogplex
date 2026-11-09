@@ -1,7 +1,7 @@
 import Link from "next/link"
 import { useParams } from "next/navigation"
 import type { ObservabilityJobDetail } from "@/lib/types"
-import { formatDispatchOutcome, formatDispatchReason, formatCostUsd, formatDuration } from "./formatters"
+import { formatDispatchOutcome, formatDispatchReason, formatCostUsd, formatDuration } from "@/lib/observability/formatters"
 
 export function RunTimeline({ run, latestOnly = false }: { run: ObservabilityJobDetail; latestOnly?: boolean }) {
   const events = [

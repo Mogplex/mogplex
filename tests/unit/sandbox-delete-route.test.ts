@@ -8,14 +8,20 @@ import {
   loadSandboxRecordRouteModule,
 } from "./sandbox-record-route-test-harness";
 
-test("DELETE /api/sandbox/[id] falls back to a row-only delete when sandbox id drifted", async () => {
+test("DELETE /api/sandbox/[id] returns conflict without deleting a replacement row", async () => {
   const { createSandboxDeleteHandler } = await loadSandboxRecordRouteModule();
-  const deleted: Array<{ id: string; userId?: string; sandboxId?: string }> =
-    [];
+  const deleted: Array<{
+    id: string;
+    userId?: string;
+    sandboxId?: string;
+    lastBootStartedAt?: string | null;
+  }> = [];
 
   const handler = createSandboxDeleteHandler({
     loadOwnedSandboxRouteRecord: (async () =>
-      buildLoadedSandboxDeleteRecord()) as never,
+      buildLoadedSandboxDeleteRecord({
+        last_boot_started_at: "2026-04-01T10:00:00.000Z",
+      })) as never,
     resolveLoadedSandboxRouteContext: async (loaded) =>
       buildResolvedSandboxRouteContext(loaded) as never,
     getSandbox: async () =>
@@ -24,14 +30,19 @@ test("DELETE /api/sandbox/[id] falls back to a row-only delete when sandbox id d
       }) as never,
     deleteSandboxRecord: (async (
       id: string,
-      options?: { userId?: string; expectedSandboxId?: string }
+      options?: {
+        userId?: string;
+        expectedSandboxId?: string;
+        expectedLastBootStartedAt?: string | null;
+      }
     ) => {
       deleted.push({
         id,
         userId: options?.userId,
         sandboxId: options?.expectedSandboxId,
+        lastBootStartedAt: options?.expectedLastBootStartedAt,
       });
-      return deleted.length === 1 ? null : ({ id } as never);
+      return null;
     }) as never,
   });
 
@@ -40,10 +51,14 @@ test("DELETE /api/sandbox/[id] falls back to a row-only delete when sandbox id d
     buildSandboxRouteParams()
   );
 
-  assert.equal(response.status, 200);
+  assert.equal(response.status, 409);
   assert.deepEqual(deleted, [
-    { id: "sandbox-1", userId: "user-1", sandboxId: "vm_123" },
-    { id: "sandbox-1", userId: "user-1", sandboxId: undefined },
+    {
+      id: "sandbox-1",
+      userId: "user-1",
+      sandboxId: "vm_123",
+      lastBootStartedAt: "2026-04-01T10:00:00.000Z",
+    },
   ]);
 });
 
@@ -132,10 +147,18 @@ test("DELETE /api/sandbox/[id] falls back to stop when delete is unavailable", a
   const { createSandboxDeleteHandler } = await loadSandboxRecordRouteModule();
   const events: string[] = [];
   let remoteStopCount = 0;
+  let stopOptions:
+    | {
+        expectedSandboxId?: string;
+        expectedLastBootStartedAt?: string | null;
+      }
+    | undefined;
 
   const handler = createSandboxDeleteHandler({
     loadOwnedSandboxRouteRecord: (async () =>
-      buildLoadedSandboxDeleteRecord()) as never,
+      buildLoadedSandboxDeleteRecord({
+        last_boot_started_at: "2026-04-01T10:00:00.000Z",
+      })) as never,
     resolveLoadedSandboxRouteContext: async (loaded) =>
       buildResolvedSandboxRouteContext(loaded) as never,
     getSandbox: async () =>
@@ -148,7 +171,8 @@ test("DELETE /api/sandbox/[id] falls back to stop when delete is unavailable", a
           updatedAt: new Date("2026-04-01T10:05:00.000Z"),
         }),
       }) as never,
-    stopSandboxRecord: async () => {
+    stopSandboxRecord: async (_id, options) => {
+      stopOptions = options;
       events.push("db-stop");
       return { id: "sandbox-1" } as never;
     },
@@ -166,6 +190,11 @@ test("DELETE /api/sandbox/[id] falls back to stop when delete is unavailable", a
   assert.equal(response.status, 200);
   assert.equal(remoteStopCount, 1);
   assert.deepEqual(events, ["remote-stop", "db-stop", "db-delete"]);
+  assert.equal(stopOptions?.expectedSandboxId, "vm_123");
+  assert.equal(
+    stopOptions?.expectedLastBootStartedAt,
+    "2026-04-01T10:00:00.000Z"
+  );
 });
 
 test("DELETE /api/sandbox/[id] still deletes the row when stop bookkeeping fails after fallback", async () => {

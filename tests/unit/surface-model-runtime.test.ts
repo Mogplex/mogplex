@@ -82,7 +82,7 @@ test("runtime defaults use their own surface, and explicit selections still win"
       await import("../../app/api/cli/inference/chat/completions/model-resolution");
     const { resolveChatModelId } = await import("../../lib/agents/run-chat");
     const { resolveControlChatModelId } =
-      await import("../../app/api/control/chat/_lib/context");
+      await import("../../lib/control/chat/context");
     const { resolveStoredUserDefaultModelId } =
       await import("../../lib/models/default-model");
     const { resolveSlackTurnModel } =

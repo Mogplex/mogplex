@@ -1,6 +1,6 @@
 import { AbortTaskRunError } from "@trigger.dev/sdk";
-import { parseNativeSlackEvent } from "@/app/api/webhooks/slack/_lib/native-input";
-import { dispatchVerifiedSlackWebhook } from "@/app/api/webhooks/slack/_lib/verified-dispatch";
+import { parseNativeSlackEvent } from "@/lib/slack/webhooks/native-input";
+import { dispatchVerifiedSlackWebhook } from "@/lib/slack/webhooks/verified-dispatch";
 import { hashToolInput } from "@/lib/agents/slack-tool-idempotency";
 import { supabaseSlackToolExecutionStore as store } from "@/lib/agents/slack-tool-idempotency-store";
 import { resolveSlackCommandUserId } from "./command-identity";

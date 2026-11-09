@@ -83,7 +83,7 @@ export async function GET(req: Request) {
         "cli",
         "rest-api",
       ];
-      filtered = docs
+      filtered = [...docs]
         .sort((a, b) => {
           const aIdx = priority.findIndex((p) => a.path.startsWith(p));
           const bIdx = priority.findIndex((p) => b.path.startsWith(p));

@@ -6,9 +6,9 @@ import { StructuredValueViewer } from "@/components/diffs/structured-value-viewe
 import { DataTable } from "@/components/ui/data-table"
 import type { AutomationEventsFilters } from "@/hooks/use-observability"
 import type { AutomationDispatchEvent } from "@/lib/types"
-import { PressureOutcomeBadge } from "./badges"
+import { PressureOutcomeBadge } from "@/components/observability/badges"
 import { FilterSelect } from "./filter-select"
-import { formatDispatchReason, timeAgo } from "./formatters"
+import { formatDispatchReason, timeAgo } from "@/lib/observability/formatters"
 import { GithubEventLinkPanel } from "./github-event-link-panel"
 import { PaginationControls } from "./pagination-controls"
 

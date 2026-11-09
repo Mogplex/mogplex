@@ -84,6 +84,7 @@ test("entity summaries expose last run state and retry/requeue affordances", () 
     [
       {
         id: "run-1",
+        flow_id: null,
         status: "failed",
         error: "boom",
         created_at: new Date(NOW - 60_000).toISOString(),
@@ -92,6 +93,7 @@ test("entity summaries expose last run state and retry/requeue affordances", () 
       },
       {
         id: "run-2",
+        flow_id: null,
         status: "running",
         error: null,
         created_at: new Date(NOW - 10_000).toISOString(),
@@ -110,9 +112,24 @@ test("entity summaries expose last run state and retry/requeue affordances", () 
   assert.equal(summary.last_run_cancelable, true);
 });
 
-test("failed runs are requeueable", () => {
-  assert.equal(isRequeueableJobRun({ status: "failed" }), true);
-  assert.equal(isRequeueableJobRun({ status: "success" }), false);
+test("only failed flow-backed runs are requeueable", () => {
+  assert.equal(
+    isRequeueableJobRun({ status: "failed", flow_id: "flow-1" }),
+    true
+  );
+  assert.equal(isRequeueableJobRun({ status: "failed", flow_id: null }), false);
+  assert.equal(
+    isRequeueableJobRun({
+      status: "failed",
+      flow_id: "flow-1",
+      trigger_id: "trigger-1",
+    }),
+    true
+  );
+  assert.equal(
+    isRequeueableJobRun({ status: "success", flow_id: "flow-1" }),
+    false
+  );
 });
 
 test("pending and running runs are cancelable until a cancel is requested or completed", () => {

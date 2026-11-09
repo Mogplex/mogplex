@@ -8,7 +8,7 @@ import {
   getAutomationCostState,
   getAutomationStatusPresentation,
 } from "@/lib/observability/automation-run-presentation"
-import { CostSourceBadge, StatusBadge } from "./badges"
+import { CostSourceBadge, StatusBadge } from "@/components/observability/badges"
 
 type AutomationMetadata = Record<string, unknown> | null | undefined
 

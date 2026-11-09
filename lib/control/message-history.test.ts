@@ -3,7 +3,7 @@ import { expect, it } from "vitest";
 import {
   normalizeControlChatMessages,
   validateControlChatMessages,
-} from "@/app/api/control/chat/_lib/messages";
+} from "@/lib/control/chat/messages";
 
 it("retains command results and stable message identity across a Control follow-up", async () => {
   const messages = normalizeControlChatMessages([

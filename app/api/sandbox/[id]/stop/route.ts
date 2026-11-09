@@ -52,6 +52,7 @@ type SandboxStopRecord = {
   base_branch: string;
   working_branch: string;
   status: string;
+  last_boot_started_at?: string | null;
   root_directory?: string | null;
   billing_source?: string | null;
   billing_team_id?: string | null;
@@ -343,16 +344,20 @@ export function createSandboxStopHandler(
       if (confirmedStopped) {
         const stopped = await deps.stopSandboxRecord(id, {
           expectedSandboxId: loaded.record.sandbox_id,
+          expectedLastBootStartedAt: loaded.record.last_boot_started_at ?? null,
           healthStatus: "stopped",
           fromStatuses: STOPPABLE_SANDBOX_STATUSES,
           stopReason: automatic ? "auto_pause" : "manual",
         });
         if (!stopped) {
-          await deps.stopSandboxRecord(id, {
-            healthStatus: "stopped",
-            fromStatuses: STOPPABLE_SANDBOX_STATUSES,
-            stopReason: automatic ? "auto_pause" : "manual",
-          });
+          return NextResponse.json(
+            {
+              error:
+                "Sandbox changed before the stop could be recorded. Refresh and retry.",
+              code: "sandbox_lifecycle_conflict",
+            },
+            { status: 409 }
+          );
         }
       }
 
@@ -371,7 +376,11 @@ export function createSandboxStopHandler(
       }
       if (Object.keys(recordUpdates).length > 0) {
         try {
-          await deps.updateSandboxRecord(id, recordUpdates);
+          await deps.updateSandboxRecord(id, recordUpdates, {
+            expectedSandboxId: loaded.record.sandbox_id,
+            expectedLastBootStartedAt:
+              loaded.record.last_boot_started_at ?? null,
+          });
         } catch (error) {
           console.error(
             "[sandbox/stop] Failed to persist stop metadata:",

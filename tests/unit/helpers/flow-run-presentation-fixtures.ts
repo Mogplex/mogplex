@@ -127,7 +127,7 @@ export const runActionScenarios: Array<{
       repairable: true,
       requeueable: true,
     }),
-    expected: [RETRY_DESCRIPTOR, SECONDARY_REPAIR_DESCRIPTOR],
+    expected: [RETRY_DESCRIPTOR],
   },
   {
     name: "failed runs can surface retry without repair",
@@ -137,7 +137,7 @@ export const runActionScenarios: Array<{
   {
     name: "failed runs can surface repair without retry",
     run: buildActionableRun({ status: "failed", repairable: true }),
-    expected: [SECONDARY_REPAIR_DESCRIPTOR],
+    expected: [],
   },
   {
     name: "failed runs without repair or retry expose no actions",

@@ -3,7 +3,7 @@
 import { StructuredValueViewer } from "@/components/diffs/structured-value-viewer"
 import { getJobRunRuntimeProvider, getJobRunRuntimeRunId } from "@/lib/job-run-runtime"
 import type { ObservabilityJob } from "@/lib/types"
-import { formatDispatchOutcome, formatDispatchReason } from "./formatters"
+import { formatDispatchOutcome, formatDispatchReason } from "@/lib/observability/formatters"
 
 export function JobExpandedRow({ job }: { job: ObservabilityJob }) {
   const fields = [

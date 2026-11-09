@@ -8,7 +8,7 @@ import {
 import { controlTranscriptDatabase } from "../support/control-transcript-database";
 import { persistedControlStream } from "../../lib/control/persisted-stream";
 import { controlRequestHistory } from "../../lib/control/request-history";
-import { validateControlChatMessages } from "../../app/api/control/chat/_lib/messages";
+import { validateControlChatMessages } from "../../lib/control/chat/messages";
 import { enableScopedE2EAuth, scopedPath } from "./helpers/auth";
 import {
   fulfillJson,

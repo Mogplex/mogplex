@@ -1,6 +1,6 @@
 import { buildInternalApiHeaders } from "@/lib/internal-api-auth";
 import type { SandboxCommandExecution } from "@/lib/agents/tools/sandbox";
-import type { SandboxExecPostDeps } from "@/app/api/sandbox/[id]/exec/_lib/types";
+import type { SandboxExecPostDeps } from "@/lib/sandbox/exec/_lib/types";
 
 export function createNativeSandboxExecution(
   userId: string,
@@ -14,7 +14,7 @@ export function createNativeSandboxExecution(
       // Keep command completion in the durable worker instead of a second
       // HTTP invocation. Reuse the route's authorization, billing and locks.
       const { createSandboxExecPostHandler } =
-        await import("@/app/api/sandbox/[id]/exec/route");
+        await import("@/lib/sandbox/exec/route");
       return createSandboxExecPostHandler(overrides)(
         new Request(`https://internal.mogplex/api/sandbox/${sandboxId}/exec`, {
           method: "POST",

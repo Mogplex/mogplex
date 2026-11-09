@@ -12,6 +12,76 @@ import {
   type ResumeRecord,
 } from "./helpers/sandbox-resume-route-fixtures";
 
+test(
+  "a closed SSE controller does not strand the resume claim or workspace",
+  { timeout: 3000 },
+  async () => {
+    const { createSandboxResumeHandler } = await loadSandboxResumeRouteModule();
+    const finishedBootstrap = Promise.withResolvers<void>();
+    const statuses: string[] = [];
+    const OriginalReadableStream = globalThis.ReadableStream;
+    const createReadableStream = function createReadableStream(
+      source: UnderlyingSource<Uint8Array>
+    ) {
+      return new OriginalReadableStream({
+        ...source,
+        start(controller) {
+          const closedController = new Proxy(controller, {
+            get(target, property) {
+              if (property === "enqueue") {
+                return () => {
+                  throw new Error("stream closed");
+                };
+              }
+              const value = Reflect.get(target, property, target);
+              return typeof value === "function" ? value.bind(target) : value;
+            },
+          });
+          return source.start?.(closedController);
+        },
+      });
+    } as unknown as typeof ReadableStream;
+    let stops = 0;
+    const handler = createSandboxResumeHandler({
+      loadOwnedSandboxRouteContext: (async () =>
+        buildLoadedResumeContext({ snapshot_id: "snapshot-1" })) as never,
+      enforceSandboxBootLimits: (async () => ({ allowed: true })) as never,
+      createReadableStream,
+      getSandbox: (async () => ({
+        stop: async () => {
+          stops += 1;
+        },
+      })) as never,
+      updateSandboxRecord: (async (
+        _id: string,
+        updates: Partial<ResumeRecord>
+      ) => {
+        if (updates.status) statuses.push(updates.status);
+        return buildPersistedResumeRecord(updates);
+      }) as never,
+      resolveRepoSandboxEnv: (async () => ({
+        envVars: {},
+        sync: { mode: "sandbox-only" },
+      })) as never,
+      bootstrapFromSnapshotStreaming: async function* bootstrap() {
+        yield { type: "status", status: "running" };
+        finishedBootstrap.resolve();
+      } as never,
+    });
+
+    const response = await handler(
+      buildSandboxRouteRequest({ method: "POST", suffix: "/resume" }),
+      buildSandboxRouteParams()
+    );
+    const reader = response.body!.getReader();
+    await finishedBootstrap.promise;
+    await setImmediate();
+    await reader.cancel();
+    assert.equal(stops, 0);
+    assert.deepEqual(statuses, ["installing", "running"]);
+  }
+);
+
 test("closing the readiness stream does not stop or fail the restored workspace", async () => {
   const { createSandboxResumeHandler } = await loadSandboxResumeRouteModule();
   const continueBootstrap = Promise.withResolvers<void>();

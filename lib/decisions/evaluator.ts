@@ -5,6 +5,7 @@ import {
   Output,
 } from "ai";
 import { z } from "zod";
+import { decisionCircuitBreaker } from "./circuit-breaker";
 import type { DecisionState } from "./state";
 import type {
   DecisionAnswers,
@@ -16,8 +17,6 @@ import type {
 export const DEFAULT_DECISION_MODEL = "typesafe-ai/jev";
 export const DEFAULT_ESCALATION_MODEL = "anthropic/claude-sonnet-5";
 export const DEFAULT_ESCALATION_TIMEOUT_MS = 8000;
-const BREAKER_FAILURE_LIMIT = 5;
-const BREAKER_OPEN_MS = 60_000;
 
 export type EvaluateInput = {
   decisionId: string;
@@ -33,25 +32,8 @@ export type DecisionEvaluator = (
 
 type Gateway = ReturnType<typeof createGateway>;
 
-let breakerFailures = 0;
-let breakerOpenUntil = 0;
-
-/** Test seam: reset the process-wide circuit breaker. */
 export function resetDecisionCircuitBreaker(): void {
-  breakerFailures = 0;
-  breakerOpenUntil = 0;
-}
-
-function noteResult(ok: boolean, now: number): void {
-  if (ok) {
-    breakerFailures = 0;
-    return;
-  }
-  breakerFailures += 1;
-  if (breakerFailures >= BREAKER_FAILURE_LIMIT) {
-    breakerOpenUntil = now + BREAKER_OPEN_MS;
-    breakerFailures = 0;
-  }
+  decisionCircuitBreaker.reset();
 }
 
 /**
@@ -129,9 +111,11 @@ export const evaluateWithDecisionModel: DecisionEvaluator = async (input) => {
   const startedAt = performance.now();
   const gateway = resolveDecisionGateway();
   if (!gateway) return failure("unconfigured", startedAt);
-  if (Date.now() < breakerOpenUntil) return failure("circuit_open", startedAt);
-
   const model = process.env.DECISION_MODEL?.trim() || DEFAULT_DECISION_MODEL;
+  if (decisionCircuitBreaker.isOpen(model, Date.now())) {
+    return failure("circuit_open", startedAt);
+  }
+
   try {
     const result = await evaluate({
       model: gateway.evaluationModel(model),
@@ -141,7 +125,7 @@ export const evaluateWithDecisionModel: DecisionEvaluator = async (input) => {
       maxRetries: 1,
       abortSignal: AbortSignal.timeout(input.timeoutMs),
     });
-    noteResult(true, Date.now());
+    decisionCircuitBreaker.noteResult(model, true, null, Date.now());
     const confidence = (
       result.providerMetadata as
         | { typesafe?: { confidence?: Record<string, number> } }
@@ -160,7 +144,7 @@ export const evaluateWithDecisionModel: DecisionEvaluator = async (input) => {
       },
     };
   } catch (error) {
-    noteResult(false, Date.now());
+    decisionCircuitBreaker.noteResult(model, false, error, Date.now());
     return failure(isTimeout(error) ? "timeout" : "error", startedAt, error);
   }
 };

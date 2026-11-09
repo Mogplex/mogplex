@@ -5,6 +5,10 @@ import { isWorkspaceSession, useSessionsStore } from "@/hooks/use-sessions"
 import { scopedHref } from "@/lib/scoped-href"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useSandboxLaunchActions } from "@/components/sandbox-launch-provider"
+import {
+  bindSessionToPendingSandboxBranch,
+  ensureSessionSandboxBinding,
+} from "@/hooks/session-retarget"
 import { useRepos } from "@/hooks/use-repos"
 import { TouchActions, type ActionItem } from "@/components/ui/touch-actions"
 import {
@@ -78,16 +82,30 @@ export function SessionBar() {
                     type: "item" as const,
                     label: "Start fresh sandbox…",
                     onSelect: () => {
-                      void launchRepoSandbox(sessionRepo, {
-                        source: "session_overflow",
-                        trigger: "user_action",
-                        intent: { kind: "start_fresh" },
-                      })
+                      void (async () => {
+                        const launchOutcome = await launchRepoSandbox(sessionRepo, {
+                          source: "session_overflow",
+                          trigger: "user_action",
+                          intent: { kind: "start_fresh" },
+                          onConfirmed: (request) => {
+                            bindSessionToPendingSandboxBranch(
+                              session.id,
+                              request.workingBranch
+                            )
+                          },
+                        })
+                        if (launchOutcome.status !== "launched") return
+                        ensureSessionSandboxBinding(
+                          session.id,
+                          session.activeSandboxId ?? null,
+                          launchOutcome.sandbox.id
+                        )
+                      })()
                     },
                   },
                 ]
               : []),
-            ...(renderedSessions.length > 1
+            ...(sessions.length > 1
               ? [
                   { type: "separator" as const },
                   { type: "item" as const, label: "Close", onSelect: () => closeSession(session.id), destructive: true },
@@ -129,7 +147,7 @@ export function SessionBar() {
                     {session.index}:{session.name}
                   </span>
                 )}
-                {renderedSessions.length > 1 && (
+                {sessions.length > 1 && (
                   <button
                     onClick={(e) => {
                       e.stopPropagation()

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef } from "react";
-import { getActiveTeamRequestHeaders } from "@/components/active-scope-provider";
+import { getActiveTeamRequestHeaders } from "@/lib/active-team-request";
 import { readTerminalExecImmediateResponse } from "@/lib/sandbox/terminal-exec-response";
 import {
   consumeTerminalExecStream,

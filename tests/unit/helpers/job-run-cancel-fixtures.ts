@@ -197,6 +197,9 @@ export async function withPatchedCancellationStore<T>(
       limit() {
         return api;
       },
+      range() {
+        return api;
+      },
       async maybeSingle() {
         const selectError = getSelectError();
         if (selectError) {

@@ -3,12 +3,14 @@ import { requireMachineApiAuth } from "@/lib/internal-api-auth";
 import { withSupabaseAdminConnection } from "@/lib/supabase/admin";
 import { startAutomationJobRun } from "@/lib/workflows/automation-job-workflow";
 import { isRepairablePendingJob } from "@/lib/workflows/job-run-repair";
+import { isExecutableJobRunSource } from "@/lib/job-runs";
 
 type RepairJobsHandlerDeps = {
   requireMachineApiAuth: typeof requireMachineApiAuth;
   withSupabaseAdminConnection: typeof withSupabaseAdminConnection;
   startAutomationJobRun: typeof startAutomationJobRun;
   isRepairablePendingJob: typeof isRepairablePendingJob;
+  isExecutableJobRunSource: typeof isExecutableJobRunSource;
 };
 
 const defaultRepairJobsHandlerDeps: RepairJobsHandlerDeps = {
@@ -16,6 +18,7 @@ const defaultRepairJobsHandlerDeps: RepairJobsHandlerDeps = {
   withSupabaseAdminConnection,
   startAutomationJobRun,
   isRepairablePendingJob,
+  isExecutableJobRunSource,
 };
 
 export function createRepairJobsGetHandler(
@@ -37,7 +40,9 @@ export function createRepairJobsGetHandler(
       return await deps.withSupabaseAdminConnection(async (adminClient) => {
         const { data: jobs, error } = await adminClient
           .from("job_runs")
-          .select("id, status, created_at, started_at, last_start_attempt_at")
+          .select(
+            "id, status, flow_id, trigger_id, created_at, started_at, last_start_attempt_at"
+          )
           .eq("status", "pending")
           .order("created_at", { ascending: true })
           .limit(250);
@@ -52,17 +57,62 @@ export function createRepairJobsGetHandler(
           );
         }
 
-        const repairableJobs = (jobs || []).filter((job) =>
+        const staleJobs = (jobs || []).filter((job) =>
           deps.isRepairablePendingJob(job)
         );
+        // Assignments retain the original starter. Only trigger-only rows are
+        // legacy display history that cannot execute.
+        const repairableJobs = staleJobs.filter(
+          (job) => !job.trigger_id || deps.isExecutableJobRunSource(job)
+        );
+        const unsupportedJobs = staleJobs.filter(
+          (job) => job.trigger_id && !deps.isExecutableJobRunSource(job)
+        );
+        const scanned = jobs?.length ?? 0;
+        const skippedNotStale = scanned - staleJobs.length;
+        let retiredLegacy = 0;
+        let retireErrors = 0;
+
+        // Legacy rows cannot execute. Retire them so they leave pending queues
+        // instead of accumulating ahead of repairable flow runs.
+        if (unsupportedJobs.length > 0) {
+          try {
+            const message = "Legacy job run source is not executable";
+            const { data: retiredRows, error: updateError } = await adminClient
+              .from("job_runs")
+              .update({
+                status: "failed",
+                error: message,
+                last_start_error: message,
+                completed_at: new Date().toISOString(),
+              })
+              .in(
+                "id",
+                unsupportedJobs.map((job) => job.id)
+              )
+              .eq("status", "pending")
+              .select("id");
+            if (updateError) throw new Error(updateError.message);
+            retiredLegacy = retiredRows?.length ?? 0;
+          } catch (error) {
+            retireErrors = unsupportedJobs.length;
+            console.error("[job-repair] failed to retire legacy pending runs", {
+              jobRunIds: unsupportedJobs.map((job) => job.id),
+              error: error instanceof Error ? error.message : "Unknown error",
+            });
+          }
+        }
 
         if (repairableJobs.length === 0) {
           return NextResponse.json({
-            message: "No stale pending jobs",
-            scanned: jobs?.length ?? 0,
+            message: "No repairable pending jobs",
+            scanned,
             started: 0,
             deferred: 0,
-            failed: 0,
+            failed: retireErrors,
+            skippedNotStale,
+            retireErrors,
+            retiredLegacy,
           });
         }
 
@@ -115,11 +165,15 @@ export function createRepairJobsGetHandler(
         );
 
         return NextResponse.json({
-          message: `Scanned ${jobs?.length ?? 0} stale pending job(s)`,
-          scanned: jobs?.length ?? 0,
+          message: `Scanned ${scanned} pending job(s); ${staleJobs.length} stale`,
+          scanned,
           started: results.filter((result) => result.started).length,
           deferred: results.filter((result) => result.deferred).length,
-          failed: results.filter((result) => result.error).length,
+          failed:
+            results.filter((result) => result.error).length + retireErrors,
+          skippedNotStale,
+          retireErrors,
+          retiredLegacy,
           results,
         });
       });

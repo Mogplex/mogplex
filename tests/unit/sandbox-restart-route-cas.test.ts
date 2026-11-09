@@ -12,11 +12,12 @@ import {
   type PersistentRestartRecord,
 } from "./helpers/sandbox-restart-route-fixtures";
 
-test("POST /api/sandbox/[id]/restart emits cancelled when installing CAS fails", async () => {
+test("POST /api/sandbox/[id]/restart never touches the provider VM when installing CAS fails", async () => {
   const { createSandboxRestartHandler } = await loadSandboxRestartRouteModule();
   let resolvedEnv = false;
   let bootstrapped = false;
   let stopCalls = 0;
+  let providerCalls = 0;
 
   const handler = createSandboxRestartHandler({
     loadOwnedSandboxRouteRecord: (async () => ({
@@ -28,15 +29,17 @@ test("POST /api/sandbox/[id]/restart emits cancelled when installing CAS fails",
     })) as never,
     loadOwnedSandboxRouteContext: (async () =>
       buildLoadedPersistentRestartContext()) as never,
-    getSandbox: async () =>
-      ({
+    getSandbox: async () => {
+      providerCalls += 1;
+      return {
         stop: async () => {
           stopCalls += 1;
         },
         currentSession: () => ({
           stoppedAt: new Date("2026-08-05T11:10:00.000Z"),
         }),
-      }) as never,
+      } as never;
+    },
     updateSandboxRecord: async () => null,
     resolveRepoSandboxEnv: (async () => {
       resolvedEnv = true;
@@ -59,7 +62,8 @@ test("POST /api/sandbox/[id]/restart emits cancelled when installing CAS fails",
   assert.match(body, /"reason":"conflict"/);
   assert.equal(resolvedEnv, false);
   assert.equal(bootstrapped, false);
-  assert.equal(stopCalls, 2);
+  assert.equal(providerCalls, 0);
+  assert.equal(stopCalls, 0);
 });
 
 test("POST /api/sandbox/[id]/restart emits cancelled and not ready when running CAS fails", async () => {
@@ -252,6 +256,9 @@ test("POST /api/sandbox/[id]/restart guards bootstrap error writes after late st
   );
   assert.deepEqual(errorWrite?.options, {
     expectedSandboxId: "vm_123",
+    expectedLastBootStartedAt: updateCalls.find(
+      (call) => call.updates.status === "installing"
+    )?.updates.last_boot_started_at,
     fromStatuses: ["installing", "running"],
   });
   assert.match(body, /"type":"cancelled"/);

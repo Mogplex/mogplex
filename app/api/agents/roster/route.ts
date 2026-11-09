@@ -2,19 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { requireUserId } from "@/lib/auth";
 import { PRECONFIGURED_AGENTS } from "@/lib/agents/templates";
-
-// No `model`: an agent is identity and prompt. Which model a step runs on is a
-// property of the automation node that uses the agent, not of the agent — see
-// the agent node's modelOverride. Reporting `agents.model` here would show a
-// value no run reads.
-export type AgentRosterItem = {
-  id: string;
-  name: string;
-  description: string;
-  status: "running" | "idle" | "error";
-  cycleCount: number;
-  lastActivity: string | null;
-};
+import type { AgentRosterItem } from "@/lib/agents/roster-types";
 
 export async function GET() {
   const userId = await requireUserId();

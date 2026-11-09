@@ -29,13 +29,23 @@ export type OrchestratorToolCategory =
  * Definition for each orchestrator tool: name, category, description,
  * access level, and implementation status.
  */
-export type OrchestratorToolDef = {
+export type OrchestratorToolBuilder = (
+  ctx: OrchestratorToolContext,
+  repoDefaults: RepoToolDefaults
+) => import("ai").Tool | null;
+
+type OrchestratorToolMetadata = {
   name: string;
   category: OrchestratorToolCategory;
   description: string;
   access: OrchestratorToolAccess;
-  implemented: boolean;
 };
+
+export type OrchestratorToolDef = OrchestratorToolMetadata &
+  (
+    | { implemented: true; build: OrchestratorToolBuilder }
+    | { implemented: false; build?: never }
+  );
 
 /**
  * Context passed to buildOrchestratorTools for tool instantiation.

@@ -70,6 +70,13 @@ export function buildHarnessGitDeliveryDeps() {
       autoCommittedFiles: [],
     }),
     updateSandboxWorkingBranch: async () => {},
+    injectClaudeMcpConfig: async () => ({
+      ok: true as const,
+      mcpConfigPath: ".mogplex/mcp.json",
+      serverCount: 0,
+      serverNames: [],
+      mogplexServerName: "mogplex",
+    }),
     // Most route tests run for a user who keeps no skills.
     loadSkillCatalog: async (): Promise<SkillCatalog> => ({ skills: [] }),
     recordSkillUse: async () => {},
@@ -81,5 +88,5 @@ export async function loadSandboxHarnessRouteModule() {
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||= "test-anon-key";
   process.env.SUPABASE_SERVICE_ROLE_KEY ||= "test-service-role-key";
   process.env.VERCEL_PROJECT_ID ||= "prj_test0000000000000000000000";
-  return import("../../../app/api/sandbox/[id]/harness/route");
+  return import("../../../lib/harness/route");
 }

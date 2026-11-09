@@ -7,11 +7,8 @@ import { replaceJobRunReviewFindings } from "@/lib/review-findings";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { capturedUsageAiCallColumns } from "@/lib/observability/usage";
-import {
-  AUTOMATION_LIMITS,
-  loadAutomationScopesByStatus,
-  selectQueuedJobsToStart,
-} from "@/lib/workflows/automation-guardrails";
+import { AUTOMATION_LIMITS } from "@/lib/workflows/automation-guardrails";
+import { releaseQueuedAutomationJobs } from "@/lib/workflows/queue-release";
 import type { JobRunStartSource } from "@/lib/job-runs";
 import type { ReviewFinding } from "@/lib/types";
 import type {
@@ -240,62 +237,15 @@ export async function releaseQueuedJobs(
 ) {
   "use step";
 
-  if (
-    !input.releasedScope.repoId &&
-    input.releasedScope.installationId == null
-  ) {
-    return [];
-  }
-
   try {
-    const scopes = await loadAutomationScopesByStatus(["pending", "running"]);
-    const pendingScopes = scopes.filter(
-      (scope) => scope.status === "pending" && scope.jobRunId !== input.jobRunId
-    );
-    const runningScopes = scopes.filter(
-      (scope) => scope.status === "running" && scope.jobRunId !== input.jobRunId
-    );
-
-    const nextJobIds = selectQueuedJobsToStart({
+    return await releaseQueuedAutomationJobs({
       releasedScope: {
         ...input.releasedScope,
         jobRunId: input.jobRunId,
         status: "success",
       },
-      pendingScopes,
-      runningScopes,
+      startAutomationJobRun,
     });
-
-    return await Promise.all(
-      nextJobIds.map(async (jobRunId) => {
-        try {
-          const started = await startAutomationJobRun(
-            jobRunId,
-            "queue_release"
-          );
-          return {
-            jobRunId,
-            started: started.started,
-            reason: started.reason ?? null,
-          };
-        } catch (error) {
-          const message =
-            error instanceof Error
-              ? error.message
-              : "Failed to release queued job";
-          console.error("[automation-job] failed to release queued job", {
-            sourceJobRunId: input.jobRunId,
-            jobRunId,
-            error: message,
-          });
-          return {
-            jobRunId,
-            started: false,
-            reason: message,
-          };
-        }
-      })
-    );
   } catch (error) {
     console.error("[automation-job] failed to load queued jobs for release", {
       sourceJobRunId: input.jobRunId,

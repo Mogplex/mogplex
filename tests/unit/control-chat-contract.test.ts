@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizeControlChatMessages } from "../../app/api/control/chat/_lib/messages";
+import { normalizeControlChatMessages } from "../../lib/control/chat/messages";
 import {
   buildControlChatRunMetadata,
   resolveControlPromptSandboxContext,
   resolveControlPromptSandboxes,
   resolveControlPromptWorktrees,
-} from "../../app/api/control/chat/_lib/context";
+} from "../../lib/control/chat/context";
 
 test("control run metadata keeps client resource hints non-authoritative", () => {
   const metadata = buildControlChatRunMetadata(

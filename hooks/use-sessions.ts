@@ -1,7 +1,8 @@
 "use client";
 import { useSyncExternalStore } from "react";
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { createJSONStorage, persist } from "zustand/middleware";
+import { sessionPersistStorage } from "./session-persist-storage";
 import type { Repo } from "@/lib/types";
 import type { PersistedSessionsState, SessionsState } from "./session-types";
 import {
@@ -19,11 +20,11 @@ import {
   migratePersistedSessionsV2,
 } from "./session-migrations";
 import {
-  collectPaneIds,
   createDefaultTree,
   createWorkspaceTree,
-  retargetSandboxPanes,
-} from "./use-split-panes";
+} from "./split-panes-factories";
+import { collectPaneIds } from "./split-panes-types";
+import { retargetSandboxPanes } from "./split-panes-tree-ops";
 
 export type {
   Session,
@@ -239,11 +240,12 @@ export const useSessionsStore = create<SessionsState>()(
       },
 
       updatePaneTree: (tree, activeId, options) => {
+        const targetId = options?.sessionId ?? get().activeSessionId;
+        const current = get().sessions.find((s) => s.id === targetId);
+        if (current?.paneTree === tree && current.activeId === activeId) return;
         set((state) => ({
           sessions: state.sessions.map((s) =>
-            s.id === (options?.sessionId ?? state.activeSessionId)
-              ? { ...s, paneTree: tree, activeId }
-              : s
+            s.id === targetId ? { ...s, paneTree: tree, activeId } : s
           ),
         }));
       },
@@ -280,6 +282,7 @@ export const useSessionsStore = create<SessionsState>()(
         sessions: state.sessions,
         activeSessionId: state.activeSessionId,
       }),
+      storage: createJSONStorage(() => sessionPersistStorage),
     }
   )
 );

@@ -1,60 +1,14 @@
-/**
- * Orchestrator tool registry - assembles tools from category modules.
- *
- * This module composes the orchestrator's tool surface from category-specific
- * modules and provides factory functions for building tool instances.
- */
 import type { Tool } from "ai";
-import {
-  createWriteFile,
-  createStartSandbox,
-  createStopSandbox,
-  createGithubPullRequestTool,
-  createScopedGithubIssueTool,
-  createGithubApi,
-  webFetch,
-  webSearch,
-  createTerminalExec,
-  createMemoryTools,
-  createSkillTools,
-} from "@/lib/agents/tools";
 import type {
   OrchestratorToolDef,
   OrchestratorToolContext,
   OrchestratorToolCategory,
-  RepoToolDefaults,
 } from "./types";
 import { buildRepoDefaults } from "./helpers";
-import {
-  createHandoffNoteTool,
-  createSummarizeHistoryTool,
-} from "./tools/memory-impl";
-import { createEditFile } from "@/lib/agents/tools/sandbox-files";
-import { createRequestApprovalTool } from "./tools/governance-impl";
-import {
-  createControlListFiles,
-  createControlReadFile,
-} from "./tools/filesystem-impl";
-import {
-  createListAgentsTool,
-  createPlanMissionTool,
-  createSpawnSubagentTool,
-} from "./tools/planning-impl";
-import {
-  createArchiveWorktreeTool,
-  createDiffWorktreeTool,
-  createListWorktreesTool,
-  createPruneWorktreeTool,
-  createRebaseWorktreeTool,
-  createSpawnWorktreeTool,
-} from "./tools/worktree-impl";
 import { PLANNING_TOOLS } from "./tools/planning";
 import { FILESYSTEM_TOOLS } from "./tools/filesystem";
 import { GIT_TOOLS } from "./tools/git";
 import { EXECUTION_TOOLS } from "./tools/execution";
-import { createRunChecksTool } from "./checks/tool";
-import { controlDecisionScope } from "./decision-scope";
-import { createProjectSettingsTools } from "@/lib/agents/tools/project-settings";
 import { MCP_TOOLS } from "./tools/mcp";
 import { INFRASTRUCTURE_TOOLS } from "./tools/infrastructure";
 import { DELIVERY_TOOLS } from "./tools/delivery";
@@ -64,7 +18,6 @@ import {
   COMMUNICATION_TOOLS,
 } from "./tools/memory-communication";
 
-// Re-export types from types module
 export type {
   OrchestratorToolAccess,
   OrchestratorToolCategory,
@@ -72,9 +25,6 @@ export type {
   OrchestratorToolContext,
 } from "./types";
 
-/**
- * Complete registry of orchestrator tools by category.
- */
 export const ORCHESTRATOR_TOOLS: OrchestratorToolDef[] = [
   ...PLANNING_TOOLS,
   ...FILESYSTEM_TOOLS,
@@ -88,232 +38,49 @@ export const ORCHESTRATOR_TOOLS: OrchestratorToolDef[] = [
   ...COMMUNICATION_TOOLS,
 ];
 
-/**
- * Get a tool definition by name.
- */
 export function getToolDef(name: string): OrchestratorToolDef | undefined {
-  return ORCHESTRATOR_TOOLS.find((t) => t.name === name);
+  return ORCHESTRATOR_TOOLS.find((tool) => tool.name === name);
 }
 
-/**
- * Get all tools in a category.
- */
 export function getToolsByCategory(
   category: OrchestratorToolCategory
 ): OrchestratorToolDef[] {
-  return ORCHESTRATOR_TOOLS.filter((t) => t.category === category);
+  return ORCHESTRATOR_TOOLS.filter((tool) => tool.category === category);
 }
 
-/**
- * Get counts of implemented vs planned tools for diagnostics.
- */
 export function getImplementationStats(): {
   implemented: number;
   planned: number;
   total: number;
 } {
-  const implemented = ORCHESTRATOR_TOOLS.filter((t) => t.implemented).length;
+  const implemented = ORCHESTRATOR_TOOLS.filter(
+    (tool) => tool.implemented
+  ).length;
   const total = ORCHESTRATOR_TOOLS.length;
   return { implemented, planned: total - implemented, total };
 }
 
-const skillToolsByContext = new WeakMap<
-  OrchestratorToolContext,
-  Record<string, Tool>
->();
-
-const projectSettingsToolsByContext = new WeakMap<
-  OrchestratorToolContext,
-  Record<string, Tool>
->();
-
-/** Project settings tools for the server-selected repository only. */
-function projectSettingsToolsFor(ctx: OrchestratorToolContext) {
-  if (!ctx.repoId) return null;
-  const existing = projectSettingsToolsByContext.get(ctx);
-  if (existing) return existing;
-  const tools: Record<string, Tool> = createProjectSettingsTools({
-    userId: ctx.userId,
-    repoId: ctx.repoId,
-    teamId: ctx.teamId ?? null,
-  });
-  projectSettingsToolsByContext.set(ctx, tools);
-  return tools;
+function normalizeToolContext(
+  ctx: OrchestratorToolContext
+): OrchestratorToolContext {
+  if (ctx.sandboxBinding) return ctx;
+  ctx.sandboxBinding = {
+    sandboxId: ctx.sandboxId ?? null,
+    status: ctx.sandboxId ? "running" : "unavailable",
+  };
+  return ctx;
 }
 
-/** Both skill tools share one catalog read per turn. */
-function skillToolsFor(ctx: OrchestratorToolContext) {
-  const existing = skillToolsByContext.get(ctx);
-  if (existing) return existing;
-  const tools = createSkillTools({
-    userId: ctx.userId,
-    repoId: ctx.repoId ?? null,
-  });
-  skillToolsByContext.set(ctx, tools);
-  return tools;
-}
-
-/**
- * Build a tool for the given definition using the context.
- * Planned definitions and implemented tools unavailable in this context are
- * omitted so the model never receives a callable placeholder.
- */
-function buildToolForDef(
-  def: OrchestratorToolDef,
-  ctx: OrchestratorToolContext,
-  repoDefaults: RepoToolDefaults
-): Tool | null {
-  if (!def.implemented) return null;
-  if (def.name === "await_workers") return ctx.workerHandoffTool ?? null;
-
-  if (def.name === "read_file") {
-    return createControlReadFile(ctx, repoDefaults);
-  }
-  if (def.name === "list_files") {
-    return createControlListFiles(ctx, repoDefaults);
-  }
-  if (def.name === "write_file") {
-    return ctx.sandboxSelectionRequired
-      ? null
-      : createWriteFile(ctx.userId, ctx.sandboxBinding);
-  }
-  if (def.name === "edit_file") {
-    return ctx.sandboxSelectionRequired
-      ? null
-      : createEditFile(ctx.userId, ctx.sandboxBinding);
-  }
-  if (def.name === "search_repo") {
-    return ctx.githubToken
-      ? createGithubApi(ctx.githubToken, repoDefaults)
-      : null;
-  }
-  if (def.name === "github_create_issue") {
-    return ctx.repoId && repoDefaults.owner && repoDefaults.repo
-      ? createScopedGithubIssueTool({ userId: ctx.userId, repoDefaults })
-      : null;
-  }
-  if (def.name === "run_command") {
-    if (ctx.sandboxSelectionRequired) return null;
-    return createTerminalExec(
-      ctx.sandboxBinding?.sandboxId ?? undefined,
-      ctx.userId,
-      ctx.repoId ?? undefined,
-      ctx.sandboxBinding,
-      ctx.sandboxExecution,
-      { ...controlDecisionScope(ctx), riskGate: false }
-    );
-  }
-  if (def.name === "run_checks") {
-    return ctx.sandboxSelectionRequired ? null : createRunChecksTool(ctx);
-  }
-  if (def.name === "sandbox_start") {
-    if (ctx.sandboxSelectionRequired) return null;
-    if (!ctx.repoId) return null;
-    return createStartSandbox(
-      ctx.userId,
-      ctx.repoId,
-      undefined,
-      ctx.sandboxBinding
-    );
-  }
-  if (def.name === "sandbox_stop") {
-    return ctx.sandboxSelectionRequired
-      ? null
-      : createStopSandbox(ctx.userId, ctx.sandboxBinding, ctx.sandboxExecution);
-  }
-  if (def.name === "open_pr") {
-    return ctx.githubToken
-      ? createGithubPullRequestTool(ctx.githubToken, repoDefaults)
-      : null;
-  }
-  if (def.name === "web_fetch") {
-    return webFetch;
-  }
-  if (def.name === "web_search") {
-    return webSearch;
-  }
-  if (def.name === "memory_write" || def.name === "memory_search") {
-    const memoryTools = createMemoryTools(ctx.userId, ctx.repoId ?? undefined, {
-      workspaceSessionId: ctx.workspaceSessionId ?? null,
-      conversationId: ctx.conversationId ?? null,
-      sandboxId: ctx.sandboxBinding?.sandboxId ?? ctx.sandboxId ?? null,
-    });
-    return def.name === "memory_write"
-      ? memoryTools.add_memory
-      : memoryTools.search_memories;
-  }
-  if (def.name === "find_skills" || def.name === "load_skill") {
-    return skillToolsFor(ctx)[def.name];
-  }
-  if (def.name === "summarize_history") {
-    return createSummarizeHistoryTool(ctx);
-  }
-  if (def.name === "handoff_note") {
-    return createHandoffNoteTool(ctx);
-  }
-  if (def.name === "request_approval") {
-    return createRequestApprovalTool(ctx);
-  }
-  if (def.name === "plan_mission") {
-    return createPlanMissionTool(ctx);
-  }
-  if (def.name === "spawn_worktree") {
-    return ctx.sandboxSelectionRequired ? null : createSpawnWorktreeTool(ctx);
-  }
-  if (def.name === "list_worktrees") {
-    return createListWorktreesTool(ctx);
-  }
-  if (def.name === "archive_worktree") {
-    return createArchiveWorktreeTool(ctx);
-  }
-  if (def.name === "prune_worktree") {
-    return createPruneWorktreeTool(ctx);
-  }
-  if (def.name === "rebase_worktree") {
-    return createRebaseWorktreeTool(ctx);
-  }
-  if (def.name === "diff_worktree") {
-    return createDiffWorktreeTool(ctx);
-  }
-  if (def.name === "spawn_subagent") {
-    return createSpawnSubagentTool(ctx);
-  }
-  if (def.name === "list_agents") {
-    return createListAgentsTool(ctx);
-  }
-  if (
-    def.name === "project_settings" ||
-    def.name === "project_settings_update" ||
-    def.name === "project_env_request" ||
-    def.name === "project_env_set"
-  ) {
-    return projectSettingsToolsFor(ctx)?.[def.name] ?? null;
-  }
-
-  return null;
-}
-
-/**
- * Build callable orchestrator tools for the current context. Planned tools and
- * implemented tools missing required context are intentionally absent.
- */
 export function buildOrchestratorTools(
   ctx: OrchestratorToolContext
 ): Record<string, Tool> {
-  const toolContext: OrchestratorToolContext = ctx.sandboxBinding
-    ? ctx
-    : {
-        ...ctx,
-        sandboxBinding: {
-          sandboxId: ctx.sandboxId ?? null,
-          status: ctx.sandboxId ? "running" : "unavailable",
-        },
-      };
+  const toolContext = normalizeToolContext(ctx);
   const repoDefaults = buildRepoDefaults(toolContext);
   const tools: Record<string, Tool> = {};
 
   for (const def of ORCHESTRATOR_TOOLS) {
-    const built = buildToolForDef(def, toolContext, repoDefaults);
+    if (!def.implemented) continue;
+    const built = def.build(toolContext, repoDefaults);
     if (built) tools[def.name] = built;
   }
 

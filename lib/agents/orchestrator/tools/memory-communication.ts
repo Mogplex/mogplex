@@ -2,7 +2,50 @@
  * Memory and communication tools for the orchestrator.
  */
 import { z } from "zod";
-import type { OrchestratorToolDef } from "../types";
+import {
+  createMemoryTools,
+  createSkillTools,
+  webFetch,
+  webSearch,
+} from "@/lib/agents/tools";
+import type { OrchestratorToolContext, OrchestratorToolDef } from "../types";
+import {
+  createHandoffNoteTool,
+  createSummarizeHistoryTool,
+} from "./memory-impl";
+
+const memoryToolsByContext = new WeakMap<
+  OrchestratorToolContext,
+  Record<string, import("ai").Tool>
+>();
+
+function memoryToolsFor(ctx: OrchestratorToolContext) {
+  const existing = memoryToolsByContext.get(ctx);
+  if (existing) return existing;
+  const tools = createMemoryTools(ctx.userId, ctx.repoId ?? undefined, {
+    workspaceSessionId: ctx.workspaceSessionId ?? null,
+    conversationId: ctx.conversationId ?? null,
+    sandboxId: () => ctx.sandboxBinding?.sandboxId ?? ctx.sandboxId ?? null,
+  });
+  memoryToolsByContext.set(ctx, tools);
+  return tools;
+}
+
+const skillToolsByContext = new WeakMap<
+  OrchestratorToolContext,
+  Record<string, import("ai").Tool>
+>();
+
+function skillToolsFor(ctx: OrchestratorToolContext) {
+  const existing = skillToolsByContext.get(ctx);
+  if (existing) return existing;
+  const tools = createSkillTools({
+    userId: ctx.userId,
+    repoId: ctx.repoId ?? null,
+  });
+  skillToolsByContext.set(ctx, tools);
+  return tools;
+}
 
 // --- Memory tool definitions ---
 
@@ -13,6 +56,7 @@ export const MEMORY_TOOLS: OrchestratorToolDef[] = [
     description: "Store information in agent memory",
     access: "mutation",
     implemented: true,
+    build: (ctx) => memoryToolsFor(ctx).add_memory,
   },
   {
     name: "memory_search",
@@ -20,6 +64,7 @@ export const MEMORY_TOOLS: OrchestratorToolDef[] = [
     description: "Search agent memory for relevant context",
     access: "read",
     implemented: true,
+    build: (ctx) => memoryToolsFor(ctx).search_memories,
   },
   {
     name: "find_skills",
@@ -27,6 +72,7 @@ export const MEMORY_TOOLS: OrchestratorToolDef[] = [
     description: "Search the operator's skills for a task",
     access: "read",
     implemented: true,
+    build: (ctx) => skillToolsFor(ctx).find_skills,
   },
   {
     name: "load_skill",
@@ -34,6 +80,7 @@ export const MEMORY_TOOLS: OrchestratorToolDef[] = [
     description: "Load one of the operator's skills by slug",
     access: "read",
     implemented: true,
+    build: (ctx) => skillToolsFor(ctx).load_skill,
   },
   {
     name: "read_spec",
@@ -48,6 +95,7 @@ export const MEMORY_TOOLS: OrchestratorToolDef[] = [
     description: "Summarize conversation or execution history",
     access: "read",
     implemented: true,
+    build: (ctx) => createSummarizeHistoryTool(ctx),
   },
   {
     name: "web_fetch",
@@ -55,6 +103,7 @@ export const MEMORY_TOOLS: OrchestratorToolDef[] = [
     description: "Fetch content from a URL",
     access: "read",
     implemented: true,
+    build: () => webFetch,
   },
   {
     name: "web_search",
@@ -62,6 +111,7 @@ export const MEMORY_TOOLS: OrchestratorToolDef[] = [
     description: "Search documentation and public resources with Exa",
     access: "read",
     implemented: true,
+    build: () => webSearch,
   },
 ];
 
@@ -95,6 +145,7 @@ export const COMMUNICATION_TOOLS: OrchestratorToolDef[] = [
     description: "Leave a note for the next agent or operator",
     access: "mutation",
     implemented: true,
+    build: (ctx) => createHandoffNoteTool(ctx),
   },
 ];
 
@@ -156,18 +207,3 @@ export const handoffNoteSchema = z.object({
   note: z.string().describe("Handoff note content"),
   forAgent: z.string().optional().describe("Target agent"),
 });
-
-// --- Schema map for stub tools ---
-
-export const MEMORY_COMMUNICATION_SCHEMAS: Record<string, z.ZodType> = {
-  memory_write: memoryWriteSchema,
-  memory_search: memorySearchSchema,
-  find_skills: findSkillsSchema,
-  load_skill: loadSkillSchema,
-  read_spec: readSpecSchema,
-  summarize_history: summarizeHistorySchema,
-  notify_operator: notifyOperatorSchema,
-  post_to_inbox: postToInboxSchema,
-  answer_context_chat: answerContextChatSchema,
-  handoff_note: handoffNoteSchema,
-};

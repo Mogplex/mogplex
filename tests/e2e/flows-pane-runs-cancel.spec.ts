@@ -189,8 +189,8 @@ test("running flow runs expose cancel in the recent runs rail", async ({
     cancel_reason: null,
     cancel_error: null,
     cancelable: false,
-    repairable: true,
-    requeueable: false,
+    repairable: false,
+    requeueable: true,
     latest_dispatch_event: {
       outcome: "completed",
       reason: "REVIEW_REQUIRED",
@@ -352,7 +352,7 @@ test("running flow runs expose cancel in the recent runs rail", async ({
   await expect(
     page
       .getByTestId("flow-run-card-job-failed")
-      .getByRole("button", { name: "Repair" })
+      .getByRole("button", { name: "Retry" })
   ).toBeEnabled();
   releaseCancelResponse();
   expect(cancelCount).toBe(1);

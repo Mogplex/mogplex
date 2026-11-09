@@ -9,7 +9,7 @@ import { validateOrchestrationBranchName } from "@/lib/orchestrations/validation
 import { redactSecretsInValue } from "@/lib/ai-telemetry";
 import { parseControlSessionModelId } from "@/lib/control/session-model";
 import { mergePersistedControlMessages } from "@/lib/control/transcript-store";
-import { validateControlChatMessages } from "../chat/_lib/messages";
+import { validateControlChatMessages } from "@/lib/control/chat/messages";
 
 const LIST_COLUMNS =
   "id, title, project, repo_id, model_id, orchestration_run_id, external_run_id, pinned, archived, created_at, updated_at";

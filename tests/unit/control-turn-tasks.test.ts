@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createControlTurnTasks } from "../../app/api/control/chat/_lib/turn-end";
+import { createControlTurnTasks } from "../../lib/control/chat/turn-end";
 import type { ControlMemoryContext } from "../../lib/agents/control-memory-context";
 import type { MemoryRelevanceInput } from "../../lib/decisions/memory-relevance";
 import type { SkillSelectionInput } from "../../lib/decisions/skills";

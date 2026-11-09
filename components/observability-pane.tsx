@@ -2,7 +2,7 @@
 import { useLiveInteractiveCalls, useObservabilityStats, useRecentAutomationEvents, useRecentCalls, useRecentJobRuns } from "@/hooks/use-observability"
 import { useState } from "react"
 import { Badge } from "@/components/ui/badge"
-import { formatCostUsd, formatDispatchOutcome, formatDispatchReason, getJobAutomationSummary } from "@/app/(dashboard)/[scope]/observability/_components/formatters"
+import { formatCostUsd, formatDispatchOutcome, formatDispatchReason, formatTokens, getJobAutomationSummary } from "@/lib/observability/formatters"
 import type { AiCall, AutomationDispatchEvent, ObservabilityJob } from "@/lib/types"
 
 function formatDuration(ms: number): string {
@@ -13,13 +13,6 @@ function formatDuration(ms: number): string {
   const hours = Math.floor(mins / 60)
   const remainMins = mins % 60
   return remainMins > 0 ? `${hours}h${remainMins}m` : `${hours}h`
-}
-
-function formatTokens(n: number | null): string {
-  if (n == null || n === 0) return "—"
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
-  return String(n)
 }
 
 function timeAgo(dateStr: string): string {

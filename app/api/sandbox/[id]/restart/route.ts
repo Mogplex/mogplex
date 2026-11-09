@@ -33,14 +33,11 @@ import {
   buildClientSnapshot,
   isActiveSandboxStatus,
   releaseSandboxBootLimitClaim,
+  releasePersistentRestartClaim,
+  failPersistentRestartClaim,
 } from "./_lib/helpers";
 import { handleLegacyRestart } from "./_lib/legacy-restart";
 
-/**
- * Native persistent restart: stop the VM to capture a fresh snapshot,
- * then wake the same sandbox with resume:true and re-run the dev
- * bootstrap. Keeps the DB record and the Vercel sandbox name stable.
- */
 async function handlePersistentRestart(
   request: Request,
   id: string,
@@ -89,11 +86,50 @@ async function handlePersistentRestart(
     limitClaimId = limitDecision.claimId ?? null;
   }
 
-  // Step 1: stop the current VM when it is already active
-  // (auto-snapshots on persistent), then wake it via resume:true to get a
-  // fresh session. Stopped/paused persistent VMs skip stop and must pass
-  // active admission before the wake.
-  let sandbox;
+  // Claim before provider work so a loser cannot stop the winning workspace.
+  let installingRecord: PersistentRestartRecord | null;
+  const restartStartedAt = new Date().toISOString();
+  try {
+    installingRecord = (await deps.updateSandboxRecord(
+      record.id,
+      {
+        ...(limitClaimId ? { limit_claim_id: limitClaimId } : {}),
+        status: "installing",
+        health_status: "starting",
+        stop_reason: null,
+        stopped_at: null,
+        last_boot_started_at: restartStartedAt,
+        last_boot_completed_at: null,
+        last_active_at: new Date().toISOString(),
+      },
+      {
+        expectedSandboxId: record.sandbox_id,
+        expectedLastBootStartedAt: record.last_boot_started_at ?? null,
+        fromStatuses: RESTART_INSTALLING_FROM_STATUSES,
+        select: PERSISTENT_RESTART_SELECT,
+      }
+    )) as PersistentRestartRecord | null;
+  } catch (error) {
+    await releaseSandboxBootLimitClaim(deps, auth.userId, limitClaimId);
+    throw error;
+  }
+
+  if (!installingRecord) {
+    await releaseSandboxBootLimitClaim(deps, auth.userId, limitClaimId);
+    return buildLifecycleConflictResponse(
+      "Sandbox restart was cancelled before it started."
+    );
+  }
+
+  const releaseRestartClaim = () =>
+    releasePersistentRestartClaim(deps, {
+      userId: auth.userId,
+      record,
+      limitClaimId,
+      restartStartedAt,
+    });
+
+  let sandbox!: Awaited<ReturnType<typeof deps.getSandbox>>;
   try {
     const currentVm = await deps.getSandbox(
       record.sandbox_id,
@@ -107,21 +143,18 @@ async function handlePersistentRestart(
     );
 
     if (isSandboxExplicitlyNonPersistent(currentVm)) {
-      await releaseSandboxBootLimitClaim(deps, auth.userId, limitClaimId);
+      await releaseRestartClaim();
       await markSandboxRecordNonPersistent(deps, record);
       return handleLegacyRestart(request, id, deps);
     }
 
     if (!needsWakeAdmission) {
-      // Restart immediately rotates this live provider session. Require the
-      // close barrier before stop so scheduled accrual cannot cross sessions.
       const billingClose = await deps.prepareSandboxBillingClose(record.id);
       let stopSucceeded = false;
       try {
         await currentVm.stop();
         stopSucceeded = true;
       } catch (stopErr) {
-        // Already stopped (e.g. user paused first) is fine; surface anything else.
         console.warn(
           `[sandbox/restart] stop() during persistent restart surfaced: ${
             stopErr instanceof Error ? stopErr.message : String(stopErr)
@@ -132,9 +165,6 @@ async function handlePersistentRestart(
         const providerSession = currentVm.currentSession();
         const providerEndedAt =
           providerSession.stoppedAt ?? providerSession.updatedAt ?? new Date();
-        // Finalize before waking the replacement so stopped boot time can
-        // never be charged to the predecessor. Failure remains fail-closed:
-        // the VM is stopped and reconciliation can finish this generation.
         await deps.finalizeSandboxBillingClose(billingClose, providerEndedAt);
       }
     }
@@ -147,12 +177,16 @@ async function handlePersistentRestart(
     });
     await deps.requireSandboxBillingSession(record.id, sandbox);
   } catch (err) {
-    await releaseSandboxBootLimitClaim(deps, auth.userId, limitClaimId);
+    if (sandbox) {
+      await stopSandboxAfterLifecycleConflict(
+        sandbox,
+        record.id,
+        "wake failure",
+        deps
+      );
+    }
     if (isNotFoundError(err)) {
-      // Vercel no longer has a resumable sandbox behind this name (its last
-      // session and snapshot expired). Nothing can be woken, so retire the
-      // record and relaunch through the collection route, which reconciles
-      // the stale provider name before creating a replacement.
+      await releaseRestartClaim();
       console.info(
         "[sandbox/restart] provider sandbox gone; relaunching through legacy restart",
         { sandboxRecordId: record.id, sandboxId: record.sandbox_id }
@@ -165,64 +199,46 @@ async function handlePersistentRestart(
       (err instanceof Error
         ? err.message
         : "Failed to wake sandbox for restart");
+    await failPersistentRestartClaim(deps, {
+      userId: auth.userId,
+      record,
+      limitClaimId,
+      restartStartedAt,
+      message,
+    });
     return NextResponse.json(
       { error: message },
       { status: billingError?.status ?? 502 }
     );
   }
 
-  // Step 2: transition the record to installing so UI overlays show
-  // the restart-in-progress state. We accept transitions from any
-  // active status since user can hit Restart on running/error/idle.
-  // Clear stop_reason so a previously-stopped record doesn't carry a
-  // stale reason (e.g. "idle_timeout") while it is actively running.
-  let installingRecord: PersistentRestartRecord | null;
+  const repo = record.repo;
+  let envResolution: Awaited<ReturnType<typeof resolveRepoSandboxEnv>>;
   try {
-    installingRecord = (await deps.updateSandboxRecord(
-      record.id,
-      {
-        ...(limitClaimId ? { limit_claim_id: limitClaimId } : {}),
-        status: "installing",
-        health_status: "starting",
-        stop_reason: null,
-        stopped_at: null,
-        // A persistent name survives across provider sessions. The reaper
-        // must measure this boot, not the age of a previous stopped VM.
-        last_boot_started_at: new Date().toISOString(),
-        last_boot_completed_at: null,
-        last_active_at: new Date().toISOString(),
-      },
-      {
-        expectedSandboxId: record.sandbox_id,
-        fromStatuses: RESTART_INSTALLING_FROM_STATUSES,
-        select: PERSISTENT_RESTART_SELECT,
-      }
-    )) as PersistentRestartRecord | null;
+    envResolution = await deps.resolveRepoSandboxEnv({
+      repo: repo as unknown as Parameters<
+        typeof resolveRepoSandboxEnv
+      >[0]["repo"],
+      userId: auth.userId,
+    });
   } catch (error) {
-    await releaseSandboxBootLimitClaim(deps, auth.userId, limitClaimId);
-    throw error;
-  }
-
-  if (!installingRecord) {
-    await releaseSandboxBootLimitClaim(deps, auth.userId, limitClaimId);
     await stopSandboxAfterLifecycleConflict(
       sandbox,
       record.id,
-      "restart",
+      "environment failure",
       deps
     );
-    return buildLifecycleConflictResponse(
-      "Sandbox restart was cancelled before it started."
-    );
+    const message =
+      error instanceof Error ? error.message : "Failed to prepare restart";
+    await failPersistentRestartClaim(deps, {
+      userId: auth.userId,
+      record,
+      limitClaimId,
+      restartStartedAt,
+      message,
+    });
+    return NextResponse.json({ error: message }, { status: 502 });
   }
-
-  const repo = record.repo;
-  const envResolution = await deps.resolveRepoSandboxEnv({
-    repo: repo as unknown as Parameters<
-      typeof resolveRepoSandboxEnv
-    >[0]["repo"],
-    userId: auth.userId,
-  });
 
   const encoder = new TextEncoder();
   let cancelled = false;
@@ -255,12 +271,7 @@ async function handlePersistentRestart(
         for await (const bevent of deps.bootstrapFromSnapshotStreaming(
           sandbox,
           {
-            // Use the sandbox's snapshot of the launch-time path verbatim.
-            // PERSISTENT_RESTART_SELECT always includes root_directory, and
-            // the 20260425030000 migration backfilled every existing row,
-            // so null here means "explicit repo root", not "missing value".
-            // Falling back to repo.root_directory would silently relocate a
-            // restarted sandbox into the repo's monorepo subdirectory.
+            // Boot in the original workspace, not the repo's subdirectory.
             rootDirectory: record.root_directory,
             devCommand: repo.dev_command,
             devPort: resolveConfiguredDevPort(
@@ -309,6 +320,7 @@ async function handlePersistentRestart(
                 },
                 {
                   expectedSandboxId: record.sandbox_id,
+                  expectedLastBootStartedAt: restartStartedAt,
                   fromStatuses: ["installing", "running"],
                   select: PERSISTENT_RESTART_SELECT,
                 }
@@ -354,6 +366,7 @@ async function handlePersistentRestart(
                   },
                   {
                     expectedSandboxId: record.sandbox_id,
+                    expectedLastBootStartedAt: restartStartedAt,
                     fromStatuses: ["installing", "running"],
                     select: PERSISTENT_RESTART_SELECT,
                   }
@@ -413,6 +426,7 @@ async function handlePersistentRestart(
           },
           {
             expectedSandboxId: record.sandbox_id,
+            expectedLastBootStartedAt: restartStartedAt,
             fromStatuses: ["installing", "running"],
           }
         );
@@ -460,8 +474,6 @@ export function createSandboxRestartHandler(
   ) {
     const { id } = await params;
 
-    // Cheap probe to branch persistent vs. legacy without loading the
-    // full repo relation for both paths.
     const probe = await deps.loadOwnedSandboxRouteRecord<{
       id: string;
       sandbox_id: string;

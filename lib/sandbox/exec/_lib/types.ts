@@ -12,6 +12,7 @@ import type {
 import type { resolveSandboxAiAccess } from "@/lib/sandbox/ai-runtime";
 import type { syncTerminalRuntimeAuth } from "@/lib/sandbox/dev-tools";
 import type { resolveSandboxGitAuthor } from "@/lib/sandbox/git-author";
+import type { resolveRepoSandboxEnv } from "@/lib/vercel/env-vars";
 
 export type ExecSandboxRecord = {
   sandbox_id: string;
@@ -64,4 +65,5 @@ export type SandboxExecPostDeps = {
   syncTerminalRuntimeAuth: typeof syncTerminalRuntimeAuth;
   touchSandboxLastActive: typeof touchSandboxLastActive;
   renewSandboxActivityLease: typeof renewSandboxActivityLease;
+  resolveRepoSandboxEnv: typeof resolveRepoSandboxEnv;
 };

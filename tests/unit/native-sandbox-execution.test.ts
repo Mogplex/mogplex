@@ -9,7 +9,7 @@ import {
   buildSandboxServiceRouteAuth,
   loadSandboxExecRouteModule,
 } from "./sandbox-service-route-test-harness";
-import type { SandboxExecPostDeps } from "../../app/api/sandbox/[id]/exec/_lib/types";
+import type { SandboxExecPostDeps } from "../../lib/sandbox/exec/_lib/types";
 
 const TEAM_ID = "11111111-1111-4111-8111-111111111111";
 

@@ -1,17 +1,16 @@
 import type { FileUIPart, TextUIPart, UIMessage } from "ai";
 import { validateUIMessages } from "ai";
+import {
+  chargeAttachmentBudget,
+  readAttachmentDataUrlByteLength,
+} from "@/lib/attachments/data-url";
+import { ATTACHMENT_LIMITS } from "@/lib/attachments/policy";
 import type {
   ControlChatRequestMessage,
   ControlChatRequestPart,
 } from "./types";
 
 type NormalizedControlChatMessage = UIMessage;
-
-const MAX_CONTROL_FILE_DATA_URL_CHARS = 5_600_000;
-const MAX_CONTROL_FILE_BYTES = 4 * 1024 * 1024;
-const MAX_CONTROL_FILE_PARTS = 5;
-const MAX_CONTROL_TOTAL_FILE_BYTES =
-  MAX_CONTROL_FILE_BYTES * MAX_CONTROL_FILE_PARTS;
 
 type ControlFileBudget = {
   count: number;
@@ -26,50 +25,25 @@ export class ControlChatValidationError extends Error {
 }
 
 function readFilePartBytes(part: ControlChatRequestPart): number {
-  const match = /^data:([^;,]+);base64,([A-Za-z0-9+/]*={0,2})$/.exec(
-    part.type === "file" ? part.url : ""
+  const parsed = readAttachmentDataUrlByteLength(
+    part.type === "file" ? part.url : "",
+    part.type === "file" ? part.mediaType : ""
   );
-  if (
-    !match ||
-    part.type !== "file" ||
-    match[1]?.toLowerCase() !== part.mediaType.toLowerCase()
-  ) {
+  if (!parsed.ok) {
     throw new ControlChatValidationError(
       "Invalid control chat file attachment."
     );
   }
-  const encodedData = match[2] ?? "";
-  if (encodedData.length % 4 !== 0) {
-    throw new ControlChatValidationError(
-      "Invalid control chat file attachment."
-    );
-  }
-  const decodedData = Buffer.from(encodedData, "base64");
-  if (decodedData.toString("base64") !== encodedData) {
-    throw new ControlChatValidationError(
-      "Invalid control chat file attachment."
-    );
-  }
-  const decodedBytes = decodedData.byteLength;
-  if (decodedBytes > MAX_CONTROL_FILE_BYTES) {
-    throw new ControlChatValidationError(
-      "Control chat file attachment exceeds the size limit."
-    );
-  }
-  return decodedBytes;
+  return parsed.byteLength;
 }
 
 function applyFileBudget(budget: ControlFileBudget, decodedBytes: number) {
-  budget.count += 1;
-  if (budget.count > MAX_CONTROL_FILE_PARTS) {
+  const result = chargeAttachmentBudget(budget, decodedBytes);
+  if (!result.ok) {
     throw new ControlChatValidationError(
-      `Control chat supports up to ${MAX_CONTROL_FILE_PARTS} file attachments.`
-    );
-  }
-  budget.bytes += decodedBytes;
-  if (budget.bytes > MAX_CONTROL_TOTAL_FILE_BYTES) {
-    throw new ControlChatValidationError(
-      "Control chat file attachments exceed the total size limit."
+      result.reason === "count"
+        ? `Control chat supports up to ${ATTACHMENT_LIMITS.maxFiles} file attachments.`
+        : "Control chat file attachments exceed the total size limit."
     );
   }
 }
@@ -93,7 +67,7 @@ function normalizeFilePart(
       "Control chat file attachments must be uploaded as data URLs."
     );
   }
-  if (part.url.length > MAX_CONTROL_FILE_DATA_URL_CHARS) {
+  if (part.url.length > ATTACHMENT_LIMITS.maxDataUrlChars) {
     throw new ControlChatValidationError(
       "Control chat file attachment exceeds the size limit."
     );

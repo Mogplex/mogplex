@@ -1,3 +1,5 @@
+import { ATTACHMENT_LIMITS } from "@/lib/attachments/policy";
+
 export type ControlComposerFile = {
   id: string;
   type: "file";
@@ -6,8 +8,8 @@ export type ControlComposerFile = {
   url: string;
 };
 
-export const MAX_CONTROL_ATTACHMENT_COUNT = 5;
-const MAX_CONTROL_ATTACHMENT_BYTES = 4 * 1024 * 1024;
+export const MAX_CONTROL_ATTACHMENT_COUNT = ATTACHMENT_LIMITS.maxFiles;
+const MAX_CONTROL_ATTACHMENT_BYTES = ATTACHMENT_LIMITS.maxFileBytes;
 
 export function appendControlComposerFiles(
   current: ControlComposerFile[],

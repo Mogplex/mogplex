@@ -1,5 +1,5 @@
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import type { ControlChatRequestBody } from "@/app/api/control/chat/_lib/types";
+import type { ControlChatRequestBody } from "@/lib/control/chat/types";
 import type { AiCall } from "@/lib/types";
 
 export type ControlTurn = {

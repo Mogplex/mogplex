@@ -6,7 +6,7 @@ import {
   createToolCallFinishPayload,
   createToolCallStartPayload,
   summarizeToolCalls,
-} from "../../app/api/control/chat/_lib/telemetry";
+} from "../../lib/control/chat/telemetry";
 
 test("control resource context telemetry preserves server-owned identity boundaries", () => {
   const payload = buildControlResourceContextPayload({

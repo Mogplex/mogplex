@@ -2,7 +2,7 @@ import type { Repo, SandboxRecord } from "@/lib/types";
 import type { PaneType, SplitDir } from "@/hooks/use-split-panes";
 import { useSessionsStore } from "@/hooks/use-sessions";
 import { useSandboxStore } from "@/hooks/use-sandbox";
-import { ensureSessionSandboxBinding } from "@/lib/sandbox/session-retarget";
+import { ensureSessionSandboxBinding } from "@/hooks/session-retarget";
 import type { SessionSandboxRestartCandidate } from "@/lib/sandbox/session-auto-restart";
 import type { ActiveRepoProps, ActiveSandboxProps } from "./types";
 

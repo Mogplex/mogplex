@@ -1,8 +1,10 @@
 import { resolveSandboxPath } from "@/lib/repo-settings";
+import { parseAttachmentDataUrl } from "@/lib/attachments/data-url";
+import { ATTACHMENT_LIMITS } from "@/lib/attachments/policy";
 
-export const BROWSER_HARNESS_ATTACHMENT_MAX_COUNT = 5;
-export const BROWSER_HARNESS_ATTACHMENT_MAX_BYTES = 4 * 1024 * 1024;
-const MAX_DATA_URL_CHARS = 5_600_000;
+export const BROWSER_HARNESS_ATTACHMENT_MAX_COUNT = ATTACHMENT_LIMITS.maxFiles;
+export const BROWSER_HARNESS_ATTACHMENT_MAX_BYTES =
+  ATTACHMENT_LIMITS.maxFileBytes;
 const ATTACHMENT_DIR = ".mogplex/chat-attachments";
 const GITIGNORE_FILENAME = ".mogplex/.gitignore";
 
@@ -49,7 +51,7 @@ export function normalizeBrowserHarnessAttachments(
     if (!dataUrl.toLowerCase().startsWith("data:")) {
       throw new Error("Harness chat attachments must use a data URL.");
     }
-    if (dataUrl.length > MAX_DATA_URL_CHARS) {
+    if (dataUrl.length > ATTACHMENT_LIMITS.maxDataUrlChars) {
       throw new Error("Harness chat attachment exceeds the size limit.");
     }
     return { name, mediaType, dataUrl };
@@ -77,23 +79,14 @@ export function readBrowserHarnessAttachments(
 }
 
 function decodeAttachment(attachment: BrowserHarnessAttachment) {
-  const commaIndex = attachment.dataUrl.indexOf(",");
-  const header = attachment.dataUrl.slice(0, commaIndex);
-  const payload = attachment.dataUrl.slice(commaIndex + 1).replace(/\s/g, "");
-  const headerParts = header.slice(5).split(";");
-  if (
-    commaIndex < 0 ||
-    headerParts[0]?.toLowerCase() !== attachment.mediaType.toLowerCase() ||
-    headerParts.at(-1)?.toLowerCase() !== "base64" ||
-    !/^[A-Za-z0-9+/]*={0,2}$/.test(payload)
-  ) {
+  const parsed = parseAttachmentDataUrl(
+    attachment.dataUrl,
+    attachment.mediaType
+  );
+  if (!parsed.ok) {
     throw new Error("Invalid harness chat attachment data URL.");
   }
-  const content = Buffer.from(payload, "base64");
-  if (content.byteLength > BROWSER_HARNESS_ATTACHMENT_MAX_BYTES) {
-    throw new Error("Harness chat attachment exceeds the size limit.");
-  }
-  return content;
+  return parsed.content;
 }
 
 function sanitizeFilename(name: string, index: number) {

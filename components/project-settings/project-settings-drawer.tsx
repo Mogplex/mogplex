@@ -18,14 +18,8 @@ import { useRepos } from "@/hooks/use-repos";
 import { useRepoSettingsActions } from "@/hooks/use-repo-settings-actions";
 import { EnvVarsPanel } from "./env-vars-panel";
 
-export type ProjectSettingsTab =
-  | "env"
-  | "general"
-  | "secrets"
-  | "skills"
-  | "rules"
-  | "models"
-  | "snapshot";
+import type { ProjectSettingsTab } from "@/hooks/use-project-settings-drawer";
+export type { ProjectSettingsTab } from "@/hooks/use-project-settings-drawer";
 
 const TABS: { id: ProjectSettingsTab; label: string }[] = [
   { id: "env", label: "Environment variables" },

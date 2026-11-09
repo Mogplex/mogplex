@@ -293,7 +293,7 @@ it("bounds saved-server startup, keeps healthy tools, and does not abort later t
 
 it("returns healthy saved tools before Control's outer startup deadline", async () => {
   const { loadControlConnectionTools } =
-    await import("@/app/api/control/chat/_lib/connection-tools");
+    await import("@/lib/control/chat/connection-tools");
   vi.useFakeTimers();
   stallDiscovery = true;
   const started = new Promise<void>((resolve) => {

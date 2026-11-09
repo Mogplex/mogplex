@@ -74,6 +74,9 @@ describe("buildOrchestratorTools", () => {
     // registry def descriptions the stubs would echo back.
     expect(tools.memory_write.description).toContain("durable memory");
     expect(tools.memory_search.description).toContain("saved memories");
+    const rebuilt = buildOrchestratorTools(FULL_CONTEXT);
+    expect(rebuilt.memory_write).toBe(tools.memory_write);
+    expect(rebuilt.memory_search).toBe(tools.memory_search);
   });
 
   it("should wire find_skills and load_skill to the skill catalog tools", () => {

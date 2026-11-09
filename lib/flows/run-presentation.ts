@@ -204,14 +204,6 @@ export function getRunActionDescriptors(
       });
     }
 
-    if (run.repairable) {
-      actions.push({
-        action: "repair",
-        label: "Repair",
-        emphasis: "secondary",
-      });
-    }
-
     return actions;
   }
 

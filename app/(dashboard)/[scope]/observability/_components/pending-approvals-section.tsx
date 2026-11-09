@@ -8,7 +8,7 @@ import type {
   FlowAwaitEventConfig,
   FlowToolApprovalWaitConfig,
 } from "@/lib/types"
-import { timeAgo } from "./formatters"
+import { timeAgo } from "@/lib/observability/formatters"
 import { useRealtimeRouteRefresh } from "@/hooks/use-realtime-route-refresh"
 
 type PendingApproval = {

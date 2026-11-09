@@ -32,7 +32,8 @@ async function resolveProfileId(authUserId: string) {
     .select("id")
     .eq("auth_user_id", authUserId)
     .maybeSingle();
-  if (error || !data?.id) return null;
+  if (error) throw new Error(error.message);
+  if (!data?.id) return null;
   return data.id as string;
 }
 
@@ -97,7 +98,7 @@ export async function resolveMogplexOAuthToken(
     dependencies.captureException(error, {
       tags: { auth_surface: "mogplex_mcp_oauth" },
     });
-    return { ok: false, reason: "invalid" };
+    throw error;
   }
 }
 

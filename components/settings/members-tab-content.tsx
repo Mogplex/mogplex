@@ -2,7 +2,7 @@
 
 import type { RefObject } from "react";
 import { formatDate, roleOptions } from "./team-settings-helpers";
-import type { TeamMembersResponse } from "@/app/api/teams/[teamId]/members/route";
+import type { TeamMembersResponse } from "@/lib/team-api-types";
 import type { TeamRole } from "@/lib/team-capabilities";
 
 type MembersTabContentProps = {

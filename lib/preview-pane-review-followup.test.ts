@@ -10,7 +10,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { InlineEnvVarForm, StatusOverlay } from "@/components/preview-pane";
-import { setActiveTeamIdForRequests } from "@/components/active-scope-provider";
+import { setActiveTeamIdForRequests } from "@/lib/active-team-request";
 import { ACTIVE_TEAM_HEADER } from "@/lib/team-capabilities";
 
 describe("preview missing-environment recovery", () => {

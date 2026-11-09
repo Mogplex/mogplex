@@ -4,7 +4,7 @@ import test from "node:test";
 test("active scope helpers attach the current team header without dropping existing headers", async () => {
   const { ACTIVE_TEAM_HEADER } = await import("../../lib/team-capabilities");
   const { getActiveTeamRequestHeaders, setActiveTeamIdForRequests } =
-    await import("../../components/active-scope-provider");
+    await import("../../lib/active-team-request");
 
   setActiveTeamIdForRequests(null);
   const personalHeaders = getActiveTeamRequestHeaders({

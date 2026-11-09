@@ -3,7 +3,7 @@ import test from "node:test";
 import {
   resolveControlPromptSandboxContext,
   resolveControlToolSandboxId,
-} from "../../app/api/control/chat/_lib/sandbox-context";
+} from "../../lib/control/chat/sandbox-context";
 
 test("control prompt rejects a failed selection without allowing a fresh fallback", async () => {
   const context = await resolveControlPromptSandboxContext(

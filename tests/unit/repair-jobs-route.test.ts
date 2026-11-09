@@ -3,28 +3,64 @@ import test from "node:test";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createRepairJobsGetHandler } from "../../app/api/cron/repair-jobs/handler";
 
-function buildPendingJobsClient() {
-  const jobs = [
-    {
-      id: "job-1",
-      status: "pending",
-      created_at: "2026-08-15T10:00:00.000Z",
-      started_at: null,
-      last_start_attempt_at: null,
-    },
-    {
-      id: "job-2",
-      status: "pending",
-      created_at: "2026-08-15T10:01:00.000Z",
-      started_at: null,
-      last_start_attempt_at: null,
-    },
-  ];
+type PendingJob = {
+  id: string;
+  status: string;
+  created_at: string;
+  started_at: string | null;
+  last_start_attempt_at: string | null;
+  flow_id: string | null;
+  trigger_id: string | null;
+};
+
+const defaultPendingJobs: PendingJob[] = [
+  {
+    id: "job-1",
+    status: "pending",
+    created_at: "2026-08-15T10:00:00.000Z",
+    started_at: null,
+    last_start_attempt_at: null,
+    flow_id: "flow-1",
+    trigger_id: null,
+  },
+  {
+    id: "job-2",
+    status: "pending",
+    created_at: "2026-08-15T10:01:00.000Z",
+    started_at: null,
+    last_start_attempt_at: null,
+    flow_id: "flow-2",
+    trigger_id: null,
+  },
+];
+
+function buildPendingJobsClient(
+  jobs: PendingJob[] = defaultPendingJobs,
+  onSelect?: (columns: string) => void,
+  onNot?: (column: string, operator: string, value: unknown) => void,
+  onUpdate?: (updates: Record<string, unknown>) => void
+) {
   const query = {
-    select: () => query,
+    select: (columns: string) => {
+      onSelect?.(columns);
+      return query;
+    },
     eq: () => query,
+    not: (column: string, operator: string, value: unknown) => {
+      onNot?.(column, operator, value);
+      return query;
+    },
+    update: (updates: Record<string, unknown>) => {
+      onUpdate?.(updates);
+      return query;
+    },
+    in: () => query,
     order: () => query,
     limit: async () => ({ data: jobs, error: null }),
+    then: (
+      resolve: (result: { error: null; data: Array<{ id: string }> }) => unknown
+    ) =>
+      Promise.resolve({ error: null, data: [{ id: "legacy" }] }).then(resolve),
   };
   return {
     from: (table: string) => {
@@ -80,10 +116,75 @@ test("repair-jobs keeps loading and nested starts inside one admin connection", 
   assert.equal(body.failed, 0);
 });
 
+test("repair-jobs retires stale legacy rows and reports skip reasons", async () => {
+  const jobs = [
+    defaultPendingJobs[0]!,
+    {
+      ...defaultPendingJobs[1]!,
+      id: "legacy",
+      flow_id: null,
+      trigger_id: "legacy-trigger",
+    },
+    { ...defaultPendingJobs[1]!, id: "assignment", flow_id: null },
+    {
+      ...defaultPendingJobs[1]!,
+      id: "trigger-flow",
+      trigger_id: "trigger-1",
+    },
+    { ...defaultPendingJobs[1]!, id: "fresh-flow" },
+  ];
+  const selectedColumns: string[] = [];
+  const notFilters: string[] = [];
+  const updates: Record<string, unknown>[] = [];
+  const adminClient = buildPendingJobsClient(
+    jobs,
+    (columns) => {
+      selectedColumns.push(columns);
+    },
+    (column, operator, value) => {
+      notFilters.push(`${column}:${operator}:${String(value)}`);
+    },
+    (update) => {
+      updates.push(update);
+    }
+  );
+  const startedJobIds: string[] = [];
+  const handler = createRepairJobsGetHandler({
+    requireMachineApiAuth: () => null,
+    withSupabaseAdminConnection: (operation) => operation(adminClient),
+    isRepairablePendingJob: (job) => (job as PendingJob).id !== "fresh-flow",
+    startAutomationJobRun: async (jobRunId) => {
+      startedJobIds.push(jobRunId);
+      return { started: true, status: "running" };
+    },
+  });
+
+  const response = await handler(
+    new Request("http://localhost/api/cron/repair-jobs")
+  );
+  const body = await response.json();
+
+  assert.equal(
+    selectedColumns.some((columns) => /\btrigger_id\b/.test(columns)),
+    true
+  );
+  assert.deepEqual(notFilters, []);
+  assert.deepEqual(startedJobIds, ["job-1", "assignment", "trigger-flow"]);
+  assert.equal(body.scanned, 5);
+  assert.equal(body.skippedNotStale, 1);
+  assert.equal(body.retireErrors, 0);
+  assert.equal(body.retiredLegacy, 1);
+  assert.equal(body.started, 3);
+  assert.equal(updates.length, 1);
+  assert.equal(updates[0]?.status, "failed");
+  assert.equal(updates[0]?.error, "Legacy job run source is not executable");
+});
+
 test("repair-jobs returns consistent counters for an empty batch", async () => {
   const query = {
     select: () => query,
     eq: () => query,
+    not: () => query,
     order: () => query,
     limit: async () => ({ data: [], error: null }),
   };
@@ -100,11 +201,14 @@ test("repair-jobs returns consistent counters for an empty batch", async () => {
   );
 
   assert.deepEqual(await response.json(), {
-    message: "No stale pending jobs",
+    message: "No repairable pending jobs",
     scanned: 0,
     started: 0,
     deferred: 0,
     failed: 0,
+    skippedNotStale: 0,
+    retireErrors: 0,
+    retiredLegacy: 0,
   });
 });
 

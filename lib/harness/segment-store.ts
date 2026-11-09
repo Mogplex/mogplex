@@ -1,7 +1,7 @@
 import type {
   LocalMessageSegment,
   LocalToolCall,
-} from "@/hooks/use-conversations";
+} from "@/lib/harness/output-types";
 
 export type HarnessRenderChunk = {
   text: string;

@@ -2,7 +2,7 @@ import { convertToModelMessages, type UIMessageChunk } from "ai";
 import { expect, it } from "vitest";
 import { controlTranscriptDatabase } from "../support/control-transcript-database";
 import { persistedControlStream } from "@/lib/control/persisted-stream";
-import { validateControlChatMessages } from "@/app/api/control/chat/_lib/messages";
+import { validateControlChatMessages } from "@/lib/control/chat/messages";
 
 it("persists final tool evidence despite a racing browser save, then restores it for the next model turn", async () => {
   const fixture = await controlTranscriptDatabase();

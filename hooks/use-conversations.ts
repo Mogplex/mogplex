@@ -1,6 +1,6 @@
 "use client";
 import { create } from "zustand";
-import { getActiveTeamRequestHeaders } from "@/components/active-scope-provider";
+import { getActiveTeamRequestHeaders } from "@/lib/active-team-request";
 import { DEFAULT_NEW_AGENT_MODEL_ID } from "@/lib/agents/model-options";
 import type {
   ConversationContext,

@@ -48,7 +48,7 @@ const defaultMogplexApiSandboxesGetDeps: MogplexApiSandboxesGetDeps = {
 async function postMogplexApiSandbox(request: Request) {
   const [{ createSandboxPostHandler }, { createMogplexApiSandboxPostDeps }] =
     await Promise.all([
-      import("@/app/api/sandbox/route"),
+      import("@/lib/sandbox/collection/route"),
       import("./_lib/launch-deps"),
     ]);
   return createSandboxPostHandler(createMogplexApiSandboxPostDeps())(request);

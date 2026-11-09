@@ -428,7 +428,7 @@ export async function runFlowAction(
   }
   const sandbox = await launchFlowActionSandbox(input);
   const { createSandboxExecPostHandler } =
-    await import("@/app/api/sandbox/[id]/exec/route");
+    await import("@/lib/sandbox/exec/route");
   const response = await createSandboxExecPostHandler()(
     new Request(
       `https://internal.mogplex/api/sandbox/${sandbox.recordId}/exec`,

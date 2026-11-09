@@ -7,6 +7,7 @@ import type {
   TriggerEvent,
 } from "@/lib/types";
 import type { AutomationDispatchEventOutcome } from "@/lib/automation-dispatch";
+import type { JobRunStartSource } from "@/lib/job-runs";
 
 export type TestInstallation = {
   id: string;
@@ -97,13 +98,7 @@ export type TestJobRunRow = {
   start_attempts?: number;
   last_start_attempt_at: string | null;
   last_start_error?: string | null;
-  last_start_source?:
-    | "webhook"
-    | "cron"
-    | "repair"
-    | "manual_retry"
-    | "queue_release"
-    | null;
+  last_start_source?: JobRunStartSource | null;
   cancel_requested_at?: string | null;
   cancelled_at?: string | null;
   cancel_reason?: string | null;

@@ -301,6 +301,9 @@ describe("findReviewFormatProblems", () => {
     await expect(judge({ mode: "off", status: "off" })).resolves.toBeNull();
     await expect(judge({ mode: "shadow", status: "ok" })).resolves.toBeNull();
     await expect(
+      judge({ mode: "advise", status: "ok" }, true)
+    ).resolves.toBeNull();
+    await expect(
       judge({ mode: "enforce", status: "ok" }, false, false)
     ).resolves.toBeNull();
   });

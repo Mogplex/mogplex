@@ -281,8 +281,9 @@ async function consumeStreamWithCallback(
   result: ReturnType<typeof streamText>,
   reporter: ReturnType<typeof createRunChatProgressReporter>
 ) {
-  for await (const delta of result.textStream) {
-    await reporter.textDelta(delta);
+  for await (const part of result.fullStream) {
+    if (part.type === "error") throw part.error;
+    if (part.type === "text-delta") await reporter.textDelta(part.text);
   }
 }
 

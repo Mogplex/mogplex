@@ -4,8 +4,8 @@ import { PGlite } from "@electric-sql/pglite";
 import { createPostgrestShim, type Queryable } from "@/lib/db/postgrest-shim";
 import { SHIM_TYPE_PARSERS } from "@/lib/db/pool";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { createSandboxResumeHandler } from "@/app/api/sandbox/[id]/resume/route";
-import { RESUME_SELECT } from "@/app/api/sandbox/[id]/resume/_lib/constants";
+import { createSandboxResumeHandler } from "@/lib/sandbox/resume/route";
+import { RESUME_SELECT } from "@/lib/sandbox/resume/_lib/constants";
 import { buildLoadedResumeContext } from "../unit/helpers/sandbox-resume-route-fixtures";
 
 export async function withResumeDatabase(

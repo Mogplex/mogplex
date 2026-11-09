@@ -2,7 +2,27 @@
  * Infrastructure and sandbox lifecycle tools for the orchestrator.
  */
 import { z } from "zod";
-import type { OrchestratorToolDef } from "../types";
+import { createStartSandbox, createStopSandbox } from "@/lib/agents/tools";
+import { createProjectSettingsTools } from "@/lib/agents/tools/project-settings";
+import type { OrchestratorToolContext, OrchestratorToolDef } from "../types";
+
+const projectSettingsToolsByContext = new WeakMap<
+  OrchestratorToolContext,
+  Record<string, import("ai").Tool>
+>();
+
+function projectSettingsToolsFor(ctx: OrchestratorToolContext) {
+  if (!ctx.repoId) return null;
+  const existing = projectSettingsToolsByContext.get(ctx);
+  if (existing) return existing;
+  const tools: Record<string, import("ai").Tool> = createProjectSettingsTools({
+    userId: ctx.userId,
+    repoId: ctx.repoId,
+    teamId: ctx.teamId ?? null,
+  });
+  projectSettingsToolsByContext.set(ctx, tools);
+  return tools;
+}
 
 // --- Tool definitions ---
 
@@ -20,6 +40,15 @@ export const INFRASTRUCTURE_TOOLS: OrchestratorToolDef[] = [
     description: "Start a sandbox microVM",
     access: "mutation",
     implemented: true,
+    build: (ctx) => {
+      if (ctx.sandboxSelectionRequired || !ctx.repoId) return null;
+      return createStartSandbox(
+        ctx.userId,
+        ctx.repoId,
+        undefined,
+        ctx.sandboxBinding
+      );
+    },
   },
   {
     name: "sandbox_stop",
@@ -27,6 +56,14 @@ export const INFRASTRUCTURE_TOOLS: OrchestratorToolDef[] = [
     description: "Stop sandbox compute without deleting its record",
     access: "mutation",
     implemented: true,
+    build: (ctx) =>
+      ctx.sandboxSelectionRequired
+        ? null
+        : createStopSandbox(
+            ctx.userId,
+            ctx.sandboxBinding,
+            ctx.sandboxExecution
+          ),
   },
   {
     name: "project_settings",
@@ -35,6 +72,7 @@ export const INFRASTRUCTURE_TOOLS: OrchestratorToolDef[] = [
       "Read the project's saved install/dev commands, port, root directory, and env var names",
     access: "read",
     implemented: true,
+    build: (ctx) => projectSettingsToolsFor(ctx)?.project_settings ?? null,
   },
   {
     name: "project_settings_update",
@@ -43,6 +81,8 @@ export const INFRASTRUCTURE_TOOLS: OrchestratorToolDef[] = [
       "Save working install/dev commands, port, or root directory for future boots",
     access: "mutation",
     implemented: true,
+    build: (ctx) =>
+      projectSettingsToolsFor(ctx)?.project_settings_update ?? null,
   },
   {
     name: "project_env_request",
@@ -51,6 +91,7 @@ export const INFRASTRUCTURE_TOOLS: OrchestratorToolDef[] = [
       "Ask the operator to fill in secret environment variables in Project settings",
     access: "read",
     implemented: true,
+    build: (ctx) => projectSettingsToolsFor(ctx)?.project_env_request ?? null,
   },
   {
     name: "project_env_set",
@@ -58,6 +99,7 @@ export const INFRASTRUCTURE_TOOLS: OrchestratorToolDef[] = [
     description: "Save one non-secret environment variable on the project",
     access: "mutation",
     implemented: true,
+    build: (ctx) => projectSettingsToolsFor(ctx)?.project_env_set ?? null,
   },
   {
     name: "sandbox_pause",
@@ -153,16 +195,3 @@ export const containerLogsSchema = z.object({
   tail: z.number().optional().describe("Number of lines"),
   since: z.string().optional().describe("Start time"),
 });
-
-// --- Schema map for stub tools ---
-
-export const INFRASTRUCTURE_SCHEMAS: Record<string, z.ZodType> = {
-  sandbox_provision: sandboxProvisionSchema,
-  sandbox_pause: sandboxPauseSchema,
-  sandbox_resize: sandboxResizeSchema,
-  sandbox_snapshot: sandboxSnapshotSchema,
-  secrets_read: secretsReadSchema,
-  artifact_store: artifactStoreSchema,
-  artifact_fetch: artifactFetchSchema,
-  container_logs: containerLogsSchema,
-};

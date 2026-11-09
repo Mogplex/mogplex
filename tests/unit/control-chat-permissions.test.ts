@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { runAuthorizedControlChat } from "../../app/api/control/chat/_lib/authorized-request";
+import { runAuthorizedControlChat } from "../../lib/control/chat/authorized-request";
 
 async function request(permissions: unknown) {
   // A malformed message lets accepted permission values continue through the

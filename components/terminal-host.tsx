@@ -20,7 +20,9 @@ const TerminalSession = dynamic(
 // session renders its DOM via createPortal into the anchor managed by
 // XTermPane, or into an offscreen fallback while the workspace is hidden.
 export function TerminalHost() {
-  const repoId = useSessionsStore(state => state.getActiveSession().activeRepo?.id);
+  const repoId = useSessionsStore(
+    (state) => state.getActiveSession()?.activeRepo?.id
+  );
   const { state: repositoryState } = useWorkspaceRepo(repoId);
   const root = useSessionsStore((state) => {
     const activeSession =

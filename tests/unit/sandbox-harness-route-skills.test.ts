@@ -18,6 +18,7 @@ import {
 import type { AgentRuntime } from "../../lib/agents/runtime/types";
 import type { SkillSelectionInput } from "../../lib/decisions/skills";
 import type { CatalogSkill, SkillCatalog } from "../../lib/skill-catalog/types";
+import type { SandboxHarnessPostDeps } from "../../lib/harness/_lib/types";
 
 function skill(
   id: string,
@@ -78,6 +79,7 @@ async function runHarness(input: {
   harness?: "codex" | "claude-code";
   agentId?: string;
   installLogs?: string;
+  injectClaudeMcpConfig?: SandboxHarnessPostDeps["injectClaudeMcpConfig"];
   loadSkillCatalog: (args: {
     userId: string;
     repoId?: string | null;
@@ -96,6 +98,9 @@ async function runHarness(input: {
   let harnessOpts: Record<string, unknown> = {};
   const handler = createSandboxHarnessPostHandler({
     ...buildHarnessGitDeliveryDeps(),
+    ...(input.injectClaudeMcpConfig
+      ? { injectClaudeMcpConfig: input.injectClaudeMcpConfig }
+      : {}),
     getSandboxServiceCredentials: async () => buildSandboxServiceRouteAuth(),
     loadOwnedSandboxRecord: async () =>
       buildOwnedSandboxServiceRecord({
@@ -359,6 +364,8 @@ test("POST /api/sandbox/[id]/harness runs unchanged for a user without skills or
 
 test("POST /api/sandbox/[id]/harness gives an ACP Codex run its MCP config and the same agent it set up for", async () => {
   const { HARNESSES } = await import("../../lib/harness/config");
+  const { injectClaudeMcpConfig } =
+    await import("../../lib/harness/mcp-config");
   const { withEnv } = await import("./helpers/agents-tools-fixtures");
   const noSkills = async () => ({ skills: [] });
 
@@ -366,6 +373,7 @@ test("POST /api/sandbox/[id]/harness gives an ACP Codex run its MCP config and t
     runHarness({
       prompt: "inspect",
       installLogs: "added 20 packages",
+      injectClaudeMcpConfig,
       loadSkillCatalog: noSkills,
     })
   );

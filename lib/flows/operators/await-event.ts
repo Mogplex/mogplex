@@ -7,28 +7,22 @@ import type {
   FlowNode,
 } from "@/lib/types";
 import { FAILURE_HANDLE_ID } from "@/lib/flows/graph-helpers";
+import {
+  AWAIT_EVENT_KINDS,
+  AWAIT_TIMEOUT_UNITS,
+} from "@/lib/flows/capabilities";
 import type { FlowOperatorDefinition } from "./types";
 
 type AwaitEventNode = Extract<FlowNode, { type: "await_event" }>;
 
-const AWAIT_KINDS = new Set<FlowAwaitEventConfig["kind"]>([
-  "github_label_added",
-  "github_comment_added",
-  "ci_workflow_completed",
-  "vercel_preview_ready",
-  "manual_approval",
-]);
+const AWAIT_KINDS = new Set<FlowAwaitEventConfig["kind"]>(AWAIT_EVENT_KINDS);
 const CI_CONCLUSIONS = new Set<FlowCiWorkflowConclusion>([
   "any",
   "success",
   "failure",
   "cancelled",
 ]);
-const TIMEOUT_UNITS = new Set<FlowAwaitEventTimeoutUnit>([
-  "minutes",
-  "hours",
-  "days",
-]);
+const TIMEOUT_UNITS = new Set<FlowAwaitEventTimeoutUnit>(AWAIT_TIMEOUT_UNITS);
 
 function isAwaitKind(value: unknown): value is FlowAwaitEventConfig["kind"] {
   return AWAIT_KINDS.has(value as FlowAwaitEventConfig["kind"]);

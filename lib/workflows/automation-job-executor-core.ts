@@ -185,6 +185,7 @@ export async function runAutomationJob(
   // Create initial check run for PR reviews before reporter is created
   let reviewCheckRunId: number | null = null;
   let reviewCheckRunUrl: string | null = null;
+  let reviewCheckRunError: string | null = null;
   if (isPrReview && reviewHeadSha.length > 0) {
     try {
       const checkRun = await deps.createPrReviewCheckRun({
@@ -196,8 +197,11 @@ export async function runAutomationJob(
       });
       reviewCheckRunId = checkRun.id;
       reviewCheckRunUrl = checkRun.htmlUrl;
-    } catch {
-      // Error is captured in reporter state
+    } catch (error) {
+      reviewCheckRunError =
+        error instanceof Error
+          ? error.message
+          : "Failed to create GitHub check run";
     }
   }
 
@@ -222,6 +226,7 @@ export async function runAutomationJob(
         reviewCheckDetailsUrl: reviewCheckDetailsUrl ?? "",
         reviewCheckRunId,
         reviewCheckRunUrl,
+        reviewCheckRunError,
       })
     : null;
 

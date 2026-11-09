@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { SandboxLaunchPreparation } from "../../app/api/sandbox/_lib/types";
+import type { SandboxLaunchPreparation } from "../../lib/sandbox/collection/_lib/types";
 import {
   buildOwnedRepoWithGithubAccess,
   buildSandboxCollectionRequest,
@@ -110,7 +110,7 @@ test("POST /api/sandbox finishes cleanup before requesting a fresh invocation", 
 test("terminal cleanup selects a replacement name and continues the same launch", async () => {
   await loadSandboxRouteModule();
   const { maybeReturnNameCollisionResponse } =
-    await import("../../app/api/sandbox/_lib/launch");
+    await import("../../lib/sandbox/collection/_lib/launch");
   const launch = {
     repoId: "repo-123",
     creds: { userId: "user-123" },

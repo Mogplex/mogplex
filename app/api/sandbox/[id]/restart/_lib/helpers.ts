@@ -135,3 +135,60 @@ export function releaseSandboxBootLimitClaim(
     claimId,
   });
 }
+
+export async function releasePersistentRestartClaim(
+  deps: Pick<SandboxRestartDeps, "updateSandboxRecord" | "releaseLimitClaim">,
+  input: {
+    userId: string;
+    record: PersistentRestartRecord;
+    limitClaimId: string | null;
+    restartStartedAt: string;
+  }
+) {
+  const { record } = input;
+  await deps.updateSandboxRecord(
+    record.id,
+    {
+      status: record.status,
+      health_status: record.health_status,
+      stop_reason: record.stop_reason,
+      last_boot_started_at: record.last_boot_started_at ?? null,
+      last_active_at: record.last_active_at,
+      limit_claim_id: null,
+    },
+    {
+      expectedSandboxId: record.sandbox_id,
+      fromStatuses: "installing",
+      expectedLastBootStartedAt: input.restartStartedAt,
+    }
+  );
+  await releaseSandboxBootLimitClaim(deps, input.userId, input.limitClaimId);
+}
+
+export async function failPersistentRestartClaim(
+  deps: Pick<SandboxRestartDeps, "updateSandboxRecord" | "releaseLimitClaim">,
+  input: {
+    userId: string;
+    record: PersistentRestartRecord;
+    limitClaimId: string | null;
+    restartStartedAt: string;
+    message: string;
+  }
+) {
+  await deps.updateSandboxRecord(
+    input.record.id,
+    {
+      status: "error",
+      health_status: "error",
+      error: input.message,
+      last_boot_error: input.message,
+      limit_claim_id: null,
+    },
+    {
+      expectedSandboxId: input.record.sandbox_id,
+      fromStatuses: "installing",
+      expectedLastBootStartedAt: input.restartStartedAt,
+    }
+  );
+  await releaseSandboxBootLimitClaim(deps, input.userId, input.limitClaimId);
+}

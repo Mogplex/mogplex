@@ -72,13 +72,3 @@ export const featureFlagSetSchema = z.object({
   value: z.union([z.boolean(), z.string(), z.number()]).describe("Flag value"),
   environment: z.string().optional().describe("Environment scope"),
 });
-
-// --- Schema map for stub tools ---
-
-export const DELIVERY_SCHEMAS: Record<string, z.ZodType> = {
-  deploy: deploySchema,
-  promote: promoteSchema,
-  rollback: rollbackSchema,
-  query_deployment_health: queryDeploymentHealthSchema,
-  feature_flag_set: featureFlagSetSchema,
-};

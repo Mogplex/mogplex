@@ -167,7 +167,7 @@ export function FlowsPane({ surface = "pane" }: { surface?: "pane" | "automation
     history, setHistory, baselineDraft, setBaselineDraft, saving, setSaving, saveStatus, setSaveStatus,
     saveError, setSaveError, savedInSessionFlowId, setSavedInSessionFlowId, publishing, setPublishing,
     publishSucceeded, setPublishSucceeded, draft, dirty, canUndo, canRedo, historyMergeRef,
-    autosaveTimeoutRef, publishStateTimeoutRef, autosaveAttemptSignatureRef, hydratedFlowIdRef,
+    autosaveTimeoutRef, publishStateTimeoutRef, autosaveAttemptSignatureRef, hydratedFlowIdRef, draftSignatureRef,
   } = useFlowSavePublishState({ selectedFlow, setContextMenu })
   const { activeRunActionsRef, activeRunActions, setActiveRunActions, reviewFindingIssueActionId, setReviewFindingIssueActionId } = useFlowRunActionsState()
   const assistantPanelOpen = useFlowAssistantPanel((s) => s.open)
@@ -225,10 +225,10 @@ export function FlowsPane({ surface = "pane" }: { surface?: "pane" | "automation
   const selectedRunDetail = selectedRunDetailResponse?.run ?? null
 
   // Handler hooks
-  const { persistFlow, publishFlow, toggleFlowStatus, undoDraft, redoDraft, resetHistoryMerge } = useFlowSavePublishHandlers({
+  const { persistFlow, publishFlow, toggleFlowStatus, undoDraft, redoDraft } = useFlowSavePublishHandlers({
     setHistory, setBaselineDraft, setSaving, setSaveStatus, setSaveError, setSavedInSessionFlowId,
     setPublishing, setPublishSucceeded, autosaveTimeoutRef, publishStateTimeoutRef,
-    autosaveAttemptSignatureRef, historyMergeRef, selectedFlow, draft, dirty, publishing, saving,
+    autosaveAttemptSignatureRef, hydratedFlowIdRef, draftSignatureRef, historyMergeRef, selectedFlow, draft, dirty, publishing, saving,
     activeTeamId, mutateFlows, mutateSelectedFlow, publishSuccessStateMs: PUBLISH_SUCCESS_STATE_MS,
   })
   const { createFlow, duplicateSelectedFlow, deleteSelectedFlow } = useFlowCrudHandlers({
@@ -269,7 +269,7 @@ export function FlowsPane({ surface = "pane" }: { surface?: "pane" | "automation
   const { insertNodeOnEdge, tidyCanvasLayout, straightenCanvasSelection, applyAssistantGraph } = useFlowGraphOperations({
     draft, updateDraft, agents, selectedStartConfigEvent: selectedStartConfig?.event,
   })
-  const { setRunActionState, runFlowJobAction, createReviewFindingIssue } = useFlowRunHandlers({
+  const { runFlowJobAction, createReviewFindingIssue } = useFlowRunHandlers({
     activeRunActionsRef, setActiveRunActions, reviewFindingIssueActionId, setReviewFindingIssueActionId,
     selectedRunDetail, mutateFlowRuns, mutateFlows, mutateSelectedRunDetail,
   })

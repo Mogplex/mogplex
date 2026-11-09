@@ -79,14 +79,3 @@ export const mcpRevokeSchema = z.object({
   agentId: z.string().describe("Agent to revoke access"),
   serverId: z.string().describe("MCP server ID"),
 });
-
-// --- Schema map for stub tools ---
-
-export const MCP_SCHEMAS: Record<string, z.ZodType> = {
-  mcp_list_servers: mcpListServersSchema,
-  mcp_discover_tools: mcpDiscoverToolsSchema,
-  mcp_call: mcpCallSchema,
-  mcp_health_check: mcpHealthCheckSchema,
-  mcp_grant: mcpGrantSchema,
-  mcp_revoke: mcpRevokeSchema,
-};

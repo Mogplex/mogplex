@@ -2,11 +2,11 @@ import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { readActiveTeamIdHeader } from "@/lib/team-capabilities";
 import { redactSecretsInValue } from "@/lib/ai-telemetry";
-import { createControlAiCall } from "@/app/api/control/chat/_lib/start-call";
-import type { executeControlChatRequest } from "@/app/api/control/chat/_lib/execute";
-import type { ControlStartupFailure } from "@/app/api/control/chat/_lib/types";
+import { createControlAiCall } from "@/lib/control/chat/start-call";
+import type { executeControlChatRequest } from "@/lib/control/chat/execute";
+import type { ControlStartupFailure } from "@/lib/control/chat/types";
 import { saveControlTranscript } from "./transcript-store";
-import { validateControlChatMessages } from "@/app/api/control/chat/_lib/messages";
+import { validateControlChatMessages } from "@/lib/control/chat/messages";
 import { TRIGGER_TASK_IDS } from "@/lib/trigger/task-ids";
 
 export async function queueControlTurn(

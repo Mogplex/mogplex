@@ -13,7 +13,7 @@ const defaultDeps: ResumeSandboxDeps = {
   client: supabaseAdmin,
   resume: async (request, recordId) => {
     const { createSandboxResumeHandler } =
-      await import("@/app/api/sandbox/[id]/resume/route");
+      await import("@/lib/sandbox/resume/route");
     return createSandboxResumeHandler()(request, {
       params: Promise.resolve({ id: recordId }),
     });

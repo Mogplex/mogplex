@@ -6,15 +6,13 @@ import type { Repo, SandboxRecord } from "@/lib/types";
 import { useSandboxStore } from "@/hooks/use-sandbox";
 import { useSessionsStore } from "@/hooks/use-sessions";
 import { toast } from "@/hooks/use-toast";
-import {
-  getActiveTeamRequestHeaders,
-  useActiveTeamId,
-} from "@/components/active-scope-provider";
+import { getActiveTeamRequestHeaders } from "@/lib/active-team-request";
+import { useActiveTeamId } from "@/hooks/use-active-team";
 import { useSandboxLaunchActions } from "@/components/sandbox-launch-provider";
 import {
   bindSessionToPendingSandboxBranch,
   ensureSessionSandboxBinding,
-} from "@/lib/sandbox/session-retarget";
+} from "@/hooks/session-retarget";
 
 /**
  * Save and restart actions for a project's settings drawer. Saving patches
@@ -79,11 +77,12 @@ export function useRepoSettingsActions(mutateRepos: KeyedMutator<Repo[]>) {
 
   const restartRepoSandbox = useCallback(
     async (repo: Repo) => {
+      const sessionId = useSessionsStore.getState().activeSessionId;
       await saveRepo(repo);
       const previousSandbox = getSandboxForRepo(repo.id);
       if (previousSandbox) await stopSandbox(previousSandbox.id);
       bindSessionToPendingSandboxBranch(
-        useSessionsStore.getState().activeSessionId,
+        sessionId,
         previousSandbox?.working_branch ?? null
       );
 
@@ -106,7 +105,7 @@ export function useRepoSettingsActions(mutateRepos: KeyedMutator<Repo[]>) {
 
       if (launched?.id) {
         ensureSessionSandboxBinding(
-          useSessionsStore.getState().activeSessionId,
+          sessionId,
           previousSandbox?.id ?? null,
           launched.id
         );

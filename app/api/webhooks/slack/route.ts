@@ -1,11 +1,11 @@
 import { after, NextResponse } from "next/server";
 import { verifySlackRequest } from "@/lib/slack/verify";
 import { forwardNativeWebhook } from "@/lib/trigger/webhook-forwarding";
-import { parseDurableSlackWebhook } from "./_lib/native-input";
+import { parseDurableSlackWebhook } from "@/lib/slack/webhooks/native-input";
 import {
   dispatchVerifiedSlackWebhook,
   parseSlackCommand,
-} from "./_lib/verified-dispatch";
+} from "@/lib/slack/webhooks/verified-dispatch";
 
 import {
   SLACK_WEBHOOK_MAX_BODY_BYTES,
@@ -16,7 +16,7 @@ import {
   type SlackEventPayload,
   type SlackWebhookDeps,
   type SlackWebhookDispatchInput,
-} from "./_lib/event-types";
+} from "@/lib/slack/webhooks/event-types";
 import { parseCommand } from "@/lib/slack/command-parse";
 import { buildSlackCommandHelpResponse } from "@/lib/slack/command-help";
 
@@ -34,7 +34,7 @@ export {
   isSupportedSlackEvent,
   buildSlackEventTaskPayload,
   buildSlackThreadConcurrencyKey,
-} from "./_lib/event-types";
+} from "@/lib/slack/webhooks/event-types";
 
 async function handleSlashCommandRequest(
   rawBody: string,

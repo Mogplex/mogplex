@@ -1,44 +1,17 @@
 import type { SandboxHealthStatus } from "@/lib/sandbox/health-status";
-import type { PreviewOverlayStatus } from "@/lib/sandbox/preview-overlay-status";
-import type { StopReason } from "@/lib/types";
 import { computeSandboxUiBundle } from "./ui-state-resolver";
-import type { ResolveSandboxUiStateInput } from "./ui-state-resolver";
+import type {
+  PreviewOverlayStatus,
+  ResolveSandboxUiStateInput,
+  SandboxUiBundle,
+  SandboxUiState,
+} from "./ui-state-types";
 
-export type SandboxUiState =
-  | { kind: "no_session" }
-  | { kind: "no_sandbox"; branch: string | null; lastSandboxId: string | null }
-  | {
-      kind: "booting";
-      sandboxId: string;
-      phase: "creating" | "installing";
-      runtimeStatus?: "pausing";
-    }
-  | { kind: "starting"; sandboxId: string; previewUrl: string | null }
-  | {
-      kind: "live";
-      sandboxId: string;
-      previewUrl: string;
-      expiresAt: string;
-    }
-  | {
-      kind: "degraded";
-      sandboxId: string;
-      reason: "app_error" | "unreachable" | "idle_warning";
-      previewUrl: string | null;
-    }
-  | { kind: "paused"; sandboxId: string; snapshotId: string | null }
-  | {
-      kind: "stopped";
-      sandboxId: string;
-      reason: StopReason | null;
-      branch: string;
-    }
-  | { kind: "errored"; sandboxId: string; message: string };
-
-export type SandboxUiBundle = {
-  state: SandboxUiState;
-  overlayStatus: PreviewOverlayStatus;
-};
+export type {
+  ResolveSandboxUiStateInput,
+  SandboxUiBundle,
+  SandboxUiState,
+} from "./ui-state-types";
 
 export function resolveSandboxUiBundle(
   input: ResolveSandboxUiStateInput

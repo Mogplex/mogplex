@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizeControlChatMessages } from "../../app/api/control/chat/_lib/messages";
+import { normalizeControlChatMessages } from "../../lib/control/chat/messages";
 
 test("control chat rejects malformed roles and parts", () => {
   assert.throws(

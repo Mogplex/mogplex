@@ -3,14 +3,6 @@ export const BACKGROUND_RUNTIME_PROVIDERS = ["workflow", "trigger"] as const;
 export type BackgroundRuntimeProvider =
   (typeof BACKGROUND_RUNTIME_PROVIDERS)[number];
 
-export function getAutomationRuntimeProvider(): BackgroundRuntimeProvider {
-  return "trigger";
-}
-
-export function getRepoSnapshotRuntimeProvider(): BackgroundRuntimeProvider {
-  return "trigger";
-}
-
 /**
  * Whether this process can trigger Trigger.dev tasks. The SDK authenticates
  * with a secret key or access token alone; the project ref is baked into the

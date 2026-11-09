@@ -3,9 +3,9 @@ import { useMemo, useState } from "react"
 import { useParams } from "next/navigation"
 import useSWR from "swr"
 import { scopedHref } from "@/lib/scoped-href"
-import type { AgentRosterItem } from "@/app/api/agents/roster/route"
-import { create } from "zustand"
+import type { AgentRosterItem } from "@/lib/agents/roster-types"
 import { useRealtimeRouteRefresh } from "@/hooks/use-realtime-route-refresh"
+import { useOutputPaneTab, useSelectedAgent } from "@/hooks/use-agent-output"
 import { useAgentRosterSummary } from "@/hooks/use-agent-roster-summary"
 import { AgentCreatorDialog } from "@/components/agent-creator-dialog"
 import {
@@ -15,29 +15,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { formatTokens } from "@/app/(dashboard)/[scope]/observability/_components/formatters"
+import { formatTokens } from "@/lib/observability/formatters"
 
 const fetcher = async (url: string) => {
   const r = await fetch(url)
   if (!r.ok) throw new Error(`API error: ${r.status}`)
   return r.json()
 }
-
-export const useSelectedAgent = create<{
-  agentId: string | null
-  setAgentId: (id: string | null) => void
-}>((set) => ({
-  agentId: null,
-  setAgentId: (id) => set({ agentId: id }),
-}))
-
-export const useOutputPaneTab = create<{
-  tab: "activity" | "calls" | "events"
-  setTab: (tab: "activity" | "calls" | "events") => void
-}>((set) => ({
-  tab: "activity",
-  setTab: (tab) => set({ tab }),
-}))
 
 function timeAgo(dateStr: string | null): string {
   if (!dateStr) return "never"

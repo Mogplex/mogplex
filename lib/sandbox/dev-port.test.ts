@@ -9,11 +9,11 @@ import {
 import {
   resolveSandboxLaunchRuntimePreparation,
   provisionSandboxForLaunch,
-} from "@/app/api/sandbox/_lib/provisioning";
+} from "@/lib/sandbox/collection/_lib/provisioning";
 import type {
   SandboxLaunchPreparation,
   SandboxRepoRecord,
-} from "@/app/api/sandbox/_lib/types";
+} from "@/lib/sandbox/collection/_lib/types";
 
 const repoInput = {
   repoFullName: "acme/repo",

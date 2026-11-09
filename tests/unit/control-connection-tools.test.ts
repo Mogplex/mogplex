@@ -6,7 +6,7 @@ import {
   buildControlTurnTools,
   loadControlConnectionTools,
   type ControlConnectionToolDeps,
-} from "../../app/api/control/chat/_lib/connection-tools";
+} from "../../lib/control/chat/connection-tools";
 import type { Connection } from "../../lib/types";
 import type { Tool } from "ai";
 

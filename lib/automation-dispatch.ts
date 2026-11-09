@@ -73,8 +73,8 @@ export async function enqueueAutomationJobRun(input: {
   idempotencyKey: string;
   metadata?: Record<string, unknown> | null;
   duplicateSensitive?: boolean;
-  maxActivePerRepo?: number;
-  maxActivePerInstallation?: number;
+  maxActivePerRepo?: number | null;
+  maxActivePerInstallation?: number | null;
 }) {
   const { data, error } = await supabaseAdmin.rpc(
     "enqueue_automation_job_run",
@@ -92,8 +92,8 @@ export async function enqueueAutomationJobRun(input: {
       p_idempotency_key: input.idempotencyKey,
       p_metadata: input.metadata ?? {},
       p_duplicate_sensitive: input.duplicateSensitive ?? false,
-      p_max_active_per_repo: input.maxActivePerRepo ?? 25,
-      p_max_active_per_installation: input.maxActivePerInstallation ?? 100,
+      p_max_active_per_repo: input.maxActivePerRepo ?? null,
+      p_max_active_per_installation: input.maxActivePerInstallation ?? null,
     }
   );
 

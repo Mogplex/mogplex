@@ -15,7 +15,7 @@ import {
   presentRepoSyncFailure,
 } from "@/lib/activation/setup-state"
 import { resolveSandboxRootDirectory } from "@/lib/repo-settings"
-import { ensureSessionSandboxBinding } from "@/lib/sandbox/session-retarget"
+import { ensureSessionSandboxBinding } from "@/hooks/session-retarget"
 import {
   isSandboxUiRuntimeRunning,
   resolveSandboxUiState,

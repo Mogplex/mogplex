@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createControlFinalizationGuard } from "../../app/api/control/chat/_lib/finalization-guard";
+import { createControlFinalizationGuard } from "../../lib/control/chat/finalization-guard";
 
 test("Control finalization joins concurrent callers and persists once", async () => {
   const guard = createControlFinalizationGuard();

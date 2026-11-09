@@ -1,12 +1,12 @@
 import type { FileUIPart, UIMessage } from "ai";
+import {
+  chargeAttachmentBudget,
+  readAttachmentDataUrlByteLength,
+} from "@/lib/attachments/data-url";
+import { ATTACHMENT_LIMITS } from "@/lib/attachments/policy";
 import type { ChatRequestMessage, ChatRequestPart } from "./types";
 
 type NormalizedChatMessage = Omit<UIMessage, "id">;
-
-const MAX_CHAT_FILE_DATA_URL_CHARS = 5_600_000;
-const MAX_CHAT_FILE_BYTES = 4 * 1024 * 1024;
-const MAX_CHAT_FILE_PARTS = 5;
-const MAX_CHAT_TOTAL_FILE_BYTES = MAX_CHAT_FILE_BYTES * MAX_CHAT_FILE_PARTS;
 
 type ChatFileBudget = {
   count: number;
@@ -21,30 +21,23 @@ export class ChatValidationError extends Error {
 }
 
 function readFilePartBytes(part: ChatRequestPart): number {
-  const match = /^data:([^;,]+);base64,([A-Za-z0-9+/]*={0,2})$/.exec(
-    part.url ?? ""
+  const parsed = readAttachmentDataUrlByteLength(
+    part.url ?? "",
+    part.mediaType ?? ""
   );
-  if (!match || match[1]?.toLowerCase() !== part.mediaType?.toLowerCase()) {
+  if (!parsed.ok) {
     throw new ChatValidationError("Invalid chat file attachment.");
   }
-  const decodedBytes = Buffer.byteLength(match[2] ?? "", "base64");
-  if (decodedBytes > MAX_CHAT_FILE_BYTES) {
-    throw new ChatValidationError("Invalid chat file attachment.");
-  }
-  return decodedBytes;
+  return parsed.byteLength;
 }
 
 function applyFileBudget(budget: ChatFileBudget, decodedBytes: number) {
-  budget.count += 1;
-  if (budget.count > MAX_CHAT_FILE_PARTS) {
+  const result = chargeAttachmentBudget(budget, decodedBytes);
+  if (!result.ok) {
     throw new ChatValidationError(
-      `Chat supports up to ${MAX_CHAT_FILE_PARTS} file attachments.`
-    );
-  }
-  budget.bytes += decodedBytes;
-  if (budget.bytes > MAX_CHAT_TOTAL_FILE_BYTES) {
-    throw new ChatValidationError(
-      "Chat file attachments exceed the total size limit."
+      result.reason === "count"
+        ? `Chat supports up to ${ATTACHMENT_LIMITS.maxFiles} file attachments.`
+        : "Chat file attachments exceed the total size limit."
     );
   }
 }
@@ -66,7 +59,7 @@ function normalizeFilePart(
       "Chat file attachments must be uploaded as data URLs."
     );
   }
-  if (part.url.length > MAX_CHAT_FILE_DATA_URL_CHARS) {
+  if (part.url.length > ATTACHMENT_LIMITS.maxDataUrlChars) {
     throw new ChatValidationError(
       "Chat file attachment exceeds the size limit."
     );

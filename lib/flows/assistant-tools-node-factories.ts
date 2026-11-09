@@ -15,6 +15,7 @@ import {
   addSetVariableNodeParams,
   addTransformNodeParams,
 } from "./assistant-tools-schemas";
+import { DEFAULT_FLOW_SCHEDULE } from "./schedule-defaults";
 
 export type ToolContext = {
   graph: FlowGraph;
@@ -95,8 +96,11 @@ export function createSetStartTool(ctx: ToolContext) {
             : {}),
           ...(event === "schedule"
             ? {
-                scheduleCron: scheduleCron?.trim() || "0 9 * * 1-5",
-                scheduleTimezone: scheduleTimezone?.trim() || "UTC",
+                scheduleCron:
+                  scheduleCron?.trim() || DEFAULT_FLOW_SCHEDULE.scheduleCron,
+                scheduleTimezone:
+                  scheduleTimezone?.trim() ||
+                  DEFAULT_FLOW_SCHEDULE.scheduleTimezone,
               }
             : {}),
           ...(event === "slack_mention" && slackTeamId?.trim()

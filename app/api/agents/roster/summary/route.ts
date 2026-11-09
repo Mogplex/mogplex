@@ -1,17 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { requireUserId } from "@/lib/auth";
-
-export type AgentRosterSummaryItem = {
-  agentId: string;
-  runs24h: number;
-  succeeded: number;
-  failed: number;
-  suppressed: number;
-  tokens24h: number;
-};
-
-export type AgentRosterSummaryResponse = Record<string, AgentRosterSummaryItem>;
+import type { AgentRosterSummaryResponse } from "@/lib/agents/roster-types";
 
 // Aggregated in Postgres by the agent_roster_summary RPC (migration
 // 20260731011500). The previous implementation filtered job_runs by

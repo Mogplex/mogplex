@@ -5,7 +5,7 @@ import { create } from "zustand";
 
 import { mergeSandboxRecord } from "@/lib/sandbox/client-record";
 import { createSandboxLaunchAttemptId } from "@/lib/sandbox/error-state";
-import { getActiveTeamRequestHeaders } from "@/components/active-scope-provider";
+import { getActiveTeamRequestHeaders } from "@/lib/active-team-request";
 import { toast } from "@/hooks/use-toast";
 import { useTableEvents } from "@/hooks/use-table-events";
 import { useUser } from "@/hooks/use-user";

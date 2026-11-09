@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { withEnv } from "./helpers/agents-tools-fixtures";
 import { verifyResearchToken } from "../../lib/harness/research-auth";
-import type { SandboxSetupContext } from "../../app/api/sandbox/[id]/harness/_lib/setup";
+import type { SandboxSetupContext } from "../../lib/harness/_lib/setup";
 
 const context: SandboxSetupContext = {
   id: "sandbox-1",
@@ -31,7 +31,7 @@ test("sandbox environment and Claude MCP reuse one research credential across se
     },
     async () => {
       const { setupSandboxEnv, setupMcpConfig } =
-        await import("../../app/api/sandbox/[id]/harness/_lib/setup");
+        await import("../../lib/harness/_lib/setup");
       const { resolveRepoSandboxEnv } =
         await import("../../lib/vercel/env-vars");
       const { injectClaudeMcpConfig } =
@@ -89,8 +89,7 @@ test("sandbox environment and Claude MCP reuse one research credential across se
 });
 
 test("Codex gets the MCP config through ACP, and none on the CLI path", async () => {
-  const { setupMcpConfig } =
-    await import("../../app/api/sandbox/[id]/harness/_lib/setup");
+  const { setupMcpConfig } = await import("../../lib/harness/_lib/setup");
   const codex: SandboxSetupContext = { ...context, harnessId: "codex" };
   const logged: string[] = [];
   let injections = 0;
@@ -127,4 +126,28 @@ test("Codex gets the MCP config through ACP, and none on the CLI path", async ()
 
   assert.equal(await setupMcpConfig(deps, sandbox, codex, {}, null), undefined);
   assert.equal(injections, 1);
+});
+
+test("Codex ACP fails before launch when required MCP config cannot be injected", async () => {
+  const { setupMcpConfig } = await import("../../lib/harness/_lib/setup");
+  const { HARNESSES } = await import("../../lib/harness/config");
+  const deps = {
+    injectClaudeMcpConfig: async () => ({
+      ok: false as const,
+      error: "sandbox write failed",
+    }),
+    getResolvedConnections: async () => [],
+    safeAppendAiCallEvent: async () => null,
+  } as unknown as Parameters<typeof setupMcpConfig>[0];
+
+  await assert.rejects(
+    setupMcpConfig(
+      deps,
+      {} as Parameters<typeof setupMcpConfig>[1],
+      { ...context, harnessId: "codex" },
+      {},
+      HARNESSES.codex.acp ?? null
+    ),
+    /MCP config injection failed: sandbox write failed/
+  );
 });

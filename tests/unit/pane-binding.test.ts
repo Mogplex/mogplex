@@ -6,7 +6,7 @@ import {
   type PaneNode,
   updatePaneNode,
 } from "../../hooks/use-split-panes";
-import { resolvePaneSandboxId } from "../../lib/sandbox/pane-binding";
+import { resolvePaneSandboxId } from "../../hooks/pane-binding";
 import { resolvePreviewPaneUrl } from "../../lib/sandbox/preview-url";
 import type { SandboxRecord } from "../../lib/types";
 
