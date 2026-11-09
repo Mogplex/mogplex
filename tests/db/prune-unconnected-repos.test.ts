@@ -11,6 +11,8 @@ import { applyNeonMigrations } from "@/lib/db/neon-migrations";
 
 const root = path.resolve(import.meta.dirname, "../..");
 const migrationName = "20261109180000_prune_unconnected_repos.sql";
+const indexMigrationName =
+  "20261109180500_prune_unconnected_repos_guard_indexes.sql";
 
 let db: PGlite;
 let scratch: string;
@@ -78,9 +80,8 @@ beforeAll(async () => {
   // The baseline has no API roles; create them so the migration's revoke for
   // them runs, as it does on databases that have them.
   await db.exec("create role anon; create role authenticated");
-  await db.exec(
-    await readFile(path.join(migrationsDir, migrationName), "utf8")
-  );
+  for (const name of [migrationName, indexMigrationName])
+    await db.exec(await readFile(path.join(migrationsDir, name), "utf8"));
   await account(user, "user@example.com");
   await account(other, "other@example.com");
   for (const id of [user, other]) {
@@ -276,4 +277,33 @@ it("is not executable by the API roles", async () => {
     { role: "authenticated", allowed: false },
     { role: "service_role", allowed: true },
   ]);
+});
+
+it("probes every guard column through an index", async () => {
+  // The guard runs on every App sync while any candidate row remains (a
+  // referenced legacy row stays a candidate), so each probe must be an index
+  // lookup rather than a scan of the referencing table.
+  const { rows } = await db.query<{ table_name: string; leading: string }>(
+    `select i.indrelid::regclass::text as table_name,
+            pg_get_indexdef(i.indexrelid, 1, true) as leading
+       from pg_index i
+      where i.indrelid::regclass::text like 'public.%'
+         or i.indrelid::regclass::text not like '%.%'`
+  );
+  const indexed = new Set(
+    rows.map(
+      (row) => `${row.table_name.replace(/^public\./, "")}:${row.leading}`
+    )
+  );
+  const missing: string[] = [];
+  for (const [table, predicates] of await guardsByTable()) {
+    for (const match of predicates.matchAll(/x\.(\w+)(->>'\w+')?\s*=/g)) {
+      const leading = match[2]
+        ? `(${match[1]} ->> '${match[2].slice(4, -1)}'::text)`
+        : match[1];
+      if (!indexed.has(`${table}:${leading}`))
+        missing.push(`${table}.${match[1]}${match[2] ?? ""}`);
+    }
+  }
+  expect(missing).toEqual([]);
 });

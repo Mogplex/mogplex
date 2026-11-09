@@ -46,7 +46,7 @@ begin
     and r.github_installation_id is null
   for update;
 
-  -- Routine syncs have no candidates; skip the guard's table scans.
+  -- Users with no legacy rows have no candidates; skip the guard.
   if not found then
     return 0;
   end if;
