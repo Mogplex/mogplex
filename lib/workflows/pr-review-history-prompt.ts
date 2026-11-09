@@ -7,8 +7,26 @@ function neutralize(text: string) {
   return text.replace(BLOCK_TAG, "[previous_review tag removed]");
 }
 
+// Author text is quoted, not trusted, and it costs tokens on every push:
+// keep the recent part of each list and the start of each long body.
+const QUOTE_MAX_CHARS = 2000;
+const REPLIES_PER_FINDING = 5;
+const CONVERSATION_COMMENTS = 20;
+
+function latest<T>(items: T[], keep: number) {
+  return {
+    kept: items.slice(-keep),
+    omitted: Math.max(0, items.length - keep),
+  };
+}
+
 function quote(text: string) {
-  return neutralize(text)
+  const trimmed = text.trim();
+  const clipped =
+    trimmed.length > QUOTE_MAX_CHARS
+      ? `${trimmed.slice(0, QUOTE_MAX_CHARS)} [...cut]`
+      : trimmed;
+  return neutralize(clipped)
     .trim()
     .split("\n")
     .map((line) => `    > ${line}`)
@@ -27,7 +45,11 @@ function describeFinding(finding: PriorFinding) {
   const lines = [
     `- ${finding.id} (${finding.severity}, ${describeState(finding)})${location}: ${neutralize(finding.title)}`,
   ];
-  for (const reply of finding.thread?.replies ?? []) {
+  const replies = latest(finding.thread?.replies ?? [], REPLIES_PER_FINDING);
+  if (replies.omitted > 0) {
+    lines.push(`  (${replies.omitted} earlier replies omitted)`);
+  }
+  for (const reply of replies.kept) {
     lines.push(
       `  Reply from @${reply.author ?? "unknown"}:`,
       quote(reply.body)
@@ -84,10 +106,14 @@ export function buildPrReviewHistoryBlock(history: PrReviewHistory) {
   }
 
   if (history.conversation.length > 0) {
+    const comments = latest(history.conversation, CONVERSATION_COMMENTS);
     parts.push(
       [
         "Comments on the pull request since that review:",
-        ...history.conversation.map(
+        ...(comments.omitted > 0
+          ? [`(${comments.omitted} earlier comments omitted)`]
+          : []),
+        ...comments.kept.map(
           (comment) =>
             `- @${comment.author ?? "unknown"}:\n${quote(comment.body)}`
         ),

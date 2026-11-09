@@ -69,7 +69,10 @@ function isStateFinding(value: unknown): value is PrReviewStateFinding {
   return (
     typeof entry.key === "string" &&
     typeof entry.title === "string" &&
-    ["critical", "warning", "suggestion"].includes(String(entry.severity))
+    ["critical", "warning", "suggestion"].includes(String(entry.severity)) &&
+    (entry.path === null || typeof entry.path === "string") &&
+    (entry.line === null || typeof entry.line === "number") &&
+    typeof entry.inline === "boolean"
   );
 }
 
@@ -133,10 +136,23 @@ export function findingKeyOf(
   return match[1];
 }
 
+const SEVERITY_LABEL = /^\*\*(Critical|Warning|Suggestion):\*\*\s*/i;
+
+function firstLine(body: string) {
+  return body.replace(FINDING_PATTERN, "").trim().split("\n")[0] ?? "";
+}
+
 /** First line of a Mogplex inline comment without its severity label. */
 function threadTitle(body: string) {
-  const first = body.replace(FINDING_PATTERN, "").trim().split("\n")[0] ?? "";
-  return first.replace(/^\*\*[A-Za-z]+:\*\*\s*/, "").trim();
+  return firstLine(body)
+    .replace(/^\*\*[A-Za-z]+:\*\*\s*/, "")
+    .trim();
+}
+
+/** The severity label an inline comment opens with. */
+function threadSeverity(body: string): PrReviewStateFinding["severity"] {
+  const label = SEVERITY_LABEL.exec(firstLine(body))?.[1]?.toLowerCase();
+  return label === "critical" || label === "warning" ? label : "suggestion";
 }
 
 /**
@@ -182,7 +198,7 @@ export function collectPriorFindings(
     if (listed.has(key)) continue;
     findings.push({
       key,
-      severity: "suggestion",
+      severity: threadSeverity(thread.comments[0]?.body ?? ""),
       title: threadTitle(thread.comments[0]?.body ?? ""),
       path: thread.path,
       line: thread.line,

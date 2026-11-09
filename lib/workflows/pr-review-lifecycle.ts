@@ -20,23 +20,48 @@ function newFindingKey(finding: ReviewFinding) {
     .slice(0, 12);
 }
 
+const normalized = (value: string | null | undefined) =>
+  (value ?? "").trim().toLowerCase();
+
+/** The earlier finding a new one continues, if any, and not one already taken. */
+function priorFor(
+  finding: ReviewFinding,
+  priors: PriorFinding[],
+  used: Set<string>
+): PriorFinding | undefined {
+  const sameFile = (prior: PriorFinding) =>
+    normalized(prior.path) === normalized(finding.path);
+  const linked = finding.priorId
+    ? priors.find((prior) => prior.id === finding.priorId)
+    : undefined;
+  // A priorId only counts for the same file: a miscopied id must not hand an
+  // unrelated finding another finding's thread.
+  if (linked && sameFile(linked) && !used.has(linked.key)) return linked;
+  // The reviewer may report a finding again without its priorId, with a new
+  // body; the same file and title still identify it.
+  return priors.find(
+    (prior) =>
+      !used.has(prior.key) &&
+      sameFile(prior) &&
+      normalized(prior.title) === normalized(finding.title)
+  );
+}
+
 /**
- * A stable key per finding. A finding the reviewer linked to an earlier one
- * (`priorId`) keeps that finding's key, once; any other finding gets a key
- * from its own content.
+ * A stable key per finding. A finding that continues an earlier one (linked
+ * by `priorId` in the same file, or with the same file and title) keeps that
+ * finding's key, once; any other finding gets a key from its own content.
  */
 export function assignFindingKeys(
   findings: ReviewFinding[],
   history: PrReviewHistory | null
 ): Map<ReviewFinding, string> {
-  const priorById = new Map(
-    (history?.findings ?? []).map((prior) => [prior.id, prior.key])
-  );
+  const priors = history?.findings ?? [];
   const keys = new Map<ReviewFinding, string>();
   const used = new Set<string>();
   for (const finding of findings) {
-    const prior = finding.priorId ? priorById.get(finding.priorId) : undefined;
-    let key = prior && !used.has(prior) ? prior : newFindingKey(finding);
+    const prior = priorFor(finding, priors, used);
+    let key = prior ? prior.key : newFindingKey(finding);
     let suffix = 2;
     while (used.has(key)) {
       key = `${newFindingKey(finding).slice(0, 10)}${suffix.toString(16).padStart(2, "0")}`;

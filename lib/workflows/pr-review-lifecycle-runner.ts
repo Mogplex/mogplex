@@ -156,8 +156,12 @@ export function createPrReviewLifecycle(input: {
             body: entry.body,
           });
           resolved += 1;
-        } catch {
+        } catch (error) {
           // The thread stays open; the next review plans it again.
+          console.warn("[pr-review] failed to resolve thread", {
+            threadId: entry.threadId,
+            error: error instanceof Error ? error.message : String(error),
+          });
         }
       }
       return resolved;

@@ -144,6 +144,27 @@ describe("PR review state", () => {
     expect(newestPrReviewState([], signer)).toBeNull();
   });
 
+  it("should drop state findings that miss the inline flag or have bad types", () => {
+    const parsed = parsePrReviewState(
+      serializePrReviewState(
+        {
+          ...state,
+          findings: [
+            state.findings[0],
+            { ...state.findings[1], inline: undefined as unknown as boolean },
+            { ...state.findings[1], key: "d", line: "4" as unknown as number },
+          ],
+        },
+        signer
+      ),
+      signer
+    );
+
+    expect(parsed?.findings.map((finding) => finding.key)).toEqual([
+      "aaaaaaaaaaaa",
+    ]);
+  });
+
   it("should find the finding key in an inline comment body", () => {
     expect(
       findingKeyOf(`text\n\n${findingMarker("0123abcd4567", signer)}`, signer)
@@ -193,6 +214,25 @@ describe("collectPriorFindings", () => {
       const [first] = collectPriorFindings(state, order, signer);
       expect(first.thread?.id).toBe("new");
     }
+  });
+
+  it("should recover a listed-elsewhere thread's severity from its label", () => {
+    const critical = thread("cccccccccccc", {
+      comments: [
+        {
+          author: "mogplex",
+          body: `**Critical:** SQL injection\n\nBody.\n\n${findingMarker("cccccccccccc", signer)}`,
+          createdAt: "t",
+        },
+      ],
+    });
+
+    const findings = collectPriorFindings(state, [critical], signer);
+
+    expect(findings[2]).toMatchObject({
+      severity: "critical",
+      title: "SQL injection",
+    });
   });
 
   it("should ignore threads whose marker Mogplex did not sign", () => {

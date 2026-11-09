@@ -101,6 +101,39 @@ describe("buildPrReviewHistoryBlock", () => {
     expect(block).toContain("[previous_review tag removed]");
   });
 
+  it("should keep the latest replies and comments and cut long bodies", () => {
+    const replies = Array.from({ length: 7 }, (_, index) => ({
+      author: "dev",
+      body: `reply ${index}`,
+      createdAt: "t",
+    }));
+    const conversation = Array.from({ length: 25 }, (_, index) => ({
+      author: "dev",
+      isBot: false,
+      body: index === 24 ? "x".repeat(5000) : `comment ${index}`,
+      createdAt: "t",
+    }));
+    const block = buildPrReviewHistoryBlock({
+      ...history,
+      findings: [
+        {
+          ...history.findings[0],
+          thread: { id: "t1", url: null, isResolved: false, replies },
+        },
+      ],
+      conversation,
+    });
+
+    expect(block).toContain("(2 earlier replies omitted)");
+    expect(block).not.toContain("reply 1\n");
+    expect(block).toContain("> reply 6");
+    expect(block).toContain("(5 earlier comments omitted)");
+    expect(block).not.toContain("> comment 4\n");
+    expect(block).toContain("> comment 5");
+    expect(block).toContain("[...cut]");
+    expect(block).not.toContain("x".repeat(2001));
+  });
+
   it("should scope an incremental review to the files changed since", () => {
     const block = buildPrReviewHistoryBlock(history);
 

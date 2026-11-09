@@ -72,6 +72,35 @@ describe("assignFindingKeys", () => {
     expect(keys.get(unknown)).toMatch(/^[a-f0-9]{12}$/);
   });
 
+  it("should ignore a priorId that points at another file", () => {
+    const earlier = history([prior("F1", "aaaaaaaaaaaa", null)]);
+    const elsewhere = finding("Other file", {
+      priorId: "F1",
+      path: "lib/b.ts",
+    });
+
+    const keys = assignFindingKeys([elsewhere], earlier);
+
+    expect(keys.get(elsewhere)).not.toBe("aaaaaaaaaaaa");
+  });
+
+  it("should keep the key of a finding reported again without its priorId", () => {
+    const earlier = history([prior("F1", "aaaaaaaaaaaa", openThread("t1"))]);
+    const reworded = finding("  prior f1 ", { body: "New wording." });
+
+    const keys = assignFindingKeys([reworded], earlier);
+    const plan = planPrReviewThreads({
+      history: earlier,
+      keys,
+      headSha: "1234567890",
+      complete: true,
+    });
+
+    expect(keys.get(reworded)).toBe("aaaaaaaaaaaa");
+    expect(plan.existingThreads.has(reworded)).toBe(true);
+    expect(plan.resolve).toEqual([]);
+  });
+
   it("should keep keys unique when two findings have the same content", () => {
     const keys = assignFindingKeys([finding("Same"), finding("Same")], null);
 

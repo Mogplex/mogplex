@@ -398,6 +398,11 @@ export function createPrReviewReporter(
         error instanceof Error
           ? error.message
           : "Failed to publish PR timeline comment";
+      console.warn("[automation-job] PR summary comment publish failed", {
+        repoFullName: context.repo.full_name,
+        prNumber: reviewPrNumber,
+        error: state.reviewTimelineCommentError,
+      });
       return false;
     }
   };

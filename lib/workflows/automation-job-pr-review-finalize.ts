@@ -298,7 +298,7 @@ export async function finalizePrReviewSuccess(
       review_outcome_label: formatAutomationReasonLabel(reviewReason),
       review_has_issues: input.reviewOutcome?.hasIssues ?? false,
       review_verdict: reviewVerdict,
-      review_summary: reviewSummary,
+      review_summary: publishedOutcome?.summary ?? reviewSummary,
       review_affected_files: input.reviewOutcome?.affectedFiles ?? [],
       review_comment_posted: input.reviewCommentPosted,
       review_timeline_comment_posted: timelineCommentPublished,

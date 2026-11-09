@@ -74,7 +74,10 @@ since the last review, and `compare/{reviewedSha}...{head}`:
   and replies.
 
 `buildPrReviewHistoryBlock` turns this into a `<previous_review>` block in
-the review prompt, for native and harness reviewers alike. Earlier findings
+the review prompt, for native and harness reviewers alike. Author text in it is
+bounded: the latest five replies per finding, the latest twenty PR
+comments, and the first 2,000 characters of each, with a line saying how
+many were left out. Earlier findings
 get short ids (`F1`, `F2`, ...) with their thread state and the author's
 replies. The rules it states:
 
@@ -92,8 +95,9 @@ and the harness JSON line).
 
 `planPrReviewThreads` (`lib/workflows/pr-review-lifecycle.ts`) is pure:
 
-- A finding with a valid `priorId` keeps that finding's key; others get a
-  new key.
+- A finding with a `priorId` in the same file keeps that finding's key. A
+  finding reported again without its `priorId`, in the same file with the
+  same title, keeps it too. Others get a new key.
 - A finding whose key has an open Mogplex thread is not posted again; the
   summary links the existing thread.
 - An open Mogplex thread whose key is not reported again is resolved with a

@@ -105,6 +105,11 @@ export async function publishInlinePrReview(input: {
     state.reviewGithubReviewError =
       error instanceof Error ? error.message : "Failed to publish PR review";
     state.reviewGithubInlineCommentCount = 0;
+    console.warn("[automation-job] PR inline review publish failed", {
+      repoFullName: input.repoFullName,
+      prNumber: input.prNumber,
+      error: state.reviewGithubReviewError,
+    });
     return false;
   }
 }
