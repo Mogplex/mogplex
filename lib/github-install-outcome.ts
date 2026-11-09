@@ -6,8 +6,29 @@ export type GithubInstallToast = {
 
 const RETRY = "Start again from Settings, or reload the page in a minute.";
 
-/** Messages for the `reason` the GitHub callback reports with `?github=error`. */
-const FAILURES: Record<string, GithubInstallToast> = {
+/** Every `reason` the GitHub callback can report with `?github=error`. */
+export type GithubInstallFailureReason =
+  | "github_installation_fetch"
+  | "github_installation_invalid"
+  | "github_installation_owner_required"
+  | "github_installation_persist"
+  | "github_installation_state"
+  | "github_profile_update"
+  | "github_repository_authorization"
+  | "github_token_error"
+  | "github_token_exchange"
+  | "github_token_store"
+  | "github_user_fetch"
+  | "invalid_state";
+
+const GENERIC_FAILURE: GithubInstallToast = {
+  title: "GitHub connection failed",
+  description: RETRY,
+  variant: "destructive",
+};
+
+/** Messages for each failure reason; a new reason must pick one here. */
+const FAILURES: Record<GithubInstallFailureReason, GithubInstallToast> = {
   github_installation_owner_required: {
     title: "Only an owner can connect this account",
     description:
@@ -36,13 +57,20 @@ const FAILURES: Record<string, GithubInstallToast> = {
     description: RETRY,
     variant: "destructive",
   },
+  github_installation_persist: GENERIC_FAILURE,
+  github_profile_update: GENERIC_FAILURE,
+  github_repository_authorization: GENERIC_FAILURE,
+  github_token_error: GENERIC_FAILURE,
+  github_token_exchange: GENERIC_FAILURE,
+  github_token_store: GENERIC_FAILURE,
+  github_user_fetch: GENERIC_FAILURE,
 };
 
-const GENERIC_FAILURE: GithubInstallToast = {
-  title: "GitHub connection failed",
-  description: RETRY,
-  variant: "destructive",
-};
+function isFailureReason(
+  reason: string | null
+): reason is GithubInstallFailureReason {
+  return reason !== null && Object.hasOwn(FAILURES, reason);
+}
 
 /**
  * The toast for a GitHub callback outcome (`?github=connected`,
@@ -68,5 +96,6 @@ export function getGithubInstallToast(
         };
   }
   if (status !== "error") return null;
-  return FAILURES[params.get("reason") ?? ""] ?? GENERIC_FAILURE;
+  const reason = params.get("reason");
+  return isFailureReason(reason) ? FAILURES[reason] : GENERIC_FAILURE;
 }

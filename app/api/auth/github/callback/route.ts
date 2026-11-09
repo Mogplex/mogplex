@@ -19,6 +19,7 @@ import {
 } from "@/lib/github-installation-owner";
 import { getUserId } from "@/lib/auth";
 import { isGithubOAuthRepositoryAccessAllowed } from "@/lib/github-repository-auth";
+import type { GithubInstallFailureReason } from "@/lib/github-install-outcome";
 
 function requireEnv(name: "GITHUB_CLIENT_ID" | "GITHUB_CLIENT_SECRET") {
   const value = process.env[name]?.trim();
@@ -65,7 +66,7 @@ export async function GET(request: Request) {
   };
   const redirectBack = (query: string) => redirectWithOutcome(query, false);
   /** Report a failure the GitHub install toast can explain. */
-  const fail = (reason: string) =>
+  const fail = (reason: GithubInstallFailureReason) =>
     redirectWithOutcome(`?github=error&reason=${reason}`, true);
 
   if (installationIdParam && hasGithubAppConfig()) {

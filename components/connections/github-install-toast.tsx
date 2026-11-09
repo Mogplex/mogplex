@@ -48,7 +48,9 @@ export function GithubInstallToast() {
     const next = new URLSearchParams(params);
     for (const key of GITHUB_OUTCOME_PARAMS) next.delete(key);
     const qs = next.toString();
-    router.replace(qs ? `${pathname}?${qs}` : pathname);
+    router.replace(`${pathname}${qs ? `?${qs}` : ""}${window.location.hash}`, {
+      scroll: false,
+    });
   }, [params, pathname, router, mutate]);
 
   return null;
