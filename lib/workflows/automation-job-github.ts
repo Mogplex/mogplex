@@ -277,7 +277,7 @@ function buildGithubPrAccessFailureMessage(input: {
   return [
     `${GITHUB_PR_ACCESS_FAILURE_PREFIX} for ${input.repoFullName}#${input.prNumber}.`,
     detailLabel,
-    `Open Settings > GitHub App coverage and add ${ownerHint}, then rerun the review.`,
+    `Open Settings > Account > GitHub and connect ${ownerHint}, then rerun the review.`,
   ].join(" ");
 }
 

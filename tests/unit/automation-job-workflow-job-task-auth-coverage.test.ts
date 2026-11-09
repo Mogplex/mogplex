@@ -167,7 +167,7 @@ test("createAutomationJobTask fails PR reviews early when GitHub coverage cannot
     );
     assert.match(
       result.error!,
-      /Open Settings > GitHub App coverage and add the "acme" org or personal account, then rerun the review\./
+      /Open Settings > Account > GitHub and connect the "acme" org or personal account, then rerun the review\./
     );
 
     assert.ok(controlDispatchEvent);
