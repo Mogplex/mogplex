@@ -149,6 +149,25 @@ test("split resize frames coalesce persisted tree updates", async (t) => {
   }
 });
 
+test("popOutIDE preserves the active pane when the target does not exist", async () => {
+  const useSessionsStore = await resetSessionsStore();
+  const { installControlHookDom } = await import("../support/control-hook-dom");
+  const cleanup = installControlHookDom();
+  const { renderHook, act } = await import("@testing-library/react");
+  const { useSplitPanes } = await import("../../hooks/use-split-panes");
+  const initialTree = useSessionsStore.getState().getActiveSession()?.paneTree;
+  const view = renderHook(() => useSplitPanes());
+
+  try {
+    await act(async () => view.result.current.popOutIDE("missing-pane"));
+    assert.equal(view.result.current.activeId, "p-home");
+    assert.equal(view.result.current.root, initialTree);
+  } finally {
+    view.unmount();
+    cleanup();
+  }
+});
+
 test("getPreferredWorkspaceSession falls back to the first workspace session when the active session is blank", async () => {
   const { getPreferredWorkspaceSession } =
     await import("../../hooks/use-sessions");

@@ -1,7 +1,7 @@
 import type { FileUIPart, TextUIPart, UIMessage } from "ai";
 import { validateUIMessages } from "ai";
 import {
-  checkAttachmentBudget,
+  chargeAttachmentBudget,
   readAttachmentDataUrlByteLength,
 } from "@/lib/attachments/data-url";
 import { ATTACHMENT_LIMITS } from "@/lib/attachments/policy";
@@ -38,7 +38,7 @@ function readFilePartBytes(part: ControlChatRequestPart): number {
 }
 
 function applyFileBudget(budget: ControlFileBudget, decodedBytes: number) {
-  const result = checkAttachmentBudget(budget, decodedBytes);
+  const result = chargeAttachmentBudget(budget, decodedBytes);
   if (!result.ok) {
     throw new ControlChatValidationError(
       result.reason === "count"

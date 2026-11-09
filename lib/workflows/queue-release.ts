@@ -43,6 +43,10 @@ export async function releaseQueuedAutomationJobs(input: {
           reason: started.reason ?? null,
         };
       } catch (error) {
+        console.error("[queue-release] failed to start queued job", {
+          jobRunId,
+          error,
+        });
         return {
           jobRunId,
           started: false,

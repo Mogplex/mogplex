@@ -13,7 +13,7 @@ type ResolvedAuth = {
 };
 
 type ResolvedAuthDependencies = {
-  getHeaders: () => Promise<{ get: (name: string) => string | null }>;
+  getHeaders: typeof headers;
   resolveCliBearer: typeof resolveCliBearerAuth;
 };
 
@@ -35,9 +35,11 @@ async function findProfileIdByAuthUserId(
   return (profile?.id as string | undefined) ?? undefined;
 }
 
-async function getBetterAuthLinkedUserId(): Promise<ResolvedAuth | undefined> {
+async function getBetterAuthLinkedUserId(
+  headerStore: Awaited<ReturnType<ResolvedAuthDependencies["getHeaders"]>>
+): Promise<ResolvedAuth | undefined> {
   const { auth } = await import("@/lib/better-auth/server");
-  const session = await auth.api.getSession({ headers: await headers() });
+  const session = await auth.api.getSession({ headers: headerStore });
   const authUserId = session?.user?.id;
   if (!authUserId) return undefined;
 
@@ -96,7 +98,7 @@ export async function getResolvedAuth(
 
   // 3. Session cookie auth — better-auth (profiles and better-auth users share
   // the Neon database).
-  return getBetterAuthLinkedUserId();
+  return getBetterAuthLinkedUserId(headerStore);
 }
 
 export function ensureUserId(userId: string | undefined) {

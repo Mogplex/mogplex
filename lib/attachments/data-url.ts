@@ -72,7 +72,7 @@ export function parseAttachmentDataUrl(
   return { ok: true, content: Buffer.from(parsed.encodedData, "base64") };
 }
 
-export function checkAttachmentBudget(
+export function chargeAttachmentBudget(
   budget: { count: number; bytes: number },
   decodedBytes: number
 ): { ok: true } | { ok: false; reason: "count" | "total" } {

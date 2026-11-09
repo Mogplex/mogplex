@@ -81,6 +81,7 @@ export {
 type TreeUpdate = { root: TreeNode; activeId: string };
 
 const FALLBACK_TREE = createDefaultTree();
+const IDE_POP_OUT_SIZES = [18, 47, 35];
 
 function updateSessionTree(
   sessionId: string | undefined,
@@ -340,18 +341,20 @@ export function useSplitPanes() {
 
   const popOutIDE = useCallback(
     (paneId: string, filePath?: string) => {
-      updateActiveSessionTree((currentRoot) => {
+      updateActiveSessionTree((currentRoot, currentActiveId) => {
         const uid = crypto.randomUUID().slice(0, 8);
         const editorId = `p-editor-${uid}`;
+        let inserted = false;
         const update = (node: TreeNode): TreeNode => {
           if (isPane(node) && node.id === paneId && node.type === "preview") {
+            inserted = true;
             const sandboxBinding = getPaneSandboxBinding(node);
             const sandboxId =
               sandboxBinding === "pinned" ? node.sandboxId : undefined;
             return {
               id: `s-ide-${uid}`,
               dir: "horizontal",
-              sizes: [18, 47, 35],
+              sizes: IDE_POP_OUT_SIZES,
               children: [
                 createPaneNode(node, `p-files-${uid}`, "files", {
                   sandboxBinding,
@@ -374,7 +377,10 @@ export function useSplitPanes() {
           }
           return node;
         };
-        return { root: update(currentRoot), activeId: editorId };
+        return {
+          root: update(currentRoot),
+          activeId: inserted ? editorId : currentActiveId,
+        };
       });
     },
     [updateActiveSessionTree]
