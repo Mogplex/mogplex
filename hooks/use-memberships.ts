@@ -11,9 +11,10 @@ const EMPTY: MembershipsResponse = {
 const fetcher = (url: string) =>
   fetchJsonObject<MembershipsResponse>(url, "Failed to load memberships");
 
-export function useMemberships() {
+/** Pass `enabled: false` while signed out so no unauthenticated request is made. */
+export function useMemberships({ enabled = true }: { enabled?: boolean } = {}) {
   const { data, error, isLoading, mutate } = useSWR<MembershipsResponse>(
-    "/api/memberships",
+    enabled ? "/api/memberships" : null,
     fetcher
   );
 

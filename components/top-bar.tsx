@@ -123,7 +123,7 @@ export function TopBar() {
   const primaryItems = navItems.filter((item) => item.section === "primary");
   const adminItems = navItems.filter((item) => item.section === "admin");
   const { open: openCommandPalette } = useCommandPalette();
-  const { memberships } = useMemberships();
+  const { memberships } = useMemberships({ enabled: Boolean(user) });
   // Personal scope wins, matching the project switcher's resolution.
   const activeTeam =
     scope && scope !== memberships.personal.slug

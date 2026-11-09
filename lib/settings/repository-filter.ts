@@ -32,62 +32,52 @@ export function filterRepositories<
   };
 }
 
-/** True when the repository came through a GitHub App installation. */
-export function isAppConnected(repo: Pick<Repo, "github_installation_id">) {
-  return repo.github_installation_id != null;
-}
-
-export type OwnerCoverage = "connected" | "partial" | "none";
-
-const COVERAGE_ORDER: Record<OwnerCoverage, number> = {
-  connected: 0,
-  partial: 1,
-  none: 2,
-};
-
 /**
- * Group the visible repositories by owner, keeping their order inside each
- * group. Coverage and `notConnected` come from all of the owner's connected
- * repositories in `all`, not just the visible ones, so a search never changes
- * what an owner is labelled as or what its bulk removal hides. GitHub only
- * sends webhooks (and so PR reviews and automations) for repositories that
- * came through a GitHub App installation; ones imported through OAuth access
- * alone (the legacy sync of every repo the account could see) never trigger
- * them. Fully connected owners come first, then partly, then not connected,
- * each by name.
+ * Split Settings' repository inventory by GitHub App coverage, as the repos
+ * API reports it (`github_app_covered`, from `deriveRepoGithubCoverage`). On App
+ * deployments with an installation (`github_prefer_installation_coverage`)
+ * every other surface already hides repositories without an installation
+ * (see `visibleScopedRepos`); those came from the legacy OAuth sync of every
+ * repository the account could see and never receive webhooks, so Settings
+ * lists them apart. OAuth-only deployments keep every repository.
  */
-export function groupRepositoriesByOwner<
+export function splitByAppConnection<
   T extends Pick<
     Repo,
-    "owner" | "full_name" | "github_installation_id" | "is_hidden"
+    "github_app_covered" | "github_prefer_installation_coverage"
   >,
->(visible: T[], all: T[]) {
+>(repos: T[]) {
+  if (!repos.some((repo) => repo.github_prefer_installation_coverage)) {
+    return { inventory: repos, notConnected: [] as T[] };
+  }
+  return {
+    inventory: repos.filter((repo) => repo.github_app_covered),
+    notConnected: repos.filter((repo) => !repo.github_app_covered),
+  };
+}
+
+/**
+ * Group repositories by owner the way GitHub lists them: the signed-in
+ * account first, then organizations and other owners by name. Order inside
+ * each group is kept.
+ */
+export function groupRepositoriesByOwner<
+  T extends Pick<Repo, "owner" | "full_name">,
+>(repos: T[], selfLogin?: string | null) {
   const groups = new Map<string, T[]>();
-  for (const repo of visible) {
+  for (const repo of repos) {
     const owner = repoOwner(repo);
     const group = groups.get(owner);
     if (group) group.push(repo);
     else groups.set(owner, [repo]);
   }
+  const self = selfLogin?.toLowerCase();
   return [...groups.entries()]
-    .map(([owner, repos]) => {
-      const ownerConnected = all.filter(
-        (repo) => !repo.is_hidden && repoOwner(repo) === owner
-      );
-      const notConnected = ownerConnected.filter(
-        (repo) => !isAppConnected(repo)
-      );
-      const coverage: OwnerCoverage =
-        notConnected.length === 0
-          ? "connected"
-          : notConnected.length === ownerConnected.length
-            ? "none"
-            : "partial";
-      return { owner, repos, coverage, notConnected };
-    })
+    .map(([owner, ownerRepos]) => ({ owner, repos: ownerRepos }))
     .sort(
       (a, b) =>
-        COVERAGE_ORDER[a.coverage] - COVERAGE_ORDER[b.coverage] ||
+        Number(b.owner.toLowerCase() === self) -
+          Number(a.owner.toLowerCase() === self) ||
         a.owner.localeCompare(b.owner)
     );
 }

@@ -145,6 +145,7 @@ async function installTeamRepositories(page: Page, canManage = true) {
         owner: teamId ? "acme" : "alex",
         name: teamId ? "team-project" : "personal-project",
         github_installation_id: 42,
+        github_app_covered: true,
         github_prefer_installation_coverage: true,
       },
       {
@@ -152,6 +153,8 @@ async function installTeamRepositories(page: Page, canManage = true) {
         full_name: "acme/removed-project",
         owner: "acme",
         name: "removed-project",
+        github_installation_id: 42,
+        github_app_covered: true,
         is_hidden: true,
       },
       {

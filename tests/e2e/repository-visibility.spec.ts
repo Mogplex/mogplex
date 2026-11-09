@@ -8,14 +8,24 @@ import {
 async function dashboard(page: Page, failedIds: string[] = []) {
   await enableScopedE2EAuth(page);
   await mockBaseChrome(page);
+  // The repos API marks App coverage per repository; the legacy rows came
+  // from the old OAuth sync and have no installation.
+  const app = {
+    github_app_covered: true,
+    github_prefer_installation_coverage: true,
+  };
+  const legacy = {
+    github_app_covered: false,
+    github_prefer_installation_coverage: true,
+  };
   const repos = [
     {
       id: "alpha",
       name: "alpha",
       full_name: "alex/alpha",
       owner: "alex",
-      github_installation_id: 11,
       is_hidden: false,
+      ...app,
     },
     {
       id: "beta",
@@ -23,6 +33,7 @@ async function dashboard(page: Page, failedIds: string[] = []) {
       full_name: "alex/beta",
       owner: "alex",
       is_hidden: false,
+      ...app,
     },
     {
       id: "removed",
@@ -30,14 +41,15 @@ async function dashboard(page: Page, failedIds: string[] = []) {
       full_name: "alex/removed",
       owner: "alex",
       is_hidden: true,
+      ...app,
     },
     {
       id: "acme-app",
       name: "app",
       full_name: "acme/app",
       owner: "acme",
-      github_installation_id: 12,
       is_hidden: false,
+      ...app,
     },
     {
       id: "other",
@@ -45,6 +57,23 @@ async function dashboard(page: Page, failedIds: string[] = []) {
       full_name: "team/other",
       owner: "team",
       is_hidden: false,
+      ...app,
+    },
+    {
+      id: "fork",
+      name: "docs",
+      full_name: "skhard99/docs",
+      owner: "skhard99",
+      is_hidden: false,
+      ...legacy,
+    },
+    {
+      id: "old-fork",
+      name: "docs",
+      full_name: "blackboxaicode/docs",
+      owner: "blackboxaicode",
+      is_hidden: true,
+      ...legacy,
     },
   ];
   const writes: { id: string; is_hidden: boolean }[] = [];
@@ -84,69 +113,65 @@ async function dashboard(page: Page, failedIds: string[] = []) {
 }
 
 const connected = (page: Page) =>
-  page.getByRole("region", { name: "Connected repositories" });
+  page.getByRole("region", { name: "Connected repositories", exact: true });
 
-test("connected repositories are grouped by owner with their GitHub App status", async ({
+const repoLink = (page: Page, fullName: string) =>
+  connected(page).getByRole("link", { name: `Open ${fullName} on GitHub` });
+
+test("connected repositories are grouped by GitHub owner and open on GitHub in a new tab", async ({
   page,
 }) => {
   await dashboard(page);
-  const group = (name: string) =>
-    connected(page).getByRole("region", { name, exact: true });
-  const alex = group("alex");
-
-  // Fully connected, partly connected, then not connected owners.
   await expect(connected(page).getByRole("heading", { level: 2 })).toHaveText([
     "acme",
     "alex",
     "team",
   ]);
-  await expect(group("acme").getByText("GitHub App connected")).toBeVisible();
-  await expect(alex.getByText("2 repositories")).toBeVisible();
-  await expect(
-    alex.getByText("1 not connected", { exact: true })
-  ).toBeVisible();
-  await expect(
-    alex.getByRole("listitem").filter({ hasText: "alex/beta" })
-  ).toContainText("Not connected");
-  await expect(
-    alex.getByRole("listitem").filter({ hasText: "alex/alpha" })
-  ).not.toContainText("Not connected");
-  await expect(
-    group("team").getByText("Not connected", { exact: true })
-  ).toHaveCount(1);
-  await expect(
-    group("team").getByText(/PR reviews and automations never run here/)
-  ).toBeVisible();
-});
-
-test("a search inside a partly connected owner keeps its status and removes only not-connected repositories", async ({
-  page,
-}) => {
-  const { writes } = await dashboard(page);
-  await page.getByLabel("Search repositories").fill("beta");
   const alex = connected(page).getByRole("region", {
     name: "alex",
     exact: true,
   });
-  await expect(alex.getByText("1 repository")).toBeVisible();
+  await expect(alex.getByText("2 repositories")).toBeVisible();
   await expect(
-    alex.getByText("1 not connected", { exact: true })
+    alex.getByRole("link", { name: "alex", exact: true })
+  ).toHaveAttribute("href", "https://github.com/alex");
+  const alpha = repoLink(page, "alex/alpha");
+  await expect(alpha).toHaveText("alpha");
+  await expect(alpha).toHaveAttribute("href", "https://github.com/alex/alpha");
+  await expect(alpha).toHaveAttribute("target", "_blank");
+  await expect(alpha).toHaveAttribute("rel", "noopener noreferrer");
+});
+
+test("repositories without the GitHub App stay out of the list and can be removed together", async ({
+  page,
+}) => {
+  const { writes } = await dashboard(page);
+  await expect(connected(page).getByText("skhard99")).toHaveCount(0);
+  await expect(
+    page
+      .getByLabel("Owner", { exact: true })
+      .locator("option", { hasText: "skhard99" })
+  ).toHaveCount(0);
+  // Removed legacy rows are not offered for restore either.
+  await expect(
+    page.getByRole("button", { name: "Show removed (1)" })
   ).toBeVisible();
-  await alex
-    .getByRole("button", {
-      name: "Remove not-connected repositories from alex",
-    })
+
+  const notice = page.getByRole("region", {
+    name: "Not connected repositories",
+  });
+  await expect(notice.getByText("1 repository not connected")).toBeVisible();
+  await notice.getByText("Show repository").click();
+  await expect(notice.getByText("skhard99/docs")).toBeVisible();
+  await notice
+    .getByRole("button", { name: "Remove all not-connected repositories" })
     .click();
   await page
-    .getByRole("alertdialog", {
-      name: "Remove 1 not-connected repository from alex?",
-    })
+    .getByRole("alertdialog", { name: "Remove 1 not-connected repository?" })
     .getByRole("button", { name: "Remove 1 repository" })
     .click();
-  await expect(connected(page).getByText("alex/beta")).toHaveCount(0);
-  expect(writes).toEqual([{ id: "beta", is_hidden: true }]);
-  await page.getByLabel("Search repositories").fill("");
-  await expect(connected(page).getByText("alex/alpha")).toBeVisible();
+  await expect(notice).toHaveCount(0);
+  expect(writes).toEqual([{ id: "fork", is_hidden: true }]);
 });
 
 test("remove owner persists, and a removed repository can be restored", async ({
@@ -161,8 +186,8 @@ test("remove owner persists, and a removed repository can be restored", async ({
     .getByRole("alertdialog", { name: "Remove all 2 repositories from alex?" })
     .getByRole("button", { name: "Remove 2 repositories" })
     .click();
-  await expect(connected(page).getByText("alex/alpha")).toHaveCount(0);
-  await expect(connected(page).getByText("alex/beta")).toHaveCount(0);
+  await expect(repoLink(page, "alex/alpha")).toHaveCount(0);
+  await expect(repoLink(page, "alex/beta")).toHaveCount(0);
   await expect(
     page
       .locator('[data-variant="info"]')
@@ -177,10 +202,10 @@ test("remove owner persists, and a removed repository can be restored", async ({
   await expect(
     page.getByText("Repository restored", { exact: true })
   ).toBeVisible();
-  await expect(connected(page).getByText("alex/alpha")).toBeVisible();
+  await expect(repoLink(page, "alex/alpha")).toBeVisible();
   await page.reload();
-  await expect(connected(page).getByText("alex/alpha")).toBeVisible();
-  await expect(connected(page).getByText("alex/beta")).toHaveCount(0);
+  await expect(repoLink(page, "alex/alpha")).toBeVisible();
+  await expect(repoLink(page, "alex/beta")).toHaveCount(0);
 });
 
 test("bulk removal waits for confirmation", async ({ page }) => {
@@ -191,7 +216,7 @@ test("bulk removal waits for confirmation", async ({ page }) => {
     .click();
   await page.getByRole("button", { name: "Cancel", exact: true }).click();
 
-  await expect(connected(page).getByText("alex/alpha")).toBeVisible();
+  await expect(repoLink(page, "alex/alpha")).toBeVisible();
   expect(writes).toEqual([]);
 });
 
@@ -223,7 +248,7 @@ test("restore failures show a retryable error and leave the repository removed",
   await expect(
     page.getByText("Repository restored", { exact: true })
   ).toHaveCount(0);
-  await expect(connected(page).getByText("alex/removed")).toHaveCount(0);
+  await expect(repoLink(page, "alex/removed")).toHaveCount(0);
   await expect(
     page
       .getByRole("list", { name: "Removed repositories" })
@@ -259,8 +284,8 @@ test("bulk removal reports partial failures without claiming every repository wa
   await expect(
     page.getByText("Removed 2 repositories", { exact: true })
   ).toHaveCount(0);
-  await expect(connected(page).getByText("alex/alpha")).toHaveCount(0);
-  await expect(connected(page).getByText("alex/beta")).toBeVisible();
+  await expect(repoLink(page, "alex/alpha")).toHaveCount(0);
+  await expect(repoLink(page, "alex/beta")).toBeVisible();
 });
 
 test("bulk removal reports a full failure when no repositories were removed", async ({
@@ -279,8 +304,8 @@ test("bulk removal reports a full failure when no repositories were removed", as
     .locator('[data-variant="destructive"]')
     .filter({ hasText: "Could not remove all repositories" });
   await expect(failure).toContainText("0 removed; 2 could not be removed.");
-  await expect(connected(page).getByText("alex/alpha")).toBeVisible();
-  await expect(connected(page).getByText("alex/beta")).toBeVisible();
+  await expect(repoLink(page, "alex/alpha")).toBeVisible();
+  await expect(repoLink(page, "alex/beta")).toBeVisible();
 });
 
 test("network failures during removal are visible", async ({ page }) => {
@@ -304,7 +329,7 @@ test("network failures during removal are visible", async ({ page }) => {
       { exact: true }
     )
   ).toBeVisible();
-  await expect(connected(page).getByText("alex/alpha")).toBeVisible();
+  await expect(repoLink(page, "alex/alpha")).toBeVisible();
 });
 
 test("removing one repository waits for confirmation", async ({ page }) => {
@@ -314,7 +339,7 @@ test("removing one repository waits for confirmation", async ({ page }) => {
     .getByRole("alertdialog", { name: "Remove alex/alpha?" })
     .getByRole("button", { name: "Cancel", exact: true })
     .click();
-  await expect(connected(page).getByText("alex/alpha")).toBeVisible();
+  await expect(repoLink(page, "alex/alpha")).toBeVisible();
   expect(writes).toEqual([]);
 
   await page.getByRole("button", { name: "Remove alex/alpha" }).click();
@@ -325,7 +350,7 @@ test("removing one repository waits for confirmation", async ({ page }) => {
   await expect(
     page.getByText("Repository removed", { exact: true })
   ).toBeVisible();
-  await expect(connected(page).getByText("alex/alpha")).toHaveCount(0);
+  await expect(repoLink(page, "alex/alpha")).toHaveCount(0);
   expect(writes).toEqual([{ id: "alpha", is_hidden: true }]);
 });
 
@@ -343,38 +368,4 @@ test("project settings open from a repository with no sessions", async ({
   await expect(
     drawer.getByRole("button", { name: "Save variables" })
   ).toBeVisible();
-});
-
-test("an owner without the GitHub App can be removed in one step", async ({
-  page,
-}) => {
-  const { writes } = await dashboard(page);
-  await page
-    .getByRole("button", {
-      name: "Remove not-connected repositories from team",
-    })
-    .click();
-  await page
-    .getByRole("alertdialog", {
-      name: "Remove 1 not-connected repository from team?",
-    })
-    .getByRole("button", { name: "Remove 1 repository" })
-    .click();
-  await expect(connected(page).getByText("team/other")).toHaveCount(0);
-  expect(writes).toEqual([{ id: "other", is_hidden: true }]);
-});
-
-test("filtering to a not-connected owner shows one remove-all control", async ({
-  page,
-}) => {
-  await dashboard(page);
-  await page.getByLabel("Owner", { exact: true }).selectOption("team");
-  await expect(
-    page.getByRole("button", { name: "Remove all from team", exact: true })
-  ).toBeVisible();
-  await expect(
-    page.getByRole("button", {
-      name: "Remove not-connected repositories from team",
-    })
-  ).toHaveCount(0);
 });

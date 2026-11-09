@@ -11,6 +11,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { OpenNewWindow } from "iconoir-react";
 import { Button } from "@/components/ui/button";
 import type { Repo } from "@/lib/types";
 
@@ -73,29 +74,34 @@ export function ConfirmRemoveButton({
  */
 export function RepositoryRow({
   repo,
+  label = repo.full_name,
   pending,
-  notConnected = false,
   onToggle,
   onOpenSettings,
 }: {
   repo: Repo;
+  /** Text shown for the repository; grouped rows show the short name. */
+  label?: string;
   pending: boolean;
-  /** Mark a repository without the GitHub App inside a partly connected owner. */
-  notConnected?: boolean;
   onToggle: (repo: Repo) => void;
   onOpenSettings: (repo: Repo) => void;
 }) {
   const removed = Boolean(repo.is_hidden);
   return (
     <li className="border-border flex items-center justify-between gap-3 border-b px-3 py-2 last:border-b-0">
-      <span className="flex min-w-0 items-center gap-2">
-        <span className="truncate text-sm">{repo.full_name}</span>
-        {notConnected ? (
-          <span className="border-destructive/40 text-destructive shrink-0 rounded-full border px-2 py-0.5 text-[11px]">
-            Not connected
-          </span>
-        ) : null}
-      </span>
+      <a
+        href={`https://github.com/${repo.full_name}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label={`Open ${repo.full_name} on GitHub`}
+        className="group text-foreground flex min-w-0 items-center gap-1.5 text-sm hover:underline"
+      >
+        <span className="truncate">{label}</span>
+        <OpenNewWindow
+          aria-hidden="true"
+          className="text-muted-foreground size-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+        />
+      </a>
       <div className="flex shrink-0 items-center gap-1">
         {removed ? (
           <Button

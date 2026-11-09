@@ -1,12 +1,5 @@
+import { scopeInitials } from "@/lib/scope-initials";
 import { cn } from "@/lib/utils";
-
-/** Up to two initials for a team or account without an icon. */
-export function scopeInitials(label: string): string {
-  const parts = label.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-}
 
 /**
  * Square team (or account) icon: the uploaded image when there is one,

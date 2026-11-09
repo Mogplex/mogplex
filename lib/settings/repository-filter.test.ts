@@ -3,6 +3,7 @@ import {
   filterRepositories,
   groupRepositoriesByOwner,
   repoOwner,
+  splitByAppConnection,
 } from "./repository-filter";
 
 const repo = (full_name: string, is_hidden = false, owner = "") => ({
@@ -56,51 +57,54 @@ describe("filterRepositories", () => {
   });
 });
 
-describe("groupRepositoriesByOwner", () => {
+describe("splitByAppConnection", () => {
   const row = (
     full_name: string,
-    github_installation_id: number | null,
-    is_hidden = false
-  ) => ({ full_name, owner: "", github_installation_id, is_hidden });
+    github_app_covered: boolean,
+    github_prefer_installation_coverage = true
+  ) => ({
+    full_name,
+    github_app_covered,
+    github_prefer_installation_coverage,
+  });
 
-  it("should group visible repositories by owner and keep their order", () => {
-    const repos = [row("zed/b", 1), row("acme/z", 2), row("zed/a", 1)];
-    const groups = groupRepositoriesByOwner(repos, repos);
+  it("should keep only App-installed repositories when the account prefers App coverage", () => {
+    const { inventory, notConnected } = splitByAppConnection([
+      row("me/app", true),
+      row("skhard99/docs", false),
+    ]);
+
+    expect(inventory.map((r) => r.full_name)).toEqual(["me/app"]);
+    expect(notConnected.map((r) => r.full_name)).toEqual(["skhard99/docs"]);
+  });
+
+  it("should keep every repository on an OAuth-only deployment", () => {
+    const { inventory, notConnected } = splitByAppConnection([
+      row("me/app", false, false),
+      row("me/other", false, false),
+    ]);
+
+    expect(inventory).toHaveLength(2);
+    expect(notConnected).toEqual([]);
+  });
+});
+
+describe("groupRepositoriesByOwner", () => {
+  const row = (full_name: string) => ({ full_name, owner: "" });
+
+  it("should list the signed-in account first, then other owners by name, keeping repository order", () => {
+    const groups = groupRepositoriesByOwner(
+      [row("zed/b"), row("Me/z"), row("acme/x"), row("zed/a")],
+      "me"
+    );
+
+    expect(groups.map((g) => g.owner)).toEqual(["Me", "acme", "zed"]);
+    expect(groups[2].repos.map((r) => r.full_name)).toEqual(["zed/b", "zed/a"]);
+  });
+
+  it("should sort every owner by name without a signed-in login", () => {
+    const groups = groupRepositoriesByOwner([row("zed/a"), row("acme/x")]);
 
     expect(groups.map((g) => g.owner)).toEqual(["acme", "zed"]);
-    expect(groups[1].repos.map((r) => r.full_name)).toEqual(["zed/b", "zed/a"]);
-  });
-
-  it("should classify owners as connected, partly connected, or not connected", () => {
-    const repos = [
-      row("legacy/docs", null),
-      row("mixed/a", null),
-      row("mixed/b", 7),
-      row("app/x", 3),
-    ];
-    const groups = groupRepositoriesByOwner(repos, repos);
-
-    expect(groups.map((g) => [g.owner, g.coverage])).toEqual([
-      ["app", "connected"],
-      ["mixed", "partial"],
-      ["legacy", "none"],
-    ]);
-    expect(groups[1].notConnected.map((r) => r.full_name)).toEqual(["mixed/a"]);
-  });
-
-  it("should judge coverage from every connected repository of the owner, not only the visible ones", () => {
-    const all = [row("mixed/alpha", 11), row("mixed/beta", null)];
-    const [group] = groupRepositoriesByOwner([all[1]], all);
-
-    expect(group.repos.map((r) => r.full_name)).toEqual(["mixed/beta"]);
-    expect(group.coverage).toBe("partial");
-    expect(group.notConnected.map((r) => r.full_name)).toEqual(["mixed/beta"]);
-  });
-
-  it("should ignore removed repositories when judging coverage", () => {
-    const all = [row("legacy/docs", null), row("legacy/old", 4, true)];
-    const [group] = groupRepositoriesByOwner([all[0]], all);
-
-    expect(group.coverage).toBe("none");
   });
 });
