@@ -1,19 +1,14 @@
 "use client"
 import { useState } from "react"
 import type { CreateMcpInput } from "@/hooks/use-connections"
-import { MAX_MCP_CONNECTIONS } from "@/lib/connections/constants"
 import { PasswordInput } from "@/components/ui/password-input"
 
 export function AddMcpForm({
   allowScopeSelection,
-  globalAtCap,
-  projectAtCap,
   onCancel,
   onSubmit,
 }: {
   allowScopeSelection: boolean
-  globalAtCap: boolean
-  projectAtCap: boolean
   onCancel: () => void
   onSubmit: (values: CreateMcpInput) => Promise<void>
 }) {
@@ -22,24 +17,13 @@ export function AddMcpForm({
   const [transport, setTransport] = useState<"http" | "sse">("http")
   const [authType, setAuthType] = useState<"none" | "api_key" | "bearer">("none")
   const [credentials, setCredentials] = useState("")
-  const [scope, setScope] = useState<"global" | "project">(() => {
-    if (!allowScopeSelection) return "global"
-    // Prefer the scope that isn't already at cap so the default choice is
-    // submittable; fall back to "project" when neither is full.
-    if (projectAtCap && !globalAtCap) return "global"
-    return "project"
-  })
+  const [scope, setScope] = useState<"global" | "project">(
+    allowScopeSelection ? "project" : "global"
+  )
   const [saving, setSaving] = useState(false)
 
-  const selectedScopeAtCap =
-    (allowScopeSelection ? scope : "global") === "global"
-      ? globalAtCap
-      : projectAtCap
   const canSubmit =
-    name.trim() &&
-    url.trim() &&
-    (authType === "none" || credentials.trim()) &&
-    !selectedScopeAtCap
+    name.trim() && url.trim() && (authType === "none" || credentials.trim())
 
   const handleSubmit = async () => {
     if (!canSubmit || saving) return
@@ -78,9 +62,6 @@ export function AddMcpForm({
                 className="h-3 w-3"
               />
               This project
-              {projectAtCap && (
-                <span className="text-[9px] text-muted-foreground/80">(at cap)</span>
-              )}
             </label>
             <label className="flex items-center gap-1 cursor-pointer">
               <input
@@ -91,27 +72,12 @@ export function AddMcpForm({
                 className="h-3 w-3"
               />
               Global
-              {globalAtCap && (
-                <span className="text-[9px] text-muted-foreground/80">(at cap)</span>
-              )}
             </label>
           </div>
-          {selectedScopeAtCap && (
-            <div className="text-[10px] text-amber-400">
-              {scope === "global"
-                ? `Max ${MAX_MCP_CONNECTIONS} global MCPs reached.`
-                : `Max ${MAX_MCP_CONNECTIONS} MCPs resolved for this repo.`}
-            </div>
-          )}
         </div>
       ) : (
         <div className="text-[10px] text-muted-foreground">
           Creating in <span className="text-foreground">Global</span> scope.
-          {globalAtCap && (
-            <span className="ml-1 text-amber-400">
-              Max {MAX_MCP_CONNECTIONS} reached.
-            </span>
-          )}
         </div>
       )}
       <input

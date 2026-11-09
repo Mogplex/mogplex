@@ -1,6 +1,5 @@
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { encrypt, decrypt } from "./encryption";
-import { MAX_MCP_CONNECTIONS } from "./constants";
 import type {
   Connection,
   ConnectionApprovalMode,
@@ -42,23 +41,6 @@ async function fetchRepoConnectionData(userId: string, repoId: string) {
   };
 }
 
-function applyMcpCap(connections: Connection[]): Connection[] {
-  const restApis = connections.filter((c) => c.type === "rest_api");
-  const mcpServers = connections.filter((c) => c.type === "mcp_server");
-
-  if (mcpServers.length <= MAX_MCP_CONNECTIONS) {
-    return connections;
-  }
-
-  const sortedMcps = [...mcpServers].sort((a, b) => {
-    if (a.scope === "project" && b.scope !== "project") return -1;
-    if (a.scope !== "project" && b.scope === "project") return 1;
-    return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-  });
-
-  return [...restApis, ...sortedMcps.slice(0, MAX_MCP_CONNECTIONS)];
-}
-
 export function resolveRepoConnections(
   globalConnections: Connection[],
   projectConnections: Connection[],
@@ -76,10 +58,7 @@ export function resolveRepoConnections(
   const enabledProjectConnections = projectConnections.filter(
     (c) => c.is_enabled
   );
-  const resolvedConnections = applyMcpCap([
-    ...filteredGlobal,
-    ...enabledProjectConnections,
-  ]);
+  const resolvedConnections = [...filteredGlobal, ...enabledProjectConnections];
 
   return { resolvedConnections, excludedSet };
 }
@@ -127,7 +106,7 @@ export async function findUserConnectionBySourcePreset(
   return ((data ?? []) as Connection[])[0] ?? null;
 }
 
-/** Resolve runnable connections for a repo: enabled global (minus excluded) + enabled project, with MCP cap */
+/** Resolve runnable connections for a repo: enabled global (minus excluded) + enabled project */
 export async function getResolvedConnections(
   userId: string,
   repoId: string
@@ -163,15 +142,6 @@ export async function getRepoConnectionsForDisplay(
     resolvedMcpCount: resolvedConnections.filter((c) => c.type === "mcp_server")
       .length,
   };
-}
-
-/** Count resolved MCP connections for a user+repo (lightweight query for validation) */
-export async function countResolvedMcps(
-  userId: string,
-  repoId: string
-): Promise<number> {
-  const conns = await getResolvedConnections(userId, repoId);
-  return conns.filter((c) => c.type === "mcp_server").length;
 }
 
 export async function getConnectionCredentials(

@@ -290,11 +290,7 @@ test("settings manual add preserves input and surfaces API errors", async ({
       return;
     }
 
-    await fulfillJson(
-      route,
-      { error: "Maximum 5 MCP connections allowed" },
-      400
-    );
+    await fulfillJson(route, { error: "mcp_url could not be reached" }, 400);
   });
 
   await page.goto(scopedPath("connections"));
@@ -312,9 +308,7 @@ test("settings manual add preserves input and surfaces API errors", async ({
   await page.getByPlaceholder("token").fill("bb_live_123");
   await page.getByRole("button", { name: "Add Connection" }).click();
 
-  await expect(
-    page.getByText("Maximum 5 MCP connections allowed")
-  ).toBeVisible();
+  await expect(page.getByText("mcp_url could not be reached")).toBeVisible();
   await expect(page.getByPlaceholder("name")).toHaveValue("Browserbase MCP");
   await expect(page.getByPlaceholder("https://mcp.example.com")).toHaveValue(
     "https://mcp.browserbase.com/mcp"

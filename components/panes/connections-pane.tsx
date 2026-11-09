@@ -3,7 +3,6 @@ import { useCallback, useMemo, useState } from "react"
 import useSWR from "swr"
 import { useSessionsStore } from "@/hooks/use-sessions"
 import { useRealtimeRouteRefresh } from "@/hooks/use-realtime-route-refresh"
-import { MAX_MCP_CONNECTIONS } from "@/lib/connections/constants"
 import {
   CONNECTION_PRESETS,
   CONNECTION_PRESET_MANUAL_HINT,
@@ -147,7 +146,7 @@ export function ConnectionsPane() {
       <div className="flex items-center justify-between px-3 py-2.5 border-b border-border-dim">
         <span className="text-[11px] text-muted-foreground">
           {connections.length} connection{connections.length !== 1 ? "s" : ""}
-          <span className="ml-2 text-purple-400">{mcpCount}/{MAX_MCP_CONNECTIONS} MCPs</span>
+          <span className="ml-2 text-purple-400">{mcpCount} MCP{mcpCount !== 1 ? "s" : ""}</span>
         </span>
         <button
           onClick={() => setShowForm((f) => !f)}
@@ -160,7 +159,6 @@ export function ConnectionsPane() {
       {showForm && (
         <InlineAddForm
           repoId={activeRepo?.id}
-          mcpCount={mcpCount}
           onCreated={() => { setShowForm(false); void mutate() }}
           onCancel={() => setShowForm(false)}
         />

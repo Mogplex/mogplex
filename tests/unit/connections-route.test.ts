@@ -75,7 +75,7 @@ function fixture(
     failRead?: boolean;
     failWrite?: boolean;
     duplicate?: boolean;
-    cap?: boolean;
+    manyMcps?: boolean;
     empty?: boolean;
   } = {}
 ) {
@@ -116,8 +116,8 @@ function fixture(
           options.duplicate ? [{ ...row, source_preset: "notion" }] : []
         );
       return Response.json(
-        options.cap
-          ? Array.from({ length: 5 }, () => ({ ...row, type: "mcp_server" }))
+        options.manyMcps
+          ? Array.from({ length: 12 }, () => ({ ...row, type: "mcp_server" }))
           : options.empty
             ? []
             : [row]
@@ -244,8 +244,8 @@ test("connection POST retains duplicate preset 409", async () => {
   assert.deepEqual(f.writes(), []);
 });
 
-test("connection POST retains existing MCP cap", async () => {
-  const f = fixture({ cap: true });
+test("should create an MCP connection however many the user already has", async () => {
+  const f = fixture({ manyMcps: true });
   const response = await f.handlers.POST(
     request("POST", {
       name: "MCP",
@@ -253,8 +253,13 @@ test("connection POST retains existing MCP cap", async () => {
       mcp_url: "https://mcp.example.com",
     })
   );
-  assert.equal(response.status, 400);
-  assert.deepEqual(f.writes(), []);
+  assert.equal(response.status, 201);
+  // No read of existing connections: a count-then-reject check of any shape
+  // would have to query them first.
+  assert.deepEqual(
+    f.calls.map((call) => call.method),
+    ["POST"]
+  );
 });
 
 for (const method of ["PATCH", "DELETE"] as const) {
