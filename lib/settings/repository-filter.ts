@@ -31,3 +31,36 @@ export function filterRepositories<
     ).length,
   };
 }
+
+/**
+ * Group repositories by owner, keeping the incoming order inside each group.
+ * `appInstalled` is true when any repository of the owner came through a
+ * GitHub App installation: GitHub only sends webhooks (and so PR reviews and
+ * automations) for installed owners, while repositories imported through
+ * OAuth access alone (legacy sync of every repo the account could see) never
+ * trigger them. Installed owners come first, then each half by name.
+ */
+export function groupRepositoriesByOwner<
+  T extends Pick<Repo, "owner" | "full_name" | "github_installation_id">,
+>(repos: T[]) {
+  const groups = new Map<string, T[]>();
+  for (const repo of repos) {
+    const owner = repoOwner(repo);
+    const group = groups.get(owner);
+    if (group) group.push(repo);
+    else groups.set(owner, [repo]);
+  }
+  return [...groups.entries()]
+    .map(([owner, ownerRepos]) => ({
+      owner,
+      repos: ownerRepos,
+      appInstalled: ownerRepos.some(
+        (repo) => repo.github_installation_id != null
+      ),
+    }))
+    .sort(
+      (a, b) =>
+        Number(b.appInstalled) - Number(a.appInstalled) ||
+        a.owner.localeCompare(b.owner)
+    );
+}

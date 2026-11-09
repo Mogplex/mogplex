@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { filterRepositories, repoOwner } from "./repository-filter";
+import {
+  filterRepositories,
+  groupRepositoriesByOwner,
+  repoOwner,
+} from "./repository-filter";
 
 const repo = (full_name: string, is_hidden = false, owner = "") => ({
   full_name,
@@ -49,5 +53,49 @@ describe("filterRepositories", () => {
   it("should prefer the stored owner over the name prefix", () => {
     expect(repoOwner(repo("old-name/app", false, "new-name"))).toBe("new-name");
     expect(repoOwner(repo("acme/app"))).toBe("acme");
+  });
+});
+
+describe("groupRepositoriesByOwner", () => {
+  const installed = (
+    full_name: string,
+    github_installation_id: number | null
+  ) => ({
+    full_name,
+    owner: "",
+    github_installation_id,
+  });
+
+  it("should group by owner in owner order and keep repository order", () => {
+    const groups = groupRepositoriesByOwner([
+      installed("zed/b", 1),
+      installed("acme/z", 2),
+      installed("zed/a", 1),
+    ]);
+
+    expect(groups.map((g) => g.owner)).toEqual(["acme", "zed"]);
+    expect(groups[1].repos.map((r) => r.full_name)).toEqual(["zed/b", "zed/a"]);
+  });
+
+  it("should mark an owner without any App installation as not installed", () => {
+    const groups = groupRepositoriesByOwner([
+      installed("oauth-only/docs", null),
+      installed("mixed/a", null),
+      installed("mixed/b", 7),
+    ]);
+
+    expect(groups).toEqual([
+      expect.objectContaining({ owner: "mixed", appInstalled: true }),
+      expect.objectContaining({ owner: "oauth-only", appInstalled: false }),
+    ]);
+  });
+
+  it("should list App-connected owners before owners without the App", () => {
+    const groups = groupRepositoriesByOwner([
+      installed("aaa-legacy/docs", null),
+      installed("zed/app", 3),
+    ]);
+
+    expect(groups.map((g) => g.owner)).toEqual(["zed", "aaa-legacy"]);
   });
 });

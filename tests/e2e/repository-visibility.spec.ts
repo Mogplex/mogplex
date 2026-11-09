@@ -14,6 +14,7 @@ async function dashboard(page: Page, failedIds: string[] = []) {
       name: "alpha",
       full_name: "alex/alpha",
       owner: "alex",
+      github_installation_id: 11,
       is_hidden: false,
     },
     {
@@ -75,7 +76,38 @@ async function dashboard(page: Page, failedIds: string[] = []) {
 }
 
 const connected = (page: Page) =>
-  page.getByRole("list", { name: "Connected repositories" });
+  page.getByRole("region", { name: "Connected repositories" });
+
+test("connected repositories are grouped by owner and flag owners without the GitHub App", async ({
+  page,
+}) => {
+  await dashboard(page);
+  const alex = connected(page).getByRole("region", {
+    name: "alex",
+    exact: true,
+  });
+  const team = connected(page).getByRole("region", {
+    name: "team",
+    exact: true,
+  });
+
+  await expect(alex.getByRole("heading", { name: "alex" })).toBeVisible();
+  await expect(alex.getByText("2 repositories")).toBeVisible();
+  await expect(alex.getByText("alex/alpha")).toBeVisible();
+  await expect(alex.getByText("team/other")).toHaveCount(0);
+  await expect(alex.getByText("GitHub App connected")).toBeVisible();
+  await expect(alex.getByText("Not connected")).toHaveCount(0);
+  await expect(team.getByText("team/other")).toBeVisible();
+  await expect(team.getByText("Not connected")).toBeVisible();
+  await expect(
+    team.getByText(/PR reviews and automations never run here/)
+  ).toBeVisible();
+  // App-connected owners are listed before owners without the App.
+  await expect(connected(page).getByRole("heading", { level: 2 })).toHaveText([
+    "alex",
+    "team",
+  ]);
+});
 
 test("remove owner persists, and a removed repository can be restored", async ({
   page,
@@ -271,4 +303,21 @@ test("project settings open from a repository with no sessions", async ({
   await expect(
     drawer.getByRole("button", { name: "Save variables" })
   ).toBeVisible();
+});
+
+test("an owner without the GitHub App can be removed in one step", async ({
+  page,
+}) => {
+  const { writes } = await dashboard(page);
+  await page
+    .getByRole("button", {
+      name: "Remove all not-connected repositories from team",
+    })
+    .click();
+  await page
+    .getByRole("alertdialog", { name: "Remove all 1 repository from team?" })
+    .getByRole("button", { name: "Remove 1 repository" })
+    .click();
+  await expect(connected(page).getByText("team/other")).toHaveCount(0);
+  expect(writes).toEqual([{ id: "other", is_hidden: true }]);
 });

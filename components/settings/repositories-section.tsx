@@ -14,10 +14,12 @@ import { scopedHref } from "@/lib/scoped-href";
 import { trackActivation } from "@/lib/activation-tracking";
 import {
   filterRepositories,
+  groupRepositoriesByOwner,
   repoOwner,
 } from "@/lib/settings/repository-filter";
 import type { Repo } from "@/lib/types";
 import { ConfirmRemoveButton, RepositoryRow } from "./repository-row";
+import { RepositoryOwnerGroup } from "./repository-owner-group";
 import { useRepositoryAdmin } from "./use-repository-admin";
 
 /**
@@ -150,17 +152,33 @@ export function RepositoriesSection() {
           Loading repositories…
         </p>
       ) : (
-        <ul aria-label="Connected repositories" className="border-border rounded-md border">
-          {connected.length === 0 ? (
-            <li className="text-muted-foreground px-3 py-4 text-xs">
-              {query || owner !== "all"
-                ? "No connected repositories match."
-                : "No connected repositories yet. Sync GitHub to import them."}
-            </li>
-          ) : (
-            connected.map(renderRow)
-          )}
-        </ul>
+        connected.length === 0 ? (
+          <p className="border-border text-muted-foreground rounded-md border px-3 py-4 text-xs">
+            {query || owner !== "all"
+              ? "No connected repositories match."
+              : "No connected repositories yet. Sync GitHub to import them."}
+          </p>
+        ) : (
+          <div aria-label="Connected repositories" role="region" className="space-y-4">
+            {groupRepositoriesByOwner(connected).map((group) => (
+              <RepositoryOwnerGroup
+                key={group.owner}
+                owner={group.owner}
+                appInstalled={group.appInstalled}
+                shownCount={group.repos.length}
+                totalCount={
+                  admin.repos.filter(
+                    (repo) => !repo.is_hidden && repoOwner(repo) === group.owner
+                  ).length
+                }
+                removing={admin.removingOwner}
+                onRemoveAll={() => void admin.removeOwner(group.owner)}
+              >
+                {group.repos.map(renderRow)}
+              </RepositoryOwnerGroup>
+            ))}
+          </div>
+        )
       )}
 
       {showRemoved && removed.length > 0 ? (

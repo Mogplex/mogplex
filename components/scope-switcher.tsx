@@ -6,6 +6,7 @@ import { useParams, usePathname, useRouter } from "next/navigation";
 import { useMemberships } from "@/hooks/use-memberships";
 import { useUser } from "@/hooks/use-user";
 import { switchScopePath } from "@/lib/scope-switch";
+import { ScopeIcon } from "@/components/scope-icon";
 import {
   Command,
   CommandEmpty,
@@ -20,13 +21,6 @@ import {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
 } from "@/components/ui/dropdown-menu";
-
-function initialsOf(label: string): string {
-  const parts = label.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-}
 
 function ActiveMark({ active }: { active: boolean }) {
   if (!active) return null;
@@ -120,12 +114,10 @@ export function ScopeMenuItems({
                   value={`personal ${personalLabel} ${memberships.personal.slug}`}
                   onSelect={() => handleSelect(memberships.personal.slug!)}
                 >
-                  <span
-                    aria-hidden="true"
-                    className="flex h-5 w-5 shrink-0 items-center justify-center rounded-sm bg-accent text-[10px] font-medium text-foreground/80"
-                  >
-                    {initialsOf(personalLabel)}
-                  </span>
+                  <ScopeIcon
+                    name={personalLabel}
+                    className="h-5 w-5 text-[10px]"
+                  />
                   <span className="flex-1 truncate">{personalLabel}</span>
                   <ActiveMark active={personalActive} />
                 </CommandItem>
@@ -149,20 +141,11 @@ export function ScopeMenuItems({
                         value={`team ${team.name} ${team.slug}`}
                         onSelect={() => handleSelect(team.slug)}
                       >
-                        <span
-                          aria-hidden="true"
-                          className="flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-sm bg-accent text-[10px] font-medium text-foreground/80"
-                        >
-                          {team.iconUrl ? (
-                            <img
-                              src={team.iconUrl}
-                              alt=""
-                              className="h-full w-full object-cover"
-                            />
-                          ) : (
-                            initialsOf(team.name)
-                          )}
-                        </span>
+                        <ScopeIcon
+                          name={team.name}
+                          iconUrl={team.iconUrl}
+                          className="h-5 w-5 text-[10px]"
+                        />
                         <span className="flex-1 truncate">{team.name}</span>
                         <ActiveMark active={isActive} />
                       </CommandItem>
