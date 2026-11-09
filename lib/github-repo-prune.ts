@@ -22,9 +22,10 @@ const defaultDeps: PruneUnconnectedReposDeps = {
  * Delete the user's personal repository rows that came from the legacy OAuth
  * sync (no App installation) and that nothing references;
  * `prune_unconnected_repos` holds the reference guard. Call it only after a
- * GitHub App sync, never on OAuth-only deployments. It does nothing unless
- * that sync returned at least one repository, so a failed or empty App sync
- * never deletes anything. Fails open: the sync result never depends on it.
+ * personal GitHub App sync: never on OAuth-only deployments, and never after
+ * a team sync, whose grant says nothing about personal rows. It does
+ * nothing unless that sync returned at least one repository, so a failed or
+ * empty App sync never deletes anything. Fails open: the sync result never depends on it.
  *
  * @param authorizedRepoCount repositories the App sync returned
  * @returns the number of rows deleted (0 when skipped or on error)

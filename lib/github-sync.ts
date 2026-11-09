@@ -469,7 +469,6 @@ export async function syncGithubReposForUser(
       );
       for (const id of ids) authorizedGithubRepoIds.add(id);
     }
-    // Personal syncs only: a team sync's grant says nothing about personal rows.
     if (!options.productTeamId)
       await pruneUnconnectedRepos(userId, authorizedGithubRepoIds.size);
   } else if (oauthToken && allowOAuth) {
