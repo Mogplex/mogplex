@@ -112,6 +112,20 @@ it("should not attach anything without an identity token", async () => {
   expect(deps.findInstallation).not.toHaveBeenCalled();
 });
 
+it("should report a rejected token as checked so discovery is throttled", async () => {
+  const { deps } = fixture();
+  deps.fetchLogin.mockResolvedValueOnce(null);
+  expect(
+    await reconcileGithubInstallationsForUser(
+      "fixture-user",
+      "member",
+      "revoked-fixture",
+      deps
+    )
+  ).toEqual({ discovered: 0, checked: true });
+  expect(deps.findInstallation).not.toHaveBeenCalled();
+});
+
 it("should check ownership for the login the token reports, not a stored one", async () => {
   const { deps } = fixture();
   await reconcileGithubInstallationsForUser(

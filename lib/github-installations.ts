@@ -83,8 +83,11 @@ export async function reconcileGithubInstallationsForUser(
 
   // Ownership is checked for the login the token reports now, never a stored
   // one that a rename may have handed to someone else.
+  if (!githubToken) return { discovered: 0, checked: false };
   const login = await deps.fetchLogin(githubToken, deps.request);
-  if (!login || !githubToken) return { discovered: 0, checked: false };
+  // GitHub answered but rejected the token (revoked or expired): that still
+  // counts as checked, so callers throttle instead of re-asking every request.
+  if (!login) return { discovered: 0, checked: true };
 
   const attached = new Set(
     ((data ?? []) as Array<{ account_login: string | null }>)
