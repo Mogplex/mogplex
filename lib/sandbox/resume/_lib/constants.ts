@@ -35,4 +35,5 @@ export const defaultSandboxResumeDeps: SandboxResumeDeps = {
   requireSandboxBillingSession,
   prepareSandboxBillingClose,
   finalizeSandboxBillingClose,
+  createReadableStream: ReadableStream,
 };

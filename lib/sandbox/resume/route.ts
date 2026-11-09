@@ -254,7 +254,7 @@ export function createSandboxResumeHandler(
     // disconnect after ready; bootstrap and the restored VM must survive it.
     let disconnected = false;
 
-    const stream = new ReadableStream<Uint8Array>({
+    const stream = new deps.createReadableStream<Uint8Array>({
       async start(controller) {
         const emit = (event: SandboxEvent | SandboxLifecycleConflictEvent) => {
           if (disconnected) return;
