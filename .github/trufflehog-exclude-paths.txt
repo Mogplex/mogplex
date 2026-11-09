@@ -1,0 +1,1 @@
+^tests/unit/pr-fixer-git-author\.test\.ts$
