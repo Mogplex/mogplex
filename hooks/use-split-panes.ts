@@ -82,30 +82,42 @@ type TreeUpdate = { root: TreeNode; activeId: string };
 
 const FALLBACK_TREE = createDefaultTree();
 
-function updateActiveSessionTree(
+function updateSessionTree(
+  sessionId: string | undefined,
   update: (root: TreeNode, activeId: string) => TreeUpdate
 ) {
   const state = useSessionsStore.getState();
-  const session = state.getActiveSession();
+  const session = state.sessions.find(
+    (candidate) => candidate.id === sessionId
+  );
   if (!session) return;
   const next = update(session.paneTree, session.activeId);
   state.updatePaneTree(next.root, next.activeId, { sessionId: session.id });
 }
 
 export function useSplitPanes() {
+  const sessionId = useSessionsStore((state) => state.getActiveSession()?.id);
   const root = useSessionsStore(
     (state) => state.getActiveSession()?.paneTree ?? FALLBACK_TREE
   );
   const activeId = useSessionsStore(
     (state) => state.getActiveSession()?.activeId ?? FALLBACK_TREE.id
   );
+  const updateActiveSessionTree = useCallback(
+    (update: (root: TreeNode, activeId: string) => TreeUpdate) =>
+      updateSessionTree(sessionId, update),
+    [sessionId]
+  );
 
-  const setActiveId = useCallback((id: string) => {
-    updateActiveSessionTree((currentRoot) => ({
-      root: currentRoot,
-      activeId: id,
-    }));
-  }, []);
+  const setActiveId = useCallback(
+    (id: string) => {
+      updateActiveSessionTree((currentRoot) => ({
+        root: currentRoot,
+        activeId: id,
+      }));
+    },
+    [updateActiveSessionTree]
+  );
 
   const split = useCallback(
     (
@@ -124,23 +136,26 @@ export function useSplitPanes() {
         };
       });
     },
-    []
+    [updateActiveSessionTree]
   );
 
-  const closePane = useCallback((id: string) => {
-    updateActiveSessionTree((currentRoot, currentActiveId) => {
-      const { next } = detachPane(currentRoot, id);
-      if (!next) return { root: currentRoot, activeId: currentActiveId };
-      const remainingIds = collectPaneIds(next);
-      return {
-        root: next,
-        activeId:
-          currentActiveId === id && remainingIds.length > 0
-            ? remainingIds[0]
-            : currentActiveId,
-      };
-    });
-  }, []);
+  const closePane = useCallback(
+    (id: string) => {
+      updateActiveSessionTree((currentRoot, currentActiveId) => {
+        const { next } = detachPane(currentRoot, id);
+        if (!next) return { root: currentRoot, activeId: currentActiveId };
+        const remainingIds = collectPaneIds(next);
+        return {
+          root: next,
+          activeId:
+            currentActiveId === id && remainingIds.length > 0
+              ? remainingIds[0]
+              : currentActiveId,
+        };
+      });
+    },
+    [updateActiveSessionTree]
+  );
 
   const openFile = useCallback(
     (
@@ -199,15 +214,18 @@ export function useSplitPanes() {
         };
       });
     },
-    []
+    [updateActiveSessionTree]
   );
 
-  const updatePane = useCallback((id: string, updates: Partial<PaneNode>) => {
-    updateActiveSessionTree((currentRoot, currentActiveId) => ({
-      root: updatePaneNode(currentRoot, id, updates),
-      activeId: currentActiveId,
-    }));
-  }, []);
+  const updatePane = useCallback(
+    (id: string, updates: Partial<PaneNode>) => {
+      updateActiveSessionTree((currentRoot, currentActiveId) => ({
+        root: updatePaneNode(currentRoot, id, updates),
+        activeId: currentActiveId,
+      }));
+    },
+    [updateActiveSessionTree]
+  );
 
   const retargetFilePath = useCallback(
     (fromPath: string, toPath: string, scope?: FilePathMutationScope) => {
@@ -216,7 +234,7 @@ export function useSplitPanes() {
         activeId: currentActiveId,
       }));
     },
-    []
+    [updateActiveSessionTree]
   );
 
   const clearFilePath = useCallback(
@@ -226,7 +244,7 @@ export function useSplitPanes() {
         activeId: currentActiveId,
       }));
     },
-    []
+    [updateActiveSessionTree]
   );
 
   const updateTerminalSession = useCallback(
@@ -244,15 +262,18 @@ export function useSplitPanes() {
         return { root: apply(currentRoot), activeId: currentActiveId };
       });
     },
-    []
+    [updateActiveSessionTree]
   );
 
-  const updateSplitSizes = useCallback((splitId: string, sizes: number[]) => {
-    updateActiveSessionTree((currentRoot, currentActiveId) => ({
-      root: updateSplitNodeSizes(currentRoot, splitId, sizes),
-      activeId: currentActiveId,
-    }));
-  }, []);
+  const updateSplitSizes = useCallback(
+    (splitId: string, sizes: number[]) => {
+      updateActiveSessionTree((currentRoot, currentActiveId) => ({
+        root: updateSplitNodeSizes(currentRoot, splitId, sizes),
+        activeId: currentActiveId,
+      }));
+    },
+    [updateActiveSessionTree]
+  );
 
   const movePaneById = useCallback(
     (sourceId: string, targetId: string, position: MovePosition) => {
@@ -267,47 +288,50 @@ export function useSplitPanes() {
         activeId: currentActiveId,
       }));
     },
-    []
+    [updateActiveSessionTree]
   );
 
-  const popOutIDE = useCallback((paneId: string, filePath?: string) => {
-    updateActiveSessionTree((currentRoot) => {
-      const uid = crypto.randomUUID().slice(0, 8);
-      const editorId = `p-editor-${uid}`;
-      const update = (node: TreeNode): TreeNode => {
-        if (isPane(node) && node.id === paneId && node.type === "preview") {
-          const sandboxBinding = getPaneSandboxBinding(node);
-          const sandboxId =
-            sandboxBinding === "pinned" ? node.sandboxId : undefined;
-          return {
-            id: `s-ide-${uid}`,
-            dir: "horizontal",
-            sizes: [18, 47, 35],
-            children: [
-              createPaneNode(node, `p-files-${uid}`, "files", {
-                sandboxBinding,
-                sandboxId,
-              }),
-              createPaneNode(node, editorId, "editor", {
-                name: filePath
-                  ? filePath.split("/").pop() || DEFAULT_PANE_NAMES.editor
-                  : DEFAULT_PANE_NAMES.editor,
-                filePath,
-                sandboxBinding,
-                sandboxId,
-              }),
-              node,
-            ],
-          };
-        }
-        if (!isPane(node)) {
-          return { ...node, children: node.children.map(update) };
-        }
-        return node;
-      };
-      return { root: update(currentRoot), activeId: editorId };
-    });
-  }, []);
+  const popOutIDE = useCallback(
+    (paneId: string, filePath?: string) => {
+      updateActiveSessionTree((currentRoot) => {
+        const uid = crypto.randomUUID().slice(0, 8);
+        const editorId = `p-editor-${uid}`;
+        const update = (node: TreeNode): TreeNode => {
+          if (isPane(node) && node.id === paneId && node.type === "preview") {
+            const sandboxBinding = getPaneSandboxBinding(node);
+            const sandboxId =
+              sandboxBinding === "pinned" ? node.sandboxId : undefined;
+            return {
+              id: `s-ide-${uid}`,
+              dir: "horizontal",
+              sizes: [18, 47, 35],
+              children: [
+                createPaneNode(node, `p-files-${uid}`, "files", {
+                  sandboxBinding,
+                  sandboxId,
+                }),
+                createPaneNode(node, editorId, "editor", {
+                  name: filePath
+                    ? filePath.split("/").pop() || DEFAULT_PANE_NAMES.editor
+                    : DEFAULT_PANE_NAMES.editor,
+                  filePath,
+                  sandboxBinding,
+                  sandboxId,
+                }),
+                node,
+              ],
+            };
+          }
+          if (!isPane(node)) {
+            return { ...node, children: node.children.map(update) };
+          }
+          return node;
+        };
+        return { root: update(currentRoot), activeId: editorId };
+      });
+    },
+    [updateActiveSessionTree]
+  );
 
   return {
     root,

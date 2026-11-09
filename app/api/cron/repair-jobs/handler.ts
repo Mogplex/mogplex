@@ -39,7 +39,7 @@ export function createRepairJobsGetHandler(
         const { data: jobs, error } = await adminClient
           .from("job_runs")
           .select(
-            "id, status, flow_id, created_at, started_at, last_start_attempt_at"
+            "id, status, flow_id, trigger_id, created_at, started_at, last_start_attempt_at"
           )
           .eq("status", "pending")
           .order("created_at", { ascending: true })
@@ -61,14 +61,17 @@ export function createRepairJobsGetHandler(
           (job) =>
             isExecutableJobRunSource(job) && deps.isRepairablePendingJob(job)
         );
+        const scanned = jobs?.length ?? 0;
+        const skipped = scanned - repairableJobs.length;
 
         if (repairableJobs.length === 0) {
           return NextResponse.json({
             message: "No stale pending jobs",
-            scanned: jobs?.length ?? 0,
+            scanned,
             started: 0,
             deferred: 0,
             failed: 0,
+            skipped,
           });
         }
 
@@ -121,11 +124,12 @@ export function createRepairJobsGetHandler(
         );
 
         return NextResponse.json({
-          message: `Scanned ${jobs?.length ?? 0} stale pending job(s)`,
-          scanned: jobs?.length ?? 0,
+          message: `Scanned ${scanned} stale pending job(s)`,
+          scanned,
           started: results.filter((result) => result.started).length,
           deferred: results.filter((result) => result.deferred).length,
           failed: results.filter((result) => result.error).length,
+          skipped,
           results,
         });
       });

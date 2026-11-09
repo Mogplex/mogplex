@@ -86,6 +86,7 @@ const defaultSandboxExecPostDeps: SandboxExecPostDeps = {
   syncTerminalRuntimeAuth,
   touchSandboxLastActive,
   renewSandboxActivityLease,
+  resolveRepoSandboxEnv,
 };
 
 async function providerSandboxNotFoundResponse({
@@ -258,7 +259,7 @@ export function createSandboxExecPostHandler(
       );
 
       const repoRootDirectory = sandboxData.rootDirectory;
-      const envResolution = await resolveRepoSandboxEnv({
+      const envResolution = await deps.resolveRepoSandboxEnv({
         repo: repo ?? {},
         userId: creds.userId,
       });

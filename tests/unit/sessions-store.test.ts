@@ -77,6 +77,45 @@ test("useSplitPanes falls back to a home layout when sessions are empty", async 
   }
 });
 
+test("pane callbacks keep their originating session when the active session changes", async () => {
+  const useSessionsStore = await resetSessionsStore();
+  const { installControlHookDom } = await import("../support/control-hook-dom");
+  const cleanup = installControlHookDom();
+  const { renderHook, act } = await import("@testing-library/react");
+  const { useSplitPanes } = await import("../../hooks/use-split-panes");
+  const firstSessionId = useSessionsStore.getState().activeSessionId;
+  useSessionsStore.getState().createSession("second");
+  const secondSessionId = useSessionsStore.getState().activeSessionId;
+  useSessionsStore.getState().switchSession(firstSessionId);
+  const view = renderHook(() => useSplitPanes());
+
+  try {
+    const updateFirstSession = view.result.current.updatePane;
+    await act(async () => {
+      useSessionsStore.getState().switchSession(secondSessionId);
+    });
+    view.rerender();
+    await act(async () =>
+      updateFirstSession("p-home", { name: "First session update" })
+    );
+
+    const sessions = useSessionsStore.getState().sessions;
+    const firstTree = sessions.find(
+      (session) => session.id === firstSessionId
+    )?.paneTree;
+    const secondTree = sessions.find(
+      (session) => session.id === secondSessionId
+    )?.paneTree;
+    assert.ok(firstTree && "name" in firstTree);
+    assert.ok(secondTree && "name" in secondTree);
+    assert.equal(firstTree.name, "First session update");
+    assert.notEqual(secondTree.name, "First session update");
+  } finally {
+    view.unmount();
+    cleanup();
+  }
+});
+
 test("getPreferredWorkspaceSession falls back to the first workspace session when the active session is blank", async () => {
   const { getPreferredWorkspaceSession } =
     await import("../../hooks/use-sessions");
