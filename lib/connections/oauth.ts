@@ -108,10 +108,16 @@ export function canPrepareOAuthConnection(connection: Connection): boolean {
 }
 
 export function getOAuthResourceIndicator(
-  connection: Connection
+  connection: Connection,
+  grant: "authorize" | "refresh" = "authorize"
 ): string | undefined {
-  return getOAuthProfile(connection)?.use_resource_indicator &&
-    connection.type === "mcp_server"
+  // Refresh sends the indicator only for presets that declare it. Custom MCP
+  // rows hand-configured before browser sign-in may use servers that reject it.
+  const profile =
+    grant === "refresh"
+      ? getConnectionPreset(connection.source_preset)?.oauth_config
+      : getOAuthProfile(connection);
+  return profile?.use_resource_indicator && connection.type === "mcp_server"
     ? (connection.mcp_url ?? undefined)
     : undefined;
 }
@@ -397,7 +403,7 @@ export async function refreshOAuthToken(
     connection.oauth_token_url!,
     "oauth_token_url"
   );
-  const resource = getOAuthResourceIndicator(connection);
+  const resource = getOAuthResourceIndicator(connection, "refresh");
   const res = await fetch(tokenUrl, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },

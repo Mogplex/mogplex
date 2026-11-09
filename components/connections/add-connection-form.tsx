@@ -32,10 +32,15 @@ export function AddConnectionForm({
     setConnectionSaving(true)
     setConnectionError(null)
     try {
+      // A credential typed under another auth type stays in form state; OAuth
+      // sign-in must never send it on as a client secret.
+      const { credentials: _credentials, ...withoutCredentials } = newConn
       const res = await fetch("/api/connections", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newConn),
+        body: JSON.stringify(
+          newConn.auth_type === "oauth" ? withoutCredentials : newConn
+        ),
       })
 
       if (!res.ok) {
