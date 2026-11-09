@@ -2,7 +2,7 @@ import type { FileUIPart, TextUIPart, UIMessage } from "ai";
 import { validateUIMessages } from "ai";
 import {
   checkAttachmentBudget,
-  parseAttachmentDataUrl,
+  readAttachmentDataUrlByteLength,
 } from "@/lib/attachments/data-url";
 import { ATTACHMENT_LIMITS } from "@/lib/attachments/policy";
 import type {
@@ -25,7 +25,7 @@ export class ControlChatValidationError extends Error {
 }
 
 function readFilePartBytes(part: ControlChatRequestPart): number {
-  const parsed = parseAttachmentDataUrl(
+  const parsed = readAttachmentDataUrlByteLength(
     part.type === "file" ? part.url : "",
     part.type === "file" ? part.mediaType : ""
   );
@@ -34,7 +34,7 @@ function readFilePartBytes(part: ControlChatRequestPart): number {
       "Invalid control chat file attachment."
     );
   }
-  return parsed.content.byteLength;
+  return parsed.byteLength;
 }
 
 function applyFileBudget(budget: ControlFileBudget, decodedBytes: number) {

@@ -65,9 +65,7 @@ export function createRepairJobsGetHandler(
           deps.isRepairablePendingJob(job)
         );
         const scanned = jobs?.length ?? 0;
-        const skippedUnsupported = scanned - executableJobs.length;
         const skippedNotStale = executableJobs.length - repairableJobs.length;
-        const skipped = skippedUnsupported + skippedNotStale;
 
         if (repairableJobs.length === 0) {
           return NextResponse.json({
@@ -76,8 +74,7 @@ export function createRepairJobsGetHandler(
             started: 0,
             deferred: 0,
             failed: 0,
-            skipped,
-            skippedUnsupported,
+            skipped: skippedNotStale,
             skippedNotStale,
           });
         }
@@ -136,8 +133,7 @@ export function createRepairJobsGetHandler(
           started: results.filter((result) => result.started).length,
           deferred: results.filter((result) => result.deferred).length,
           failed: results.filter((result) => result.error).length,
-          skipped,
-          skippedUnsupported,
+          skipped: skippedNotStale,
           skippedNotStale,
           results,
         });

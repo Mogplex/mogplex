@@ -5,11 +5,14 @@ export type AttachmentDataUrlFailure =
   | "data_url_too_long"
   | "file_too_large";
 
-export function parseAttachmentDataUrl(
+const BASE64_ALPHABET =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+function readAttachmentDataUrlMetadata(
   url: string,
   mediaType: string
 ):
-  | { ok: true; content: Buffer }
+  | { ok: true; encodedData: string; byteLength: number }
   | { ok: false; reason: AttachmentDataUrlFailure } {
   if (url.length > ATTACHMENT_LIMITS.maxDataUrlChars) {
     return { ok: false, reason: "data_url_too_long" };
@@ -22,14 +25,51 @@ export function parseAttachmentDataUrl(
   if (encodedData.length % 4 !== 0) {
     return { ok: false, reason: "invalid" };
   }
-  const content = Buffer.from(encodedData, "base64");
-  if (content.toString("base64") !== encodedData) {
-    return { ok: false, reason: "invalid" };
+
+  const padding = encodedData.endsWith("==")
+    ? 2
+    : encodedData.endsWith("=")
+      ? 1
+      : 0;
+  const unusedBits = padding === 2 ? 4 : padding === 1 ? 2 : 0;
+  if (unusedBits > 0) {
+    const lastValue = BASE64_ALPHABET.indexOf(
+      encodedData[encodedData.length - padding - 1] ?? ""
+    );
+    if (lastValue === -1 || (lastValue & ((1 << unusedBits) - 1)) !== 0) {
+      return { ok: false, reason: "invalid" };
+    }
   }
-  if (content.byteLength > ATTACHMENT_LIMITS.maxFileBytes) {
+
+  const byteLength = (encodedData.length / 4) * 3 - padding;
+  if (byteLength > ATTACHMENT_LIMITS.maxFileBytes) {
     return { ok: false, reason: "file_too_large" };
   }
-  return { ok: true, content };
+  return { ok: true, encodedData, byteLength };
+}
+
+// Size validation uses the same canonical-base64 contract as full decoding,
+// without allocating or re-encoding the attachment content.
+export function readAttachmentDataUrlByteLength(
+  url: string,
+  mediaType: string
+):
+  | { ok: true; byteLength: number }
+  | { ok: false; reason: AttachmentDataUrlFailure } {
+  const parsed = readAttachmentDataUrlMetadata(url, mediaType);
+  if (!parsed.ok) return parsed;
+  return { ok: true, byteLength: parsed.byteLength };
+}
+
+export function parseAttachmentDataUrl(
+  url: string,
+  mediaType: string
+):
+  | { ok: true; content: Buffer }
+  | { ok: false; reason: AttachmentDataUrlFailure } {
+  const parsed = readAttachmentDataUrlMetadata(url, mediaType);
+  if (!parsed.ok) return parsed;
+  return { ok: true, content: Buffer.from(parsed.encodedData, "base64") };
 }
 
 export function checkAttachmentBudget(

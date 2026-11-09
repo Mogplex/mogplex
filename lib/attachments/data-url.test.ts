@@ -1,5 +1,8 @@
-import { describe, expect, it } from "vitest";
-import { parseAttachmentDataUrl } from "./data-url";
+import { describe, expect, it, vi } from "vitest";
+import {
+  parseAttachmentDataUrl,
+  readAttachmentDataUrlByteLength,
+} from "./data-url";
 
 describe("parseAttachmentDataUrl", () => {
   it("decodes a canonical attachment", () => {
@@ -38,5 +41,32 @@ describe("parseAttachmentDataUrl", () => {
         "text/plain"
       )
     ).toEqual({ ok: false, reason: "file_too_large" });
+  });
+});
+
+describe("readAttachmentDataUrlByteLength", () => {
+  it("validates size without allocating decoded content", () => {
+    const from = vi.spyOn(Buffer, "from");
+    try {
+      expect(
+        readAttachmentDataUrlByteLength(
+          "data:text/plain;base64,aGVsbG8=",
+          "text/plain"
+        )
+      ).toEqual({ ok: true, byteLength: 5 });
+      expect(from).not.toHaveBeenCalled();
+    } finally {
+      from.mockRestore();
+    }
+  });
+
+  it.each([
+    "data:text/plain;base64,aGVsbG8",
+    "data:text/plain;base64,aGVsbG9=",
+  ])("rejects non-canonical input %s without decoding", (url) => {
+    expect(readAttachmentDataUrlByteLength(url, "text/plain")).toEqual({
+      ok: false,
+      reason: "invalid",
+    });
   });
 });

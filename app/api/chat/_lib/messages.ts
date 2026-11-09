@@ -1,7 +1,7 @@
 import type { FileUIPart, UIMessage } from "ai";
 import {
   checkAttachmentBudget,
-  parseAttachmentDataUrl,
+  readAttachmentDataUrlByteLength,
 } from "@/lib/attachments/data-url";
 import { ATTACHMENT_LIMITS } from "@/lib/attachments/policy";
 import type { ChatRequestMessage, ChatRequestPart } from "./types";
@@ -21,11 +21,14 @@ export class ChatValidationError extends Error {
 }
 
 function readFilePartBytes(part: ChatRequestPart): number {
-  const parsed = parseAttachmentDataUrl(part.url ?? "", part.mediaType ?? "");
+  const parsed = readAttachmentDataUrlByteLength(
+    part.url ?? "",
+    part.mediaType ?? ""
+  );
   if (!parsed.ok) {
     throw new ChatValidationError("Invalid chat file attachment.");
   }
-  return parsed.content.byteLength;
+  return parsed.byteLength;
 }
 
 function applyFileBudget(budget: ChatFileBudget, decodedBytes: number) {

@@ -148,8 +148,7 @@ test("repair-jobs filters sources in SQL and reports skip reasons", async () => 
   assert.deepEqual(notFilters, ["flow_id:is:null"]);
   assert.deepEqual(startedJobIds, ["job-1", "trigger-flow"]);
   assert.equal(body.scanned, 4);
-  assert.equal(body.skipped, 2);
-  assert.equal(body.skippedUnsupported, 1);
+  assert.equal(body.skipped, 1);
   assert.equal(body.skippedNotStale, 1);
   assert.equal(body.started, 2);
 });
@@ -181,7 +180,6 @@ test("repair-jobs returns consistent counters for an empty batch", async () => {
     deferred: 0,
     failed: 0,
     skipped: 0,
-    skippedUnsupported: 0,
     skippedNotStale: 0,
   });
 });

@@ -50,6 +50,8 @@ export function isRepairableJobRun(
   return isRepairablePendingJob(run, now, staleThresholdMs);
 }
 
+// Trigger-only rows are display history, not restartable runs. Executable
+// runs carry flow_id, including flows launched by a trigger.
 export function isExecutableJobRunSource(
   run: Pick<JobRunStateFields, "flow_id" | "trigger_id">
 ) {
