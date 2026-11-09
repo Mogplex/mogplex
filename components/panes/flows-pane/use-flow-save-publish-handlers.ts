@@ -186,12 +186,12 @@ export function useFlowSavePublishHandlers(
         const description =
           error instanceof Error ? error.message : "Failed to save flow";
         if (isStale()) {
-          if (hydratedFlowIdRef.current !== flowId) {
-            console.warn("[flows] save failed after flow change", {
-              flowId,
-              error: description,
-            });
-          }
+          console.warn("[flows] save failed for superseded draft", {
+            flowId,
+            flowChanged: hydratedFlowIdRef.current !== flowId,
+            signatureChanged: draftSignatureRef.current !== snapshotSignature,
+            error: description,
+          });
           return false;
         }
         setSaveStatus("error");
@@ -203,6 +203,7 @@ export function useFlowSavePublishHandlers(
         });
         return false;
       } finally {
+        // Only the newest in-flight attempt may clear the shared saving state.
         if (autosaveAttemptSignatureRef.current === snapshotSignature) {
           autosaveAttemptSignatureRef.current = null;
           setSaving(false);

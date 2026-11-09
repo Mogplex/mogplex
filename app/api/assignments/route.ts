@@ -71,7 +71,7 @@ async function getAssignments(req: Request, deps: AssignmentsReadDeps) {
   const { data: jobRuns, error: jobRunsError } = await deps.db
     .from("job_runs")
     .select(
-      "id, assignment_id, status, error, started_at, created_at, last_start_attempt_at"
+      "id, assignment_id, flow_id, status, error, started_at, created_at, last_start_attempt_at"
     )
     .in("assignment_id", assignmentIds)
     .order("created_at", { ascending: false })

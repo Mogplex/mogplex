@@ -42,6 +42,7 @@ export function createRepairJobsGetHandler(
             "id, status, flow_id, trigger_id, created_at, started_at, last_start_attempt_at"
           )
           .eq("status", "pending")
+          .not("flow_id", "is", null)
           .order("created_at", { ascending: true })
           .limit(250);
 
@@ -57,12 +58,16 @@ export function createRepairJobsGetHandler(
 
         // Legacy assignment and trigger-only rows are not restartable without
         // a flow; trigger-launched flows repair through their flow context.
-        const repairableJobs = (jobs || []).filter(
-          (job) =>
-            isExecutableJobRunSource(job) && deps.isRepairablePendingJob(job)
+        const executableJobs = (jobs || []).filter((job) =>
+          isExecutableJobRunSource(job)
+        );
+        const repairableJobs = executableJobs.filter((job) =>
+          deps.isRepairablePendingJob(job)
         );
         const scanned = jobs?.length ?? 0;
-        const skipped = scanned - repairableJobs.length;
+        const skippedUnsupported = scanned - executableJobs.length;
+        const skippedNotStale = executableJobs.length - repairableJobs.length;
+        const skipped = skippedUnsupported + skippedNotStale;
 
         if (repairableJobs.length === 0) {
           return NextResponse.json({
@@ -72,6 +77,8 @@ export function createRepairJobsGetHandler(
             deferred: 0,
             failed: 0,
             skipped,
+            skippedUnsupported,
+            skippedNotStale,
           });
         }
 
@@ -130,6 +137,8 @@ export function createRepairJobsGetHandler(
           deferred: results.filter((result) => result.deferred).length,
           failed: results.filter((result) => result.error).length,
           skipped,
+          skippedUnsupported,
+          skippedNotStale,
           results,
         });
       });

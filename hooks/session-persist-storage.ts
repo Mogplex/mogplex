@@ -33,9 +33,25 @@ export const sessionPersistStorage: StateStorage = {
   },
 };
 
+export function flushSessionPersist() {
+  flushPendingWrites();
+}
+
+function flushWhenHidden() {
+  if (document.visibilityState === "hidden") flushSessionPersist();
+}
+
 if (typeof window !== "undefined") {
-  window.addEventListener("pagehide", flushPendingWrites);
-  window.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "hidden") flushPendingWrites();
+  window.addEventListener("pagehide", flushSessionPersist);
+  window.addEventListener("beforeunload", flushSessionPersist);
+  window.addEventListener("visibilitychange", flushWhenHidden);
+  (
+    import.meta as ImportMeta & {
+      hot?: { dispose: (callback: () => void) => void };
+    }
+  ).hot?.dispose(() => {
+    window.removeEventListener("pagehide", flushSessionPersist);
+    window.removeEventListener("beforeunload", flushSessionPersist);
+    window.removeEventListener("visibilitychange", flushWhenHidden);
   });
 }

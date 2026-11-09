@@ -84,6 +84,7 @@ test("entity summaries expose last run state and retry/requeue affordances", () 
     [
       {
         id: "run-1",
+        flow_id: null,
         status: "failed",
         error: "boom",
         created_at: new Date(NOW - 60_000).toISOString(),
@@ -92,6 +93,7 @@ test("entity summaries expose last run state and retry/requeue affordances", () 
       },
       {
         id: "run-2",
+        flow_id: null,
         status: "running",
         error: null,
         created_at: new Date(NOW - 10_000).toISOString(),

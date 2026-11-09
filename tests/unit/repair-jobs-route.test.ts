@@ -36,7 +36,8 @@ const defaultPendingJobs: PendingJob[] = [
 
 function buildPendingJobsClient(
   jobs: PendingJob[] = defaultPendingJobs,
-  onSelect?: (columns: string) => void
+  onSelect?: (columns: string) => void,
+  onNot?: (column: string, operator: string, value: unknown) => void
 ) {
   const query = {
     select: (columns: string) => {
@@ -44,6 +45,10 @@ function buildPendingJobsClient(
       return query;
     },
     eq: () => query,
+    not: (column: string, operator: string, value: unknown) => {
+      onNot?.(column, operator, value);
+      return query;
+    },
     order: () => query,
     limit: async () => ({ data: jobs, error: null }),
   };
@@ -101,7 +106,7 @@ test("repair-jobs keeps loading and nested starts inside one admin connection", 
   assert.equal(body.failed, 0);
 });
 
-test("repair-jobs selects trigger_id and counts unsupported pending runs as skipped", async () => {
+test("repair-jobs filters sources in SQL and reports skip reasons", async () => {
   const jobs = [
     defaultPendingJobs[0]!,
     { ...defaultPendingJobs[1]!, id: "legacy", flow_id: null },
@@ -110,16 +115,24 @@ test("repair-jobs selects trigger_id and counts unsupported pending runs as skip
       id: "trigger-flow",
       trigger_id: "trigger-1",
     },
+    { ...defaultPendingJobs[1]!, id: "fresh-flow" },
   ];
   let selectedColumns = "";
-  const adminClient = buildPendingJobsClient(jobs, (columns) => {
-    selectedColumns = columns;
-  });
+  const notFilters: string[] = [];
+  const adminClient = buildPendingJobsClient(
+    jobs,
+    (columns) => {
+      selectedColumns = columns;
+    },
+    (column, operator, value) => {
+      notFilters.push(`${column}:${operator}:${String(value)}`);
+    }
+  );
   const startedJobIds: string[] = [];
   const handler = createRepairJobsGetHandler({
     requireMachineApiAuth: () => null,
     withSupabaseAdminConnection: (operation) => operation(adminClient),
-    isRepairablePendingJob: () => true,
+    isRepairablePendingJob: (job) => (job as PendingJob).id !== "fresh-flow",
     startAutomationJobRun: async (jobRunId) => {
       startedJobIds.push(jobRunId);
       return { started: true, status: "running" };
@@ -132,9 +145,12 @@ test("repair-jobs selects trigger_id and counts unsupported pending runs as skip
   const body = await response.json();
 
   assert.match(selectedColumns, /\btrigger_id\b/);
+  assert.deepEqual(notFilters, ["flow_id:is:null"]);
   assert.deepEqual(startedJobIds, ["job-1", "trigger-flow"]);
-  assert.equal(body.scanned, 3);
-  assert.equal(body.skipped, 1);
+  assert.equal(body.scanned, 4);
+  assert.equal(body.skipped, 2);
+  assert.equal(body.skippedUnsupported, 1);
+  assert.equal(body.skippedNotStale, 1);
   assert.equal(body.started, 2);
 });
 
@@ -142,6 +158,7 @@ test("repair-jobs returns consistent counters for an empty batch", async () => {
   const query = {
     select: () => query,
     eq: () => query,
+    not: () => query,
     order: () => query,
     limit: async () => ({ data: [], error: null }),
   };
@@ -164,6 +181,8 @@ test("repair-jobs returns consistent counters for an empty batch", async () => {
     deferred: 0,
     failed: 0,
     skipped: 0,
+    skippedUnsupported: 0,
+    skippedNotStale: 0,
   });
 });
 

@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { useFlowSavePublishHandlers } from "../../components/panes/flows-pane/use-flow-save-publish-handlers";
-import { serializePersistedFlowDraft } from "../../lib/flows/editor";
 import type { Flow } from "../../lib/types";
 import { installControlHookDom } from "../support/control-hook-dom";
 import { makeDraft } from "./helpers/flows-editor-fixtures";
@@ -38,7 +37,7 @@ test("persistFlow logs a failed save after the selected flow changes", async () 
       autosaveAttemptSignatureRef: { current: null },
       hydratedFlowIdRef: { current: "flow-2" },
       draftSignatureRef: {
-        current: serializePersistedFlowDraft(draft),
+        current: "newer-draft-signature",
       },
       historyMergeRef: { current: { mergeKey: null, lastAt: 0 } },
       selectedFlow: { id: "flow-1" } as Flow,
@@ -63,8 +62,13 @@ test("persistFlow logs a failed save after the selected flow changes", async () 
     assert.deepEqual(saveStatuses, ["saving"]);
     assert.deepEqual(warnings, [
       [
-        "[flows] save failed after flow change",
-        { flowId: "flow-1", error: "network offline" },
+        "[flows] save failed for superseded draft",
+        {
+          flowId: "flow-1",
+          flowChanged: true,
+          signatureChanged: true,
+          error: "network offline",
+        },
       ],
     ]);
   } finally {

@@ -104,7 +104,7 @@ test("session persistence reads pending values and flushes or removes them on pa
 
   sessionPersistStorage.setItem("sessions", "latest");
   assert.equal(sessionPersistStorage.getItem("sessions"), "latest");
-  window.dispatchEvent(new window.Event("pagehide"));
+  window.dispatchEvent(new window.Event("beforeunload"));
   assert.deepEqual(writes, [["sessions", "latest"]]);
 
   sessionPersistStorage.setItem("sessions", "must-not-resurrect");

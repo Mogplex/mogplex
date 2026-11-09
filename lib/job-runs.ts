@@ -82,7 +82,7 @@ export function summarizeEntityJobRuns<
     last_start_attempt_at?: string | null;
     cancel_requested_at?: string | null;
     cancelled_at?: string | null;
-    flow_id?: string | null;
+    flow_id: string | null;
   },
 >(runs: T[], now = Date.now()) {
   const lastRun =
