@@ -138,6 +138,15 @@ it("deletes only the user's unreferenced personal repositories without a GitHub 
     "insert into public.job_runs (status, metadata) values ('pending',$1)",
     [{ repo_id: queued }]
   );
+  // Settings the user stored on the row itself.
+  await repo("legacy/with-env");
+  await repo("legacy/with-install");
+  await repo("legacy/favorite");
+  await db.exec(
+    `update public.repos set sandbox_env_vars = '{"API_URL":"x"}'::jsonb where full_name = 'legacy/with-env';
+     update public.repos set install_command = 'pnpm install' where full_name = 'legacy/with-install';
+     update public.repos set is_favorite = true where full_name = 'legacy/favorite'`
+  );
 
   // pg_dump's baseline omits role attributes and ACLs; run as the server role.
   await db.exec(
@@ -154,10 +163,13 @@ it("deletes only the user's unreferenced personal repositories without a GitHub 
     "legacy/assigned",
     "legacy/billed",
     "legacy/discussed",
+    "legacy/favorite",
     "legacy/parent",
     "legacy/queued",
     "legacy/sandboxed",
     "legacy/session-by-name",
+    "legacy/with-env",
+    "legacy/with-install",
     "me/connected",
     "other/legacy",
   ]);

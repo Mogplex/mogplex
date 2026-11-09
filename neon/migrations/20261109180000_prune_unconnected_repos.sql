@@ -8,8 +8,11 @@
 -- Slack links), so the guard checks every foreign key into repos, the
 -- repo_id columns that have no foreign key (control sessions, orchestration),
 -- the name-based references (control_sessions.project,
--- review_findings.repo_full_name) and job_runs.metadata->>'repo_id'. Keeping
--- a row is always safe; deleting one that is still referenced is not.
+-- review_findings.repo_full_name) and job_runs.metadata->>'repo_id'. A row
+-- that carries settings the user set (favorite, env vars, commands, runtime,
+-- Vercel link, snapshot, ...) is kept too. default_branch is not checked:
+-- sync copies it from GitHub, so it says nothing about the user. Keeping a
+-- row is always safe; deleting one that is still in use is not.
 --
 -- Expand only: a new function, no change to any table.
 create or replace function public.prune_unconnected_repos(p_user_id uuid)
@@ -42,6 +45,27 @@ begin
     and r.owner_user_id = p_user_id
     and r.product_team_id is null
     and r.github_installation_id is null
+    -- Settings stored on the row itself: a row the user configured is kept.
+    and not r.is_favorite
+    and not r.is_monorepo
+    and r.sandbox_env_vars = '{}'::jsonb
+    and r.install_command is null
+    and r.dev_command is null
+    and r.root_directory is null
+    and r.runtime is null
+    and r.sandbox_timeout_ms is null
+    and r.sandbox_idle_timeout_ms is null
+    and r.dev_port = 3000
+    and r.dev_port_auto
+    and r.env_sync_mode = 'sandbox-only'
+    and r.sandbox_billing_target = 'personal'
+    and r.sandbox_billing_mode_override is null
+    and r.vercel_project_id is null
+    and r.vercel_team_id is null
+    and r.webhook_secret is null
+    and r.snapshot_id is null
+    and r.snapshot_build_token is null
+    and r.snapshot_created_at is null
     and not exists (select 1 from public.repos x where x.parent_repo_id = r.id)
     and not exists (select 1 from public.ai_call_events x where x.repo_id = r.id)
     and not exists (select 1 from public.ai_calls x where x.repo_id = r.id)
