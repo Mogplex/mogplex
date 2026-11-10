@@ -133,6 +133,26 @@ describe("createPrReviewLifecycle", () => {
     expect(deps.replyAndResolvePrReviewThread).not.toHaveBeenCalled();
   });
 
+  it("should log and act as a first review when the history cannot be built", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const malformed = { ...thread("aaaaaaaaaaaa"), comments: null };
+    const lifecycle = createPrReviewLifecycle({
+      ...target,
+      deps: threadDeps({
+        listPrReviewThreads: async () => [
+          malformed as unknown as PrReviewThread,
+        ],
+      }),
+    });
+
+    await expect(lifecycle.loadHistoryBlock()).resolves.toBeNull();
+    expect(warn).toHaveBeenCalledWith(
+      "[pr-review] history load failed",
+      expect.objectContaining({ repoFullName: "acme/widgets", prNumber: 7 })
+    );
+    warn.mockRestore();
+  });
+
   it("should keep the reported finding's thread and resolve the dropped one", async () => {
     const deps = threadDeps();
     const lifecycle = createPrReviewLifecycle({ ...target, deps });

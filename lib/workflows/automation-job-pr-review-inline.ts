@@ -5,7 +5,7 @@ import type {
 import type { ReviewFinding } from "@/lib/types";
 import {
   buildPrReviewGithubReviewBody,
-  buildPrReviewInlineComments,
+  buildPrReviewInlineComment,
   type PrReviewConclusion,
   type PrReviewHarnessResult,
 } from "./pr-review-harness";
@@ -84,8 +84,9 @@ export async function publishInlinePrReview(input: {
         checkRunUrl: state.reviewCheckRunUrl,
         inlineCommentCount: comments.length,
       }),
-      comments: buildPrReviewInlineComments(comments).map((comment, index) => {
-        const marker = lifecycle.markerFor(comments[index].finding);
+      comments: comments.map((anchored) => {
+        const comment = buildPrReviewInlineComment(anchored);
+        const marker = lifecycle.markerFor(anchored.finding);
         return marker
           ? { ...comment, body: `${comment.body}\n\n${marker}` }
           : comment;

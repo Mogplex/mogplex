@@ -105,7 +105,15 @@ export function createPrReviewLifecycle(input: {
           }),
         listConversation: (since) =>
           deps.listPrConversationComments({ ...target, since }),
-      }).catch(() => null);
+      }).catch((error: unknown) => {
+        // The run continues as a first review: earlier findings post again.
+        console.warn("[pr-review] history load failed", {
+          repoFullName,
+          prNumber,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return null;
+      });
       return history ? buildPrReviewHistoryBlock(history) : null;
     },
 

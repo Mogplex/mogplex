@@ -141,6 +141,31 @@ describe("buildPrReviewHistoryBlock", () => {
     expect(block).not.toContain("x".repeat(2001));
   });
 
+  it("should cut quotes shorter when the whole block is over its budget", () => {
+    const long = (index: number) => ({
+      author: "dev",
+      body: `${index} ${"y".repeat(3000)}`,
+      createdAt: "t",
+    });
+    const findings = Array.from({ length: 50 }, (_, index) => ({
+      ...history.findings[0],
+      id: `F${index + 1}`,
+      thread: {
+        id: `t${index}`,
+        url: null,
+        isResolved: false,
+        replies: Array.from({ length: 5 }, (_, reply) => long(reply)),
+      },
+    }));
+
+    const block = buildPrReviewHistoryBlock({ ...history, findings });
+
+    expect(block.length).toBeLessThan(80_000);
+    expect(block).toContain("- F50 (warning, open thread)");
+    expect(block).not.toContain("y".repeat(201));
+    expect(block.endsWith("</previous_review>")).toBe(true);
+  });
+
   it("should scope an incremental review to the files changed since", () => {
     const block = buildPrReviewHistoryBlock(history);
 

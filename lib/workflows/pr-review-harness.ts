@@ -59,8 +59,8 @@ export {
 } from "./pr-review-harness-formatting";
 
 /** GitHub review comments for findings anchored to the diff. */
-export function buildPrReviewInlineComments(comments: AnchoredReviewComment[]) {
-  return comments.map((comment) => ({
+export function buildPrReviewInlineComment(comment: AnchoredReviewComment) {
+  return {
     path: comment.path,
     line: comment.line,
     body: [
@@ -70,7 +70,11 @@ export function buildPrReviewInlineComments(comments: AnchoredReviewComment[]) {
     ]
       .filter(Boolean)
       .join("\n\n"),
-  }));
+  };
+}
+
+export function buildPrReviewInlineComments(comments: AnchoredReviewComment[]) {
+  return comments.map(buildPrReviewInlineComment);
 }
 
 /**

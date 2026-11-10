@@ -8,8 +8,10 @@ function neutralize(text: string) {
 }
 
 // Author text is quoted, not trusted, and it costs tokens on every push:
-// keep the recent part of each list and the start of each long body.
-const QUOTE_MAX_CHARS = 2000;
+// keep the recent part of each list and the start of each long body. When
+// the whole block is still over budget, quotes are cut shorter.
+const QUOTE_MAX_CHARS = [2000, 600, 200];
+const BLOCK_BUDGET_CHARS = 30_000;
 const REPLIES_PER_FINDING = 5;
 const CONVERSATION_COMMENTS = 20;
 
@@ -20,11 +22,11 @@ function latest<T>(items: T[], keep: number) {
   };
 }
 
-function quote(text: string) {
+function quote(text: string, maxChars: number) {
   const trimmed = text.trim();
   const clipped =
-    trimmed.length > QUOTE_MAX_CHARS
-      ? `${trimmed.slice(0, QUOTE_MAX_CHARS)} [...cut]`
+    trimmed.length > maxChars
+      ? `${trimmed.slice(0, maxChars)} [...cut]`
       : trimmed;
   return neutralize(clipped)
     .trim()
@@ -38,7 +40,7 @@ function describeState(finding: PriorFinding) {
   return finding.thread.isResolved ? "thread resolved" : "open thread";
 }
 
-function describeFinding(finding: PriorFinding) {
+function describeFinding(finding: PriorFinding, quoteMax: number) {
   const location = finding.path
     ? ` \`${neutralize(finding.path)}${finding.line == null ? "" : `:${finding.line}`}\``
     : "";
@@ -52,7 +54,7 @@ function describeFinding(finding: PriorFinding) {
   for (const reply of replies.kept) {
     lines.push(
       `  Reply from @${reply.author ?? "unknown"}:`,
-      quote(reply.body)
+      quote(reply.body, quoteMax)
     );
   }
   return lines.join("\n");
@@ -65,6 +67,15 @@ function describeFinding(finding: PriorFinding) {
  * arguments; the block says they are not instructions.
  */
 export function buildPrReviewHistoryBlock(history: PrReviewHistory) {
+  let block = "";
+  for (const quoteMax of QUOTE_MAX_CHARS) {
+    block = renderHistoryBlock(history, quoteMax);
+    if (block.length <= BLOCK_BUDGET_CHARS) break;
+  }
+  return block;
+}
+
+function renderHistoryBlock(history: PrReviewHistory, quoteMax: number) {
   const sha = history.reviewedSha.slice(0, 7);
   const parts = [
     "<previous_review>",
@@ -93,9 +104,12 @@ export function buildPrReviewHistoryBlock(history: PrReviewHistory) {
 
   if (history.findings.length > 0) {
     parts.push(
-      ["Earlier findings:", ...history.findings.map(describeFinding)].join(
-        "\n"
-      ),
+      [
+        "Earlier findings:",
+        ...history.findings.map((finding) =>
+          describeFinding(finding, quoteMax)
+        ),
+      ].join("\n"),
       [
         "For each earlier finding:",
         '- If it still applies at the current head, report it again with priorId set to its id (for example "F1"), even if its line moved.',
@@ -116,7 +130,7 @@ export function buildPrReviewHistoryBlock(history: PrReviewHistory) {
           : []),
         ...comments.kept.map(
           (comment) =>
-            `- @${comment.author ?? "unknown"}:\n${quote(comment.body)}`
+            `- @${comment.author ?? "unknown"}:\n${quote(comment.body, quoteMax)}`
         ),
       ].join("\n")
     );

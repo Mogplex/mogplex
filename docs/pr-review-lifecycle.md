@@ -86,7 +86,9 @@ since the last review, and `compare/{reviewedSha}...{head}`:
 the review prompt, for native and harness reviewers alike. Author text in it is
 bounded: the latest five replies per finding, the latest twenty PR
 comments, and the first 2,000 characters of each, with a line saying how
-many were left out. Earlier findings
+many were left out. When the whole block passes 30,000 characters, quotes
+are cut to 600 and then 200 characters, so the author's text cannot grow
+every later review prompt without bound. Earlier findings
 get short ids (`F1`, `F2`, ...) with their thread state and the author's
 replies. The rules it states:
 
