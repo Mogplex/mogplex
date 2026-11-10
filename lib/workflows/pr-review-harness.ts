@@ -197,6 +197,11 @@ export function buildPrReviewCheckSummary(input: {
  * place on every run. Findings that were posted inline are listed with a
  * link to their comment instead of being repeated.
  */
+// GitHub caps a comment at 65,536 characters. The review text yields to the
+// state marker (up to 16,000) and the rest, since a body over the cap fails
+// to publish and loses the state with it.
+const SUMMARY_DETAIL_MAX_CHARS = 40_000;
+
 export function buildPrReviewTimelineCommentBody(input: {
   harnessResult: PrReviewHarnessResult | null;
   fallbackText: string | null | undefined;
@@ -223,7 +228,11 @@ export function buildPrReviewTimelineCommentBody(input: {
   const parts = ["## Mogplex PR Review", buildPrReviewStatusHeading(input)];
 
   if (detail) {
-    parts.push(detail);
+    parts.push(
+      detail.length > SUMMARY_DETAIL_MAX_CHARS
+        ? `${detail.slice(0, SUMMARY_DETAIL_MAX_CHARS)}\n\n_The review was cut to fit in a GitHub comment._`
+        : detail
+    );
   }
 
   if (input.resolvedFindings?.length) {

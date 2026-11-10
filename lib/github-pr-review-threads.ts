@@ -115,8 +115,8 @@ export async function listPrReviewThreads(input: {
     const connection = page.repository?.pullRequest?.reviewThreads;
     if (!connection) return threads;
     for (const node of connection.nodes) {
-      // The first comment carries the finding marker; the latest hundred
-      // carry the discussion. Together they cover any thread length.
+      // The first comment carries the finding marker; the latest twenty
+      // carry the discussion, of which the prompt quotes at most five.
       const root = node.root.nodes[0];
       const recent = node.recent.nodes.filter(
         (comment) => comment.id !== root?.id
