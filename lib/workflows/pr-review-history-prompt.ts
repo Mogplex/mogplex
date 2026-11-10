@@ -100,7 +100,8 @@ export function buildPrReviewHistoryBlock(history: PrReviewHistory) {
         "For each earlier finding:",
         '- If it still applies at the current head, report it again with priorId set to its id (for example "F1"), even if its line moved.',
         "- If it no longer applies, leave it out. Mogplex closes its thread.",
-        "- If someone replied to it, or its thread was resolved by a person, report it again only if the code it is about changed since then or you have new evidence. Answer the reply in the finding body.",
+        "- If someone replied to it, weigh the reply against the code. Leave the finding out only if the reply shows it does not apply; otherwise report it again and answer the reply in the finding body.",
+        "- If a person resolved its thread, report it again only if the code it is about changed since then or you have new evidence.",
       ].join("\n")
     );
   }

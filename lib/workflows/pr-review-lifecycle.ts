@@ -132,6 +132,14 @@ export function planPrReviewThreads(input: {
     ) {
       continue;
     }
+    // The reviewer reads the author's replies, so a reply alone could argue
+    // a finding away. A critical one closes only once its file changed.
+    if (
+      prior.severity === "critical" &&
+      !(prior.path && changed.has(prior.path))
+    ) {
+      continue;
+    }
     plan.resolvedFindings.push(prior);
     if (prior.thread && !prior.thread.isResolved) {
       plan.resolve.push({

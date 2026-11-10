@@ -198,6 +198,34 @@ describe("planPrReviewThreads", () => {
     expect(plan.resolvedFindings.map((entry) => entry.id)).toEqual(["F5"]);
   });
 
+  it("should close a critical finding by omission only once its file changed", () => {
+    const critical = (id: string, key: string, path: string) => ({
+      ...prior(id, key, openThread(`t-${id}`)),
+      severity: "critical" as const,
+      path,
+    });
+    const plan = (mode: PrReviewHistory["mode"], changedFiles: string[]) =>
+      planPrReviewThreads({
+        history: {
+          ...history([
+            critical("F1", "aaaaaaaaaaaa", "lib/a.ts"),
+            critical("F2", "bbbbbbbbbbbb", "lib/b.ts"),
+          ]),
+          mode,
+          changedFiles,
+        },
+        keys: new Map(),
+        headSha: "1234567890",
+        complete: true,
+      });
+
+    expect(
+      plan("incremental", ["lib/a.ts"]).resolve.map((entry) => entry.threadId)
+    ).toEqual(["t-F1"]);
+    expect(plan("full", []).resolve).toEqual([]);
+    expect(plan("same_head", []).resolvedFindings).toEqual([]);
+  });
+
   it("should neither post again nor close anything when the threads could not be read", () => {
     const inlineBefore = finding("Inline before");
     const summaryOnly = finding("Summary only");

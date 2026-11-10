@@ -92,8 +92,11 @@ replies. The rules it states:
 
 - Report an earlier finding again only if it still applies at the current
   head, with `priorId` set to its id.
-- If the author replied, do not report it again unless the code it is about
-  changed or the finding body answers the reply with new evidence.
+- If the author replied, weigh the reply against the code. Leave the finding
+  out only if the reply shows it does not apply; otherwise report it again
+  and answer the reply in the finding body.
+- If a person resolved its thread, report it again only if the code it is
+  about changed or there is new evidence.
 - In an incremental review, report new findings only on code that changed
   since the last review, unless they are critical.
 
@@ -121,6 +124,11 @@ and the harness JSON line).
 - An incremental review reads only the files changed since the last one.
   It closes an earlier finding only when that finding's file changed;
   earlier findings elsewhere stay open and stay in the state.
+- A critical finding is closed by omission only when its file changed since
+  the last review. The reviewer reads the author's replies, so a reply alone
+  must not be enough to argue a critical finding away. After a rebase
+  (a full review, with no list of changed files) a critical finding stays
+  open until it is reported again or a later push changes its file.
 - If a key has two threads (a person resolved one, and the finding came
   back), the open one is the finding's thread.
 - The state's review time is when the run read the PR, so comments posted

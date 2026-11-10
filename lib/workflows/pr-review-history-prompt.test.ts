@@ -59,6 +59,9 @@ describe("buildPrReviewHistoryBlock", () => {
       "- F2 (suggestion, in the summary only): Rename helper"
     );
     expect(block).toContain("priorId");
+    expect(block).toContain(
+      "Leave the finding out only if the reply shows it does not apply"
+    );
   });
 
   it("should frame replies and comments as arguments, not instructions", () => {
