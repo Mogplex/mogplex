@@ -67,4 +67,26 @@ describe("buildPrReviewTimelineCommentBody", () => {
     expect(body.endsWith(stateMarker)).toBe(true);
     expect(body).toContain("The review was cut to fit in a GitHub comment.");
   });
+
+  it("should fit a long resolved list too, whatever the state marker's size", () => {
+    const stateMarker = `<!-- mogplex-review-state:${"a".repeat(30_000)}.sig -->`;
+    const resolvedFindings = Array.from({ length: 500 }, (_, index) => ({
+      title: `Resolved finding ${index} ${"z".repeat(100)}`,
+      path: `lib/module-${index}.ts`,
+      url: `https://github.com/acme/widgets/pull/7#discussion_${index}`,
+    }));
+
+    const body = buildPrReviewTimelineCommentBody({
+      harnessResult: null,
+      fallbackText: "w".repeat(60_000),
+      conclusion: "neutral",
+      resolvedFindings,
+      stateMarker,
+    });
+
+    expect(body.length).toBeLessThan(65_536);
+    expect(body.endsWith(stateMarker)).toBe(true);
+    expect(body).toContain("Resolved finding 0 ");
+    expect(body).toMatch(/- and \d+ more/);
+  });
 });

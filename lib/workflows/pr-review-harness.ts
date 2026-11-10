@@ -201,10 +201,33 @@ export function buildPrReviewCheckSummary(input: {
  * place on every run. Findings that were posted inline are listed with a
  * link to their comment instead of being repeated.
  */
-// GitHub caps a comment at 65,536 characters. The review text yields to the
-// state marker (up to 16,000) and the rest, since a body over the cap fails
-// to publish and loses the state with it.
-const SUMMARY_DETAIL_MAX_CHARS = 40_000;
+// GitHub caps a comment at 65,536 characters, and a body over the cap fails
+// to publish and loses the state with it. The state marker (up to 16,000)
+// always fits; the resolved list and then the review text are cut to the
+// room left.
+const SUMMARY_MAX_CHARS = 65_000;
+const SUMMARY_RESOLVED_MAX_CHARS = 8000;
+const SUMMARY_CUT_NOTE = "_The review was cut to fit in a GitHub comment._";
+
+function buildResolvedSection(
+  findings: Array<{ title: string; path: string | null; url: string | null }>
+) {
+  const lines = ["**Resolved since the last review**"];
+  let length = lines[0].length;
+  for (const [index, finding] of findings.entries()) {
+    const label = finding.path
+      ? `${finding.title} (${formatInlineCode(finding.path)})`
+      : finding.title;
+    const line = finding.url ? `- [${label}](${finding.url})` : `- ${label}`;
+    if (length + line.length + 1 > SUMMARY_RESOLVED_MAX_CHARS) {
+      lines.push(`- and ${findings.length - index} more`);
+      break;
+    }
+    lines.push(line);
+    length += line.length + 1;
+  }
+  return lines.join("\n");
+}
 
 export function buildPrReviewTimelineCommentBody(input: {
   harnessResult: PrReviewHarnessResult | null;
@@ -229,37 +252,32 @@ export function buildPrReviewTimelineCommentBody(input: {
     failureDetails: input.failureDetails,
     inline: input.inline,
   });
-  const parts = ["## Mogplex PR Review", buildPrReviewStatusHeading(input)];
+  const head = ["## Mogplex PR Review", buildPrReviewStatusHeading(input)];
+  const tail: string[] = [];
+  if (input.resolvedFindings?.length) {
+    tail.push(buildResolvedSection(input.resolvedFindings));
+  }
+  if (input.checkRunUrl?.trim()) {
+    tail.push(`[View check run](${input.checkRunUrl.trim()})`);
+  }
+  if (input.stateMarker) {
+    tail.push(input.stateMarker);
+  }
 
+  const room =
+    SUMMARY_MAX_CHARS -
+    [...head, ...tail].join("\n\n").length -
+    SUMMARY_CUT_NOTE.length -
+    8;
+  const parts = [...head];
   if (detail) {
     parts.push(
-      detail.length > SUMMARY_DETAIL_MAX_CHARS
-        ? `${detail.slice(0, SUMMARY_DETAIL_MAX_CHARS)}\n\n_The review was cut to fit in a GitHub comment._`
+      detail.length > room
+        ? `${detail.slice(0, Math.max(0, room))}\n\n${SUMMARY_CUT_NOTE}`
         : detail
     );
   }
-
-  if (input.resolvedFindings?.length) {
-    parts.push(
-      [
-        "**Resolved since the last review**",
-        ...input.resolvedFindings.map((finding) => {
-          const label = finding.path
-            ? `${finding.title} (${formatInlineCode(finding.path)})`
-            : finding.title;
-          return finding.url ? `- [${label}](${finding.url})` : `- ${label}`;
-        }),
-      ].join("\n")
-    );
-  }
-
-  if (input.checkRunUrl?.trim()) {
-    parts.push(`[View check run](${input.checkRunUrl.trim()})`);
-  }
-
-  if (input.stateMarker) {
-    parts.push(input.stateMarker);
-  }
+  parts.push(...tail);
 
   return parts.join("\n\n").trim();
 }
