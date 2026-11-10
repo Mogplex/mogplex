@@ -249,6 +249,35 @@ export async function loadPullRequestChangedLines(input: {
 }
 
 /**
+ * The inline comments of one review with their links. A review holds at most
+ * the findings cap, so one page covers it.
+ */
+export async function listPrReviewComments(input: {
+  githubToken: string;
+  repoFullName: string;
+  prNumber: number;
+  reviewId: number;
+}): Promise<Array<{ body: string; htmlUrl: string }>> {
+  const { owner, repo } = parseRepoFullName(input.repoFullName);
+  const response = await fetch(
+    `${GITHUB_API_BASE}/repos/${owner}/${repo}/pulls/${input.prNumber}/reviews/${input.reviewId}/comments?per_page=100`,
+    { headers: getGithubHeaders(input.githubToken) }
+  );
+  const payload = (await response.json().catch(() => null)) as unknown;
+  if (!response.ok || !Array.isArray(payload)) {
+    throw new Error(
+      `GitHub review comments lookup failed (${response.status})`
+    );
+  }
+  return (payload as Array<{ body?: unknown; html_url?: unknown }>).flatMap(
+    (comment) =>
+      typeof comment.body === "string" && typeof comment.html_url === "string"
+        ? [{ body: comment.body, htmlUrl: comment.html_url }]
+        : []
+  );
+}
+
+/**
  * Every comment carrying the Mogplex review marker, oldest first, with its
  * author. Anyone can post the marker; readers pick the one whose signed state
  * verifies and is newest.

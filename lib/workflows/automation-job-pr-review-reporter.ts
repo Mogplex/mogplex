@@ -21,6 +21,7 @@ import {
 import type {
   completePrReviewCheckRun,
   createPrReviewGithubReview,
+  listPrReviewComments,
   loadPullRequestChangedLines,
   upsertPrReviewTimelineComment,
 } from "@/lib/github-check-runs";
@@ -36,6 +37,10 @@ import {
   finalizePrReviewSuccess,
   type FinalizePrReviewSuccessResult,
 } from "./automation-job-pr-review-finalize";
+import {
+  createPrReviewReporterState,
+  type PrReviewReporterState,
+} from "./pr-review-reporter-state";
 
 /**
  * Dependencies required by the PR review reporter.
@@ -46,6 +51,8 @@ export type PrReviewReporterDeps = {
   createPrReviewGithubReview: typeof createPrReviewGithubReview;
   /** Without it, inline comments go only on the lines findings name. */
   loadPullRequestChangedLines?: typeof loadPullRequestChangedLines;
+  /** Without it, the summary links each new comment through the review. */
+  listPrReviewComments?: typeof listPrReviewComments;
   upsertPrReviewTimelineComment: typeof upsertPrReviewTimelineComment;
   /** Without it, every review is a first review (no thread lifecycle). */
   reviewThreads?: PrReviewThreadsDeps;
@@ -70,32 +77,7 @@ export type PrReviewReporterInput = {
   reviewCheckRunError?: string | null;
 };
 
-/**
- * Mutable state tracked during the review reporting lifecycle.
- * Exposed via a state object so the executor can read current values.
- */
-export type PrReviewReporterState = {
-  reviewCheckRunId: number | null;
-  reviewCheckRunUrl: string | null;
-  reviewCheckRunCompleted: boolean;
-  reviewCheckRunConclusion: "success" | "neutral" | "failure" | null;
-  reviewCheckRunError: string | null;
-  reviewTimelineCommentPublished: boolean;
-  reviewTimelineCommentId: number | null;
-  reviewTimelineCommentUrl: string | null;
-  reviewTimelineCommentError: string | null;
-  reviewGithubReviewPublished: boolean;
-  reviewGithubReviewId: number | null;
-  reviewGithubReviewUrl: string | null;
-  reviewGithubReviewError: string | null;
-  reviewGithubInlineCommentCount: number;
-  /** Findings this run posted as new inline comments. */
-  reviewInlineFindings: ReadonlySet<ReviewFinding>;
-  /** Earlier threads this run replied to and resolved. */
-  reviewThreadsResolved: number;
-  reviewStaleHeadCheckError: string | null;
-  prReviewCompletionReason: string | null;
-};
+export type { PrReviewReporterState } from "./pr-review-reporter-state";
 
 export type PrReviewReporter = {
   state: PrReviewReporterState;
@@ -160,26 +142,11 @@ export function createPrReviewReporter(
   } = input;
 
   // Mutable state object — methods mutate this, executor reads from it
-  const state: PrReviewReporterState = {
+  const state = createPrReviewReporterState({
     reviewCheckRunId: input.reviewCheckRunId,
     reviewCheckRunUrl: input.reviewCheckRunUrl,
-    reviewCheckRunCompleted: false,
-    reviewCheckRunConclusion: null,
     reviewCheckRunError: input.reviewCheckRunError ?? null,
-    reviewTimelineCommentPublished: false,
-    reviewTimelineCommentId: null,
-    reviewTimelineCommentUrl: null,
-    reviewTimelineCommentError: null,
-    reviewGithubReviewPublished: false,
-    reviewGithubReviewId: null,
-    reviewGithubReviewUrl: null,
-    reviewGithubReviewError: null,
-    reviewGithubInlineCommentCount: 0,
-    reviewInlineFindings: new Set(),
-    reviewThreadsResolved: 0,
-    reviewStaleHeadCheckError: null,
-    prReviewCompletionReason: null,
-  };
+  });
 
   const lifecycle = createPrReviewLifecycle({
     deps: deps.reviewThreads,
@@ -372,7 +339,12 @@ export function createPrReviewReporter(
             links: new Map([
               ...lifecycle.plan.existingThreads,
               ...[...state.reviewInlineFindings].map(
-                (finding) => [finding, state.reviewGithubReviewUrl] as const
+                (finding) =>
+                  [
+                    finding,
+                    state.reviewInlineCommentUrls.get(finding) ??
+                      state.reviewGithubReviewUrl,
+                  ] as const
               ),
             ]),
             carried: new Set(lifecycle.plan.existingThreads.keys()),

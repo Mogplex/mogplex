@@ -143,6 +143,11 @@ async function runReReview(options: { newerReviewMeanwhile?: boolean } = {}) {
         created: false,
       };
     },
+    listPrReviewComments: async () =>
+      (reviewInputs[0]?.comments ?? []).map((comment, index) => ({
+        body: comment.body,
+        htmlUrl: `https://github.com/acme/widgets/pull/44#discussion_r${index}`,
+      })),
     createPrReviewGithubReview: async (input) => {
       reviewInputs.push({ comments: input.comments ?? [] });
       return {
@@ -262,7 +267,12 @@ test("a re-review keeps the thread of a finding it reports again and posts only 
     summaryBodies[0],
     /Guard nullable widget lookup \(still open\).*\(https:\/\/github\.com\/acme\/widgets\/pull\/44#discussion_aaaaaaaaaaaa\)\n {2}The caller guard does not cover the retry path\./
   );
-  // A finding posted in this run keeps its body in its inline comment only.
+  // A finding posted in this run links to its own comment and keeps its
+  // body there only.
+  assert.match(
+    summaryBodies[0],
+    /Cache key ignores locale.*\(https:\/\/github\.com\/acme\/widgets\/pull\/44#discussion_r0\)/
+  );
   assert.doesNotMatch(summaryBodies[0], /Two locales share one entry/);
 });
 

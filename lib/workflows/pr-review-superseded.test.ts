@@ -4,9 +4,9 @@ import {
   finalizePrReviewSuccess,
   type FinalizePrReviewSuccessContext,
 } from "./automation-job-pr-review-finalize";
-import type { PrReviewReporterState } from "./automation-job-pr-review-reporter";
 import type { JobContext } from "./automation-job-types";
 import { extractPrReviewHarnessResult } from "./pr-review-harness-extraction";
+import { createPrReviewReporterState } from "./pr-review-reporter-state";
 
 const reported = {
   text: "Done.",
@@ -36,26 +36,9 @@ const reported = {
 };
 
 async function finalize(superseded: boolean, checkRunPublished = true) {
-  const state: PrReviewReporterState = {
+  const state = createPrReviewReporterState({
     reviewCheckRunId: 1,
-    reviewCheckRunUrl: null,
-    reviewCheckRunCompleted: false,
-    reviewCheckRunConclusion: null,
-    reviewCheckRunError: null,
-    reviewTimelineCommentPublished: false,
-    reviewTimelineCommentId: null,
-    reviewTimelineCommentUrl: null,
-    reviewTimelineCommentError: null,
-    reviewGithubReviewPublished: false,
-    reviewGithubReviewId: null,
-    reviewGithubReviewUrl: null,
-    reviewGithubReviewError: null,
-    reviewGithubInlineCommentCount: 0,
-    reviewInlineFindings: new Set(),
-    reviewThreadsResolved: 0,
-    reviewStaleHeadCheckError: null,
-    prReviewCompletionReason: null,
-  };
+  });
   const calls = {
     checkRun: vi.fn(async () => checkRunPublished),
     plan: vi.fn(),
