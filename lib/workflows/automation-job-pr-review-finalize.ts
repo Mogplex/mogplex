@@ -90,6 +90,14 @@ export type FinalizePrReviewSuccessContext = {
   isSupersededByNewerReview?: () => Promise<boolean>;
 };
 
+function checkRunPublishError(state: PrReviewReporterState, fallback: string) {
+  // An empty error reads as none, as before.
+  const reason = state.reviewCheckRunError
+    ? state.reviewCheckRunError
+    : fallback;
+  return `GitHub check run publish failed: ${reason}`;
+}
+
 /**
  * Finalizes a successful PR review by publishing check runs, reviews, and comments.
  * Handles stale head SHA detection and findings persistence.
@@ -187,9 +195,10 @@ export async function finalizePrReviewSuccess(
     if (requiresReviewCheckRun && !reviewCheckPublished) {
       return {
         ok: false,
-        error: state.reviewCheckRunError
-          ? `GitHub check run publish failed: ${state.reviewCheckRunError}`
-          : "GitHub check run publish failed: stale review check run was not completed",
+        error: checkRunPublishError(
+          state,
+          "stale review check run was not completed"
+        ),
       };
     }
 
@@ -228,9 +237,10 @@ export async function finalizePrReviewSuccess(
     if (requiresReviewCheckRun && !reviewCheckPublished) {
       return {
         ok: false,
-        error: state.reviewCheckRunError
-          ? `GitHub check run publish failed: ${state.reviewCheckRunError}`
-          : "GitHub check run publish failed: required check run was not completed",
+        error: checkRunPublishError(
+          state,
+          "required check run was not completed"
+        ),
       };
     }
     return unpublishedReview(PR_REVIEW_REASON_CODES.supersededByReview, {
@@ -293,9 +303,7 @@ export async function finalizePrReviewSuccess(
 
   const publishErrors = [
     requiresReviewCheckRun && !reviewCheckPublished
-      ? state.reviewCheckRunError
-        ? `GitHub check run publish failed: ${state.reviewCheckRunError}`
-        : "GitHub check run publish failed: required check run was not completed"
+      ? checkRunPublishError(state, "required check run was not completed")
       : null,
     requiresReviewTimelineComment && !timelineCommentPublished
       ? state.reviewTimelineCommentError

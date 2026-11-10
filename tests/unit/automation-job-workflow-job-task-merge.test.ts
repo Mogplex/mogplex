@@ -6,8 +6,49 @@ import {
   makeStep,
   makePersistedReviewFindingsResult,
 } from "./helpers/automation-job-fixtures";
+import { serializePrReviewState } from "../../lib/workflows/pr-review-history";
+import { createPrReviewSigner } from "../../lib/workflows/pr-review-signing";
 
-test("createAutomationJobTask defers safe merge actions until the review check is completed", async () => {
+const signer = createPrReviewSigner("test-secret", {
+  repoFullName: "acme/widgets",
+  prNumber: 143,
+});
+
+/** Review threads where another run publishes a review while this one runs. */
+function newerReviewMeanwhile() {
+  let reads = 0;
+  return {
+    readPrReviewTimelineComments: async () => {
+      reads += 1;
+      if (reads === 1) return [];
+      const newer = serializePrReviewState(
+        {
+          sha: "beaded42",
+          reviewedAt: "2999-01-01T00:00:00.000Z",
+          findings: [],
+        },
+        signer
+      );
+      return [
+        {
+          body: `<!-- mogplex-pr-review -->\n${newer}`,
+          author: "mogplex[bot]",
+        },
+      ];
+    },
+    listPrReviewThreads: async () => [],
+    comparePrCommits: async () => ({
+      status: "identical",
+      files: [],
+      complete: true,
+    }),
+    listPrConversationComments: async () => [],
+    replyAndResolvePrReviewThread: async () => undefined,
+    signingSecret: () => "test-secret",
+  };
+}
+
+async function runSafeMergeFlow(options: { newerReview?: boolean } = {}) {
   const { createAutomationJobTask } = await loadAutomationJobWorkflowModule();
 
   const originalFetch = globalThis.fetch;
@@ -23,6 +64,7 @@ test("createAutomationJobTask defers safe merge actions until the review check i
     // The pre-flight PR liveness check is orthogonal to this ordering test and
     // would otherwise hit the mocked PR endpoint ahead of the merge gate.
     fetchPrLiveness: async () => ({ alive: true }),
+    ...(options.newerReview ? { reviewThreads: newerReviewMeanwhile() } : {}),
     resolveJobContext: async () => ({
       context: {
         metadata: {
@@ -283,41 +325,65 @@ test("createAutomationJobTask defers safe merge actions until the review check i
       },
     });
 
-    assert.deepEqual(result, {
-      success: true,
-      output: "No material issues found.",
-      observabilityError: null,
-    });
-
-    const checkCompletedIndex = events.indexOf("check_run_completed");
-    const mergeGateIndex = events.indexOf("merge_gate_read");
-    const mergePutIndex = events.indexOf("merge_put");
-    assert.ok(checkCompletedIndex !== -1, "review check run must be completed");
-    assert.ok(
-      mergeGateIndex > checkCompletedIndex,
-      `merge gate must be read after the check run completes, got: ${events.join(", ")}`
-    );
-    assert.ok(
-      mergePutIndex > mergeGateIndex,
-      "merge must follow the gate read"
-    );
-
-    // The merge pins the reviewed head so a race with a later push loses.
-    const mergeBody = mergePutBody as Record<string, unknown> | null;
-    assert.equal(mergeBody?.sha, "beaded42");
-    assert.equal(mergeBody?.merge_method, "squash");
-    assert.equal(mergeBody?.commit_title, "Workflow merge");
-
-    assert.ok(controlDispatchEvent);
-    const dispatched = controlDispatchEvent as CapturedControlDispatchEvent;
-    assert.equal(dispatched.outcome, "completed");
-    assert.equal(dispatched.reason, "PR_REVIEW_NO_FINDINGS");
-    assert.deepEqual(dispatched.metadata?.auto_merge, {
-      merged: true,
-      reason: "Merged after clean review",
-      sha: "merge-sha",
-    });
+    return {
+      result,
+      events,
+      mergePutBody: mergePutBody as Record<string, unknown> | null,
+      controlDispatchEvent:
+        controlDispatchEvent as CapturedControlDispatchEvent | null,
+    };
   } finally {
     globalThis.fetch = originalFetch;
   }
+}
+
+test("createAutomationJobTask defers safe merge actions until the review check is completed", async () => {
+  const { result, events, mergePutBody, controlDispatchEvent } =
+    await runSafeMergeFlow();
+
+  assert.deepEqual(result, {
+    success: true,
+    output: "No material issues found.",
+    observabilityError: null,
+  });
+
+  const checkCompletedIndex = events.indexOf("check_run_completed");
+  const mergeGateIndex = events.indexOf("merge_gate_read");
+  const mergePutIndex = events.indexOf("merge_put");
+  assert.ok(checkCompletedIndex !== -1, "review check run must be completed");
+  assert.ok(
+    mergeGateIndex > checkCompletedIndex,
+    `merge gate must be read after the check run completes, got: ${events.join(", ")}`
+  );
+  assert.ok(mergePutIndex > mergeGateIndex, "merge must follow the gate read");
+
+  // The merge pins the reviewed head so a race with a later push loses.
+  const mergeBody = mergePutBody;
+  assert.equal(mergeBody?.sha, "beaded42");
+  assert.equal(mergeBody?.merge_method, "squash");
+  assert.equal(mergeBody?.commit_title, "Workflow merge");
+
+  assert.ok(controlDispatchEvent);
+  const dispatched = controlDispatchEvent as CapturedControlDispatchEvent;
+  assert.equal(dispatched.outcome, "completed");
+  assert.equal(dispatched.reason, "PR_REVIEW_NO_FINDINGS");
+  assert.deepEqual(dispatched.metadata?.auto_merge, {
+    merged: true,
+    reason: "Merged after clean review",
+    sha: "merge-sha",
+  });
+});
+
+test("createAutomationJobTask does not merge on a review that backed off for a newer one", async () => {
+  const { result, events, controlDispatchEvent } = await runSafeMergeFlow({
+    newerReview: true,
+  });
+
+  assert.equal(result.success, true);
+  assert.equal(events.includes("merge_put"), false);
+  assert.equal(controlDispatchEvent?.reason, "PR_REVIEW_SUPERSEDED_BY_REVIEW");
+  assert.deepEqual(controlDispatchEvent?.metadata?.auto_merge, {
+    merged: false,
+    reason: "A newer Mogplex review of this head was published",
+  });
 });
