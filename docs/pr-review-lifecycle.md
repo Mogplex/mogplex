@@ -142,6 +142,18 @@ The reporter applies the plan after the inline review is published, then
 writes the summary comment with the new state and a "Resolved since the
 last review" list.
 
+Two runs can review the same head, for example a rerun started while a
+review is in flight. Before publishing, a run reads the summary comments
+again. If a verified state there is newer than the one this run loaded,
+another run has published since this run read the PR, whichever of the two
+started first; this run's plan does not know that run's threads. (If the
+first read failed, only a state with a later read time than this run's
+counts.) This run then
+completes its check run and publishes nothing else (no inline comments, no
+thread changes, no summary), so it neither posts duplicates nor overwrites
+the newer state. Its outcome is `PR_REVIEW_SUPERSEDED_BY_REVIEW`. The check
+is best effort: if the lookup fails, the run publishes as usual.
+
 Every GitHub call here is best effort. A history that fails to load means a
 first review. A reply or resolve that fails leaves the thread open, and the
 next run tries again. If the thread list cannot be read, a finding the state

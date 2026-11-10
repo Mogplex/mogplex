@@ -8,7 +8,10 @@
 
 import { summarizeNodeOutput } from "@/lib/flows/graph";
 
-import { AUTOMATION_REASON_CODES } from "@/lib/automation-review";
+import {
+  AUTOMATION_REASON_CODES,
+  PR_REVIEW_REASON_CODES,
+} from "@/lib/automation-review";
 
 import {
   extractPrReviewHarnessResult,
@@ -173,8 +176,15 @@ export async function finalizeFlowSuccess(
     // The review check run for this head SHA is completed now, so a
     // repo that requires it can report the PR as clean. expectedHeadSha
     // refuses the merge if commits landed after the reviewed head.
+    // A run that backed off for a newer review published nothing, so its
+    // verdict is not the PR's review and must not merge it.
+    const supersededBlockReason =
+      finalizedReview.reviewReason === PR_REVIEW_REASON_CODES.supersededByReview
+        ? "A newer Mogplex review of this head was published"
+        : null;
     const autoMergeBlockReason = autoMergeRequest
-      ? (getPrReviewAutoMergeBlockReason({
+      ? (supersededBlockReason ??
+        getPrReviewAutoMergeBlockReason({
           reviewOutcome,
           verdictMissing: isPrReviewVerdictMissing(reviewHarnessResult),
           requestedPrNumber: autoMergeRequest.prNumber,

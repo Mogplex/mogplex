@@ -462,6 +462,7 @@ export function createPrReviewReporter(
         publishPrReviewTimelineComment,
         planReviewThreads,
         resolveStaleReviewThreads,
+        isSupersededByNewerReview: () => lifecycle.supersededByNewerReview(),
       }
     );
 
