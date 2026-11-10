@@ -144,8 +144,11 @@ last review" list.
 
 Two runs can review the same head, for example a rerun started while a
 review is in flight. Before publishing, a run reads the summary comments
-again. If a verified state there is newer than the time this run read the
-PR, another run read it later and has already published. This run then
+again. If a verified state there is newer than the one this run loaded,
+another run has published since this run read the PR, whichever of the two
+started first; this run's plan does not know that run's threads. (If the
+first read failed, only a state with a later read time than this run's
+counts.) This run then
 completes its check run and publishes nothing else (no inline comments, no
 thread changes, no summary), so it neither posts duplicates nor overwrites
 the newer state. Its outcome is `PR_REVIEW_SUPERSEDED_BY_REVIEW`. The check

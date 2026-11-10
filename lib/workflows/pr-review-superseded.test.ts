@@ -35,7 +35,7 @@ const reported = {
   ],
 };
 
-async function finalize(superseded: boolean) {
+async function finalize(superseded: boolean, checkRunPublished = true) {
   const state: PrReviewReporterState = {
     reviewCheckRunId: 1,
     reviewCheckRunUrl: null,
@@ -57,7 +57,7 @@ async function finalize(superseded: boolean) {
     prReviewCompletionReason: null,
   };
   const calls = {
-    checkRun: vi.fn(async () => true),
+    checkRun: vi.fn(async () => checkRunPublished),
     plan: vi.fn(),
     review: vi.fn(async () => true),
     resolve: vi.fn(async () => 0),
@@ -128,6 +128,17 @@ describe("finalizePrReviewSuccess with a newer review on the same head", () => {
     ]) {
       expect(skipped).not.toHaveBeenCalled();
     }
+  });
+
+  it("should fail the run when its required check run could not be completed", async () => {
+    const { outcome, calls } = await finalize(true, false);
+
+    expect(outcome).toEqual({
+      ok: false,
+      error:
+        "GitHub check run publish failed: required check run was not completed",
+    });
+    expect(calls.summary).not.toHaveBeenCalled();
   });
 
   it("should publish everything when no newer review exists", async () => {

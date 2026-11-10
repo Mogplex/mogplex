@@ -225,6 +225,14 @@ export async function finalizePrReviewSuccess(
   // Same head, but another run read the PR later and already published:
   // its threads and state are newer than this run's.
   if (await isSupersededByNewerReview?.()) {
+    if (requiresReviewCheckRun && !reviewCheckPublished) {
+      return {
+        ok: false,
+        error: state.reviewCheckRunError
+          ? `GitHub check run publish failed: ${state.reviewCheckRunError}`
+          : "GitHub check run publish failed: required check run was not completed",
+      };
+    }
     return unpublishedReview(PR_REVIEW_REASON_CODES.supersededByReview, {
       reviewCheckPublished,
       currentHeadSha,

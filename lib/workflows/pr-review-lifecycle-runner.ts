@@ -66,6 +66,9 @@ export function createPrReviewLifecycle(input: {
   // review on every run.
   const deps = signer ? input.deps : undefined;
   let previousState: PrReviewState | null = null;
+  // Whether the summary comments were read, so `previousState` is what was
+  // on the PR when this run started rather than a failed lookup.
+  let summaryLoaded = false;
   let history: PrReviewHistory | null = null;
   let keys = new Map<ReviewFinding, string>();
   let plan = EMPTY_PLAN;
@@ -93,6 +96,7 @@ export function createPrReviewLifecycle(input: {
         readSummaryComments: async () => {
           const comments = await deps.readPrReviewTimelineComments(target);
           previousState = newestPrReviewState(comments, signer)?.state ?? null;
+          summaryLoaded = true;
           return comments;
         },
         listThreads: () => deps.listPrReviewThreads(target),
@@ -118,9 +122,9 @@ export function createPrReviewLifecycle(input: {
     },
 
     /**
-     * True when another run on this PR read it after this one and has
-     * already published. Its threads and state are newer: publishing this
-     * run's would post duplicates and overwrite them.
+     * True when another run on this PR published after this one read it,
+     * whichever started first: this run's plan does not know that run's
+     * threads, so publishing would post duplicates and overwrite its state.
      */
     async supersededByNewerReview(): Promise<boolean> {
       if (!deps || !signer || prNumber == null || !startedAt) return false;
@@ -131,8 +135,15 @@ export function createPrReviewLifecycle(input: {
           prNumber,
         });
         const newest = newestPrReviewState(comments, signer)?.state;
+        if (!newest) return false;
+        // Any state newer than the one this run loaded was published after
+        // its read. Without that read, only a review that read the PR later
+        // than this run is known to be newer.
+        const loaded = summaryLoaded
+          ? (previousState?.reviewedAt ?? null)
+          : startedAt.toISOString();
         return (
-          newest != null && Date.parse(newest.reviewedAt) > startedAt.getTime()
+          loaded == null || Date.parse(newest.reviewedAt) > Date.parse(loaded)
         );
       } catch (error) {
         console.warn("[pr-review] newer-review check failed", {
