@@ -153,6 +153,52 @@ describe("createPrReviewLifecycle", () => {
     warn.mockRestore();
   });
 
+  it("should report a newer review that published after this run read the PR", async () => {
+    const summary = (reviewedAt: string) => ({
+      body: `review\n${serializePrReviewState({ ...previousState, reviewedAt }, signer)}`,
+      author: "mogplex[bot]",
+    });
+    const readsThen = (later: string) => {
+      let reads = 0;
+      return threadDeps({
+        readPrReviewTimelineComments: async () => {
+          reads += 1;
+          return reads === 1
+            ? [summary(previousState.reviewedAt)]
+            : [summary(previousState.reviewedAt), summary(later)];
+        },
+      });
+    };
+    const superseded = async (deps: PrReviewThreadsDeps) => {
+      const lifecycle = createPrReviewLifecycle({ ...target, deps });
+      await lifecycle.loadHistoryBlock();
+      return lifecycle.supersededByNewerReview();
+    };
+
+    // This run read the PR at 12:00.
+    await expect(
+      superseded(readsThen("2026-11-09T12:05:00.000Z"))
+    ).resolves.toBe(true);
+    await expect(
+      superseded(readsThen("2026-11-09T11:55:00.000Z"))
+    ).resolves.toBe(false);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    let reads = 0;
+    const failing = threadDeps({
+      readPrReviewTimelineComments: async () => {
+        reads += 1;
+        if (reads > 1) throw new Error("rest");
+        return [summary(previousState.reviewedAt)];
+      },
+    });
+    await expect(superseded(failing)).resolves.toBe(false);
+    expect(warn).toHaveBeenCalledWith(
+      "[pr-review] newer-review check failed",
+      expect.objectContaining({ prNumber: 7 })
+    );
+    warn.mockRestore();
+  });
+
   it("should keep the reported finding's thread and resolve the dropped one", async () => {
     const deps = threadDeps();
     const lifecycle = createPrReviewLifecycle({ ...target, deps });

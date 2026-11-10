@@ -18,6 +18,8 @@ export const PR_REVIEW_REASON_CODES = {
   skippedDraft: "SKIPPED_DRAFT_PR",
   skippedBotSynchronize: "SKIPPED_BOT_SYNCHRONIZE",
   superseded: "PR_REVIEW_SUPERSEDED",
+  /** Another run on this PR read it later and published first. */
+  supersededByReview: "PR_REVIEW_SUPERSEDED_BY_REVIEW",
 } as const;
 
 export const AUTOMATION_REASON_CODES = {
@@ -127,6 +129,7 @@ const REASON_LABELS: Record<string, string> = {
   [PR_REVIEW_REASON_CODES.skippedBotSynchronize]: "Skipped bot synchronize",
   [PR_REVIEW_REASON_CODES.superseded]:
     "Superseded — PR closed or branch deleted",
+  [PR_REVIEW_REASON_CODES.supersededByReview]: "Superseded by a newer review",
 };
 
 export function formatAutomationReasonLabel(
@@ -216,6 +219,7 @@ export function getReviewOutcomeSummary(
     case PR_REVIEW_REASON_CODES.skippedDraft:
     case PR_REVIEW_REASON_CODES.skippedBotSynchronize:
     case PR_REVIEW_REASON_CODES.superseded:
+    case PR_REVIEW_REASON_CODES.supersededByReview:
       return formatAutomationReasonLabel(normalizedReason, event.metadata);
     default:
       return null;

@@ -60,12 +60,13 @@ const thread = (key: string, path: string, line: number) => ({
   ],
 });
 
-async function runReReview() {
+async function runReReview(options: { newerReviewMeanwhile?: boolean } = {}) {
   const { createAutomationJobTask } = await loadAutomationJobWorkflowModule();
   const reviewInputs: Array<{ comments: Array<{ body: string }> }> = [];
   const summaryBodies: string[] = [];
   const resolvedThreads: Array<{ threadId: string; body: string }> = [];
   let promptHistory: unknown = null;
+  let summaryReads = 0;
   let metadata: Record<string, unknown> | null = null;
 
   const workflow = createAutomationJobTask({
@@ -99,12 +100,26 @@ async function runReReview() {
         ["src/cache.ts", [3]],
       ]),
     reviewThreads: {
-      readPrReviewTimelineComments: async () => [
-        {
-          body: `<!-- mogplex-pr-review -->\nOld review\n${serializePrReviewState(previousState, signer)}`,
-          author: "mogplex[bot]",
-        },
-      ],
+      readPrReviewTimelineComments: async () => {
+        summaryReads += 1;
+        const comments = [
+          {
+            body: `<!-- mogplex-pr-review -->\nOld review\n${serializePrReviewState(previousState, signer)}`,
+            author: "mogplex[bot]",
+          },
+        ];
+        if (options.newerReviewMeanwhile && summaryReads > 1) {
+          // Another run read the PR after this one and published first.
+          comments.push({
+            body: `<!-- mogplex-pr-review -->\nNewer review\n${serializePrReviewState(
+              { ...previousState, reviewedAt: "2999-01-01T00:00:00.000Z" },
+              signer
+            )}`,
+            author: "mogplex[bot]",
+          });
+        }
+        return comments;
+      },
       listPrReviewThreads: async () => [
         thread("aaaaaaaaaaaa", "src/widget.ts", 14),
         thread("bbbbbbbbbbbb", "src/io.ts", 8),
@@ -269,4 +284,15 @@ test("a re-review resolves the thread of a finding it no longer reports and reco
     state?.findings.map((finding) => finding.key)[0],
     "aaaaaaaaaaaa"
   );
+});
+
+test("a re-review publishes only its check run when a newer review published meanwhile", async () => {
+  const { result, reviewInputs, summaryBodies, resolvedThreads, metadata } =
+    await runReReview({ newerReviewMeanwhile: true });
+
+  assert.equal(result.success, true);
+  assert.equal(reviewInputs.length, 0);
+  assert.equal(summaryBodies.length, 0);
+  assert.equal(resolvedThreads.length, 0);
+  assert.equal(metadata?.review_outcome, "PR_REVIEW_SUPERSEDED_BY_REVIEW");
 });

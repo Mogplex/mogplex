@@ -117,6 +117,33 @@ export function createPrReviewLifecycle(input: {
       return history ? buildPrReviewHistoryBlock(history) : null;
     },
 
+    /**
+     * True when another run on this PR read it after this one and has
+     * already published. Its threads and state are newer: publishing this
+     * run's would post duplicates and overwrite them.
+     */
+    async supersededByNewerReview(): Promise<boolean> {
+      if (!deps || !signer || prNumber == null || !startedAt) return false;
+      try {
+        const comments = await deps.readPrReviewTimelineComments({
+          githubToken,
+          repoFullName,
+          prNumber,
+        });
+        const newest = newestPrReviewState(comments, signer)?.state;
+        return (
+          newest != null && Date.parse(newest.reviewedAt) > startedAt.getTime()
+        );
+      } catch (error) {
+        console.warn("[pr-review] newer-review check failed", {
+          repoFullName,
+          prNumber,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return false;
+      }
+    },
+
     /** Key the report's findings and decide what happens to earlier threads. */
     planThreads(findings: ReviewFinding[], structured: boolean) {
       keys = assignFindingKeys(findings, history);

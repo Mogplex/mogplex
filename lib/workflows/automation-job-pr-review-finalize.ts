@@ -86,6 +86,8 @@ export type FinalizePrReviewSuccessContext = {
     reviewOutcome: ReviewOutcome | null;
   }) => void;
   resolveStaleReviewThreads?: () => Promise<number>;
+  /** True when a newer run on this PR already published its review. */
+  isSupersededByNewerReview?: () => Promise<boolean>;
 };
 
 /**
@@ -109,6 +111,7 @@ export async function finalizePrReviewSuccess(
     publishPrReviewTimelineComment,
     planReviewThreads,
     resolveStaleReviewThreads,
+    isSupersededByNewerReview,
   } = ctx;
 
   const reviewSummary = input.reviewOutcome?.summary ?? input.result.text ?? "";
@@ -129,27 +132,13 @@ export async function finalizePrReviewSuccess(
         : null)
   );
   const reviewConclusion = prReviewVerdictConclusion(reviewVerdict);
-  const currentHeadSha = await loadCurrentPrReviewHeadSha();
-  const isStaleHeadSha =
-    reviewHeadSha.length > 0 &&
-    currentHeadSha !== null &&
-    currentHeadSha !== reviewHeadSha;
-
-  if (isStaleHeadSha) {
-    const reviewCheckPublished =
-      await completeStalePrReviewCheckRun(currentHeadSha);
-
-    if (requiresReviewCheckRun && !reviewCheckPublished) {
-      return {
-        ok: false,
-        error: state.reviewCheckRunError
-          ? `GitHub check run publish failed: ${state.reviewCheckRunError}`
-          : "GitHub check run publish failed: stale review check run was not completed",
-      };
-    }
-
-    const reviewReason = PR_REVIEW_REASON_CODES.staleHeadSha;
-
+  // A run that does not publish its review: the PR moved on, or a newer
+  // run already published. Only its check run is completed.
+  const unpublishedReview = (
+    reviewReason: string,
+    published: { reviewCheckPublished: boolean; currentHeadSha: string | null }
+  ): FinalizePrReviewSuccessResult => {
+    const { reviewCheckPublished, currentHeadSha } = published;
     return {
       ok: true,
       reviewReason,
@@ -184,6 +173,30 @@ export async function finalizePrReviewSuccess(
         ...buildAutomationExecutionMetadataFields(input.execution),
       },
     };
+  };
+  const currentHeadSha = await loadCurrentPrReviewHeadSha();
+  const isStaleHeadSha =
+    reviewHeadSha.length > 0 &&
+    currentHeadSha !== null &&
+    currentHeadSha !== reviewHeadSha;
+
+  if (isStaleHeadSha) {
+    const reviewCheckPublished =
+      await completeStalePrReviewCheckRun(currentHeadSha);
+
+    if (requiresReviewCheckRun && !reviewCheckPublished) {
+      return {
+        ok: false,
+        error: state.reviewCheckRunError
+          ? `GitHub check run publish failed: ${state.reviewCheckRunError}`
+          : "GitHub check run publish failed: stale review check run was not completed",
+      };
+    }
+
+    return unpublishedReview(PR_REVIEW_REASON_CODES.staleHeadSha, {
+      reviewCheckPublished,
+      currentHeadSha,
+    });
   }
 
   // Every surface below publishes the same checked text.
@@ -209,6 +222,14 @@ export async function finalizePrReviewSuccess(
   // summary comment is the one canonical review on every run. Findings that
   // already have a thread keep it; threads for findings this review no longer
   // reports are resolved before the summary lists them.
+  // Same head, but another run read the PR later and already published:
+  // its threads and state are newer than this run's.
+  if (await isSupersededByNewerReview?.()) {
+    return unpublishedReview(PR_REVIEW_REASON_CODES.supersededByReview, {
+      reviewCheckPublished,
+      currentHeadSha,
+    });
+  }
   planReviewThreads?.({
     reviewHarnessResult: publishedHarnessResult,
     reviewOutcome: publishedOutcome,
