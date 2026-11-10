@@ -7,6 +7,7 @@ const history: PrReviewHistory = {
   reviewedAt: "2026-11-09T10:00:00.000Z",
   mode: "incremental",
   changedFiles: ["lib/a.ts"],
+  threadsLoaded: true,
   findings: [
     {
       id: "F1",

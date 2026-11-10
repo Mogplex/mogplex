@@ -125,7 +125,10 @@ export function createPrReviewLifecycle(input: {
             )
             .map(({ id: _id, thread, ...prior }) => ({
               ...prior,
-              inline: thread != null && !thread.isResolved,
+              // Without the thread list, keep what the state recorded.
+              inline: history?.threadsLoaded
+                ? thread != null && !thread.isResolved
+                : prior.inline,
             }))
         : [];
       return { keys, plan };

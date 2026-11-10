@@ -108,12 +108,18 @@ export function planPrReviewThreads(input: {
   );
   const reported = new Set(input.keys.values());
   for (const [finding, key] of input.keys) {
-    const thread = priorByKey.get(key)?.thread;
-    if (thread && !thread.isResolved) {
-      plan.existingThreads.set(finding, thread.url);
+    const prior = priorByKey.get(key);
+    if (prior?.thread && !prior.thread.isResolved) {
+      plan.existingThreads.set(finding, prior.thread.url);
+    } else if (!input.history.threadsLoaded && prior?.inline) {
+      // The thread list could not be read; posting again would duplicate a
+      // thread that most likely still exists.
+      plan.existingThreads.set(finding, null);
     }
   }
-  if (!input.complete) return plan;
+  // Closing needs the threads: without them there is nothing to reply to,
+  // and an earlier finding cannot be called resolved.
+  if (!input.complete || !input.history.threadsLoaded) return plan;
 
   const changed = new Set(input.history.changedFiles);
   for (const prior of input.history.findings) {

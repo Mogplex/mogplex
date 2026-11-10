@@ -39,6 +39,12 @@ export type PrReviewHistory = {
   mode: "incremental" | "same_head" | "full";
   changedFiles: string[];
   findings: PriorFinding[];
+  /**
+   * False when the thread list could not be read: every finding then shows
+   * no thread, though the ones the state records as inline most likely
+   * still have one.
+   */
+  threadsLoaded: boolean;
   conversation: PrConversationComment[];
 };
 
@@ -49,17 +55,35 @@ const FINDING_PATTERN =
   /<!-- mogplex-finding:([a-f0-9]{8,64})\.([A-Za-z0-9_-]+) -->/g;
 const MOGPLEX_MARKER = "<!-- mogplex-";
 
+// GitHub caps a comment at 65,536 characters, and the state shares the
+// summary comment with the review itself.
+const STATE_MAX_CHARS = 16_000;
+const STATE_TITLE_MAX_CHARS = 200;
+
+function encodeState(state: PrReviewState) {
+  return Buffer.from(JSON.stringify(state), "utf8").toString("base64url");
+}
+
 /**
  * Hidden state for the summary comment; base64url keeps it inside the HTML
- * comment, and the signature keeps anyone else from writing it.
+ * comment, and the signature keeps anyone else from writing it. Findings
+ * past the size budget are dropped from the end, where the oldest carried
+ * ones sit; a dropped finding that has a thread is found again through the
+ * thread's marker.
  */
 export function serializePrReviewState(
   state: PrReviewState,
   signer: PrReviewSigner
 ) {
-  const encoded = Buffer.from(JSON.stringify(state), "utf8").toString(
-    "base64url"
-  );
+  const findings = state.findings.map((finding) => ({
+    ...finding,
+    title: finding.title.slice(0, STATE_TITLE_MAX_CHARS),
+  }));
+  let encoded = encodeState({ ...state, findings });
+  while (encoded.length > STATE_MAX_CHARS && findings.length > 0) {
+    findings.pop();
+    encoded = encodeState({ ...state, findings });
+  }
   return `${STATE_PREFIX}${encoded}.${signer.sign(`state:${encoded}`)} -->`;
 }
 
@@ -317,6 +341,7 @@ export async function loadPrReviewHistory(
       deps.signer,
       latest.author
     ),
+    threadsLoaded: threads != null,
     conversation: (conversation ?? []).filter(
       (comment) => !comment.isBot && !comment.body.includes(MOGPLEX_MARKER)
     ),

@@ -25,7 +25,10 @@ gives the reviewer three things, all kept on GitHub (no schema change):
 - **Review state.** The summary comment ends with
   `<!-- mogplex-review-state:BASE64URL.SIG -->`: the reviewed head SHA, the
   review time, and every finding with its key, severity, title, path, line,
-  and whether it was posted inline.
+  and whether it was posted inline. The encoded state stays under 16,000
+  characters (titles are cut at 200), so it fits in the comment beside the
+  review. Past that, the oldest carried findings are dropped; one that has a
+  thread is found again through its thread's marker.
 - **Threads.** Read through GraphQL `pullRequest.reviewThreads`, with each
   thread's first comment and its latest hundred. A thread is Mogplex's when
   its first comment carries a finding marker that verifies. Replies are its
@@ -131,4 +134,6 @@ last review" list.
 
 Every GitHub call here is best effort. A history that fails to load means a
 first review. A reply or resolve that fails leaves the thread open, and the
-next run tries again.
+next run tries again. If the thread list cannot be read, a finding the state
+records as inline is not posted again (its thread most likely still exists),
+nothing is closed, and the state keeps each earlier finding's inline flag.

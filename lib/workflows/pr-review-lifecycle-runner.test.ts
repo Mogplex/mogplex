@@ -279,6 +279,33 @@ describe("createPrReviewLifecycle", () => {
     ]);
   });
 
+  it("should keep earlier threads and their inline flags when the thread list fails", async () => {
+    const deps = threadDeps({
+      listPrReviewThreads: async () => {
+        throw new Error("graphql");
+      },
+    });
+    const lifecycle = createPrReviewLifecycle({ ...target, deps });
+    await lifecycle.loadHistoryBlock();
+    lifecycle.planThreads([stillThere], true);
+
+    const state = parsePrReviewState(
+      lifecycle.stateMarker({
+        structured: true,
+        findings: [stillThere],
+        inline: new Set(),
+      }),
+      signer
+    );
+
+    expect(lifecycle.plan.existingThreads.get(stillThere)).toBeNull();
+    await expect(lifecycle.resolveThreads()).resolves.toBe(0);
+    expect(state?.findings.map((entry) => [entry.key, entry.inline])).toEqual([
+      ["aaaaaaaaaaaa", true],
+      ["bbbbbbbbbbbb", true],
+    ]);
+  });
+
   it("should carry the previous state forward when the review judged nothing", async () => {
     const lifecycle = createPrReviewLifecycle({
       ...target,

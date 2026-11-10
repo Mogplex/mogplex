@@ -105,6 +105,27 @@ describe("PR review state", () => {
     expect(parsePrReviewState(summaryWith(state), otherSecret)).toBeNull();
   });
 
+  it("should keep the state within its size budget by dropping the oldest findings", () => {
+    const many: PrReviewState = {
+      ...state,
+      findings: Array.from({ length: 400 }, (_, index) => ({
+        ...state.findings[0],
+        key: index.toString(16).padStart(12, "0"),
+        title: `${"Long title ".repeat(40)}${index}`,
+        path: `lib/deep/path/to/module-${index}.ts`,
+      })),
+    };
+
+    const marker = serializePrReviewState(many, signer);
+    const parsed = parsePrReviewState(marker, signer);
+
+    expect(marker.length).toBeLessThan(16_200);
+    expect(parsed?.findings[0].key).toBe(many.findings[0].key);
+    expect(parsed?.findings[0].title).toHaveLength(200);
+    expect(parsed?.findings.length).toBeGreaterThan(20);
+    expect(parsed?.findings.length).toBeLessThan(400);
+  });
+
   it("should skip marker-shaped text that precedes the signed marker", () => {
     const decoyState =
       "<!-- mogplex-review-state:e30.AAAAAAAAAAAAAAAAAAAAAA -->";
@@ -451,5 +472,6 @@ describe("loadPrReviewHistory", () => {
       "bbbbbbbbbbbb",
     ]);
     expect(history?.conversation).toEqual([]);
+    expect(history?.threadsLoaded).toBe(false);
   });
 });

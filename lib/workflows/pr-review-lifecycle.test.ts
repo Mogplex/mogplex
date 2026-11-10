@@ -47,6 +47,7 @@ const history = (findings: PriorFinding[]): PrReviewHistory => ({
   mode: "full",
   changedFiles: [],
   findings,
+  threadsLoaded: true,
   conversation: [],
 });
 
@@ -195,6 +196,31 @@ describe("planPrReviewThreads", () => {
 
     expect(plan.resolve.map((entry) => entry.threadId)).toEqual(["t5"]);
     expect(plan.resolvedFindings.map((entry) => entry.id)).toEqual(["F5"]);
+  });
+
+  it("should neither post again nor close anything when the threads could not be read", () => {
+    const inlineBefore = finding("Inline before");
+    const summaryOnly = finding("Summary only");
+    const plan = planPrReviewThreads({
+      history: {
+        ...history([
+          { ...prior("F1", "aaaaaaaaaaaa", null), inline: true },
+          prior("F2", "bbbbbbbbbbbb", null),
+          { ...prior("F3", "cccccccccccc", null), inline: true },
+        ]),
+        threadsLoaded: false,
+      },
+      keys: new Map([
+        [inlineBefore, "aaaaaaaaaaaa"],
+        [summaryOnly, "bbbbbbbbbbbb"],
+      ]),
+      headSha: "1234567890",
+      complete: true,
+    });
+
+    expect([...plan.existingThreads]).toEqual([[inlineBefore, null]]);
+    expect(plan.resolve).toEqual([]);
+    expect(plan.resolvedFindings).toEqual([]);
   });
 
   it("should plan nothing for a first review", () => {
