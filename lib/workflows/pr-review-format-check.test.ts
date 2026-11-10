@@ -433,6 +433,7 @@ describe("finalizePrReviewSuccess and the format check", () => {
       reviewGithubReviewError: null,
       reviewGithubInlineCommentCount: 0,
       reviewInlineFindings: new Set(),
+      reviewThreadsResolved: 0,
       reviewStaleHeadCheckError: null,
       prReviewCompletionReason: null,
     } satisfies PrReviewReporterState;

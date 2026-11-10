@@ -19,6 +19,7 @@ export type IssueCommentResponse = {
   id?: number;
   html_url?: string | null;
   body?: string | null;
+  user?: { login?: string | null } | null;
 };
 
 export type TimelineCommentMatch = IssueCommentResponse & {
@@ -288,6 +289,7 @@ export async function findExistingTimelineComment(
     if (matchingComment) {
       return {
         id: matchingComment.id,
+        body: matchingComment.body,
         htmlUrl:
           typeof matchingComment.html_url === "string"
             ? matchingComment.html_url
@@ -297,4 +299,35 @@ export async function findExistingTimelineComment(
   }
 
   return null;
+}
+
+/**
+ * Every comment on a PR that carries `marker`, oldest first, with its author.
+ * Anyone can write the marker, so callers must check what they read.
+ */
+export async function listTimelineCommentBodies(
+  input: {
+    githubToken: string;
+    owner: string;
+    repo: string;
+    prNumber: number;
+  },
+  marker: string
+): Promise<Array<{ body: string; author: string | null }>> {
+  const bodies: Array<{ body: string; author: string | null }> = [];
+  let lastPage = 1;
+  for (let page = 1; page <= lastPage; page += 1) {
+    const result = await listIssueCommentsPage({ ...input, page });
+    // Only the first page's Link header names the last page.
+    if (page === 1) lastPage = result.lastPage;
+    for (const comment of result.comments) {
+      if (typeof comment.body === "string" && comment.body.includes(marker)) {
+        bodies.push({
+          body: comment.body,
+          author: comment.user?.login ?? null,
+        });
+      }
+    }
+  }
+  return bodies;
 }

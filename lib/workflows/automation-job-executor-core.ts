@@ -213,6 +213,7 @@ export async function runAutomationJob(
           completePrReviewCheckRun: deps.completePrReviewCheckRun,
           createPrReviewGithubReview: deps.createPrReviewGithubReview,
           loadPullRequestChangedLines: deps.loadPullRequestChangedLines,
+          reviewThreads: deps.reviewThreads,
           upsertPrReviewTimelineComment: deps.upsertPrReviewTimelineComment,
           loadPullRequestDetails: deps.loadPullRequestDetails,
           persistJobReviewFindings: deps.persistJobReviewFindings,
@@ -229,6 +230,8 @@ export async function runAutomationJob(
         reviewCheckRunError,
       })
     : null;
+  // A re-review reads the previous review's findings, threads and replies.
+  if (reporter) context = await reporter.withReviewHistory(context);
 
   // Thin wrapper around handleAutomationJobFailure to preserve call-site syntax
   const failJob = async (

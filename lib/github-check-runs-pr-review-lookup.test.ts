@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  MOGPLEX_PR_REVIEW_TIMELINE_MARKER,
   getLatestPrReviewCheckRun,
   getPullRequestHeadSha,
+  readPrReviewTimelineComments,
+  upsertPrReviewTimelineComment,
 } from "./github-check-runs";
 
 afterEach(() => {
@@ -196,5 +199,135 @@ describe("getLatestPrReviewCheckRun", () => {
         headSha: "abc123",
       })
     ).rejects.toThrow(/GitHub check runs lookup failed \(502\): Bad Gateway/);
+  });
+});
+
+describe("readPrReviewTimelineComments", () => {
+  it("returns every comment carrying the review marker, oldest first", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      Response.json([
+        {
+          id: 1,
+          body: `${MOGPLEX_PR_REVIEW_TIMELINE_MARKER}\nOld review`,
+          user: { login: "mogplex[bot]" },
+        },
+        { id: 2, body: "A person's comment" },
+        {
+          id: 3,
+          body: `> ${MOGPLEX_PR_REVIEW_TIMELINE_MARKER}\nA quoted copy`,
+          user: { login: "someone" },
+        },
+      ])
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const bodies = await readPrReviewTimelineComments({
+      githubToken: "token",
+      repoFullName: "acme/widgets",
+      prNumber: 12,
+    });
+
+    expect(bodies).toEqual([
+      {
+        body: `${MOGPLEX_PR_REVIEW_TIMELINE_MARKER}\nOld review`,
+        author: "mogplex[bot]",
+      },
+      {
+        body: `> ${MOGPLEX_PR_REVIEW_TIMELINE_MARKER}\nA quoted copy`,
+        author: "someone",
+      },
+    ]);
+  });
+
+  it("reads every page of comments", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        Response.json([{ id: 1, body: "first page" }], {
+          headers: {
+            link: '<https://api.github.com/repos/acme/widgets/issues/12/comments?per_page=100&page=2>; rel="last"',
+          },
+        })
+      )
+      .mockResolvedValueOnce(
+        Response.json([
+          { id: 2, body: `${MOGPLEX_PR_REVIEW_TIMELINE_MARKER}\nReview` },
+        ])
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const bodies = await readPrReviewTimelineComments({
+      githubToken: "token",
+      repoFullName: "acme/widgets",
+      prNumber: 12,
+    });
+
+    expect(bodies).toEqual([
+      { body: `${MOGPLEX_PR_REVIEW_TIMELINE_MARKER}\nReview`, author: null },
+    ]);
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain("page=2");
+  });
+});
+
+describe("upsertPrReviewTimelineComment", () => {
+  it("posts a new comment when the marked comment belongs to someone else", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        Response.json([
+          { id: 9, body: `${MOGPLEX_PR_REVIEW_TIMELINE_MARKER} spoof` },
+        ])
+      )
+      .mockResolvedValueOnce(
+        Response.json({ message: "Forbidden" }, { status: 403 })
+      )
+      .mockResolvedValueOnce(
+        Response.json(
+          {
+            id: 10,
+            html_url: "https://github.com/acme/widgets/pull/12#issuecomment-10",
+          },
+          { status: 201 }
+        )
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await upsertPrReviewTimelineComment({
+      githubToken: "token",
+      repoFullName: "acme/widgets",
+      prNumber: 12,
+      body: "Review",
+    });
+
+    expect(result).toEqual({
+      id: 10,
+      htmlUrl: "https://github.com/acme/widgets/pull/12#issuecomment-10",
+      created: true,
+    });
+    expect(fetchMock.mock.calls[1]?.[1]?.method).toBe("PATCH");
+    expect(fetchMock.mock.calls[2]?.[1]?.method).toBe("POST");
+  });
+
+  it("still fails on other edit errors", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(
+          Response.json([{ id: 9, body: MOGPLEX_PR_REVIEW_TIMELINE_MARKER }])
+        )
+        .mockResolvedValueOnce(
+          Response.json({ message: "Boom" }, { status: 500 })
+        )
+    );
+
+    await expect(
+      upsertPrReviewTimelineComment({
+        githubToken: "token",
+        repoFullName: "acme/widgets",
+        prNumber: 12,
+        body: "Review",
+      })
+    ).rejects.toThrow();
   });
 });

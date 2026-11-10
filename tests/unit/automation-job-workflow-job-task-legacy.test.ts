@@ -370,6 +370,7 @@ test("createAutomationJobTask keeps legacy PR reviews review-only by default", a
       review_github_review_error: null,
       review_github_inline_comments_count: 2,
       review_verdict: "blocking",
+      review_threads_resolved: 0,
       review_check_run_id: 91,
       review_check_run_url: "https://github.com/acme/widgets/runs/91",
       review_check_run_completed: true,

@@ -80,6 +80,12 @@ export type FinalizePrReviewSuccessContext = {
     conclusion: PrReviewConclusion;
     failureDetails?: PrReviewFailureDetails | null;
   }) => Promise<boolean>;
+  /** Thread lifecycle hooks; without them every review is a first review. */
+  planReviewThreads?: (input: {
+    reviewHarnessResult: PrReviewHarnessResult | null;
+    reviewOutcome: ReviewOutcome | null;
+  }) => void;
+  resolveStaleReviewThreads?: () => Promise<number>;
 };
 
 /**
@@ -101,6 +107,8 @@ export async function finalizePrReviewSuccess(
     publishPrReviewCheckRun,
     publishPrReviewGithubReview,
     publishPrReviewTimelineComment,
+    planReviewThreads,
+    resolveStaleReviewThreads,
   } = ctx;
 
   const reviewSummary = input.reviewOutcome?.summary ?? input.result.text ?? "";
@@ -198,12 +206,19 @@ export async function finalizePrReviewSuccess(
     conclusion: reviewConclusion,
   });
   // Inline comments go first so the summary comment can link to them. The
-  // summary comment is the one canonical review on every run.
+  // summary comment is the one canonical review on every run. Findings that
+  // already have a thread keep it; threads for findings this review no longer
+  // reports are resolved before the summary lists them.
+  planReviewThreads?.({
+    reviewHarnessResult: publishedHarnessResult,
+    reviewOutcome: publishedOutcome,
+  });
   await publishPrReviewGithubReview({
     reviewHarnessResult: publishedHarnessResult,
     reviewOutcome: publishedOutcome,
     conclusion: reviewConclusion,
   });
+  await resolveStaleReviewThreads?.();
   // Always published, but only required when no native review carries the
   // findings: a run retried after a failed comment would post the native
   // review a second time.
@@ -283,7 +298,7 @@ export async function finalizePrReviewSuccess(
       review_outcome_label: formatAutomationReasonLabel(reviewReason),
       review_has_issues: input.reviewOutcome?.hasIssues ?? false,
       review_verdict: reviewVerdict,
-      review_summary: reviewSummary,
+      review_summary: publishedOutcome?.summary ?? reviewSummary,
       review_affected_files: input.reviewOutcome?.affectedFiles ?? [],
       review_comment_posted: input.reviewCommentPosted,
       review_timeline_comment_posted: timelineCommentPublished,
@@ -295,6 +310,7 @@ export async function finalizePrReviewSuccess(
       review_github_review_url: state.reviewGithubReviewUrl,
       review_github_review_error: state.reviewGithubReviewError,
       review_github_inline_comments_count: state.reviewGithubInlineCommentCount,
+      review_threads_resolved: state.reviewThreadsResolved,
       review_check_run_id: state.reviewCheckRunId,
       review_check_run_url: state.reviewCheckRunUrl,
       review_check_run_completed: reviewCheckPublished,

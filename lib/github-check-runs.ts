@@ -1,6 +1,7 @@
 import {
   GITHUB_API_BASE,
   findExistingTimelineComment,
+  listTimelineCommentBodies,
   getGithubHeaders,
   parseCheckRunResponse,
   parseIssueCommentResponse,
@@ -247,6 +248,23 @@ export async function loadPullRequestChangedLines(input: {
   }
 }
 
+/**
+ * Every comment carrying the Mogplex review marker, oldest first, with its
+ * author. Anyone can post the marker; readers pick the one whose signed state
+ * verifies and is newest.
+ */
+export async function readPrReviewTimelineComments(input: {
+  githubToken: string;
+  repoFullName: string;
+  prNumber: number;
+}): Promise<Array<{ body: string; author: string | null }>> {
+  const { owner, repo } = parseRepoFullName(input.repoFullName);
+  return listTimelineCommentBodies(
+    { githubToken: input.githubToken, owner, repo, prNumber: input.prNumber },
+    MOGPLEX_PR_REVIEW_TIMELINE_MARKER
+  );
+}
+
 function withTimelineMarker(body: string) {
   // Prefix a hidden marker and newline so future runs can locate the canonical
   // comment with includes(marker) and update it instead of creating a new one.
@@ -282,12 +300,16 @@ export async function upsertPrReviewTimelineComment(input: {
       }
     );
 
-    const updated = await parseIssueCommentResponse(response, "update");
-    return {
-      id: updated.id,
-      htmlUrl: updated.htmlUrl ?? existingComment.htmlUrl,
-      created: false,
-    };
+    // Anyone can post the marker. A marked comment this token cannot edit is
+    // someone else's, so publish a new one instead of failing every run.
+    if (response.status !== 403 && response.status !== 404) {
+      const updated = await parseIssueCommentResponse(response, "update");
+      return {
+        id: updated.id,
+        htmlUrl: updated.htmlUrl ?? existingComment.htmlUrl,
+        created: false,
+      };
+    }
   }
 
   const response = await fetch(
