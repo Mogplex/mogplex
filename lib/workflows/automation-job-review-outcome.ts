@@ -5,9 +5,9 @@ import type { ReviewOutcome } from "@/lib/workflows/pr-review-harness";
 import {
   isRecord,
   toOptionalString,
-  toReviewFindings,
   toStringArray,
 } from "@/lib/workflows/automation-job-utils";
+import { toReviewFindings } from "@/lib/workflows/pr-review-harness-utils";
 
 export function resolveFlowAgentNodeRole(
   node: Extract<FlowNode, { type: "agent" }>

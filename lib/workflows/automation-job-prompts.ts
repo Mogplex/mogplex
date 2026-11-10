@@ -15,8 +15,8 @@ import {
   isRecord,
   toOptionalString,
   toStringArray,
-  toReviewFindings,
 } from "@/lib/workflows/automation-job-utils";
+import { toReviewFindings } from "@/lib/workflows/pr-review-harness-utils";
 import { isFlowAgentNodeRole } from "@/lib/flows/graph";
 import { buildApiTaskPrompt } from "./automation-job-api-prompt";
 import {
