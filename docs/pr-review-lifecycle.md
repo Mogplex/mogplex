@@ -30,7 +30,7 @@ gives the reviewer three things, all kept on GitHub (no schema change):
   review. Past that, the oldest carried findings are dropped; one that has a
   thread is found again through its thread's marker.
 - **Threads.** Read through GraphQL `pullRequest.reviewThreads`, with each
-  thread's first comment and its latest hundred. A thread is Mogplex's when
+  thread's first comment and its latest twenty. A thread is Mogplex's when
   its first comment carries a finding marker that verifies. Replies are its
   other comments that carry no Mogplex marker.
 

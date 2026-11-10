@@ -39,7 +39,7 @@ const THREADS_QUERY = `query($owner: String!, $repo: String!, $number: Int!, $af
           root: comments(first: 1) {
             nodes { id body url createdAt author { login } }
           }
-          recent: comments(last: 100) {
+          recent: comments(last: 20) {
             nodes { id body url createdAt author { login } }
           }
         }
