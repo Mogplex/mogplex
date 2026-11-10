@@ -5,7 +5,6 @@ import {
   finalizePrReviewSuccess,
   type FinalizePrReviewSuccessContext,
 } from "./automation-job-pr-review-finalize";
-import type { PrReviewReporterState } from "./automation-job-pr-review-reporter";
 import type { JobContext } from "./automation-job-types";
 import {
   extractPrReviewHarnessResult,
@@ -23,6 +22,7 @@ import {
   buildPrReviewTimelineCommentBody,
 } from "./pr-review-harness";
 import type { PrReviewConclusion } from "./pr-review-harness-types";
+import { createPrReviewReporterState } from "./pr-review-reporter-state";
 
 /** The reviewer read the PR, wrote a closing message, and never reported. */
 const unreported = {
@@ -200,26 +200,9 @@ function makeFinalizeContext() {
     check: PrReviewConclusion[];
     comment: PrReviewConclusion[];
   } = { check: [], comment: [] };
-  const state: PrReviewReporterState = {
+  const state = createPrReviewReporterState({
     reviewCheckRunId: 1,
-    reviewCheckRunUrl: null,
-    reviewCheckRunCompleted: false,
-    reviewCheckRunConclusion: null,
-    reviewCheckRunError: null,
-    reviewTimelineCommentPublished: false,
-    reviewTimelineCommentId: null,
-    reviewTimelineCommentUrl: null,
-    reviewTimelineCommentError: null,
-    reviewGithubReviewPublished: false,
-    reviewGithubReviewId: null,
-    reviewGithubReviewUrl: null,
-    reviewGithubReviewError: null,
-    reviewGithubInlineCommentCount: 0,
-    reviewInlineFindings: new Set(),
-    reviewThreadsResolved: 0,
-    reviewStaleHeadCheckError: null,
-    prReviewCompletionReason: null,
-  };
+  });
   const ctx: FinalizePrReviewSuccessContext = {
     context: {
       metadata: {},

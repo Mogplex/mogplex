@@ -3,9 +3,9 @@ import {
   finalizePrReviewSuccess,
   type FinalizePrReviewSuccessContext,
 } from "./automation-job-pr-review-finalize";
-import type { PrReviewReporterState } from "./automation-job-pr-review-reporter";
 import type { JobContext } from "./automation-job-types";
 import { extractPrReviewHarnessResult } from "./pr-review-harness-extraction";
+import { createPrReviewReporterState } from "./pr-review-reporter-state";
 
 const reportedWarning = {
   text: "Done.",
@@ -35,26 +35,10 @@ const reportedWarning = {
 };
 
 async function finalize(options: { nativeReviewPublished: boolean }) {
-  const state: PrReviewReporterState = {
+  const state = createPrReviewReporterState({
     reviewCheckRunId: 1,
-    reviewCheckRunUrl: null,
-    reviewCheckRunCompleted: false,
-    reviewCheckRunConclusion: null,
-    reviewCheckRunError: null,
-    reviewTimelineCommentPublished: false,
-    reviewTimelineCommentId: null,
-    reviewTimelineCommentUrl: null,
     reviewTimelineCommentError: "GitHub is down",
-    reviewGithubReviewPublished: false,
-    reviewGithubReviewId: null,
-    reviewGithubReviewUrl: null,
-    reviewGithubReviewError: null,
-    reviewGithubInlineCommentCount: 0,
-    reviewInlineFindings: new Set(),
-    reviewThreadsResolved: 0,
-    reviewStaleHeadCheckError: null,
-    prReviewCompletionReason: null,
-  };
+  });
   let summaryAttempts = 0;
   const ctx: FinalizePrReviewSuccessContext = {
     context: {

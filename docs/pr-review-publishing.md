@@ -9,7 +9,11 @@ A finished review is published in three places, each with one job:
 | Summary comment (`<!-- mogplex-pr-review -->`) | The canonical review: verdict, summary, every finding. Updated in place on every run. Findings posted inline are listed by link, not repeated. | `publishPrReviewTimelineComment` |
 
 The order is check run, then inline comments, then the summary comment, so
-the summary can link the inline comments.
+the summary can link the inline comments. GitHub's create-review response
+has no comment links, so the run reads the new review's comments
+(`listPrReviewComments`) and matches each to its finding by the body it was
+posted with. Each finding then links to its own comment. If that lookup
+fails, or a comment cannot be matched, the finding links to the review.
 
 The summary comment is published on every run. A failure to publish it
 fails the run only when no inline review carries the findings: retrying a

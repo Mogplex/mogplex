@@ -364,6 +364,7 @@ describe("publishInlinePrReview", () => {
     reviewGithubReviewError: null,
     reviewGithubInlineCommentCount: 0,
     reviewInlineFindings: new Set(),
+    reviewInlineCommentUrls: new Map(),
   });
 
   it("should post only findings without a thread, each with its key marker", async () => {

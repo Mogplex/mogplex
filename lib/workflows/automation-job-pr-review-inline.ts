@@ -1,5 +1,6 @@
 import type {
   createPrReviewGithubReview,
+  listPrReviewComments,
   loadPullRequestChangedLines,
 } from "@/lib/github-check-runs";
 import type { ReviewFinding } from "@/lib/types";
@@ -21,7 +22,29 @@ export type PrReviewInlineState = {
   reviewGithubInlineCommentCount: number;
   /** Findings this run posted as new inline comments. */
   reviewInlineFindings: ReadonlySet<ReviewFinding>;
+  /** The link of each of those comments, where GitHub returned it. */
+  reviewInlineCommentUrls: ReadonlyMap<ReviewFinding, string>;
 };
+
+/**
+ * Each posted comment's link, matched to its finding by the body it was
+ * posted with. A comment that cannot be matched keeps no link, and the
+ * summary falls back to the review's.
+ */
+function matchCommentUrls(
+  posted: Array<{ finding: ReviewFinding; body: string }>,
+  returned: Array<{ body: string; htmlUrl: string }>
+) {
+  const urls = new Map<ReviewFinding, string>();
+  for (const comment of returned) {
+    const match = posted.find(
+      (entry) =>
+        !urls.has(entry.finding) && entry.body.trim() === comment.body.trim()
+    );
+    if (match) urls.set(match.finding, comment.htmlUrl);
+  }
+  return urls;
+}
 
 /**
  * Publish the findings that can sit on the diff as one native review of
@@ -34,6 +57,8 @@ export async function publishInlinePrReview(input: {
   deps: {
     createPrReviewGithubReview: typeof createPrReviewGithubReview;
     loadPullRequestChangedLines?: typeof loadPullRequestChangedLines;
+    /** Without it, the summary links each new comment through the review. */
+    listPrReviewComments?: typeof listPrReviewComments;
   };
   githubToken: string;
   repoFullName: string;
@@ -71,6 +96,16 @@ export async function publishInlinePrReview(input: {
     : null;
   const { comments } = anchorReviewFindings(fresh, changed);
   if (comments.length === 0) return false;
+  const posted = comments.map((anchored) => {
+    const comment = buildPrReviewInlineComment(anchored);
+    const marker = lifecycle.markerFor(anchored.finding);
+    return {
+      finding: anchored.finding,
+      comment: marker
+        ? { ...comment, body: `${comment.body}\n\n${marker}` }
+        : comment,
+    };
+  });
 
   try {
     const review = await deps.createPrReviewGithubReview({
@@ -84,13 +119,7 @@ export async function publishInlinePrReview(input: {
         checkRunUrl: state.reviewCheckRunUrl,
         inlineCommentCount: comments.length,
       }),
-      comments: comments.map((anchored) => {
-        const comment = buildPrReviewInlineComment(anchored);
-        const marker = lifecycle.markerFor(anchored.finding);
-        return marker
-          ? { ...comment, body: `${comment.body}\n\n${marker}` }
-          : comment;
-      }),
+      comments: posted.map((entry) => entry.comment),
     });
     state.reviewGithubReviewPublished = true;
     state.reviewGithubReviewId = review.id;
@@ -100,6 +129,33 @@ export async function publishInlinePrReview(input: {
     state.reviewInlineFindings = new Set(
       comments.map((comment) => comment.finding)
     );
+    state.reviewInlineCommentUrls = deps.listPrReviewComments
+      ? await deps
+          .listPrReviewComments({
+            githubToken: input.githubToken,
+            repoFullName: input.repoFullName,
+            prNumber: input.prNumber,
+            reviewId: review.id,
+          })
+          .then((returned) =>
+            matchCommentUrls(
+              posted.map((entry) => ({
+                finding: entry.finding,
+                body: entry.comment.body,
+              })),
+              returned
+            )
+          )
+          .catch((error: unknown) => {
+            // The review is published; only the per-comment links are lost.
+            console.warn("[automation-job] PR review comments lookup failed", {
+              repoFullName: input.repoFullName,
+              prNumber: input.prNumber,
+              error: error instanceof Error ? error.message : String(error),
+            });
+            return new Map<ReviewFinding, string>();
+          })
+      : new Map();
     return true;
   } catch (error) {
     // The summary comment then carries every new finding in full.

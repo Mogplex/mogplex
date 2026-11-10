@@ -8,6 +8,7 @@
 
 import {
   loadPullRequestChangedLines,
+  listPrReviewComments,
   completePrReviewCheckRun,
   createPrReviewGithubReview,
   createPrReviewCheckRun,
@@ -87,6 +88,7 @@ export type AutomationJobExecutorDeps = {
   completePrReviewCheckRun: typeof completePrReviewCheckRun;
   createPrReviewGithubReview: typeof createPrReviewGithubReview;
   loadPullRequestChangedLines?: typeof loadPullRequestChangedLines;
+  listPrReviewComments?: typeof listPrReviewComments;
   // Without it, every PR review is a first review.
   reviewThreads?: PrReviewThreadsDeps;
   upsertPrReviewTimelineComment: typeof upsertPrReviewTimelineComment;
@@ -131,6 +133,7 @@ export const defaultAutomationJobExecutorDeps: AutomationJobExecutorDeps = {
   completePrReviewCheckRun,
   createPrReviewGithubReview,
   loadPullRequestChangedLines,
+  listPrReviewComments,
   reviewThreads: {
     readPrReviewTimelineComments,
     listPrReviewThreads,

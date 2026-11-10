@@ -5,7 +5,6 @@ import {
   finalizePrReviewSuccess,
   type FinalizePrReviewSuccessContext,
 } from "./automation-job-pr-review-finalize";
-import type { PrReviewReporterState } from "./automation-job-pr-review-reporter";
 import type { JobContext } from "./automation-job-types";
 import {
   findReviewFormatProblems,
@@ -16,6 +15,7 @@ import {
 import { buildPrReviewTimelineCommentBody } from "./pr-review-harness";
 import { extractPrReviewHarnessResult } from "./pr-review-harness-extraction";
 import type { PrReviewHarnessResult } from "./pr-review-harness-types";
+import { createPrReviewReporterState } from "./pr-review-reporter-state";
 
 const scope: DecisionScope = {
   surface: "pr_review",
@@ -417,26 +417,9 @@ describe("finalizePrReviewSuccess and the format check", () => {
       ...denseClean,
       reviewOutcome: { ...denseClean.reviewOutcome, summary: "Safe to merge." },
     };
-    const state = {
+    const state = createPrReviewReporterState({
       reviewCheckRunId: 1,
-      reviewCheckRunUrl: null,
-      reviewCheckRunCompleted: false,
-      reviewCheckRunConclusion: null,
-      reviewCheckRunError: null,
-      reviewTimelineCommentPublished: false,
-      reviewTimelineCommentId: null,
-      reviewTimelineCommentUrl: null,
-      reviewTimelineCommentError: null,
-      reviewGithubReviewPublished: false,
-      reviewGithubReviewId: null,
-      reviewGithubReviewUrl: null,
-      reviewGithubReviewError: null,
-      reviewGithubInlineCommentCount: 0,
-      reviewInlineFindings: new Set(),
-      reviewThreadsResolved: 0,
-      reviewStaleHeadCheckError: null,
-      prReviewCompletionReason: null,
-    } satisfies PrReviewReporterState;
+    });
     const ctx: FinalizePrReviewSuccessContext = {
       context: {
         metadata: {},
