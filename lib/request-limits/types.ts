@@ -109,16 +109,6 @@ export const REQUEST_LIMITS = {
     cooldownSeconds: 15 * 60,
   },
   sandboxExec: {
-    minutelyCalls: {
-      name: "sandbox_execs_per_minute",
-      value: 20,
-      windowSeconds: 60,
-    },
-    hourlyCalls: {
-      name: "sandbox_execs_per_hour",
-      value: 120,
-      windowSeconds: 60 * 60,
-    },
     concurrent: { name: "sandbox_exec_in_flight", value: 1, windowSeconds: 0 },
     lockStaleSeconds: Math.floor(MAX_SANDBOX_TIMEOUT_MS / 1000),
   },

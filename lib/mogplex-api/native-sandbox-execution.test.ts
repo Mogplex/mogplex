@@ -35,3 +35,78 @@ it.each([null, "11111111-1111-4111-8111-111111111111"])(
     expect(execution.retryOnSandboxLoss).toBe(false);
   }
 );
+
+it("keeps different sandboxes independent and releases a failed queue", async () => {
+  vi.stubEnv("INTERNAL_API_SECRET", "fixture-secret");
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let started!: () => void;
+  const entered = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  let attempts = 0;
+  const execution = createNativeSandboxExecution("owner", null, {
+    getSandboxServiceCredentials: async (request) => {
+      if (request!.url.includes("sandbox-one") && attempts++ === 0) {
+        started();
+        await gate;
+        throw new Error("Connection failed");
+      }
+      return null;
+    },
+  });
+  const first = execution.execute("sandbox-one", {}, { command: "first" });
+  const failure = expect(first).rejects.toThrow("Connection failed");
+  const second = execution.execute("sandbox-one", {}, { command: "second" });
+  await entered;
+  try {
+    expect(
+      (await execution.execute("sandbox-two", {}, { command: "independent" }))
+        .status
+    ).toBe(401);
+    expect(attempts).toBe(1);
+  } finally {
+    release();
+  }
+  await failure;
+  expect((await second).status).toBe(401);
+  expect(attempts).toBe(2);
+});
+
+it("does not start queued commands after cancellation", async () => {
+  vi.stubEnv("INTERNAL_API_SECRET", "fixture-secret");
+  const controller = new AbortController();
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let started!: () => void;
+  const entered = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  let attempts = 0;
+  const execution = createNativeSandboxExecution(
+    "owner",
+    null,
+    {
+      getSandboxServiceCredentials: async () => {
+        attempts++;
+        started();
+        await gate;
+        return null;
+      },
+    },
+    controller.signal
+  );
+  const first = execution.execute("sandbox-one", {}, { command: "first" });
+  const second = execution.execute("sandbox-one", {}, { command: "second" });
+  const cancelled = expect(second).rejects.toThrow("Cancelled");
+  await entered;
+  controller.abort(new Error("Cancelled"));
+  release();
+  await first;
+  await cancelled;
+  expect(attempts).toBe(1);
+});

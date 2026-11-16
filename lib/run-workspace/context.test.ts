@@ -9,6 +9,7 @@ function fixture(
     guidance?: boolean;
     sandbox?: boolean;
     harness?: string;
+    checkpoint?: boolean;
   } = {}
 ) {
   const calls: URL[] = [];
@@ -32,7 +33,7 @@ function fixture(
             repo_id: "repo",
             ai_call_id: "call",
             harness: options.harness ?? "mogplex",
-            status: "streaming",
+            status: options.checkpoint ? "awaiting_input" : "streaming",
             prompt: "Fix mobile",
             working_branch: "fix/mobile",
             root_directory: null,
@@ -47,7 +48,12 @@ function fixture(
                     messageTs: "1.2",
                   },
                 }
-              : {},
+              : options.checkpoint
+                ? {
+                    checkpoint_kind: "plan",
+                    checkpoint_summary: "Add signing support.",
+                  }
+                : {},
           });
         if (table === "repos")
           return Response.json({
@@ -145,4 +151,12 @@ it("fails closed when any required lookup fails", async () => {
     const { client } = fixture({ error, guidance: true });
     await expect(loadRunWorkspace("owner", "run", client)).rejects.toThrow();
   }
+});
+
+it("returns the saved plan checkpoint beside the owned run", async () => {
+  const { client } = fixture({ checkpoint: true });
+  expect(await loadRunWorkspace("owner", "run", client)).toMatchObject({
+    status: "awaiting_input",
+    checkpoint: { kind: "plan", summary: "Add signing support." },
+  });
 });
