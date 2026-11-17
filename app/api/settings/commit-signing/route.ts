@@ -130,11 +130,22 @@ export function createCommitSigningRouteHandlers(
     ) {
       await deps.markRegistered({
         userId,
+        publicKey: view.publicKey,
         githubKeyId: result.keyId,
         title,
       });
+      const current = await deps.loadKey(userId);
+      if (current?.publicKey !== view.publicKey) {
+        return NextResponse.json(
+          {
+            error:
+              "The signing key changed during registration. Register the current key again.",
+          },
+          { status: 409 }
+        );
+      }
       return NextResponse.json({
-        ...statusPayload(await deps.loadKey(userId)),
+        ...statusPayload(current),
         registration: result.status,
       });
     }

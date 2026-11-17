@@ -121,6 +121,7 @@ export async function readCommitSigningPrivateKey(
 /** Record that the public key was accepted by GitHub. */
 export async function markCommitSigningKeyRegistered(input: {
   userId: string;
+  publicKey: string;
   githubKeyId: string | null;
   title?: string | null;
 }): Promise<void> {
@@ -132,7 +133,8 @@ export async function markCommitSigningKeyRegistered(input: {
       registered_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     })
-    .eq("user_id", input.userId);
+    .eq("user_id", input.userId)
+    .eq("public_key", input.publicKey);
   if (error) {
     throw new Error(
       `Failed to record the GitHub signing key registration: ${error.message}`

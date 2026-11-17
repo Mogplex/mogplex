@@ -38,8 +38,11 @@ function fixture(overrides: Record<string, unknown> = {}) {
       deleted.push(userId);
       stored = null;
     },
-    markRegistered: async (input: { githubKeyId: string | null }) => {
-      if (stored) {
+    markRegistered: async (input: {
+      githubKeyId: string | null;
+      publicKey: string;
+    }) => {
+      if (stored?.publicKey === input.publicKey) {
         stored = {
           ...stored,
           githubKeyId: input.githubKeyId,
@@ -268,4 +271,27 @@ test("all signing settings operations require authentication", async () => {
   assert.equal((await handlers.DELETE()).status, 401);
   assert.equal(saved.length, 0);
   assert.equal(deleted.length, 0);
+});
+
+test("a delayed GitHub response cannot mark a replacement key registered", async () => {
+  const create = () =>
+    new Request("http://localhost/api", {
+      method: "POST",
+      body: JSON.stringify({ action: "generate" }),
+    });
+  const { handlers } = fixture({
+    registerKey: async () => {
+      await handlers.POST(create());
+      return { status: "registered", keyId: "old-key-id" };
+    },
+  });
+  await handlers.POST(create());
+  const response = await handlers.POST(
+    new Request("http://localhost/api", {
+      method: "POST",
+      body: JSON.stringify({ action: "register" }),
+    })
+  );
+  assert.equal(response.status, 409);
+  assert.match((await response.json()).error, /key changed/i);
 });

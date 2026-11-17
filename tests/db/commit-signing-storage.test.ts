@@ -66,6 +66,7 @@ it("keeps keys encrypted and user-scoped through save, replacement, registration
   expect(await getCommitSigningKeyView(other)).toBeNull();
   await markCommitSigningKeyRegistered({
     userId: owner,
+    publicKey: pair.publicKey,
     githubKeyId: "42",
     title: "Signing",
   });
@@ -80,6 +81,13 @@ it("keeps keys encrypted and user-scoped through save, replacement, registration
   });
   const replacement = generateCommitSigningKeyPair();
   await saveCommitSigningKey({ userId: owner, ...replacement });
+  // GitHub can finish registering the previous key after another tab
+  // replaces it. That delayed response must not certify the replacement.
+  await markCommitSigningKeyRegistered({
+    userId: owner,
+    publicKey: pair.publicKey,
+    githubKeyId: "stale-registration",
+  });
   expect(await getCommitSigningKeyView(owner)).toMatchObject({
     publicKey: replacement.publicKey,
     registeredAt: null,
