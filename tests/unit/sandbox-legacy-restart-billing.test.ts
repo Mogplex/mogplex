@@ -9,6 +9,7 @@ import {
 
 for (const scenario of [
   "running failure",
+  "signing cleanup failure",
   "stopped failure",
   "successful snapshot",
   "successful snapshot unknown outcome",
@@ -95,6 +96,12 @@ for (const scenario of [
               stoppedAt: providerStatus === "stopped" ? endedAt : null,
               updatedAt: endedAt,
             }),
+            runCommand: async () => {
+              order.push("scrub");
+              return {
+                exitCode: scenario === "signing cleanup failure" ? 1 : 0,
+              };
+            },
             snapshot: async () => {
               order.push("snapshot");
               if (
@@ -161,6 +168,7 @@ for (const scenario of [
       assert.equal(
         ledger,
         scenario === "running failure" ||
+          scenario === "signing cleanup failure" ||
           scenario === "successful snapshot still running"
           ? "open"
           : scenario === "unknown after failure" ||
@@ -181,7 +189,19 @@ for (const scenario of [
         2,
         "read provider state once after the ambiguous operation"
       );
-      assert.ok(order.indexOf("prepare") < order.indexOf("snapshot"));
+      assert.ok(order.indexOf("prepare") < order.indexOf("scrub"));
+      if (scenario === "signing cleanup failure") {
+        assert.ok(
+          !order.includes("snapshot"),
+          "never capture an unscrubbed signing key"
+        );
+        assert.ok(
+          order.includes("reopen"),
+          "keep the live workspace billing session open"
+        );
+      } else {
+        assert.ok(order.indexOf("scrub") < order.indexOf("snapshot"));
+      }
       if (scenario.startsWith("successful snapshot")) {
         assert.equal(
           storedSnapshotId,
