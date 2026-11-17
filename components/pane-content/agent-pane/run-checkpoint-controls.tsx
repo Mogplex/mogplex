@@ -77,8 +77,8 @@ export function RunCheckpointControls({ context, onRefresh }: {
       <div className="space-y-3 px-4 pb-4 pt-2">
       <p className="text-muted-foreground leading-5">{plan ? "Approving starts implementation. You can revise the plan first." : "Approving opens the pull request. You can request changes first."}</p>
       {revising ? <form className="space-y-3" onSubmit={event => { event.preventDefault(); void submit("revise"); }}>
-        <label htmlFor={feedbackId} className="block font-medium">{plan ? "What should change in the plan?" : "What should change?"}</label>
-        <Textarea ref={feedbackInput} id={feedbackId} aria-label={plan ? "Plan feedback" : "Review feedback"} className="min-h-24" placeholder="Describe the changes you want…" value={feedback} disabled={sending} onChange={event => setFeedback(event.target.value)} />
+        <label htmlFor={feedbackId} className="block font-medium">{plan ? "Plan feedback" : "Review feedback"}</label>
+        <Textarea ref={feedbackInput} id={feedbackId} className="min-h-24" placeholder="Describe the changes you want…" value={feedback} disabled={sending} onChange={event => setFeedback(event.target.value)} />
         <div className="flex flex-wrap gap-2">
           <Button type="submit" className="min-h-11" disabled={sending || !feedback.trim()}>{sending ? "Sending…" : "Send feedback"}</Button>
           <Button type="button" variant="outline" className="min-h-11" disabled={sending} onClick={() => setRevising(false)}>Cancel</Button>

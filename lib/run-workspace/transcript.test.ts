@@ -47,19 +47,45 @@ it("renders checkpoint-only output as readable markdown, not JSON", () => {
   ]);
 });
 
-it("never flashes partial checkpoint markers or JSON while deltas arrive", () => {
-  const output = `Ready.\n\n${start}{"summary":"Ready."}${end}`;
-  for (let i = output.indexOf("<"); i <= output.length; i++) {
-    const events = Array.from(output.slice(0, i), (char, index) =>
-      event(String(index), "log", char, { kind: "assistant_delta" })
-    );
-    const parts = projectRunTranscript("r", "Fix", events, "streaming")[1]
-      .parts;
-    expect(parts).toHaveLength(1);
-    expect(parts[0]).toMatchObject({ type: "text", text: expect.any(String) });
-    expect((parts[0] as { text: string }).text.trim()).toBe("Ready.");
+it.each(["pending", "streaming"])(
+  "never flashes partial checkpoint markers or JSON while %s deltas arrive",
+  (status) => {
+    const output = `Ready.\n\n${start}{"summary":"Ready."}${end}`;
+    for (let i = output.indexOf("<"); i <= output.length; i++) {
+      const events = Array.from(output.slice(0, i), (char, index) =>
+        event(String(index), "log", char, { kind: "assistant_delta" })
+      );
+      const parts = projectRunTranscript("r", "Fix", events, status)[1].parts;
+      expect(parts).toHaveLength(1);
+      expect(parts[0]).toMatchObject({
+        type: "text",
+        text: expect.any(String),
+      });
+      expect((parts[0] as { text: string }).text.trim()).toBe("Ready.");
+    }
   }
-});
+);
+
+it.each(["failed", "cancelled"])(
+  "hides a truncated marker after a %s run without losing code indentation",
+  (status) => {
+    const prose = "    const planned = true;";
+    for (const suffix of [
+      `${start}{"summary":"Ready"}${end}`,
+      "<<<MOGPLEX_CHEC",
+    ]) {
+      const output = `${prose}\n\n${suffix}`;
+      expect(
+        projectRunTranscript(
+          "r",
+          "Fix",
+          [event("1", "log", output, { kind: "assistant_final" })],
+          status
+        )[1].parts
+      ).toEqual([{ type: "text", text: prose }]);
+    }
+  }
+);
 
 it("keeps ordinary assistant whitespace and trailing punctuation unchanged", () => {
   const output = "    indented example\n\nUse x <";
