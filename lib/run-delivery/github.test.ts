@@ -52,6 +52,8 @@ function fixture() {
     ],
     checksIncomplete: false,
     formalReviews: [],
+    currentOpinionatedReviews: [],
+    currentOpinionatedReviewsIncomplete: false,
     formalReviewsIncomplete: false,
     unresolvedReviewThreadCount: 0,
     unresolvedReviewThreads: [],
@@ -153,6 +155,7 @@ test("failing CI and actionable review state request repair, but closed PRs do n
       url: null,
     },
   ];
+  f.status.currentOpinionatedReviews = f.status.formalReviews;
   const review = await loadRunDeliveryGithub(input, f.deps);
   expect(deliveryNeedsRepair(review)).toBe(true);
   expect(review.repairRevision).not.toBe(failed.repairRevision);
@@ -333,6 +336,7 @@ test("outside reviews stay visible but cannot authorize repairs, including throu
   );
   f.status.checkRollupState = "success";
   f.status.checks[0].conclusion = "success";
+  f.status.currentOpinionatedReviews = f.status.formalReviews;
   f.status.formalReviews[0].author = "mogplex";
   expect(
     deliveryNeedsRepair(
@@ -361,4 +365,25 @@ test("status provider failures are not confused with a changed PR head", async (
       loadStatus: async () => ({ error: "private provider error" }),
     })
   ).rejects.toThrow("GitHub delivery status is temporarily unavailable");
+});
+
+test("superseded trusted change requests do not lend authority to an outside review", async () => {
+  const f = fixture();
+  f.status.reviewDecision = "changes_requested";
+  const old = {
+    author: "maintainer",
+    authorAssociation: "MEMBER",
+    state: "changes_requested",
+    body: "Old finding",
+    submittedAt: null,
+    url: null,
+  };
+  f.status.formalReviews = [old];
+  f.status.currentOpinionatedReviews = [
+    { ...old, state: "approved" },
+    { ...old, author: "outsider", authorAssociation: "NONE" },
+  ];
+  expect(deliveryNeedsRepair(await loadRunDeliveryGithub(input, f.deps))).toBe(
+    false
+  );
 });

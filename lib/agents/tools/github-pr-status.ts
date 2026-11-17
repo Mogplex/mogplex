@@ -78,6 +78,10 @@ type GithubPullRequestStatusBody = {
             nodes?: Array<GithubCheckNode | null>;
           };
         } | null;
+        currentReviews?: {
+          totalCount?: number;
+          nodes?: Array<GithubReview | null>;
+        };
         reviews?: {
           totalCount?: number;
           nodes?: Array<GithubReview | null>;
@@ -117,7 +121,11 @@ query MogplexPullRequestStatus($owner: String!, $repo: String!, $number: Int!) {
           }
         }
       }
-      reviews: latestOpinionatedReviews(first: 50) {
+      currentReviews: latestOpinionatedReviews(first: 50) {
+        totalCount
+        nodes { author { login __typename } authorAssociation state body submittedAt url }
+      }
+      reviews(last: 50) {
         totalCount
         nodes { author { login __typename } authorAssociation state body submittedAt url }
       }
@@ -308,6 +316,9 @@ function presentPullRequestChecks(pullRequest: GithubPullRequestStatus) {
 
 function presentPullRequestReviews(pullRequest: GithubPullRequestStatus) {
   const formalReviews = normalizeReviews(pullRequest.reviews?.nodes);
+  const currentOpinionatedReviews = normalizeReviews(
+    pullRequest.currentReviews?.nodes
+  );
   const unresolvedReviewThreads = normalizeUnresolvedThreads(
     pullRequest.reviewThreads?.nodes
   );
@@ -321,6 +332,13 @@ function presentPullRequestReviews(pullRequest: GithubPullRequestStatus) {
   );
   return {
     formalReviews,
+    currentOpinionatedReviews,
+    currentOpinionatedReviewsIncomplete:
+      !pullRequest.currentReviews ||
+      isConnectionIncomplete(
+        pullRequest.currentReviews.totalCount,
+        currentOpinionatedReviews.length
+      ),
     formalReviewsIncomplete: isConnectionIncomplete(
       pullRequest.reviews?.totalCount,
       formalReviews.length

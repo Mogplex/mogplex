@@ -188,6 +188,7 @@ test("github_pull_request_status returns the reviewed head, checks, and unresolv
           return Response.json({ token: "ghs-installation" });
         }
         assert.match(String(init?.body), /latestOpinionatedReviews/);
+        assert.match(String(init?.body), /reviews\(last: 50\)/);
         return Response.json({
           data: {
             repository: {
@@ -228,9 +229,19 @@ test("github_pull_request_status returns the reviewed head, checks, and unresolv
                     {
                       author: { login: "reviewer", __typename: "User" },
                       authorAssociation: "MEMBER",
-                      state: "CHANGES_REQUESTED",
+                      state: "COMMENTED",
                       submittedAt: "2026-08-29T12:00:00Z",
                       url: "https://github.com/acme/widgets/pull/84#review-1",
+                    },
+                  ],
+                },
+                currentReviews: {
+                  totalCount: 1,
+                  nodes: [
+                    {
+                      author: { login: "reviewer", __typename: "User" },
+                      authorAssociation: "MEMBER",
+                      state: "APPROVED",
                     },
                   ],
                 },
@@ -309,6 +320,15 @@ test("github_pull_request_status returns the reviewed head, checks, and unresolv
           (result.formalReviews as Array<{ authorAssociation: string }>)[0]
             .authorAssociation,
           "MEMBER"
+        );
+        assert.equal(
+          (result.formalReviews as Array<{ state: string }>)[0].state,
+          "commented"
+        );
+        assert.equal(
+          (result.currentOpinionatedReviews as Array<{ state: string }>)[0]
+            .state,
+          "approved"
         );
         assert.equal(result.unresolvedReviewThreadCount, 1);
         assert.deepEqual(result.unresolvedReviewThreads, [

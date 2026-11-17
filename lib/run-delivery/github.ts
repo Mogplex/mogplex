@@ -182,7 +182,8 @@ export async function loadRunDeliveryGithub(
     );
   const trustedThreads =
     status.unresolvedReviewThreads.filter(trustedReviewAuthor);
-  const trustedReviews = status.formalReviews.filter(trustedReviewAuthor);
+  const trustedReviews =
+    status.currentOpinionatedReviews.filter(trustedReviewAuthor);
   const actionableReviews = trustedReviews.filter(
     (review) => review.state === "changes_requested"
   );
@@ -203,7 +204,9 @@ export async function loadRunDeliveryGithub(
               : "unknown",
     unresolved: status.unresolvedReviewThreadCount,
     incomplete:
-      status.reviewThreadsIncomplete || status.formalReviewsIncomplete,
+      status.reviewThreadsIncomplete ||
+      status.formalReviewsIncomplete ||
+      status.currentOpinionatedReviewsIncomplete,
   };
   snapshot.repairRevision = createHash("sha256")
     .update(
