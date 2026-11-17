@@ -10,10 +10,8 @@
  * that can write files and run a command, so the same setup works for the
  * Vercel sandbox and any future backend.
  */
-import {
-  isCommitSigningEncryptionConfigured,
-  CommitSigningEncryptionError,
-} from "@/lib/commit-signing/secret-box";
+import { isCommitSigningEncryptionConfigured } from "@/lib/commit-signing/secret-box";
+import { signingFailureDiagnostic } from "@/lib/commit-signing/diagnostics";
 import {
   getCommitSigningKey,
   readCommitSigningPrivateKey,
@@ -173,7 +171,11 @@ export async function configureSandboxCommitSigning(input: {
       status: "failed",
       reason: `the signing setup command exited with code ${command.exitCode}`,
     };
-  } catch {
+  } catch (error) {
+    console.warn(
+      "[commit-signing] key_install failed",
+      signingFailureDiagnostic(error)
+    );
     return {
       status: "failed",
       reason: "the signing setup command failed",
@@ -212,15 +214,13 @@ export async function setupSandboxCommitSigning(input: {
     privateKey = await load(input.userId);
     if (!privateKey) return { status: "skipped", reason: "no signing key" };
   } catch (error) {
-    if (error instanceof CommitSigningEncryptionError) {
-      return { status: "failed", reason: error.message };
-    }
+    console.warn(
+      "[commit-signing] key_lookup failed",
+      signingFailureDiagnostic(error)
+    );
     return {
       status: "failed",
-      reason:
-        error instanceof Error
-          ? error.message
-          : "the signing key could not be loaded",
+      reason: "the signing key could not be loaded",
     };
   }
 
@@ -239,10 +239,18 @@ export async function scrubSandboxCommitSigning(input: {
       cmd: "sh",
       args: ["-lc", buildCommitSigningScrubScript()],
     });
-    if (result.exitCode !== 0) throw new Error("Signing key cleanup failed");
-  } catch {
+    if (result.exitCode !== 0) {
+      console.warn("[commit-signing] key_scrub failed", {
+        exitCode: result.exitCode,
+      });
+      throw new Error("Signing key cleanup failed");
+    }
+  } catch (error) {
     throw new Error(
-      "The signing key could not be removed; snapshot capture is blocked."
+      "The signing key could not be removed; snapshot capture is blocked.",
+      // Raw provider errors can contain the private key; retain only safe diagnostics.
+      // eslint-disable-next-line preserve-caught-error
+      { cause: signingFailureDiagnostic(error) }
     );
   }
 }

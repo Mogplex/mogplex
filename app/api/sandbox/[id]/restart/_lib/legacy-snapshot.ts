@@ -4,6 +4,7 @@ import {
 } from "@/lib/billing/sandbox-usage";
 import { isNotFoundError } from "@/lib/sandbox/sdk-adapter";
 import { scrubSandboxCommitSigning } from "@/lib/sandbox/commit-signing";
+import { signingFailureDiagnostic } from "@/lib/commit-signing/diagnostics";
 import type { SandboxRestartDeps } from "./types";
 
 type CaptureInput = {
@@ -51,9 +52,10 @@ async function restoreRunningSandboxSigning(
         status: result.status,
       });
     }
-  } catch {
+  } catch (error) {
     console.warn("[sandbox/restart] Could not restore commit signing", {
       sandboxRecordId: input.recordId,
+      diagnostic: signingFailureDiagnostic(error),
     });
   }
 }
@@ -122,8 +124,7 @@ export async function captureLegacyWorkspaceSnapshot(
     console.error("[sandbox/restart] Snapshot provider lookup failed", {
       sandboxRecordId: input.recordId,
       providerNotFound: isNotFoundError(error),
-      errorName: error instanceof Error ? error.name : typeof error,
-      errorMessage: error instanceof Error ? error.message : String(error),
+      diagnostic: signingFailureDiagnostic(error),
     });
     if (!isNotFoundError(error)) throw error;
     return null;
@@ -152,8 +153,9 @@ export async function captureLegacyWorkspaceSnapshot(
     console.error("[sandbox/restart] Snapshot capture failed", {
       sandboxRecordId: input.recordId,
       providerNotFound: isNotFoundError(error),
-      errorName: error instanceof Error ? error.name : typeof error,
-      errorMessage: error instanceof Error ? error.message : String(error),
+      diagnostic: signingFailureDiagnostic(
+        error instanceof Error ? (error.cause ?? error) : error
+      ),
     });
   }
   let storageError: LegacySnapshotError | null = null;
@@ -199,10 +201,13 @@ export async function captureLegacyWorkspaceSnapshot(
         observed,
         readSandboxProviderSession(observed).status
       );
-    } catch {
+    } catch (error) {
       console.warn(
         "[sandbox/restart] Signing recovery could not inspect the workspace",
-        { sandboxRecordId: input.recordId }
+        {
+          sandboxRecordId: input.recordId,
+          diagnostic: signingFailureDiagnostic(error),
+        }
       );
     }
   }

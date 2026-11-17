@@ -96,6 +96,61 @@ test("a failing setup command does not throw", async () => {
   assert.equal(result.status, "failed");
 });
 
+test("setup failures retain classified diagnostics without provider secrets", async () => {
+  const entries: unknown[][] = [];
+  const warn = console.warn;
+  console.warn = (...args) => entries.push(args);
+  try {
+    const result = await configureSandboxCommitSigning({
+      privateKey: "private-signing-material",
+      sandbox: {
+        writeFiles: async () => {
+          throw Object.assign(
+            new Error("private-signing-material authorization=secret-token"),
+            { status: 403 }
+          );
+        },
+        runCommand: async () => ({ exitCode: 0 }),
+      },
+    });
+    assert.equal(result.status, "failed");
+    const recorded = JSON.stringify(entries);
+    assert.match(recorded, /key_install/);
+    assert.match(recorded, /authorization/);
+    assert.match(recorded, /403/);
+    assert.doesNotMatch(
+      recorded + JSON.stringify(result),
+      /private-signing-material|secret-token/
+    );
+  } finally {
+    console.warn = warn;
+  }
+});
+
+test("snapshot cleanup errors retain only a safe diagnostic cause", async () => {
+  await assert.rejects(
+    scrubSandboxCommitSigning({
+      sandbox: {
+        writeFiles: async () => {},
+        runCommand: async () => {
+          throw Object.assign(new Error("private-command-detail"), {
+            code: "ETIMEDOUT",
+          });
+        },
+      },
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.deepEqual(error.cause, { category: "timeout", code: "ETIMEDOUT" });
+      assert.doesNotMatch(
+        JSON.stringify(error) + error.message,
+        /private-command-detail/
+      );
+      return true;
+    }
+  );
+});
+
 test("without a key the sandbox is left exactly as it is", async () => {
   process.env[COMMIT_SIGNING_ENCRYPTION_ENV] = "test-secret-value";
   const fake = fakeSandbox(0);

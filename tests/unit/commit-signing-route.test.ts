@@ -61,6 +61,40 @@ function fixture(overrides: Record<string, unknown> = {}) {
   return { handlers, saved, deleted, registrations, current: () => stored };
 }
 
+test("a failed GitHub token lookup asks for retry without losing the saved key", async () => {
+  const { handlers, registrations, current } = fixture({
+    getGithubToken: async () => {
+      throw Object.assign(new Error("private-token-store-detail"), {
+        code: "ECONNRESET",
+      });
+    },
+  });
+  await handlers.POST(
+    new Request("http://localhost/api", {
+      method: "POST",
+      body: JSON.stringify({ action: "generate" }),
+    })
+  );
+  const publicKey = current()?.publicKey;
+  const response = await handlers.POST(
+    new Request("http://localhost/api", {
+      method: "POST",
+      body: JSON.stringify({ action: "register" }),
+    })
+  );
+  const body = await response.json();
+  assert.equal(response.status, 503);
+  assert.equal(body.retryable, true);
+  assert.match(body.error, /try again/i);
+  assert.equal(body.manualRegistrationRequired, undefined);
+  assert.doesNotMatch(
+    JSON.stringify(body),
+    /private-token-store-detail|Connect your GitHub/
+  );
+  assert.equal(current()?.publicKey, publicKey);
+  assert.equal(registrations.length, 0);
+});
+
 test("the settings screen sees that signing is not set up yet", async () => {
   const { handlers } = fixture();
   const response = await handlers.GET();

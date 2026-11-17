@@ -18,6 +18,50 @@ test.beforeEach(async ({ page }) => {
   await enableScopedE2EAuth(page);
 });
 
+test("temporary registration failures keep the key visible and can be retried", async ({
+  page,
+}) => {
+  let attempts = 0;
+  const saved = {
+    ...empty,
+    configured: true,
+    publicKey: "ssh-ed25519 public-test-key",
+    fingerprint: "SHA256:public-test-fingerprint",
+  };
+  await page.route(endpoint, async (route) => {
+    if (route.request().method() === "POST") {
+      attempts += 1;
+      if (attempts === 1) {
+        await route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: JSON.stringify({
+            error:
+              "GitHub registration is temporarily unavailable. Your signing key is saved. Please try again.",
+            retryable: true,
+          }),
+        });
+        return;
+      }
+    }
+    await fulfillJson(route, { ...saved, registered: attempts > 1 });
+  });
+  await page.goto(scopedPath("settings/commit-signing"));
+  await page.getByRole("button", { name: "Register with GitHub" }).click();
+  await expect(
+    page.getByText("Please try again.", { exact: false })
+  ).toBeVisible();
+  await expect(page.getByText(saved.publicKey, { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("Connect your GitHub account", { exact: false })
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Register with GitHub" }).click();
+  await expect(
+    page.getByText("Signing key registered with GitHub", { exact: true })
+  ).toBeVisible();
+  expect(attempts).toBe(2);
+});
+
 test("unavailable signing never offers key creation", async ({ page }) => {
   await page.route(endpoint, (route) =>
     route.fulfill({
