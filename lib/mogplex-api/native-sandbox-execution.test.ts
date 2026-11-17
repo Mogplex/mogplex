@@ -110,3 +110,59 @@ it("does not start queued commands after cancellation", async () => {
   await cancelled;
   expect(attempts).toBe(1);
 });
+
+it("binds route lookup to the requested sandbox", async () => {
+  vi.stubEnv("INTERNAL_API_SECRET", "fixture-secret");
+  const lookedUp: string[] = [];
+  const execution = createNativeSandboxExecution("owner", null, {
+    getSandboxServiceCredentials: async () => buildSandboxServiceRouteAuth(),
+    loadOwnedSandboxRecord: async (id, owner) => {
+      expect(owner).toBe("user-123");
+      lookedUp.push(id);
+      return null;
+    },
+  });
+  expect(
+    (await execution.execute("saved-sandbox", {}, { command: "pwd" })).status
+  ).toBe(404);
+  expect(lookedUp).toEqual(["saved-sandbox"]);
+});
+
+it("keeps newly arriving commands behind the still-running tail", async () => {
+  vi.stubEnv("INTERNAL_API_SECRET", "fixture-secret");
+  const firstGate = Promise.withResolvers<void>();
+  const secondGate = Promise.withResolvers<void>();
+  const firstEntered = Promise.withResolvers<void>();
+  const secondEntered = Promise.withResolvers<void>();
+  const started: string[] = [];
+  const execution = createNativeSandboxExecution("owner", null, {
+    getSandboxServiceCredentials: async (request) => {
+      const { command } = await request!.json();
+      if (command !== "independent") started.push(command);
+      if (command === "first") {
+        firstEntered.resolve();
+        await firstGate.promise;
+      }
+      if (command === "second") {
+        secondEntered.resolve();
+        await secondGate.promise;
+      }
+      return null;
+    },
+  });
+  const first = execution.execute("sandbox", {}, { command: "first" });
+  await firstEntered.promise;
+  const second = execution.execute("sandbox", {}, { command: "second" });
+  firstGate.resolve();
+  await first;
+  await secondEntered.promise;
+  const third = execution.execute("sandbox", {}, { command: "third" });
+  try {
+    await execution.execute("other", {}, { command: "independent" });
+    expect(started).toEqual(["first", "second"]);
+  } finally {
+    secondGate.resolve();
+  }
+  await Promise.all([second, third]);
+  expect(started).toEqual(["first", "second", "third"]);
+});

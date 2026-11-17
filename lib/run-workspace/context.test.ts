@@ -9,7 +9,8 @@ function fixture(
     guidance?: boolean;
     sandbox?: boolean;
     harness?: string;
-    checkpoint?: boolean;
+    checkpoint?: Record<string, unknown>;
+    status?: string;
   } = {}
 ) {
   const calls: URL[] = [];
@@ -33,7 +34,9 @@ function fixture(
             repo_id: "repo",
             ai_call_id: "call",
             harness: options.harness ?? "mogplex",
-            status: options.checkpoint ? "awaiting_input" : "streaming",
+            status:
+              options.status ??
+              (options.checkpoint ? "awaiting_input" : "streaming"),
             prompt: "Fix mobile",
             working_branch: "fix/mobile",
             root_directory: null,
@@ -48,12 +51,7 @@ function fixture(
                     messageTs: "1.2",
                   },
                 }
-              : options.checkpoint
-                ? {
-                    checkpoint_kind: "plan",
-                    checkpoint_summary: "Add signing support.",
-                  }
-                : {},
+              : (options.checkpoint ?? {}),
           });
         if (table === "repos")
           return Response.json({
@@ -154,9 +152,50 @@ it("fails closed when any required lookup fails", async () => {
 });
 
 it("returns the saved plan checkpoint beside the owned run", async () => {
-  const { client } = fixture({ checkpoint: true });
+  const { client } = fixture({
+    checkpoint: {
+      checkpoint_kind: "plan",
+      checkpoint_summary: "Add signing support.",
+    },
+  });
   expect(await loadRunWorkspace("owner", "run", client)).toMatchObject({
     status: "awaiting_input",
     checkpoint: { kind: "plan", summary: "Add signing support." },
   });
 });
+
+it.each([
+  { checkpoint_kind: "review", checkpoint_summary: "Review the changes." },
+  {},
+  { checkpoint_kind: "review", checkpoint_summary: { invalid: true } },
+])(
+  "keeps review and legacy checkpoint metadata safe for the client: %j",
+  async (checkpoint) => {
+    const { client } = fixture({ checkpoint });
+    expect(
+      (await loadRunWorkspace("owner", "run", client))?.checkpoint
+    ).toEqual({
+      kind: "review",
+      summary:
+        typeof checkpoint.checkpoint_summary === "string"
+          ? checkpoint.checkpoint_summary
+          : "",
+    });
+  }
+);
+
+it.each(["streaming", "success"])(
+  "does not offer a saved checkpoint after the run becomes %s",
+  async (status) => {
+    const { client } = fixture({
+      status,
+      checkpoint: {
+        checkpoint_kind: "plan",
+        checkpoint_summary: "Previously approved plan.",
+      },
+    });
+    expect(
+      (await loadRunWorkspace("owner", "run", client))?.checkpoint
+    ).toBeNull();
+  }
+);

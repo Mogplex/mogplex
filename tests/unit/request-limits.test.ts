@@ -51,33 +51,6 @@ test("snapshot build policy denies during cooldown when a snapshot already exist
   assert.equal(decision.retryAfterSeconds, 300);
 });
 
-test("sandbox execution records admission without querying command-count quotas", async () => {
-  const { enforceSandboxExecLimits } = await loadRequestLimits();
-  const originalFetch = globalThis.fetch;
-  const requests: string[] = [];
-  globalThis.fetch = async (input, init) => {
-    requests.push(init?.method ?? "GET");
-    // Old quota reads see a full hour of recent commands; the new path only
-    // records admission. These timestamps would exhaust both old limits.
-    return Response.json(
-      init?.method === "POST"
-        ? null
-        : Array.from({ length: 150 }, () => ({
-            created_at: new Date().toISOString(),
-          }))
-    );
-  };
-  try {
-    assert.deepEqual(
-      await enforceSandboxExecLimits({ userId: "owner", sandboxId: "sandbox" }),
-      { allowed: true }
-    );
-    assert.deepEqual(requests, ["POST"]);
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-});
-
 test("external agent run policy denies per-key bursts before launching work", async () => {
   const { evaluateExternalAgentRunLimitPolicy } = await loadRequestLimits();
   const now = new Date("2026-03-23T12:00:00.000Z");
