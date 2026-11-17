@@ -209,6 +209,9 @@ test("implementation approval explains the PR action and waits for confirmed res
   await page.screenshot({
     path: test.info().outputPath("implementation-review.png"),
   });
+  await expect(
+    conversation.getByRole("button", { name: "Approve & open PR", exact: true })
+  ).toBeInViewport();
   await conversation
     .getByRole("button", { name: "Approve & open PR", exact: true })
     .click();

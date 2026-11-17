@@ -1,5 +1,8 @@
 import { expect, test } from "vitest";
-import { checkpointSummaryLead } from "./checkpoint-summary";
+import {
+  checkpointSummaryLead,
+  checkpointSummaryDetails,
+} from "./checkpoint-summary";
 
 test("keeps the human summary visible before longer review sections", () => {
   expect(
@@ -18,4 +21,13 @@ test("legacy one-paragraph plans have a bounded lead without losing Unicode char
     "A short plan with two lines"
   );
   expect(checkpointSummaryLead("  ")).toBe("");
+});
+
+test("expanded details preserve long legacy leads and avoid duplicating a short structured lead", () => {
+  expect(checkpointSummaryDetails("Ready.\n\n## Changes\nAdd signing.")).toBe(
+    "## Changes\nAdd signing."
+  );
+  const long = "x".repeat(300) + "\n\nMore detail";
+  expect(checkpointSummaryDetails(long)).toBe(long);
+  expect(checkpointSummaryDetails("Single paragraph")).toBe("Single paragraph");
 });
