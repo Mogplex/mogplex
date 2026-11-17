@@ -42,7 +42,7 @@ async function restoreRunningSandboxSigning(
   if (status !== "running") return;
   try {
     const result = await input.deps.setupSandboxCommitSigning({
-      sandbox,
+      sandbox: sandbox.currentSession(),
       userId: input.userId,
     });
     if (result.status === "failed" || result.status === "unsupported") {
@@ -133,11 +133,17 @@ export async function captureLegacyWorkspaceSnapshot(
   let snapshotId: string | null = null;
   let snapshotCompletedAt: Date | null = null;
   try {
+    // Sandbox methods auto-resume stopped VMs. Bind all secret and snapshot
+    // operations to this existing session so a concurrent stop stays stopped.
+    const session = sandbox.currentSession();
+    if (String(session.status).toLowerCase() !== "running") {
+      throw new Error("Only a running workspace can be captured safely.");
+    }
     // Keep the private signing key out of stored snapshot state. The
     // restarted sandbox gets it back from the encrypted store.
-    await scrubSandboxCommitSigning({ sandbox });
+    await scrubSandboxCommitSigning({ sandbox: session });
     // The provider uses 0 for no expiry; saved work must never age out.
-    const snapshot = await sandbox.snapshot({ expiration: 0 });
+    const snapshot = await session.snapshot({ expiration: 0 });
     snapshotId = snapshot.snapshotId;
     snapshotCompletedAt = new Date();
   } catch (error) {
