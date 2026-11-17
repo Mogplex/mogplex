@@ -30,23 +30,23 @@ export function signingVerificationResult(exitCode: number) {
     return {
       status: "verified",
       message:
-        "This workspace signed and verified a test commit with your saved key. Your repository was not changed.",
+        "This sandbox signed and verified a test commit with your saved key. Your repository was not changed.",
     } as const;
   if (exitCode === 10)
     return {
       status: "inactive",
       message:
-        "This workspace is not configured to use your saved signing key. Relaunch or restart it to apply the key, then verify again.",
+        "This sandbox is not configured to use your saved signing key. Relaunch or restart it to apply the key, then verify again.",
     } as const;
   if (exitCode === 11)
     return {
       status: "different_key",
       message:
-        "This workspace has a different signing key. Relaunch or restart it to apply your saved key, then verify again.",
+        "This sandbox has a different signing key. Relaunch or restart it to apply your saved key, then verify again.",
     } as const;
   return {
     status: "failed",
     message:
-      "The workspace could not sign and verify a test commit. Check its signing setup and try again.",
+      "The sandbox could not sign and verify a test commit. Check its signing setup and try again.",
   } as const;
 }

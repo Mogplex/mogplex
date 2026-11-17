@@ -24,6 +24,7 @@ for (const [status, applied] of [
             id: "sandbox-stale",
             sandbox_id: "vm_stale",
             repo_id: "repo-1",
+            repos: { full_name: "acme/widgets" },
             user_id: "user-123",
             status,
             preview_url: null,
@@ -48,6 +49,7 @@ for (const [status, applied] of [
             id: "sandbox-live",
             sandbox_id: "vm_live",
             repo_id: "repo-2",
+            repos: [{ full_name: "acme/dashboard" }],
             user_id: "user-123",
             status: "running",
             preview_url: "https://preview.example.com",
@@ -92,6 +94,10 @@ for (const [status, applied] of [
       payload.sandboxes[1].billing_summary.label,
       "Your Vercel project"
     );
+    assert.deepEqual(payload.sandboxes[0].repo, { full_name: "acme/widgets" });
+    assert.deepEqual(payload.sandboxes[1].repo, {
+      full_name: "acme/dashboard",
+    });
     assert.equal("status" in payload.sandboxes[0], false);
     assert.equal("preview_url" in payload.sandboxes[1], false);
   });
