@@ -1,7 +1,24 @@
 import { resolveEffectiveSandboxTimeoutMs } from "@/lib/repo-settings";
 import { toSandboxClientRecord } from "@/lib/sandbox/summary";
 import type { SandboxRecord, SandboxRecordRow } from "@/lib/types";
-import type { ActiveSandboxRecord, CliSandboxRecord } from "./types";
+import type {
+  ActiveSandboxRecord,
+  CliSandboxRecord,
+  SandboxListRecord,
+} from "./types";
+
+export function toSandboxListRecord(
+  record: ActiveSandboxRecord
+): SandboxListRecord {
+  const repo = Array.isArray(record.repos) ? record.repos[0] : record.repos;
+  return {
+    ...toSandboxClientRecord({
+      ...record,
+      effective_timeout_ms: resolveEffectiveTimeoutFromActiveRecord(record),
+    }),
+    repo: repo ? { full_name: repo.full_name ?? null } : null,
+  };
+}
 
 export function toStreamSandboxRecord(
   record: SandboxRecordRow | SandboxRecord

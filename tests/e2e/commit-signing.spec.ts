@@ -1,6 +1,8 @@
 import { test, expect, fulfillJson } from "./helpers/run-checks-fixtures";
 import { enableScopedE2EAuth, scopedPath } from "./helpers/auth";
 
+import { toSandboxListRecord } from "../../lib/sandbox/collection/_lib/response-shaping";
+
 const endpoint = "**/api/settings/commit-signing";
 const empty = {
   available: true,
@@ -241,7 +243,7 @@ test("a user creates a key, receives manual-registration guidance, and removes i
   ).toHaveCount(0);
 });
 
-test("saved keys expose copy, honest workspace verification, and cancellable removal", async ({
+test("saved keys expose copy, honest sandbox verification, and cancellable removal", async ({
   page,
   context,
 }) => {
@@ -259,20 +261,46 @@ test("saved keys expose copy, honest workspace verification, and cancellable rem
     if (route.request().method() === "DELETE") deleted = true;
     await fulfillJson(route, key);
   });
+  const sandbox = toSandboxListRecord({
+    id: "00000000-0000-4000-8000-000000000777",
+    sandbox_id: "mogplex-148aff-4d54f7-raw-runtime-root",
+    repo_id: "repo-1",
+    user_id: "user-1",
+    base_branch: "main",
+    working_branch: "feature/signing",
+    status: "running",
+    preview_url: null,
+    runtime: "node22",
+    health_status: "running",
+    created_at: "2026-11-17T17:00:00Z",
+    last_active_at: "2026-11-17T17:00:00Z",
+    repos: { full_name: "acme/widgets" },
+  });
   await page.route("**/api/sandbox", (route) =>
     fulfillJson(route, {
       sandboxes: [
+        sandbox,
+        { ...sandbox, id: "11111111-0000-4000-8000-000000000777" },
         {
-          id: "00000000-0000-4000-8000-000000000777",
-          sandbox_id: "workspace",
-          working_branch: "feature/signing",
-          repo: { full_name: "acme/widgets" },
+          ...sandbox,
+          id: "22222222-0000-4000-8000-000000000777",
+          repo: null,
+          working_branch: "",
+          runtime_summary: { ...sandbox.runtime_summary, status: "paused" },
+        },
+        {
+          ...sandbox,
+          id: "33333333-0000-4000-8000-000000000777",
+          working_branch: "mogplex/task-" + "very-long-branch-name-".repeat(8),
         },
       ],
     })
   );
   let checks = 0;
   await page.route("**/api/sandbox/*/commit-signing", async (route) => {
+    expect(route.request().url()).toContain(
+      `/api/sandbox/${sandbox.id}/commit-signing`
+    );
     checks++;
     await fulfillJson(
       route,
@@ -280,12 +308,12 @@ test("saved keys expose copy, honest workspace verification, and cancellable rem
         ? {
             status: "paused",
             message:
-              "Resume this workspace before verifying signing. Verification does not start it automatically.",
+              "Resume this sandbox before verifying signing. Verification does not start it automatically.",
           }
         : {
             status: "verified",
             message:
-              "This workspace signed and verified a test commit with your saved key. Your repository was not changed.",
+              "This sandbox signed and verified a test commit with your saved key. Your repository was not changed.",
             fingerprint: key.fingerprint,
             checkedAt: "2026-11-17T17:00:00Z",
           }
@@ -296,7 +324,7 @@ test("saved keys expose copy, honest workspace verification, and cancellable rem
     page.getByText("Not registered with GitHub", { exact: true })
   ).toBeVisible();
   await expect(
-    page.getByText("Not verified in a workspace", { exact: true })
+    page.getByText("Not verified in a sandbox", { exact: true })
   ).toBeVisible();
   await page.getByRole("button", { name: "Copy public key" }).click();
   await expect(
@@ -316,19 +344,35 @@ test("saved keys expose copy, honest workspace verification, and cancellable rem
   await page
     .getByRole("button", { name: "Verify signing", exact: true })
     .click();
+  await expect(
+    page.getByLabel("Sandbox to check").locator("option")
+  ).toHaveText([
+    "Choose a sandbox",
+    "acme/widgets · feature/signing · Running · 00000000",
+    "acme/widgets · feature/signing · Running · 11111111",
+    "Repository unavailable · default branch · Paused",
+    "acme/widgets · mogplex/task-" +
+      "very-long-branch-name-".repeat(8) +
+      " · Running",
+  ]);
   await page
-    .getByLabel("Workspace to check")
+    .getByLabel("Sandbox to check")
     .selectOption("00000000-0000-4000-8000-000000000777");
-  await page.getByRole("button", { name: "Verify selected workspace" }).click();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth
+    )
+  ).toBe(true);
+  await page.getByRole("button", { name: "Verify selected sandbox" }).click();
   await expect(
-    page.getByText("Resume this workspace before verifying", { exact: false })
+    page.getByText("Resume this sandbox before verifying", { exact: false })
   ).toBeVisible();
   await expect(
-    page.getByText("Not verified in a workspace", { exact: true })
+    page.getByText("Not verified in a sandbox", { exact: true })
   ).toBeVisible();
-  await page.getByRole("button", { name: "Verify selected workspace" }).click();
+  await page.getByRole("button", { name: "Verify selected sandbox" }).click();
   await expect(
-    page.getByText("Verified in the selected workspace", { exact: true })
+    page.getByText("Verified in the selected sandbox", { exact: true })
   ).toBeVisible();
   await expect(
     page.getByText("Not registered with GitHub", { exact: true })

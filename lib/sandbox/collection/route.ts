@@ -2,13 +2,12 @@ import { NextResponse } from "next/server";
 import { sandboxAccessDeniedResponse } from "@/lib/sandbox/access-denied-response";
 import { isSandboxAccessDeniedError } from "@/lib/sandbox/get-user-credentials";
 import { readActiveTeamIdHeader } from "@/lib/team-capabilities";
-import { toSandboxClientRecord } from "@/lib/sandbox/summary";
 import { CLI_VISIBLE_STATUSES } from "./_lib/constants";
 import { toWorkspace, type CliSandboxRecord } from "./_lib/types";
 import {
   toCliSandboxRecord,
   readSandboxFormat,
-  resolveEffectiveTimeoutFromActiveRecord,
+  toSandboxListRecord,
 } from "./_lib/response-shaping";
 import {
   defaultSandboxPostDeps,
@@ -202,13 +201,7 @@ export function createSandboxGetHandler(
     }
 
     return NextResponse.json({
-      sandboxes: sandboxes.map((sandbox) =>
-        toSandboxClientRecord({
-          ...sandbox,
-          effective_timeout_ms:
-            resolveEffectiveTimeoutFromActiveRecord(sandbox),
-        })
-      ),
+      sandboxes: sandboxes.map(toSandboxListRecord),
     });
   };
 }

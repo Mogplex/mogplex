@@ -1,7 +1,7 @@
 import type { SandboxSetupIssue } from "@/lib/sandbox/events";
 import type { SandboxRuntime } from "@/lib/sandbox/runtimes";
 import type { ResolvedSandboxLaunchRequest } from "@/lib/sandbox/launch-config";
-import type { SandboxRecordRow, StopReason } from "@/lib/types";
+import type { SandboxRecord, SandboxRecordRow, StopReason } from "@/lib/types";
 import type { SandboxSource } from "@/lib/sandbox/source-selection";
 import type {
   resolveBillingLinkedProjectOwner,
@@ -12,6 +12,10 @@ import type { SandboxServiceCredentials } from "@/lib/sandbox/get-user-credentia
 import type { startDeferredRepoSnapshotBuild } from "@/lib/workflows/repo-snapshot-workflow";
 import type { createSandboxForRepo } from "@/lib/sandbox/client";
 import type { resolveRepoSandboxEnv } from "@/lib/vercel/env-vars";
+
+export type SandboxListRecord = SandboxRecord & {
+  repo: { full_name: string | null } | null;
+};
 
 export type DeferredSnapshotWarmupQueueResult = Awaited<
   ReturnType<typeof startDeferredRepoSnapshotBuild>

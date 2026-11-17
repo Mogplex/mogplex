@@ -53,7 +53,7 @@ export function createSigningVerificationHandler(
   ) {
     const { id } = await params;
     if (!z.string().uuid().safeParse(id).success)
-      return Response.json({ error: "Invalid workspace" }, { status: 400 });
+      return Response.json({ error: "Invalid sandbox" }, { status: 400 });
     try {
       const context = await deps.loadContext(request, id, {
         select,
@@ -67,7 +67,7 @@ export function createSigningVerificationHandler(
           return Response.json(
             {
               error:
-                "Workspace signing verification is temporarily unavailable. Try again.",
+                "Sandbox signing verification is temporarily unavailable. Try again.",
             },
             { status: 503 }
           );
@@ -77,7 +77,7 @@ export function createSigningVerificationHandler(
       const key = await deps.loadKey(context.auth.userId);
       if (!key)
         return Response.json(
-          { error: "Save a signing key before checking a workspace." },
+          { error: "Save a signing key before checking a sandbox." },
           { status: 409 }
         );
       // Pin the current session. Neither the lookup nor command may wake a paused VM.
@@ -87,8 +87,8 @@ export function createSigningVerificationHandler(
           status: session?.status === "stopped" ? "paused" : "not_running",
           message:
             session?.status === "stopped"
-              ? "Resume this workspace before verifying signing. Verification does not start it automatically."
-              : "This workspace is not running yet. Wait for its current operation to finish, then verify again.",
+              ? "Resume this sandbox before verifying signing. Verification does not start it automatically."
+              : "This sandbox is not running yet. Wait for its current operation to finish, then verify again.",
         });
       const command = await session.runCommand({
         cmd: "sh",
@@ -122,7 +122,7 @@ export function createSigningVerificationHandler(
       return Response.json(
         {
           error:
-            "Workspace signing verification is temporarily unavailable. Try again.",
+            "Sandbox signing verification is temporarily unavailable. Try again.",
         },
         { status: 503 }
       );
