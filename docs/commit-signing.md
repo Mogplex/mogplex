@@ -128,7 +128,7 @@ Not signed, by design:
 
 ## Failure behaviour
 
-Signing never breaks a commit.
+Setup errors are reported without stopping workspace launch. Once signing is enabled, Git can still fail if its key or configuration is changed.
 
 - **No key configured:** the sandbox is untouched. Behaviour is byte-for-byte
   what it was before the feature existed — unsigned commits, no prompts, no
@@ -139,8 +139,10 @@ Signing never breaks a commit.
 - **Sandbox git too old, or no `ssh-keygen`:** the sandbox stays unsigned and
   the platform logs a warning. Git below 2.34 does not understand
   `gpg.format=ssh`.
-- **A command fails for any other reason:** the error is caught and the
-  sandbox stays unsigned.
+- **A command fails:** the setup shell removes staging material on exit and
+  clears failed managed signing configuration. Transport failures are reported
+  without including provider error text; a disconnected sandbox may retain
+  files until cleanup or destruction.
 
 The rule everywhere: a half-configured sandbox is worse than an unsigned
 sandbox, because `commit.gpgsign = true` with a broken key makes *every*
@@ -160,13 +162,16 @@ commit fail.
   a failing one — and the user can recover it by restarting the workspace.
 - **Snapshots.** The private key is removed from a sandbox before the sandbox
   is captured into a workspace snapshot
-  (`app/api/sandbox/[id]/restart/_lib/legacy-snapshot.ts`), so stored snapshot
-  state never contains key material. The restarted sandbox gets the key back
-  from the encrypted store.
-- **Persistent sandboxes** keep the key on disk for the life of the sandbox.
-  That is required for signing to work and the sandbox belongs to one user.
-- **Rotation.** Revoking the key in Settings deletes the stored key. The next
-  sandbox launch writes no key and commits go back to being unsigned. Keys
+  (`app/api/sandbox/[id]/restart/_lib/legacy-snapshot.ts`). A cleanup failure
+  blocks that capture. The restarted sandbox gets the key back from the
+  encrypted store.
+- **Persistent sandboxes** keep the key on disk, including provider-managed
+  pause snapshots. These are private workspace state, not shared baselines.
+  Shared repository baselines are built in a separate ephemeral sandbox
+  (`lib/repo-snapshot-build.ts`) that never installs a user signing key.
+- **Rotation.** Removing the key in Settings deletes only the encrypted stored
+  key. Fresh workspaces no longer install it. Existing or resumed workspaces
+  can retain their old copy; remove its trust on GitHub separately. Keys
   already pushed stay signed, and their signature stays verifiable for the
   public key that was registered with GitHub — revoke that key on GitHub too
   if the old key must stop being trusted.

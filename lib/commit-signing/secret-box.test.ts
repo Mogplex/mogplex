@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import {
   COMMIT_SIGNING_ENCRYPTION_ENV,
   CommitSigningEncryptionError,
   decryptCommitSigningSecret,
   encryptCommitSigningSecret,
   isCommitSigningEncryptionConfigured,
-} from "../../lib/commit-signing/secret-box";
+} from "./secret-box";
 
 const PRIVATE_KEY = [
   "-----BEGIN OPENSSH PRIVATE KEY-----",

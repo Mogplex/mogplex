@@ -9,7 +9,13 @@
  * Only unencrypted `ssh-ed25519` keys are handled: an encrypted key would
  * need a passphrase at every commit, which no sandbox can answer.
  */
-import { createHash, generateKeyPairSync, randomBytes } from "node:crypto";
+import {
+  createHash,
+  createPrivateKey,
+  createPublicKey,
+  generateKeyPairSync,
+  randomBytes,
+} from "node:crypto";
 
 const OPENSSH_KEY_TYPE = "ssh-ed25519";
 const OPENSSH_MAGIC = "openssh-key-v1";
@@ -247,6 +253,31 @@ export function parseOpenSshPrivateKey(
     throw new CommitSigningKeyError("The SSH key is not a valid Ed25519 key.");
   }
   const comment = readText(sectionReader);
+  // Derive the public key from the seed instead of trusting the repeated
+  // public bytes in an imported OpenSSH container.
+  const seedKey = createPrivateKey({
+    key: Buffer.concat([
+      Buffer.from("302e020100300506032b657004220420", "hex"),
+      rawPrivateKey.subarray(0, ED25519_KEY_SIZE),
+    ]),
+    format: "der",
+    type: "pkcs8",
+  });
+  const derived = createPublicKey(seedKey).export({ format: "jwk" });
+  if (
+    !derived.x ||
+    !decodeBase64Url(derived.x).equals(rawPublicKey) ||
+    !rawPrivateKey.subarray(ED25519_KEY_SIZE).equals(rawPublicKey) ||
+    !publicBlob.equals(buildPublicKeyBlob(rawPublicKey)) ||
+    reader.offset !== body.length ||
+    privateSection.length % 8 !== 0
+  ) {
+    throw new CommitSigningKeyError("The SSH key failed its integrity check.");
+  }
+  const padding = privateSection.subarray(sectionReader.offset);
+  if (padding.length > 7 || padding.some((byte, index) => byte !== index + 1)) {
+    throw new CommitSigningKeyError("The SSH key has invalid padding.");
+  }
 
   return {
     publicKey: formatPublicKeyLine(rawPublicKey, comment),
@@ -256,6 +287,7 @@ export function parseOpenSshPrivateKey(
 
 /** Parse an armored OpenSSH private key and reject anything unusable. */
 export function readImportablePrivateKey(armored: string): {
+  privateKey: string;
   publicKey: string;
   fingerprint: string;
 } {
@@ -265,5 +297,11 @@ export function readImportablePrivateKey(armored: string): {
       "That does not look like an OpenSSH private key (expected -----BEGIN OPENSSH PRIVATE KEY-----)."
     );
   }
-  return parsed;
+  const block = armored
+    .slice(
+      armored.indexOf(PRIVATE_KEY_BEGIN) + PRIVATE_KEY_BEGIN.length,
+      armored.indexOf(PRIVATE_KEY_END)
+    )
+    .replace(/\s+/g, "");
+  return { ...parsed, privateKey: wrapArmor(Buffer.from(block, "base64")) };
 }

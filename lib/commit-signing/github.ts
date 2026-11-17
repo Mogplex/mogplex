@@ -46,11 +46,6 @@ function readKeyId(body: unknown): string | null {
   return typeof id === "number" || typeof id === "string" ? String(id) : null;
 }
 
-function mentionsAlreadyInUse(body: unknown): boolean {
-  const text = JSON.stringify(body ?? "").toLowerCase();
-  return text.includes("already in use") || text.includes("already exists");
-}
-
 function readMessage(body: unknown, fallback: string): string {
   if (body && typeof body === "object") {
     const message = (body as { message?: unknown }).message;
@@ -62,6 +57,7 @@ function readMessage(body: unknown, fallback: string): string {
 export type GithubSshSigningKey = {
   id: string | null;
   title: string | null;
+  publicKey: string | null;
 };
 
 /** The signing keys already registered on the signed-in GitHub account. */
@@ -71,24 +67,38 @@ export async function listGithubSshSigningKeys(
 ): Promise<GithubSshSigningKey[]> {
   const request = deps?.request ?? defaultDeps.request;
   try {
-    const response = await request(SIGNING_KEYS_URL, {
-      headers: requestHeaders(token),
-      cache: "no-store",
-      signal: AbortSignal.timeout(15_000),
-    });
-    if (!response.ok) return [];
-    const body: unknown = await response.json().catch(() => null);
-    if (!Array.isArray(body)) return [];
-    return body.flatMap((entry) => {
-      if (!entry || typeof entry !== "object") return [];
-      const record = entry as { id?: unknown; title?: unknown };
-      return [
+    const keys: GithubSshSigningKey[] = [];
+    for (let page = 1; ; page += 1) {
+      const response = await request(
+        `${SIGNING_KEYS_URL}?per_page=100&page=${page}`,
         {
-          id: readKeyId(record),
-          title: typeof record.title === "string" ? record.title : null,
-        },
-      ];
-    });
+          headers: requestHeaders(token),
+          cache: "no-store",
+          signal: AbortSignal.timeout(15_000),
+        }
+      );
+      if (!response.ok) return [];
+      const body: unknown = await response.json().catch(() => null);
+      if (!Array.isArray(body)) return [];
+      keys.push(
+        ...body.flatMap((entry) => {
+          if (!entry || typeof entry !== "object") return [];
+          const record = entry as {
+            id?: unknown;
+            title?: unknown;
+            key?: unknown;
+          };
+          return [
+            {
+              id: readKeyId(record),
+              title: typeof record.title === "string" ? record.title : null,
+              publicKey: typeof record.key === "string" ? record.key : null,
+            },
+          ];
+        })
+      );
+      if (body.length < 100) return keys;
+    }
   } catch {
     return [];
   }
@@ -127,8 +137,20 @@ export async function registerGithubSshSigningKey(
   if (response.status === 201) {
     return { status: "registered", keyId: readKeyId(body) };
   }
-  if (response.status === 422 || mentionsAlreadyInUse(body)) {
-    return { status: "already_registered", keyId: null };
+  if (response.status === 422) {
+    // A 422 can also reject an invalid key. Only claim registration when
+    // the exact public key is present on this authenticated account.
+    const normalized = input.publicKey
+      .trim()
+      .split(/\s+/)
+      .slice(0, 2)
+      .join(" ");
+    const keys = await listGithubSshSigningKeys(input.token, { request });
+    const existing = keys.find(
+      (key) =>
+        key.publicKey?.trim().split(/\s+/).slice(0, 2).join(" ") === normalized
+    );
+    if (existing) return { status: "already_registered", keyId: existing.id };
   }
   if (response.status === 403) {
     // The token is missing write:ssh_signing_key, or SSO blocked the call.

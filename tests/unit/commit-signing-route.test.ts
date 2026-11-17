@@ -229,3 +229,43 @@ test("an unknown action is rejected", async () => {
 
   assert.equal(response.status, 400);
 });
+
+test("malformed field types are rejected before saving or registering a key", async () => {
+  for (const body of [
+    { action: "generate", title: 17 },
+    { action: "import", privateKey: {} },
+    { action: "generate", registerWithGithub: "false" },
+  ]) {
+    const { handlers, saved, registrations } = fixture();
+    const response = await handlers.POST(
+      new Request("http://localhost/api", {
+        method: "POST",
+        body: JSON.stringify(body),
+      })
+    );
+    assert.equal(response.status, 400);
+    assert.equal(saved.length, 0);
+    assert.equal(registrations.length, 0);
+  }
+});
+
+test("all signing settings operations require authentication", async () => {
+  const { handlers, saved, deleted } = fixture({
+    requireUserId: async () => new Response("Unauthorized", { status: 401 }),
+  });
+  assert.equal((await handlers.GET()).status, 401);
+  assert.equal(
+    (
+      await handlers.POST(
+        new Request("http://localhost/api", {
+          method: "POST",
+          body: JSON.stringify({ action: "generate" }),
+        })
+      )
+    ).status,
+    401
+  );
+  assert.equal((await handlers.DELETE()).status, 401);
+  assert.equal(saved.length, 0);
+  assert.equal(deleted.length, 0);
+});

@@ -3,12 +3,13 @@
  *
  * GET    -> the current signing key status (never the private key)
  * POST   -> generate, import, or register a signing key
- * DELETE -> revoke the signing key
+ * DELETE -> remove the stored signing key
  *
- * The private key never leaves the server: it is encrypted before it is
+ * The private key is never returned by this API: it is encrypted before it is
  * stored and only the public key and fingerprint are returned.
  */
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { parseJsonBody } from "@/lib/api/parse-json-body";
 import { requireUserId } from "@/lib/auth";
 import { getOAuthToken } from "@/lib/oauth-tokens";
@@ -28,14 +29,12 @@ import { registerGithubSshSigningKey } from "@/lib/commit-signing/github";
 
 const DEFAULT_KEY_TITLE = "Mogplex commit signing";
 
-type CommitSigningAction = "generate" | "import" | "register";
-
-type CommitSigningPostBody = {
-  action?: CommitSigningAction;
-  privateKey?: string;
-  title?: string;
-  registerWithGithub?: boolean;
-};
+const postBodySchema = z.object({
+  action: z.enum(["generate", "import", "register"]),
+  privateKey: z.string().optional(),
+  title: z.string().optional(),
+  registerWithGithub: z.boolean().optional(),
+});
 
 export type CommitSigningRouteDeps = {
   requireUserId: typeof requireUserId;
@@ -188,7 +187,14 @@ export function createCommitSigningRouteHandlers(
     }
     const parsed = await parseJsonBody(request);
     if (!parsed.ok) return parsed.response;
-    const body = parsed.body as CommitSigningPostBody;
+    const validated = postBodySchema.safeParse(parsed.body);
+    if (!validated.success) {
+      return NextResponse.json(
+        { error: "Invalid commit signing request." },
+        { status: 400 }
+      );
+    }
+    const body = validated.data;
     const action = body.action;
 
     if (action === "generate") {
@@ -216,7 +222,7 @@ export function createCommitSigningRouteHandlers(
           { status: 400 }
         );
       }
-      let parsedKey: { publicKey: string; fingerprint: string };
+      let parsedKey: ReturnType<typeof readImportablePrivateKey>;
       try {
         parsedKey = readImportablePrivateKey(armored);
       } catch (error) {
@@ -233,7 +239,7 @@ export function createCommitSigningRouteHandlers(
       const title = body.title?.trim() || DEFAULT_KEY_TITLE;
       await deps.saveKey({
         userId,
-        privateKey: `${armored}\n`,
+        privateKey: parsedKey.privateKey,
         publicKey: parsedKey.publicKey,
         fingerprint: parsedKey.fingerprint,
         title,

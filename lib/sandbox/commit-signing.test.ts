@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
-import { COMMIT_SIGNING_ENCRYPTION_ENV } from "../../lib/commit-signing/secret-box";
+import { test } from "vitest";
+import { COMMIT_SIGNING_ENCRYPTION_ENV } from "../commit-signing/secret-box";
 import {
   COMMIT_SIGNING_UNSUPPORTED_EXIT_CODE,
   buildCommitSigningScrubScript,
@@ -8,7 +8,7 @@ import {
   configureSandboxCommitSigning,
   scrubSandboxCommitSigning,
   setupSandboxCommitSigning,
-} from "../../lib/sandbox/commit-signing";
+} from "./commit-signing";
 
 type FakeCommand = { cmd: string; args?: string[] };
 
@@ -172,4 +172,19 @@ test("scrubbing removes the key from a sandbox before it is captured", async () 
 
   assert.equal(fake.commands.length, 1);
   assert.match(fake.commands[0]?.args?.[1] ?? "", /rm -f "\$key_path"/);
+});
+
+test("a failed key scrub blocks snapshot capture", async () => {
+  await assert.rejects(
+    scrubSandboxCommitSigning({ sandbox: fakeSandbox(1).sandbox }),
+    /signing key/i
+  );
+  const fake = fakeSandbox();
+  fake.sandbox.runCommand = async () => {
+    throw new Error("provider unavailable");
+  };
+  await assert.rejects(
+    scrubSandboxCommitSigning({ sandbox: fake.sandbox }),
+    /signing key/i
+  );
 });

@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from "react"
 import useSWR from "swr"
-import { fetchJsonObject } from "@/lib/client-fetch"
+import { ClientFetchError, fetchJsonObject } from "@/lib/client-fetch"
 
 type CommitSigningStatus = {
   available: boolean
@@ -17,18 +17,24 @@ type CommitSigningStatus = {
 }
 
 const GITHUB_SIGNING_KEYS_URL =
-  "https://github.com/settings/keys/new?type=signing"
+  "https://github.com/settings/ssh/new"
 
 async function loadStatus(url: string) {
-  const payload = await fetchJsonObject(
-    url,
-    "Failed to load commit signing settings"
-  )
-  return payload as CommitSigningStatus
+  try {
+    return await fetchJsonObject<CommitSigningStatus>(
+      url,
+      "Failed to load commit signing settings"
+    )
+  } catch (error) {
+    if (error instanceof ClientFetchError && error.status === 503) {
+      return { available: false } as const
+    }
+    throw error
+  }
 }
 
 export function CommitSigningSection() {
-  const { data, mutate } = useSWR(
+  const { data, error: loadError, mutate } = useSWR(
     "/api/settings/commit-signing",
     loadStatus
   )
@@ -61,6 +67,7 @@ export function CommitSigningSection() {
           }
           return
         }
+        setImportKey("")
         await mutate()
       } catch {
         setError("Network error while talking to the server")
@@ -80,9 +87,10 @@ export function CommitSigningSection() {
         method: "DELETE",
       })
       if (!response.ok) {
-        setError("Could not revoke the signing key")
+        setError("Could not remove the signing key")
         return
       }
+      setNotice("The stored key was removed. Existing workspaces may still contain it. Remove the signing key in GitHub to revoke its trust.")
       await mutate()
     } catch {
       setError("Network error while talking to the server")
@@ -91,7 +99,7 @@ export function CommitSigningSection() {
     }
   }, [mutate])
 
-  if (data && data.available === false) {
+  if (!data || data.available === false || loadError) {
     return (
       <section className="rounded-lg border border-border/60 bg-card">
         <div className="px-5 pt-5 pb-2">
@@ -102,9 +110,11 @@ export function CommitSigningSection() {
         </div>
         <div className="px-5 pb-5">
           <div className="rounded-md border border-amber-400/20 bg-amber-400/[0.06] px-3 py-2 text-[11px] leading-5 text-amber-300">
-            Commit signing is not configured on this deployment. Ask an
-            administrator to set MOGPLEX_COMMIT_SIGNING_KEY_ENCRYPTION_KEY.
-            Commits made in Mogplex are unsigned until then.
+            {loadError
+              ? "Could not load commit signing settings. Reload the page to try again."
+              : data?.available === false
+                ? "Commit signing is not configured on this deployment. Contact your administrator to enable it."
+                : "Loading commit signing settings…"}
           </div>
         </div>
       </section>
@@ -119,7 +129,7 @@ export function CommitSigningSection() {
         <div className="ui-section-title">Commit Signing</div>
         <div className="ui-section-caption">
           Sign commits Mogplex makes on your behalf with an SSH signing key.
-          The private key is encrypted at rest and never leaves the platform.
+          The private key is encrypted in storage and installed in your workspaces.
         </div>
       </div>
       <div className="space-y-4 px-5 pb-5">
@@ -148,8 +158,8 @@ export function CommitSigningSection() {
                 </div>
                 <div className="text-[11px] leading-5 text-muted-foreground">
                   {data?.registered
-                    ? "Commits made in Mogplex show as Verified on GitHub."
-                    : "Commits made in Mogplex are cryptographically signed. Register the public key with GitHub to get the Verified badge."}
+                    ? "New workspaces use this key to sign commits. GitHub can verify them when the commit email matches your account."
+                    : "New workspaces use this key to sign commits. Register the public key with GitHub so it can verify your signatures."}
                 </div>
               </div>
               <div className="flex shrink-0 gap-2">
@@ -167,7 +177,7 @@ export function CommitSigningSection() {
                   onClick={revoke}
                   className="rounded-md border border-destructive/40 px-3 py-1.5 text-xs font-medium text-destructive disabled:opacity-50"
                 >
-                  Revoke
+                  Remove stored key
                 </button>
               </div>
             </div>
@@ -190,6 +200,9 @@ export function CommitSigningSection() {
               >
                 Add this key on GitHub
               </a>
+              <div className="text-[11px] text-muted-foreground">
+                Choose Signing Key on GitHub. Removing the stored key here does not revoke it on GitHub or erase existing workspace copies.
+              </div>
             </div>
           </div>
         ) : (
@@ -215,6 +228,7 @@ export function CommitSigningSection() {
               </summary>
               <div className="space-y-2 px-3 pb-3">
                 <textarea
+                  aria-label="OpenSSH private key"
                   value={importKey}
                   onChange={(event) => setImportKey(event.target.value)}
                   rows={5}

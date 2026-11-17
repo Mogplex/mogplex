@@ -20,7 +20,7 @@ import {
 } from "@/lib/commit-signing/storage";
 
 /** Staging path for the private key before it is moved into place. */
-const STAGED_KEY_PATH = ".mogplex-commit-signing-key";
+const STAGED_KEY_PATH = "/tmp/.mogplex-commit-signing-key";
 
 /** Exit code used when the sandbox cannot support SSH commit signing. */
 export const COMMIT_SIGNING_UNSUPPORTED_EXIT_CODE = 3;
@@ -75,6 +75,20 @@ export function buildCommitSigningSetupScript(): string {
     'key_dir="$HOME/.mogplex/signing"',
     'key_path="$key_dir/id_ed25519"',
     `staged_key="${STAGED_KEY_PATH}"`,
+    "cleanup() {",
+    "  result=$?",
+    '  rm -f "$staged_key"',
+    '  if [ "$result" -ne 0 ]; then',
+    '    rm -f "$key_path"',
+    '    if [ "$(git config --global --get user.signingkey 2>/dev/null || true)" = "$key_path" ]; then',
+    "      git config --global --unset gpg.format 2>/dev/null || true",
+    "      git config --global --unset user.signingkey 2>/dev/null || true",
+    "      git config --global --unset commit.gpgsign 2>/dev/null || true",
+    "      git config --global --unset tag.gpgsign 2>/dev/null || true",
+    "    fi",
+    "  fi",
+    "}",
+    "trap cleanup EXIT",
     "git_version=\"$(git --version 2>/dev/null | awk '{print $3}')\"",
     'major="$(echo "$git_version" | cut -d. -f1)"',
     'minor="$(echo "$git_version" | cut -d. -f2)"',
@@ -110,14 +124,18 @@ export function buildCommitSigningSetupScript(): string {
  */
 export function buildCommitSigningScrubScript(): string {
   return [
+    "set -e",
     'key_path="$HOME/.mogplex/signing/id_ed25519"',
+    `rm -f "${STAGED_KEY_PATH}"`,
     'rm -f "$key_path"',
     'rmdir "$HOME/.mogplex/signing" 2>/dev/null || true',
     'rmdir "$HOME/.mogplex" 2>/dev/null || true',
+    'if [ "$(git config --global --get user.signingkey 2>/dev/null || true)" = "$key_path" ]; then',
     "git config --global --unset gpg.format 2>/dev/null || true",
     "git config --global --unset user.signingkey 2>/dev/null || true",
     "git config --global --unset commit.gpgsign 2>/dev/null || true",
     "git config --global --unset tag.gpgsign 2>/dev/null || true",
+    "fi",
     `echo "${COMMIT_SIGNING_SCRUBBED_SENTINEL}"`,
   ].join("\n");
 }
@@ -155,13 +173,10 @@ export async function configureSandboxCommitSigning(input: {
       status: "failed",
       reason: `the signing setup command exited with code ${command.exitCode}`,
     };
-  } catch (error) {
+  } catch {
     return {
       status: "failed",
-      reason:
-        error instanceof Error
-          ? error.message
-          : "the signing setup command failed",
+      reason: "the signing setup command failed",
     };
   }
 }
@@ -220,12 +235,14 @@ export async function scrubSandboxCommitSigning(input: {
   sandbox: CommitSigningSandbox;
 }): Promise<void> {
   try {
-    await input.sandbox.runCommand({
+    const result = await input.sandbox.runCommand({
       cmd: "sh",
       args: ["-lc", buildCommitSigningScrubScript()],
     });
+    if (result.exitCode !== 0) throw new Error("Signing key cleanup failed");
   } catch {
-    // Scrubbing is best effort: a snapshot that keeps an unusable key file
-    // is still safer than failing the user's restart.
+    throw new Error(
+      "The signing key could not be removed; snapshot capture is blocked."
+    );
   }
 }

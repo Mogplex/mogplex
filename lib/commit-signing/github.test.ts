@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import {
   listGithubSshSigningKeys,
   registerGithubSshSigningKey,
-} from "../../lib/commit-signing/github";
+} from "./github";
 
 type Call = { url: string; init?: RequestInit };
 
@@ -60,10 +60,22 @@ test("a key that is already registered is a success", async () => {
   });
   const result = await registerGithubSshSigningKey(
     { token: "gh-token", publicKey: "ssh-ed25519 AAAA", title: "Mogplex" },
-    { request: fake.request }
+    {
+      request: (url, init) =>
+        init?.method === "POST"
+          ? fake.request(url, init)
+          : Promise.resolve(
+              new Response(
+                JSON.stringify([
+                  { id: 7, key: "ssh-ed25519 AAAA different-comment" },
+                ]),
+                { status: 200 }
+              )
+            ),
+    }
   );
 
-  assert.deepEqual(result, { status: "already_registered", keyId: null });
+  assert.deepEqual(result, { status: "already_registered", keyId: "7" });
 });
 
 test("a token without the signing key scope is reported", async () => {
@@ -77,6 +89,21 @@ test("a token without the signing key scope is reported", async () => {
   );
 
   assert.deepEqual(result, { status: "scope_missing" });
+});
+
+test("GitHub validation failures must not be reported as registered keys", async () => {
+  const fake = fakeRequest({
+    status: 422,
+    body: {
+      message: "Validation Failed",
+      errors: [{ message: "key is invalid" }],
+    },
+  });
+  const result = await registerGithubSshSigningKey(
+    { token: "gh-token", publicKey: "ssh-ed25519 invalid", title: "Mogplex" },
+    { request: fake.request }
+  );
+  assert.equal(result.status, "failed");
 });
 
 test("a refused registration keeps the GitHub message", async () => {
@@ -111,7 +138,9 @@ test("the registered signing keys can be listed", async () => {
     request: fake.request,
   });
 
-  assert.deepEqual(keys, [{ id: "7", title: "Mogplex commit signing" }]);
+  assert.deepEqual(keys, [
+    { id: "7", title: "Mogplex commit signing", publicKey: null },
+  ]);
 });
 
 test("listing fails soft when GitHub refuses", async () => {
@@ -121,4 +150,57 @@ test("listing fails soft when GitHub refuses", async () => {
   });
 
   assert.deepEqual(keys, []);
+});
+
+test("duplicate lookup follows pagination and verifies the exact signing key", async () => {
+  const requests: string[] = [];
+  const result = await registerGithubSshSigningKey(
+    {
+      token: "fixture-token",
+      publicKey: "ssh-ed25519 TARGET local-comment",
+      title: "Signing",
+    },
+    {
+      request: async (url, init) => {
+        requests.push(url);
+        if (init?.method === "POST")
+          return Response.json(
+            { message: "Validation Failed" },
+            { status: 422 }
+          );
+        if (new URL(url).searchParams.get("page") === "1")
+          return Response.json(
+            Array.from({ length: 100 }, (_, id) => ({
+              id,
+              key: `ssh-ed25519 OTHER${id}`,
+            }))
+          );
+        return Response.json([
+          { id: 101, key: "ssh-ed25519 TARGET github-comment" },
+        ]);
+      },
+    }
+  );
+  assert.deepEqual(result, { status: "already_registered", keyId: "101" });
+  assert.equal(requests.length, 3);
+});
+
+test("a duplicate rejection for a key absent from signing keys stays a failure", async () => {
+  const result = await registerGithubSshSigningKey(
+    {
+      token: "fixture-token",
+      publicKey: "ssh-ed25519 TARGET",
+      title: "Signing",
+    },
+    {
+      request: async (_url, init) =>
+        init?.method === "POST"
+          ? Response.json({ message: "key is already in use" }, { status: 422 })
+          : Response.json([{ id: 1, key: "ssh-ed25519 DIFFERENT" }]),
+    }
+  );
+  assert.deepEqual(result, {
+    status: "failed",
+    message: "key is already in use",
+  });
 });
