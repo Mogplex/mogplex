@@ -57,7 +57,7 @@ test("temporary registration failures keep the key visible and can be retried", 
   ).toHaveCount(0);
   await page.getByRole("button", { name: "Register with GitHub" }).click();
   await expect(
-    page.getByText("Signing key registered with GitHub", { exact: true })
+    page.getByText("GitHub registration: recorded", { exact: true })
   ).toBeVisible();
   expect(attempts).toBe(2);
 });
@@ -120,7 +120,7 @@ test("a user creates a key, receives manual-registration guidance, and removes i
   await page.goto(scopedPath("settings/commit-signing"));
   await page.getByRole("button", { name: "Generate a signing key" }).click();
   await expect(
-    page.getByText("Signing key ready", { exact: true })
+    page.getByText("Signing key saved", { exact: true })
   ).toBeVisible();
   await expect(
     page.getByText("ssh-ed25519 public-test-key", { exact: true })
@@ -135,10 +135,146 @@ test("a user creates a key, receives manual-registration guidance, and removes i
   await page
     .getByRole("button", { name: "Remove stored key", exact: true })
     .click();
+  await expect(page.getByRole("alertdialog")).toContainText(
+    "Existing workspaces may still contain a copy"
+  );
+  await page
+    .getByRole("button", { name: "Confirm removal", exact: true })
+    .click();
   await expect(
     page.getByRole("button", { name: "Generate a signing key" })
   ).toBeVisible();
   await expect(
     page.getByText("ssh-ed25519 public-test-key", { exact: true })
   ).toHaveCount(0);
+});
+
+test("saved keys expose copy, honest workspace verification, and cancellable removal", async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.setViewportSize({ width: 390, height: 844 });
+  const key = {
+    ...empty,
+    configured: true,
+    publicKey: "ssh-ed25519 public-test-key",
+    fingerprint: "SHA256:public-test-fingerprint",
+  };
+  let deleted = false;
+  await page.route(endpoint, async (route) => {
+    if (route.request().method() === "DELETE") deleted = true;
+    await fulfillJson(route, key);
+  });
+  await page.route("**/api/sandbox", (route) =>
+    fulfillJson(route, {
+      sandboxes: [
+        {
+          id: "00000000-0000-4000-8000-000000000777",
+          sandbox_id: "workspace",
+          working_branch: "feature/signing",
+          repo: { full_name: "acme/widgets" },
+        },
+      ],
+    })
+  );
+  let checks = 0;
+  await page.route("**/api/sandbox/*/commit-signing", async (route) => {
+    checks++;
+    await fulfillJson(
+      route,
+      checks === 1
+        ? {
+            status: "paused",
+            message:
+              "Resume this workspace before verifying signing. Verification does not start it automatically.",
+          }
+        : {
+            status: "verified",
+            message:
+              "This workspace signed and verified a test commit with your saved key. Your repository was not changed.",
+            fingerprint: key.fingerprint,
+            checkedAt: "2026-11-17T17:00:00Z",
+          }
+    );
+  });
+  await page.goto(scopedPath("settings/commit-signing"));
+  await expect(
+    page.getByText("GitHub registration: not recorded", { exact: true })
+  ).toBeVisible();
+  await expect(
+    page.getByText("Not verified in a workspace", { exact: true })
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Copy public key" }).click();
+  await expect(
+    page.getByText("Public key copied.", { exact: true })
+  ).toBeVisible();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+    key.publicKey
+  );
+  await page
+    .getByRole("button", { name: "Remove stored key", exact: true })
+    .click();
+  await expect(page.getByRole("alertdialog")).toContainText(
+    "GitHub will continue trusting it"
+  );
+  await page.getByRole("button", { name: "Keep key" }).click();
+  expect(deleted).toBe(false);
+  await page
+    .getByRole("button", { name: "Verify signing", exact: true })
+    .click();
+  await page
+    .getByLabel("Workspace to check")
+    .selectOption("00000000-0000-4000-8000-000000000777");
+  await page.getByRole("button", { name: "Verify selected workspace" }).click();
+  await expect(
+    page.getByText("Resume this workspace before verifying", { exact: false })
+  ).toBeVisible();
+  await expect(
+    page.getByText("Not verified in a workspace", { exact: true })
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Verify selected workspace" }).click();
+  await expect(
+    page.getByText("Verified in the selected workspace", { exact: true })
+  ).toBeVisible();
+  await expect(
+    page.getByText("GitHub registration: not recorded", { exact: true })
+  ).toBeVisible();
+  await page.screenshot({
+    path: test.info().outputPath("signing-settings-mobile.png"),
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.screenshot({
+    path: test.info().outputPath("signing-settings-desktop.png"),
+    fullPage: true,
+  });
+});
+
+test("a temporary settings outage does not say signing is disabled", async ({
+  page,
+}) => {
+  let reads = 0;
+  await page.route(endpoint, async (route) => {
+    reads++;
+    if (reads === 1)
+      return route.fulfill({
+        status: 503,
+        json: { error: "Try again", retryable: true },
+      });
+    await fulfillJson(route, empty);
+  });
+  await page.goto(scopedPath("settings/commit-signing"));
+  await expect(
+    page
+      .getByRole("alert")
+      .filter({ hasText: "Could not load commit signing settings" })
+  ).toContainText("Could not load commit signing settings");
+  await expect(
+    page.getByText("Commit signing is not configured", { exact: false })
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Try again", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Generate a signing key" })
+  ).toBeVisible();
 });

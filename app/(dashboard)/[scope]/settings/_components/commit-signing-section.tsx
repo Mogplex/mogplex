@@ -2,7 +2,10 @@
 
 import { useCallback, useState } from "react"
 import useSWR from "swr"
-import { ClientFetchError, fetchJsonObject } from "@/lib/client-fetch"
+import { ClientFetchError } from "@/lib/client-fetch"
+import { Button } from "@/components/ui/button"
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel } from "@/components/ui/alert-dialog"
+import { WorkspaceSigningCheck } from "./workspace-signing-check"
 
 type CommitSigningStatus = {
   available: boolean
@@ -20,17 +23,13 @@ const GITHUB_SIGNING_KEYS_URL =
   "https://github.com/settings/ssh/new"
 
 async function loadStatus(url: string) {
-  try {
-    return await fetchJsonObject<CommitSigningStatus>(
-      url,
-      "Failed to load commit signing settings"
-    )
-  } catch (error) {
-    if (error instanceof ClientFetchError && error.status === 503) {
-      return { available: false } as const
-    }
-    throw error
+  const response = await fetch(url)
+  const payload = await response.json().catch(() => null)
+  if (response.status === 503 && payload?.available === false) return { available: false } as const
+  if (!response.ok || !payload || typeof payload.available !== "boolean") {
+    throw new ClientFetchError("Could not load commit signing settings. Try again.", response.status)
   }
+  return payload as CommitSigningStatus
 }
 
 export function CommitSigningSection() {
@@ -42,6 +41,7 @@ export function CommitSigningSection() {
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [importKey, setImportKey] = useState("")
+  const [confirmRemoval, setConfirmRemoval] = useState(false)
 
   const post = useCallback(
     async (body: Record<string, unknown>, action: string) => {
@@ -90,6 +90,7 @@ export function CommitSigningSection() {
         setError("Could not remove the signing key")
         return
       }
+      setConfirmRemoval(false)
       setNotice("The stored key was removed. Existing workspaces may still contain it. Remove the signing key in GitHub to revoke its trust.")
       await mutate()
     } catch {
@@ -109,12 +110,13 @@ export function CommitSigningSection() {
           </div>
         </div>
         <div className="px-5 pb-5">
-          <div className="rounded-md border border-amber-400/20 bg-amber-400/[0.06] px-3 py-2 text-[11px] leading-5 text-amber-300">
+          <div role={loadError ? "alert" : "status"} className="rounded-md border border-border bg-secondary px-3 py-2 text-sm leading-5 text-muted-foreground">
             {loadError
-              ? "Could not load commit signing settings. Reload the page to try again."
+              ? "Could not load commit signing settings. Try again."
               : data?.available === false
                 ? "Commit signing is not configured on this deployment. Contact your administrator to enable it."
                 : "Loading commit signing settings…"}
+            {loadError && <Button variant="outline" className="mt-3" onClick={() => void mutate()}>Try again</Button>}
           </div>
         </div>
       </section>
@@ -134,7 +136,7 @@ export function CommitSigningSection() {
       </div>
       <div className="space-y-4 px-5 pb-5">
         {error && (
-          <div className="px-2 py-1 text-sm text-destructive">
+          <div role="alert" className="px-2 py-1 text-sm text-destructive">
             {error}{" "}
             <button onClick={() => setError(null)} className="underline">
               Dismiss
@@ -149,20 +151,16 @@ export function CommitSigningSection() {
 
         {configured ? (
           <div className="space-y-3">
-            <div className="flex items-start justify-between gap-3">
-                            <div className="space-y-1">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="space-y-1">
                 <div className="text-sm font-medium">
-                  {data?.registered
-                    ? "Signing key registered with GitHub"
-                    : "Signing key ready"}
+                  Signing key saved
                 </div>
                 <div className="text-[11px] leading-5 text-muted-foreground">
-                  {data?.registered
-                    ? "New workspaces use this key to sign commits. GitHub can verify them when the commit email matches your account."
-                    : "New workspaces use this key to sign commits. Register the public key with GitHub so it can verify your signatures."}
+                  Encrypted in storage. New and restarted workspaces receive this key.
                 </div>
               </div>
-              <div className="flex shrink-0 gap-2">
+              <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
                   disabled={busy !== null || data?.registered === true}
@@ -174,7 +172,7 @@ export function CommitSigningSection() {
                 <button
                   type="button"
                   disabled={busy !== null}
-                  onClick={revoke}
+                  onClick={() => setConfirmRemoval(true)}
                   className="rounded-md border border-destructive/40 px-3 py-1.5 text-xs font-medium text-destructive disabled:opacity-50"
                 >
                   Remove stored key
@@ -182,9 +180,17 @@ export function CommitSigningSection() {
               </div>
             </div>
 
-            <div className="space-y-1">
-              <div className="text-[11px] text-muted-foreground">
-                Public key
+            <div className="rounded-md border border-border bg-secondary px-3 py-2 text-sm">
+              <p className="font-medium">GitHub registration: {data.registered ? "recorded" : "not recorded"}</p>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">{data.registered ? "Mogplex recorded a successful registration. GitHub trust can change independently; a Verified badge also requires a matching commit email." : "Register this public key as a Signing Key on GitHub. If you added it manually, registration may not be recorded here."}</p>
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-medium">Public key</span>
+                <Button variant="outline" size="sm" onClick={async () => {
+                  try { await navigator.clipboard.writeText(data.publicKey ?? ""); setNotice("Public key copied."); setError(null) }
+                  catch { setError("Could not copy the public key. Select the key below and copy it manually.") }
+                }}>Copy public key</Button>
               </div>
               <code className="block w-full overflow-x-auto rounded-md border border-border bg-background/60 px-3 py-2 font-mono text-[11px] leading-5 break-all">
                 {data?.publicKey}
@@ -204,6 +210,20 @@ export function CommitSigningSection() {
                 Choose Signing Key on GitHub. Removing the stored key here does not revoke it on GitHub or erase existing workspace copies.
               </div>
             </div>
+            <WorkspaceSigningCheck key={data.fingerprint} fingerprint={data.fingerprint} />
+            <AlertDialog open={confirmRemoval} onOpenChange={open => { if (!busy) setConfirmRemoval(open) }}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Remove this stored signing key?</AlertDialogTitle>
+                  <AlertDialogDescription>Future workspaces will no longer receive this key. Existing workspaces may still contain a copy, and GitHub will continue trusting it until you remove it from your GitHub signing keys.</AlertDialogDescription>
+                </AlertDialogHeader>
+                {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={busy !== null}>Keep key</AlertDialogCancel>
+                  <Button variant="destructive" disabled={busy !== null} onClick={() => void revoke()}>{busy === "revoke" ? "Removing…" : "Confirm removal"}</Button>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
         ) : (
           <div className="space-y-3">
