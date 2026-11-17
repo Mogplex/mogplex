@@ -66,9 +66,7 @@ export function deliveryEventMatchesRun(
   )
     return true;
   if (body.workflow_run?.head_branch === run.working_branch) return true;
-  // A production deployment can precede the merge event. Refresh base-branch
-  // candidates, then require exact merge-SHA proof in the GitHub reader.
-  return body.deployment?.ref === run.base_branch;
+  return false;
 }
 
 /** Only call after signature verification and repository/installation resolution. */
@@ -83,7 +81,22 @@ export async function refreshDeliveryForGithubEvent(
   if (!RUN_DELIVERY_EVENTS.includes(input.event ?? "")) return;
   const parsed = schema.safeParse(input.body);
   if (!parsed.success) return;
-  const runs = await deps.list(input.repos.map((repo) => repo.id));
+  const body = parsed.data;
+  const shas = [
+    body.pull_request?.head.sha,
+    body.check_run?.head_sha,
+    body.workflow_run?.head_sha,
+    body.deployment?.sha,
+    body.sha,
+  ].filter((value): value is string => typeof value === "string");
+  const branches = [
+    body.pull_request?.head.ref,
+    body.workflow_run?.head_branch,
+  ].filter((value): value is string => typeof value === "string");
+  const runs = await deps.list(
+    input.repos.map((repo) => repo.id),
+    { shas, branches }
+  );
   const matches = runs.filter(
     (run) =>
       input.repos.some(

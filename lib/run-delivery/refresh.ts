@@ -1,6 +1,10 @@
 import { createRunDeliveryStore, type DeliveryRun } from "./store";
 import { loadRunDeliveryGithub } from "./github";
-import { deliveryNeedsRepair, readDeliverySnapshot } from "./types";
+import {
+  deliveryNeedsRepair,
+  pinnedDeliveryPullRequest,
+  readDeliverySnapshot,
+} from "./types";
 import type { queueResumeExternalAgentRun } from "@/lib/mogplex-api/run-resume-queue";
 
 const defaults = {
@@ -26,6 +30,7 @@ export async function refreshRunDelivery(
     repoFullName: run.repo_full_name,
     workingBranch: run.working_branch,
     baseBranch: run.base_branch,
+    pullRequestNumber: pinnedDeliveryPullRequest(run.metadata),
   });
   let saved = await deps.store.save(run, snapshot);
   // A simultaneous manual refresh may win the write. Its newer receipt must

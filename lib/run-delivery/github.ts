@@ -4,6 +4,15 @@ import { findInstallationToken } from "@/lib/agents/tools/github-shared";
 import { loadPullRequestStatus } from "@/lib/agents/tools/github-pr-status";
 import type { DeliverySnapshot } from "./types";
 
+export class DeliveryConnectionError extends Error {
+  constructor() {
+    super(
+      "GitHub repository access is unavailable. Check the repository connection before refreshing delivery."
+    );
+    this.name = "DeliveryConnectionError";
+  }
+}
+
 const pullSchema = z.object({
   draft: z.boolean().default(false),
   number: z.number().int().positive(),
@@ -31,6 +40,7 @@ export type DeliveryGithubInput = {
   repoFullName: string;
   workingBranch: string;
   baseBranch: string;
+  pullRequestNumber?: number;
 };
 
 function blankSnapshot(): DeliverySnapshot {
@@ -66,7 +76,7 @@ export async function loadRunDeliveryGithub(
     throw new Error("Invalid repository");
   const snapshot = blankSnapshot();
   const token = await deps.getToken({ userId: input.userId, owner });
-  if (!token) throw new Error("GitHub connection is unavailable");
+  if (!token) throw new DeliveryConnectionError();
   const root = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
   async function read(path: string): Promise<unknown> {
     const response = await deps.request(`${root}${path}`, {
@@ -77,6 +87,8 @@ export async function loadRunDeliveryGithub(
       cache: "no-store",
       signal: AbortSignal.timeout(15_000),
     });
+    if ([401, 404].includes(response.status))
+      throw new DeliveryConnectionError();
     if (!response.ok)
       throw new Error("GitHub delivery status is temporarily unavailable");
     return response.json();
@@ -89,7 +101,9 @@ export async function loadRunDeliveryGithub(
     direction: "desc",
     per_page: "100",
   });
-  const pulls = z.array(pullSchema).parse(await read(`/pulls?${query}`));
+  const pulls = input.pullRequestNumber
+    ? [pullSchema.parse(await read(`/pulls/${input.pullRequestNumber}`))]
+    : z.array(pullSchema).parse(await read(`/pulls?${query}`));
   const pull = pulls.find(
     (value) =>
       value.head.ref === input.workingBranch &&
@@ -165,6 +179,7 @@ export async function loadRunDeliveryGithub(
   snapshot.repairRevision = createHash("sha256")
     .update(
       JSON.stringify({
+        pullRequest: pull.number,
         head: status.headSha,
         checks: status.checks.filter((check) =>
           snapshot.checks.failed.includes(check.name)

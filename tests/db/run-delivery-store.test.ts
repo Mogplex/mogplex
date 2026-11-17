@@ -40,7 +40,7 @@ async function fixture() {
   await db.exec(`CREATE TABLE repos(id uuid PRIMARY KEY, full_name text);
     CREATE TABLE external_agent_runs(id uuid PRIMARY KEY, user_id uuid, repo_id uuid REFERENCES repos(id), ai_call_id uuid, status text, runtime_provider text, runtime_run_id text, error text, metadata jsonb, updated_at timestamptz);
     INSERT INTO repos VALUES ('${repoId}', 'acme/widgets');
-    INSERT INTO external_agent_runs VALUES ('${runId}', '${owner}', '${repoId}', '${callId}', 'awaiting_input', null, null, null, '{"checkpoint_kind":"review","unrelated":"keep"}', now());`);
+    INSERT INTO external_agent_runs VALUES ('${runId}', '${owner}', '${repoId}', '${callId}', 'awaiting_input', null, null, null, '{"checkpoint_kind":"review","unrelated":"keep"}', now()); ALTER TABLE external_agent_runs ADD COLUMN working_branch text DEFAULT 'feature/signing';`);
   const store = createRunDeliveryStore(async (sql, values) => ({
     rows: (await db.query<DeliveryRun>(sql, values)).rows,
   }));
@@ -65,11 +65,23 @@ test("delivery authorization is owned and bound to an implementation checkpoint"
     const allowed = await f.store.authorize(f.run);
     expect(allowed?.metadata.delivery_follow_through).toBe(true);
     expect(allowed?.metadata.unrelated).toBe("keep");
-    expect(await f.store.listForRepos([])).toEqual([]);
+    expect(await f.store.listForRepos([], { branches: [], shas: [] })).toEqual(
+      []
+    );
     await f.db.query("UPDATE external_agent_runs SET status = 'success'");
-    expect(await f.store.listForRepos([repoId])).toHaveLength(1);
+    expect(
+      await f.store.listForRepos([repoId], {
+        branches: ["feature/signing"],
+        shas: [],
+      })
+    ).toHaveLength(1);
     await f.db.query("UPDATE external_agent_runs SET status = 'cancelled'");
-    expect(await f.store.listForRepos([repoId])).toEqual([]);
+    expect(
+      await f.store.listForRepos([repoId], {
+        branches: ["feature/signing"],
+        shas: [],
+      })
+    ).toEqual([]);
   } finally {
     await f.db.close();
   }
@@ -125,6 +137,92 @@ test("repair claims atomically bind worker and call, and reject stale heads, dup
     });
     expect(admitted?.metadata.delivery_last_repair_revision).toBe("revision-1");
     expect(await f.store.claimRepair(claim)).toBeNull();
+  } finally {
+    await f.db.close();
+  }
+});
+
+test("the first PR stays pinned and withdrawn follow-through rejects queued repair", async () => {
+  const f = await fixture();
+  try {
+    await f.store.authorize(f.run);
+    await f.store.save(f.run, snapshot());
+    expect(
+      (await f.store.load(owner, runId))?.metadata.delivery_pull_request_number
+    ).toBe(42);
+    const reused = snapshot("2026-11-17T00:00:02.000Z");
+    reused.pullRequest!.number = 43;
+    expect(await f.store.save(f.run, reused)).toBeNull();
+    expect(await f.store.stop(f.run)).toBeNull();
+    await f.db.query("UPDATE external_agent_runs SET status = 'success'");
+    expect(await f.store.stop({ ...f.run, user_id: foreign })).toBeNull();
+    const stopped = await f.store.stop(f.run);
+    expect(stopped?.metadata.delivery_follow_through).toBe(false);
+    expect(stopped?.metadata.unrelated).toBe("keep");
+    expect(
+      await f.store.claimRepair({
+        run: f.run,
+        revision: "revision-1",
+        headSha: "head-1",
+        aiCallId: nextCall,
+        runtimeRunId: "queued-worker",
+      })
+    ).toBeNull();
+  } finally {
+    await f.db.close();
+  }
+});
+test("implementation approval cannot revive a cancellation during worker startup", async () => {
+  const f = await fixture();
+  try {
+    await f.store.authorize(f.run);
+    await f.db.query("UPDATE external_agent_runs SET status = 'cancelled'");
+    expect(
+      await f.store.claimCheckpoint({
+        run: f.run,
+        aiCallId: nextCall,
+        runtimeRunId: "late-worker",
+      })
+    ).toBeNull();
+  } finally {
+    await f.db.close();
+  }
+});
+
+test("webhook candidates match the branch or recorded commit, and completed delivery retires the watcher", async () => {
+  const f = await fixture();
+  try {
+    await f.store.authorize(f.run);
+    await f.store.save(f.run, snapshot());
+    await f.db.query("UPDATE external_agent_runs SET status = 'success'");
+    expect(
+      await f.store.listForRepos([repoId], { branches: [], shas: [] })
+    ).toEqual([]);
+    expect(
+      await f.store.listForRepos([repoId], {
+        branches: ["main"],
+        shas: ["unrelated"],
+      })
+    ).toEqual([]);
+    expect(
+      await f.store.listForRepos([repoId], { branches: [], shas: ["head-1"] })
+    ).toHaveLength(1);
+    const merged = snapshot("2026-11-17T00:00:02.000Z");
+    merged.pullRequest!.state = "merged";
+    merged.pullRequest!.mergeSha = "merge-1";
+    await f.store.save(f.run, merged);
+    expect(
+      await f.store.listForRepos([repoId], { branches: [], shas: ["merge-1"] })
+    ).toHaveLength(1);
+    merged.observedAt = "2026-11-17T00:00:03.000Z";
+    merged.deployment.state = "success";
+    await f.store.save(f.run, merged);
+    expect(
+      await f.store.listForRepos([repoId], { branches: [], shas: ["merge-1"] })
+    ).toEqual([]);
+    expect(
+      (await f.store.load(owner, runId))?.metadata.delivery_follow_through
+    ).toBe(false);
   } finally {
     await f.db.close();
   }

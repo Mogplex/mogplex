@@ -2,7 +2,7 @@ import { updateAiCall } from "@/lib/interactive-runs";
 import type { ExternalAgentRunRow } from "@/lib/mogplex-api/runs-types";
 import { createRunDeliveryStore } from "./store";
 import { loadRunDeliveryGithub } from "./github";
-import { deliveryNeedsRepair } from "./types";
+import { deliveryNeedsRepair, pinnedDeliveryPullRequest } from "./types";
 
 const defaults = {
   store: createRunDeliveryStore(),
@@ -33,6 +33,7 @@ export function createDeliveryResume(deps = defaults) {
         repoFullName: owned.repo_full_name,
         workingBranch: run.working_branch,
         baseBranch: run.base_branch,
+        pullRequestNumber: pinnedDeliveryPullRequest(owned.metadata),
       });
       if (!(await store.save(run, current))) return false;
       return (

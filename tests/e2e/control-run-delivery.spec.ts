@@ -40,7 +40,7 @@ for (const mobile of [false, true])
         body: `event: run\ndata: ${JSON.stringify(context)}\n\nevent: replay_complete\ndata: {}\n\n`,
       })
     );
-    let fail = false;
+    let failure: { status: number; message: string } | null = null;
     let refreshes = 0;
     let starts = 0;
     await page.route("**/api/runs/*/checkpoint", (route) => {
@@ -52,10 +52,10 @@ for (const mobile of [false, true])
     });
     await page.route("**/api/runs/*/delivery", (route) => {
       refreshes++;
-      if (fail)
+      if (failure)
         return route.fulfill({
-          status: 503,
-          json: { error: "Temporarily unavailable" },
+          status: failure.status,
+          json: { error: failure.message },
         });
       context.delivery = receipt;
       return route.fulfill({ json: { delivery: receipt } });
@@ -101,16 +101,73 @@ for (const mobile of [false, true])
     receipt.deployment.state = "success";
     await refresh.click();
     await expect(delivery).toContainText("Deployment reported successful");
-    fail = true;
+    failure = { status: 503, message: "Temporarily unavailable" };
     await refresh.click();
     await expect(delivery.getByRole("alert")).toContainText(
-      "Could not refresh delivery status"
+      "Temporarily unavailable"
     );
     await expect(delivery).toContainText("Deployment reported successful");
-    expect(refreshes).toBe(6);
+    failure = {
+      status: 409,
+      message:
+        "GitHub repository access is unavailable. Check the repository connection before refreshing delivery.",
+    };
+    await refresh.click();
+    await expect(delivery.getByRole("alert")).toContainText(
+      "Check the repository connection"
+    );
+    expect(refreshes).toBe(7);
     expect(starts).toBe(0);
     await expect(refresh).toBeInViewport();
     await page.screenshot({
       path: test.info().outputPath("delivery-progress.png"),
     });
   });
+
+test("an idle run can stop following its PR without starting another agent", async ({
+  page,
+}) => {
+  const { sessions } = await setupControlSidebar(page);
+  const runId = "00000000-0000-4000-8000-000000000901";
+  sessions[0].external_run_id = runId;
+  const context: RunWorkspaceContext = {
+    runId,
+    aiCallId: "00000000-0000-4000-8000-000000000902",
+    prompt: "Implement signing",
+    status: "success",
+    sandboxRecordId: null,
+    workingBranch: "feature/signing",
+    canGuide: false,
+    delivery: deliverySnapshot(),
+    deliveryFollowThrough: true,
+    repo: {
+      id: "repo-1",
+      user_id: "owner",
+      full_name: "acme/widgets",
+      created_at: "2026-11-17T00:00:00Z",
+    },
+  };
+  await page.route("**/api/runs/*/workspace", (route) =>
+    route.fulfill({ json: context })
+  );
+  await page.route("**/api/runs/*/stream?*", (route) =>
+    route.fulfill({
+      contentType: "text/event-stream",
+      body: `event: run\ndata: ${JSON.stringify(context)}\n\nevent: replay_complete\ndata: {}\n\n`,
+    })
+  );
+  const requests: string[] = [];
+  await page.route("**/api/runs/*/delivery", (route) => {
+    requests.push(route.request().method());
+    context.deliveryFollowThrough = false;
+    return route.fulfill({ json: { stopped: true } });
+  });
+  await page.reload();
+  const stop = page.getByRole("button", { name: "Stop following PR" });
+  await stop.press("Enter");
+  await expect(
+    page.getByText("PR follow-ups stopped.", { exact: true })
+  ).toBeVisible();
+  await expect(stop).toHaveCount(0);
+  expect(requests).toEqual(["DELETE"]);
+});

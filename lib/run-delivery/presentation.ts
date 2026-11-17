@@ -15,15 +15,17 @@ export function deliveryPresentation(context: RunWorkspaceContext) {
           : receipt.checks.state === "success"
             ? "Checks passed"
             : "Checks not confirmed";
-    if (
-      receipt.review.unresolved > 0 ||
-      receipt.review.state === "changes_requested"
-    )
-      checks += " · Review needs attention";
-    else if (receipt.review.state === "required")
-      checks += " · Review required";
-    else if (receipt.review.incomplete || receipt.review.state === "unknown")
-      checks += " · Review not confirmed";
+    if (pr.state === "open") {
+      if (
+        receipt.review.unresolved > 0 ||
+        receipt.review.state === "changes_requested"
+      )
+        checks += " · Review needs attention";
+      else if (receipt.review.state === "required")
+        checks += " · Review required";
+      else if (receipt.review.incomplete || receipt.review.state === "unknown")
+        checks += " · Review not confirmed";
+    }
   }
   const production = {
     success: "Deployment reported successful",

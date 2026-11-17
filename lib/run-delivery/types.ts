@@ -71,3 +71,10 @@ export function deliveryReadyForReview(snapshot: DeliverySnapshot) {
     ["approved", "none"].includes(snapshot.review.state)
   );
 }
+
+export function pinnedDeliveryPullRequest(metadata: Record<string, unknown>) {
+  const value = metadata.delivery_pull_request_number;
+  return typeof value === "number" && Number.isInteger(value) && value > 0
+    ? value
+    : undefined;
+}

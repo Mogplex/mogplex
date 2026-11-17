@@ -317,3 +317,35 @@ test("Vercel preview waits only accept successful Vercel deployment statuses", a
     globalThis.fetch = originalFetch;
   }
 });
+
+test("delivery refresh failures preserve HTTP webhook acknowledgement and retry in the durable worker", async () => {
+  const { dispatchVerifiedGithubWebhook } =
+    await import("../../app/api/webhooks/github/_lib/verified-dispatch");
+  const context = {
+    event: "ping",
+    deliveryId: "delivery-refresh-failure",
+    signature: "",
+    globalSecret: null,
+    payload: "{}",
+    body: {},
+    installationId: null,
+    repoGithubId: null,
+    repoFullName: null,
+    accountType: "User" as const,
+  };
+  const failure = async () => {
+    throw new Error("provider unavailable");
+  };
+  const response = await dispatchVerifiedGithubWebhook(
+    context,
+    [],
+    false,
+    failure
+  );
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).ok, true);
+  await assert.rejects(
+    dispatchVerifiedGithubWebhook(context, [], true, failure),
+    /GitHub run delivery refresh failed/
+  );
+});

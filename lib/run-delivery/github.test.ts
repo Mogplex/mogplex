@@ -71,6 +71,7 @@ function fixture() {
     request: async (url: string | URL | Request) => {
       requests.push(String(url));
       if (String(url).includes("/pulls?")) return Response.json([pull]);
+      if (String(url).includes("/pulls/42")) return Response.json(pull);
       if (String(url).includes("/statuses?"))
         return Response.json([
           {
@@ -226,4 +227,38 @@ test("agent replies on an existing review thread do not trigger another identica
   expect((await loadRunDeliveryGithub(input, f.deps)).repairRevision).not.toBe(
     before.repairRevision
   );
+});
+
+test("once a PR is associated, later branch reuse cannot switch the run to a different PR", async () => {
+  const f = fixture();
+  const result = await loadRunDeliveryGithub(
+    { ...input, pullRequestNumber: 42 },
+    f.deps
+  );
+  expect(result.pullRequest?.number).toBe(42);
+  expect(f.requests).toEqual([
+    "https://api.github.com/repos/acme/widgets/pulls/42",
+  ]);
+});
+
+test("missing repository access is distinct from rate limits and transient provider errors", async () => {
+  const { DeliveryConnectionError } = await import("./github");
+  const f = fixture();
+  await expect(
+    loadRunDeliveryGithub(input, { ...f.deps, getToken: async () => null })
+  ).rejects.toBeInstanceOf(DeliveryConnectionError);
+  for (const status of [401, 404])
+    await expect(
+      loadRunDeliveryGithub(input, {
+        ...f.deps,
+        request: async () => new Response(null, { status }),
+      })
+    ).rejects.toBeInstanceOf(DeliveryConnectionError);
+  for (const status of [403, 429, 503])
+    await expect(
+      loadRunDeliveryGithub(input, {
+        ...f.deps,
+        request: async () => new Response(null, { status }),
+      })
+    ).rejects.toThrow("temporarily unavailable");
 });

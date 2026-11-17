@@ -144,3 +144,17 @@ test("queue failures leave the saved plan available and keep diagnostics private
   });
   assert.equal(f.run.status, "awaiting_input");
 });
+
+test("legacy checkpoints without a kind resume through the compatible approval path", async () => {
+  const f = fixture();
+  delete f.run.metadata.checkpoint_kind;
+  const response = await createRunCheckpointPostHandler(f.deps)(
+    request({ action: "approve", aiCallId }),
+    params
+  );
+  assert.equal(response.status, 202);
+  const continuation = [...f.queued.values()][0];
+  assert.equal(continuation.followThrough, undefined);
+  assert.equal(continuation.mode, "review");
+  assert.equal(continuation.checkpointAiCallId, aiCallId);
+});
