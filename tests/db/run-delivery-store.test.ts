@@ -40,7 +40,7 @@ async function fixture() {
   await db.exec(`CREATE TABLE repos(id uuid PRIMARY KEY, full_name text);
     CREATE TABLE external_agent_runs(id uuid PRIMARY KEY, user_id uuid, repo_id uuid REFERENCES repos(id), ai_call_id uuid, status text, runtime_provider text, runtime_run_id text, error text, metadata jsonb, updated_at timestamptz);
     INSERT INTO repos VALUES ('${repoId}', 'acme/widgets');
-    INSERT INTO external_agent_runs VALUES ('${runId}', '${owner}', '${repoId}', '${callId}', 'awaiting_input', null, null, null, '{"checkpoint_kind":"review","unrelated":"keep"}', now()); ALTER TABLE external_agent_runs ADD COLUMN working_branch text DEFAULT 'feature/signing';`);
+    INSERT INTO external_agent_runs VALUES ('${runId}', '${owner}', '${repoId}', '${callId}', 'awaiting_input', null, null, null, '{"checkpoint_kind":"review","unrelated":"keep"}', now()); ALTER TABLE external_agent_runs ADD COLUMN working_branch text DEFAULT 'feature/signing'; ALTER TABLE external_agent_runs ADD COLUMN base_branch text DEFAULT 'main';`);
   const store = createRunDeliveryStore(async (sql, values) => ({
     rows: (await db.query<DeliveryRun>(sql, values)).rows,
   }));
@@ -223,6 +223,21 @@ test("webhook candidates match the branch or recorded commit, and completed deli
     expect(
       (await f.store.load(owner, runId))?.metadata.delivery_follow_through
     ).toBe(false);
+  } finally {
+    await f.db.close();
+  }
+});
+
+test("runs left on the shared base branch without an associated PR do not fan out on CI", async () => {
+  const f = await fixture();
+  try {
+    await f.store.authorize(f.run);
+    await f.db.query(
+      "UPDATE external_agent_runs SET status = 'success', working_branch = 'main'"
+    );
+    expect(
+      await f.store.listForRepos([repoId], { branches: ["main"], shas: [] })
+    ).toEqual([]);
   } finally {
     await f.db.close();
   }

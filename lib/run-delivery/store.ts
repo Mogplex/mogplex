@@ -29,7 +29,7 @@ export function createRunDeliveryStore(
       )
         return [];
       const result = await query(
-        `SELECT run.*, repo.full_name AS repo_full_name FROM external_agent_runs run JOIN repos repo ON repo.id = run.repo_id WHERE run.repo_id = ANY($1::uuid[]) AND run.metadata->>'delivery_follow_through' = 'true' AND run.status IN ('success', 'streaming') AND (run.working_branch = ANY($2::text[]) OR run.metadata->'delivery_progress'->'pullRequest'->>'headSha' = ANY($3::text[]) OR run.metadata->'delivery_progress'->'pullRequest'->>'mergeSha' = ANY($3::text[]))`,
+        `SELECT run.*, repo.full_name AS repo_full_name FROM external_agent_runs run JOIN repos repo ON repo.id = run.repo_id WHERE run.repo_id = ANY($1::uuid[]) AND run.metadata->>'delivery_follow_through' = 'true' AND run.status IN ('success', 'streaming') AND (run.metadata->>'delivery_pull_request_number' IS NOT NULL OR run.working_branch <> run.base_branch) AND (run.working_branch = ANY($2::text[]) OR run.metadata->'delivery_progress'->'pullRequest'->>'headSha' = ANY($3::text[]) OR run.metadata->'delivery_progress'->'pullRequest'->>'mergeSha' = ANY($3::text[]))`,
         [repoIds, match.branches, match.shas]
       );
       return result.rows;

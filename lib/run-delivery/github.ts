@@ -33,6 +33,9 @@ const depsDefault = {
   getToken: findInstallationToken,
   request: fetch,
   loadStatus: loadPullRequestStatus,
+  reviewAppLogin: process.env.GITHUB_APP_NAME?.trim()
+    ? process.env.GITHUB_APP_NAME.trim()
+    : null,
 };
 export type DeliveryGithubDeps = typeof depsDefault;
 export type DeliveryGithubInput = {
@@ -161,7 +164,31 @@ export async function loadRunDeliveryGithub(
     total: status.checks.length,
     incomplete: status.checksIncomplete,
   };
+  const trustedReviewAuthor = (item: {
+    author?: string | null;
+    authorAssociation?: string;
+    authorType?: string;
+  }) =>
+    ["OWNER", "MEMBER", "COLLABORATOR"].includes(
+      item.authorAssociation ?? ""
+    ) ||
+    Boolean(
+      item.authorType === "Bot" &&
+      deps.reviewAppLogin &&
+      item.author?.replace(/\[bot\]$/i, "").toLowerCase() ===
+        deps.reviewAppLogin.toLowerCase()
+    );
+  const trustedThreads =
+    status.unresolvedReviewThreads.filter(trustedReviewAuthor);
+  const trustedReviews = status.formalReviews.filter(trustedReviewAuthor);
+  const actionableReviews = trustedReviews.filter(
+    (review) => review.state === "changes_requested"
+  );
   snapshot.review = {
+    actionable:
+      trustedThreads.length > 0 ||
+      (status.reviewDecision === "changes_requested" &&
+        actionableReviews.length > 0),
     state:
       status.reviewDecision === "changes_requested"
         ? "changes_requested"
@@ -184,17 +211,15 @@ export async function loadRunDeliveryGithub(
         checks: status.checks.filter((check) =>
           snapshot.checks.failed.includes(check.name)
         ),
-        reviewDecision: status.reviewDecision,
+        reviewDecision: snapshot.review.actionable,
         // Thread identities remain stable when the agent replies to a finding.
         // Hashing reply text would retrigger the same repair on its own output.
-        threads: status.unresolvedReviewThreads
+        threads: trustedThreads
           .map(
             (thread) => thread.id ?? thread.comments[0]?.url ?? "unknown-thread"
           )
           .sort(),
-        reviews: status.formalReviews.filter(
-          (review) => review.state === "changes_requested"
-        ),
+        reviews: actionableReviews,
       })
     )
     .digest("hex");

@@ -225,7 +225,8 @@ test("github_pull_request_status returns the reviewed head, checks, and unresolv
                 reviews: {
                   nodes: [
                     {
-                      author: { login: "reviewer" },
+                      author: { login: "reviewer", __typename: "User" },
+                      authorAssociation: "MEMBER",
                       state: "CHANGES_REQUESTED",
                       submittedAt: "2026-08-29T12:00:00Z",
                       url: "https://github.com/acme/widgets/pull/84#review-1",
@@ -237,6 +238,17 @@ test("github_pull_request_status returns the reviewed head, checks, and unresolv
                   nodes: [
                     {
                       isResolved: false,
+                      origin: {
+                        nodes: [
+                          {
+                            author: {
+                              login: "original-author",
+                              __typename: "User",
+                            },
+                            authorAssociation: "NONE",
+                          },
+                        ],
+                      },
                       comments: {
                         nodes: [
                           {
@@ -292,9 +304,17 @@ test("github_pull_request_status returns the reviewed head, checks, and unresolv
             url: "https://ci.example/check/2",
           },
         ]);
+        assert.equal(
+          (result.formalReviews as Array<{ authorAssociation: string }>)[0]
+            .authorAssociation,
+          "MEMBER"
+        );
         assert.equal(result.unresolvedReviewThreadCount, 1);
         assert.deepEqual(result.unresolvedReviewThreads, [
           {
+            author: "original-author",
+            authorType: "User",
+            authorAssociation: "NONE",
             comments: [
               {
                 author: "reviewer",

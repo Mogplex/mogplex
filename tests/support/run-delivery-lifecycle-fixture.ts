@@ -51,7 +51,7 @@ export async function deliveryLifecycleFixture() {
     ]
   );
   await db.exec(
-    "ALTER TABLE external_agent_runs ADD COLUMN working_branch text DEFAULT 'feature/signing'"
+    "ALTER TABLE external_agent_runs ADD COLUMN working_branch text DEFAULT 'feature/signing'; ALTER TABLE external_agent_runs ADD COLUMN base_branch text DEFAULT 'main'"
   );
   const query = async (sql: string, values: unknown[]) => ({
     rows: (await db.query<DeliveryRun>(sql, values)).rows.map((row) => ({

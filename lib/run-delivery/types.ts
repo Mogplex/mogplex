@@ -29,6 +29,7 @@ export const deliverySnapshotSchema = z.object({
       "unknown",
     ]),
     unresolved: z.number().int().nonnegative(),
+    actionable: z.boolean().optional(),
     incomplete: z.boolean(),
   }),
   deployment: z.object({
@@ -55,8 +56,9 @@ export function deliveryNeedsRepair(snapshot: DeliverySnapshot) {
   return (
     snapshot.pullRequest?.state === "open" &&
     (snapshot.checks.state === "failure" ||
-      snapshot.review.state === "changes_requested" ||
-      snapshot.review.unresolved > 0)
+      (snapshot.review.actionable ??
+        (snapshot.review.state === "changes_requested" ||
+          snapshot.review.unresolved > 0)))
   );
 }
 

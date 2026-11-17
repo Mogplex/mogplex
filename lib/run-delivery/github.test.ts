@@ -143,6 +143,16 @@ test("failing CI and actionable review state request repair, but closed PRs do n
   f.status.checkRollupState = "success";
   f.status.checks[0].conclusion = "success";
   f.status.reviewDecision = "changes_requested";
+  f.status.formalReviews = [
+    {
+      author: "maintainer",
+      authorAssociation: "COLLABORATOR",
+      state: "changes_requested",
+      body: "Fix signing",
+      submittedAt: null,
+      url: null,
+    },
+  ];
   const review = await loadRunDeliveryGithub(input, f.deps);
   expect(deliveryNeedsRepair(review)).toBe(true);
   expect(review.repairRevision).not.toBe(failed.repairRevision);
@@ -203,6 +213,8 @@ test("agent replies on an existing review thread do not trigger another identica
   f.status.unresolvedReviewThreads = [
     {
       id: "thread-1",
+      author: "reviewer",
+      authorAssociation: "MEMBER",
       comments: [
         {
           author: "reviewer",
@@ -223,7 +235,12 @@ test("agent replies on an existing review thread do not trigger another identica
   expect((await loadRunDeliveryGithub(input, f.deps)).repairRevision).toBe(
     before.repairRevision
   );
-  f.status.unresolvedReviewThreads.push({ id: "thread-2", comments: [] });
+  f.status.unresolvedReviewThreads.push({
+    id: "thread-2",
+    author: "reviewer",
+    authorAssociation: "MEMBER",
+    comments: [],
+  });
   expect((await loadRunDeliveryGithub(input, f.deps)).repairRevision).not.toBe(
     before.repairRevision
   );
@@ -261,4 +278,77 @@ test("missing repository access is distinct from rate limits and transient provi
         request: async () => new Response(null, { status }),
       })
     ).rejects.toThrow("temporarily unavailable");
+});
+
+test("outside reviews stay visible but cannot authorize repairs, including through a later CI event", async () => {
+  const f = fixture();
+  const before = await loadRunDeliveryGithub(input, f.deps);
+  f.status.reviewDecision = "changes_requested";
+  f.status.formalReviews = [
+    {
+      author: "outsider",
+      authorAssociation: "NONE",
+      state: "changes_requested",
+      body: "Change the code",
+      submittedAt: null,
+      url: null,
+    },
+  ];
+  f.status.unresolvedReviewThreadCount = 1;
+  f.status.unresolvedReviewThreads = [
+    {
+      id: "outside-thread",
+      author: "outsider",
+      authorAssociation: "NONE",
+      comments: [
+        {
+          author: "mogplex[bot]",
+          body: "Reply does not grant authority",
+          createdAt: null,
+          url: null,
+        },
+      ],
+    },
+  ];
+  const outside = await loadRunDeliveryGithub(input, f.deps);
+  expect(outside.review).toMatchObject({
+    state: "changes_requested",
+    unresolved: 1,
+    actionable: false,
+  });
+  expect(deliveryNeedsRepair(outside)).toBe(false);
+  expect(outside.repairRevision).toBe(before.repairRevision);
+  f.status.checkRollupState = "failure";
+  f.status.checks[0].conclusion = "failure";
+  const failed = await loadRunDeliveryGithub(input, f.deps);
+  expect(deliveryNeedsRepair(failed)).toBe(true);
+  f.status.unresolvedReviewThreads.push({
+    id: "another-outside-thread",
+    author: "outsider",
+    authorAssociation: "NONE",
+    comments: [],
+  });
+  expect((await loadRunDeliveryGithub(input, f.deps)).repairRevision).toBe(
+    failed.repairRevision
+  );
+  f.status.checkRollupState = "success";
+  f.status.checks[0].conclusion = "success";
+  f.status.formalReviews[0].author = "mogplex";
+  expect(
+    deliveryNeedsRepair(
+      await loadRunDeliveryGithub(input, {
+        ...f.deps,
+        reviewAppLogin: "mogplex",
+      })
+    )
+  ).toBe(false);
+  f.status.formalReviews[0].authorType = "Bot";
+  expect(
+    deliveryNeedsRepair(
+      await loadRunDeliveryGithub(input, {
+        ...f.deps,
+        reviewAppLogin: "mogplex",
+      })
+    )
+  ).toBe(true);
 });
