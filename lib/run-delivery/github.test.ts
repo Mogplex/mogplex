@@ -120,6 +120,12 @@ test("only the owned branch and base repository can supply a delivery receipt", 
   f.pull.head.repo.full_name = input.repoFullName;
   f.pull.base.ref = "another-base";
   expect((await loadRunDeliveryGithub(input, f.deps)).pullRequest).toBeNull();
+  f.pull.base.ref = "main";
+  f.pull.head.ref = "another-branch";
+  expect((await loadRunDeliveryGithub(input, f.deps)).pullRequest).toBeNull();
+  f.pull.head.ref = input.workingBranch;
+  f.pull.base.repo.full_name = "another/repo";
+  expect((await loadRunDeliveryGithub(input, f.deps)).pullRequest).toBeNull();
 });
 
 test("stale heads and incomplete checks cannot be presented as ready", async () => {
@@ -169,12 +175,20 @@ test("deployment proof must match the merge commit and a production environment"
   const f = fixture();
   f.pull.state = "closed";
   f.pull.merged_at = "2026-11-17T00:00:00Z";
-  f.deployment([
-    { id: 1, sha, environment: "Preview", production_environment: false },
-  ]);
-  const preview = await loadRunDeliveryGithub(input, f.deps);
-  expect(preview.pullRequest?.state).toBe("merged");
-  expect(preview.deployment.state).toBe("not_reported");
+  for (const deployment of [
+    { id: 1, sha, environment: "Production", production_environment: true },
+    {
+      id: 1,
+      sha: mergeSha,
+      environment: "Preview",
+      production_environment: false,
+    },
+  ]) {
+    f.deployment([deployment]);
+    const preview = await loadRunDeliveryGithub(input, f.deps);
+    expect(preview.pullRequest?.state).toBe("merged");
+    expect(preview.deployment.state).toBe("not_reported");
+  }
   f.deployment([
     {
       id: 2,
@@ -184,7 +198,11 @@ test("deployment proof must match the merge commit and a production environment"
     },
   ]);
   expect((await loadRunDeliveryGithub(input, f.deps)).deployment).toMatchObject(
-    { state: "success", environment: "Production" }
+    {
+      state: "success",
+      environment: "Production",
+      url: "https://widgets.example",
+    }
   );
   f.deployment(
     [
@@ -200,6 +218,53 @@ test("deployment proof must match the merge commit and a production environment"
   expect((await loadRunDeliveryGithub(input, f.deps)).deployment.state).toBe(
     "failure"
   );
+});
+
+test("production access failures preserve the PR receipt and report unavailable evidence", async () => {
+  const f = fixture();
+  f.pull.state = "closed";
+  f.pull.merged_at = "2026-11-17T00:00:00Z";
+  const result = await loadRunDeliveryGithub(input, {
+    ...f.deps,
+    request: async (url) =>
+      String(url).includes("/deployments?")
+        ? new Response(null, { status: 403 })
+        : f.deps.request(url),
+  });
+  expect(result.pullRequest).toMatchObject({
+    state: "merged",
+    number: 42,
+    mergeSha,
+  });
+  expect(result.deployment).toEqual({
+    state: "unavailable",
+    environment: null,
+    url: null,
+  });
+});
+
+test("current review and CI decisions map to distinct visible states", async () => {
+  const f = fixture();
+  for (const [decision, expected] of [
+    ["approved", "approved"],
+    ["review_required", "required"],
+    ["unknown", "unknown"],
+  ] as const) {
+    f.status.reviewDecision = decision;
+    expect((await loadRunDeliveryGithub(input, f.deps)).review.state).toBe(
+      expected
+    );
+  }
+  for (const [rollup, expected] of [
+    ["error", "failure"],
+    ["pending", "pending"],
+    ["expected", "pending"],
+  ] as const) {
+    f.status.checkRollupState = rollup;
+    expect((await loadRunDeliveryGithub(input, f.deps)).checks.state).toBe(
+      expected
+    );
+  }
 });
 
 test("draft PRs with green checks still need author review", async () => {

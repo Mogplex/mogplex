@@ -41,6 +41,8 @@ test("delivery workers recheck current GitHub evidence before consuming an autho
   f.snapshot.repairRevision = "revision-1";
   f.snapshot.checks.state = "success";
   expect(await f.resume.prepare(f.run, expected)).toBe(false);
+  f.snapshot.pullRequest = null;
+  expect(await f.resume.prepare(f.run, expected)).toBe(false);
 });
 test("missing authorization, cancelled runs, prior repairs and stale receipts are no-ops", async () => {
   for (const change of [

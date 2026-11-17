@@ -33,8 +33,41 @@ function fixture() {
 }
 test("manual refresh updates evidence without starting an agent", async () => {
   const f = fixture();
-  expect(await refreshRunDelivery(f.run, false, f.deps)).toEqual(f.snapshot);
+  expect(await refreshRunDelivery(f.run, undefined, f.deps)).toEqual(
+    f.snapshot
+  );
   expect(f.queued).toEqual([]);
+});
+
+test("a replaced worker or missing receipt cannot borrow a newer run's repair authorization", async () => {
+  for (const changedCall of [true, false]) {
+    const f = fixture();
+    f.stale();
+    const current = deliveryRun();
+    if (changedCall) {
+      current.ai_call_id = "replacement-call";
+      current.metadata.delivery_progress = f.snapshot;
+    }
+    await refreshRunDelivery(f.run, true, {
+      ...f.deps,
+      store: { ...f.deps.store, load: async () => current },
+    });
+    expect(f.queued).toEqual([]);
+  }
+});
+
+test("a pinned PR is retained when refreshing a reused branch", async () => {
+  const f = fixture();
+  f.run.metadata.delivery_pull_request_number = 42;
+  const result = await refreshRunDelivery(f.run, false, {
+    ...f.deps,
+    loadGithub: async (input) => {
+      const snapshot = deliverySnapshot();
+      if (input.pullRequestNumber !== 42) snapshot.pullRequest!.number = 99;
+      return snapshot;
+    },
+  });
+  expect(result.pullRequest?.number).toBe(42);
 });
 test("trusted events queue exact-head repair with stable deduplication and bounded authority", async () => {
   const f = fixture();
