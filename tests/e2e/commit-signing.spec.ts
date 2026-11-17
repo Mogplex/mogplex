@@ -344,10 +344,10 @@ test("saved keys expose copy, honest sandbox verification, and cancellable remov
   await page
     .getByRole("button", { name: "Verify signing", exact: true })
     .click();
-  await expect(
-    page.getByLabel("Sandbox to check").locator("option")
-  ).toHaveText([
-    "Choose a sandbox",
+  await page
+    .getByRole("combobox", { name: "Sandbox to check", exact: true })
+    .click();
+  await expect(page.getByRole("option")).toHaveText([
     "acme/widgets · feature/signing · Running · 00000000",
     "acme/widgets · feature/signing · Running · 11111111",
     "Repository unavailable · default branch · Paused",
@@ -356,8 +356,15 @@ test("saved keys expose copy, honest sandbox verification, and cancellable remov
       " · Running",
   ]);
   await page
-    .getByLabel("Sandbox to check")
-    .selectOption("00000000-0000-4000-8000-000000000777");
+    .getByRole("combobox", { name: "Search sandboxes", exact: true })
+    .fill("00000000");
+  await expect(page.getByRole("option")).toHaveCount(1);
+  await page
+    .getByRole("option", {
+      name: "acme/widgets · feature/signing · Running · 00000000",
+      exact: true,
+    })
+    .click();
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= window.innerWidth
