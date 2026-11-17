@@ -18,7 +18,7 @@ test("legacy one-paragraph plans have a bounded lead without losing Unicode char
   expect(lead.endsWith("…")).toBe(true);
   expect(lead).not.toContain("\uFFFD");
   expect(checkpointSummaryLead("  ## A short plan\nwith two lines  ")).toBe(
-    "A short plan with two lines"
+    "A short plan\nwith two lines"
   );
   expect(checkpointSummaryLead("  ")).toBe("");
 });
@@ -41,4 +41,10 @@ test("truncated lead paragraphs are never removed from the full details", () => 
     );
     expect(checkpointSummaryDetails(full)).toBe(size > 220 ? full : "Details");
   }
+});
+
+test("saved list-shaped plans keep their line breaks and full disclosure", () => {
+  const summary = "- Add a toggle\n- Persist it";
+  expect(checkpointSummaryLead(summary)).toBe(summary);
+  expect(checkpointSummaryDetails(summary)).toBe(summary);
 });
