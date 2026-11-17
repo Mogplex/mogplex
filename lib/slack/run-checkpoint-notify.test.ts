@@ -53,7 +53,7 @@ describe("buildRunCheckpointText", () => {
     expect(text).toContain("Ready for your review");
     expect(text).toContain("Moved sign in into the menu.");
     expect(text).toContain("https://sb-abc.vercel.run");
-    expect(text).toContain("Ship it to open the pull request");
+    expect(text).toContain("Approve to open the pull request");
   });
 
   it("should omit the preview line when there is no preview URL", () => {

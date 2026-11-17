@@ -20,7 +20,7 @@ for (const action of ["approve", "revise"] as const) {
       canGuide: true,
       checkpoint: {
         kind: "plan",
-        summary: "Add a welcoming heading and test mobile layout.",
+        summary: "Add a **welcoming heading** and test mobile layout.",
       },
       repo: {
         id: "repo-1",
@@ -73,19 +73,32 @@ for (const action of ["approve", "revise"] as const) {
     await expect(conversation).not.toContainText("MOGPLEX_CHECKPOINT");
     await expect(conversation).not.toContainText('"previewUrl"');
     const summary = conversation.getByRole("button", {
-      name: "Plan summary",
+      name: "Plan, risks & verification",
       exact: true,
     });
     await expect(summary).toHaveAttribute("aria-expanded", "false");
+    await expect(
+      conversation.getByText(
+        "Add a welcoming heading and test mobile layout.",
+        { exact: true }
+      )
+    ).toBeVisible();
     await summary.click();
     await expect(summary).toHaveAttribute("aria-expanded", "true");
     await expect(
-      conversation.getByText(context.checkpoint!.summary, { exact: true })
+      conversation
+        .getByText("Add a welcoming heading and test mobile layout.", {
+          exact: true,
+        })
+        .last()
     ).toBeVisible();
     await summary.click();
     await expect(
-      conversation.getByText(context.checkpoint!.summary, { exact: true })
-    ).toHaveCount(0);
+      conversation.getByText(
+        "Add a welcoming heading and test mobile layout.",
+        { exact: true }
+      )
+    ).toBeVisible();
     await expect(
       conversation.getByRole("button", { name: "Continue in this chat" })
     ).toHaveCount(0);
@@ -138,3 +151,100 @@ for (const action of ["approve", "revise"] as const) {
     await expect.poll(() => streams).toBeGreaterThanOrEqual(3);
   });
 }
+
+test("implementation approval explains the PR action and waits for confirmed resume", async ({
+  page,
+}) => {
+  const { sessions } = await setupControlSidebar(page);
+  const runId = "00000000-0000-4000-8000-000000000911";
+  sessions[0].external_run_id = runId;
+  const context: RunWorkspaceContext = {
+    runId,
+    aiCallId: "00000000-0000-4000-8000-000000000912",
+    prompt: "Implement signing",
+    status: "awaiting_input",
+    sandboxRecordId: null,
+    workingBranch: "feature/signing",
+    canGuide: true,
+    checkpoint: {
+      kind: "review",
+      summary:
+        "Commit signing is ready for review.\n\n## Changes\nAdded signing settings.\n\n## Risks\nExisting workspaces need a restart.\n\n## Verification\nSigning tests passed.",
+    },
+    repo: {
+      id: "repo-1",
+      user_id: "owner",
+      full_name: "acme/widgets",
+      created_at: "2026-11-17T00:00:00Z",
+    },
+  };
+  await page.route("**/api/runs/*/workspace", (route) =>
+    route.fulfill({ json: context })
+  );
+  await page.route("**/api/runs/*/stream?*", (route) =>
+    route.fulfill({
+      contentType: "text/event-stream",
+      body: `event: run\ndata: ${JSON.stringify(context)}\n\nevent: replay_complete\ndata: {}\n\n`,
+    })
+  );
+  let submissions = 0;
+  await page.route("**/api/runs/*/checkpoint", (route) => {
+    submissions++;
+    expect(route.request().postDataJSON()).toEqual({
+      action: "approve",
+      aiCallId: "00000000-0000-4000-8000-000000000912",
+    });
+    return route.fulfill({ status: 202, json: { status: "queued" } });
+  });
+  await page.reload();
+  const conversation = page.getByTestId("control-external-run");
+  await expect(
+    conversation.getByText("Commit signing is ready for review.", {
+      exact: true,
+    })
+  ).toBeVisible();
+  await expect(
+    conversation.getByText("Existing workspaces need a restart.", {
+      exact: true,
+    })
+  ).toHaveCount(0);
+  await conversation
+    .getByRole("button", { name: "Changes, risks & verification" })
+    .click();
+  await expect(
+    conversation.getByRole("heading", { name: "Verification", exact: true })
+  ).toBeVisible();
+  await page.screenshot({
+    path: test.info().outputPath("implementation-review.png"),
+  });
+  await expect(
+    conversation.getByRole("button", { name: "Approve & open PR", exact: true })
+  ).toBeInViewport();
+  await conversation
+    .getByRole("button", { name: "Approve & open PR", exact: true })
+    .click();
+  await expect(
+    conversation.getByText("Response received · queued", { exact: true })
+  ).toBeVisible();
+  await expect(
+    conversation.getByText("Waiting for the agent to resume", { exact: false })
+  ).toBeVisible();
+  await expect(
+    conversation.getByRole("button", { name: "Approve & open PR", exact: true })
+  ).toHaveCount(0);
+  await conversation.getByRole("button", { name: "Refresh status" }).click();
+  await expect(
+    conversation.getByText("Response received · queued", { exact: true })
+  ).toBeVisible();
+  expect(submissions).toBe(1);
+  context.status = "streaming";
+  context.aiCallId = "00000000-0000-4000-8000-000000000913";
+  context.checkpoint = null;
+  await conversation.getByRole("button", { name: "Refresh status" }).click();
+  await expect(
+    conversation.getByText("Agent is working", { exact: true })
+  ).toBeVisible();
+  await expect(
+    conversation.getByText("Response received · queued", { exact: true })
+  ).toHaveCount(0);
+});
