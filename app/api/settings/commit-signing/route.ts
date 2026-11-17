@@ -20,12 +20,17 @@ import {
 import { isCommitSigningEncryptionConfigured } from "@/lib/commit-signing/secret-box";
 import {
   deleteCommitSigningKey,
+  clearCommitSigningKeyRegistration,
   getCommitSigningKeyView,
   markCommitSigningKeyRegistered,
   saveCommitSigningKey,
   type CommitSigningKeyView,
 } from "@/lib/commit-signing/storage";
-import { registerGithubSshSigningKey } from "@/lib/commit-signing/github";
+import {
+  checkGithubSshSigningKey,
+  registerGithubSshSigningKey,
+  type GithubSigningKeyStatus,
+} from "@/lib/commit-signing/github";
 import { signingFailureDiagnostic } from "@/lib/commit-signing/diagnostics";
 
 const DEFAULT_KEY_TITLE = "Mogplex commit signing";
@@ -43,6 +48,8 @@ export type CommitSigningRouteDeps = {
   saveKey: typeof saveCommitSigningKey;
   deleteKey: typeof deleteCommitSigningKey;
   markRegistered: typeof markCommitSigningKeyRegistered;
+  clearRegistration: typeof clearCommitSigningKeyRegistration;
+  checkKey: typeof checkGithubSshSigningKey;
   isEncryptionConfigured: typeof isCommitSigningEncryptionConfigured;
   getGithubToken: (userId: string) => Promise<string | null>;
   registerKey: typeof registerGithubSshSigningKey;
@@ -54,6 +61,8 @@ const defaultDeps: CommitSigningRouteDeps = {
   saveKey: saveCommitSigningKey,
   deleteKey: deleteCommitSigningKey,
   markRegistered: markCommitSigningKeyRegistered,
+  clearRegistration: clearCommitSigningKeyRegistration,
+  checkKey: checkGithubSshSigningKey,
   isEncryptionConfigured: isCommitSigningEncryptionConfigured,
   getGithubToken: (userId: string) => getOAuthToken(userId, "github"),
   registerKey: registerGithubSshSigningKey,
@@ -137,11 +146,11 @@ export function createCommitSigningRouteHandlers(
         { status: 409 }
       );
     }
-    const result = await deps.registerKey({
-      token,
-      publicKey: view.publicKey,
-      title,
-    });
+    const existing = await deps.checkKey({ token, publicKey: view.publicKey });
+    const result =
+      existing.status === "registered"
+        ? { status: "already_registered" as const, keyId: existing.keyId }
+        : await deps.registerKey({ token, publicKey: view.publicKey, title });
     if (
       result.status === "registered" ||
       result.status === "already_registered"
@@ -178,7 +187,49 @@ export function createCommitSigningRouteHandlers(
         { status: 409 }
       );
     }
-    return NextResponse.json({ error: result.message }, { status: 502 });
+    return NextResponse.json(
+      {
+        error:
+          "GitHub registration could not be completed. Your signing key is saved. Try again or add the public key on GitHub.",
+      },
+      { status: 502 }
+    );
+  }
+
+  async function reconcileRegistration(
+    userId: string,
+    view: CommitSigningKeyView
+  ) {
+    let result: GithubSigningKeyStatus = { status: "unavailable" };
+    try {
+      const token = await deps.getGithubToken(userId);
+      if (token)
+        result = await deps.checkKey({ token, publicKey: view.publicKey });
+    } catch (error) {
+      console.warn(
+        "[commit-signing] github_registration_check failed",
+        signingFailureDiagnostic(error)
+      );
+    }
+    if (
+      result.status === "registered" &&
+      (!view.registeredAt || view.githubKeyId !== result.keyId)
+    ) {
+      await deps.markRegistered({
+        userId,
+        publicKey: view.publicKey,
+        githubKeyId: result.keyId,
+        title: view.title,
+      });
+    } else if (result.status === "not_registered" && view.registeredAt) {
+      await deps.clearRegistration({ userId, publicKey: view.publicKey });
+    }
+    const current = await deps.loadKey(userId);
+    return NextResponse.json({
+      ...statusPayload(current),
+      registrationStatus:
+        current?.publicKey === view.publicKey ? result.status : "unavailable",
+    });
   }
   async function GET() {
     const userId = await deps.requireUserId();
@@ -202,7 +253,9 @@ export function createCommitSigningRouteHandlers(
       );
     }
     const view = await deps.loadKey(userId);
-    return NextResponse.json(statusPayload(view));
+    return view
+      ? reconcileRegistration(userId, view)
+      : NextResponse.json(statusPayload(null));
   }
 
   async function POST(request: Request) {

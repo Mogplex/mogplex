@@ -60,6 +60,68 @@ export type GithubSshSigningKey = {
   publicKey: string | null;
 };
 
+export type GithubSigningKeyStatus =
+  | { status: "registered"; keyId: string }
+  | { status: "not_registered" }
+  | { status: "unavailable" };
+
+/**
+ * Read the authenticated account's public signing keys. This does not need
+ * SSH-key management permissions, so it also finds keys added on GitHub.
+ * A refused or malformed lookup is unknown, never evidence of removal.
+ */
+export async function checkGithubSshSigningKey(
+  input: { token: string; publicKey: string },
+  deps: GithubSigningKeyDeps = defaultDeps
+): Promise<GithubSigningKeyStatus> {
+  const headers = requestHeaders(input.token);
+  const signal = AbortSignal.timeout(15_000);
+  const options = { headers, cache: "no-store" as const, signal };
+  try {
+    // Resolve identity from the token, never a browser-supplied or stale login.
+    const identity = await deps.request("https://api.github.com/user", options);
+    if (!identity.ok) return { status: "unavailable" };
+    const account: unknown = await identity.json();
+    const login =
+      account && typeof account === "object" && "login" in account
+        ? account.login
+        : null;
+    if (
+      typeof login !== "string" ||
+      !/^[a-z\d](?:[a-z\d-]*[a-z\d])?$/i.test(login)
+    )
+      return { status: "unavailable" };
+    const normalized = input.publicKey
+      .trim()
+      .split(/\s+/)
+      .slice(0, 2)
+      .join(" ");
+    for (let page = 1; ; page += 1) {
+      const response = await deps.request(
+        `https://api.github.com/users/${encodeURIComponent(login)}/ssh_signing_keys?per_page=100&page=${page}`,
+        options
+      );
+      if (!response.ok) return { status: "unavailable" };
+      const keys: unknown = await response.json();
+      if (!Array.isArray(keys)) return { status: "unavailable" };
+      for (const entry of keys) {
+        if (
+          !entry ||
+          typeof entry !== "object" ||
+          typeof entry.key !== "string" ||
+          !readKeyId(entry)
+        )
+          return { status: "unavailable" };
+        if (entry.key.trim().split(/\s+/).slice(0, 2).join(" ") === normalized)
+          return { status: "registered", keyId: readKeyId(entry)! };
+      }
+      if (keys.length < 100) return { status: "not_registered" };
+    }
+  } catch {
+    return { status: "unavailable" };
+  }
+}
+
 /** The signing keys already registered on the signed-in GitHub account. */
 export async function listGithubSshSigningKeys(
   token: string,
@@ -152,8 +214,8 @@ export async function registerGithubSshSigningKey(
     );
     if (existing) return { status: "already_registered", keyId: existing.id };
   }
-  if (response.status === 403) {
-    // The token is missing write:ssh_signing_key, or SSO blocked the call.
+  if (response.status === 403 || response.status === 404) {
+    // Missing signing-key permissions can also be hidden behind a 404.
     return { status: "scope_missing" };
   }
   return {

@@ -90,6 +90,17 @@ carry by default.
   shows the public key, which the user can paste into
   **GitHub -> Settings -> SSH and GPG keys -> Signing keys**.
 
+Opening Settings or choosing **Check GitHub registration** checks the connected
+GitHub account's public SSH signing keys. Mogplex matches the exact public key,
+including keys added manually, and updates its registration receipt. This read
+does not require signing-key management permissions. Automatic registration
+also checks for an existing key before attempting to create it; GitHub App user
+tokens need the **SSH signing keys: write** account permission to create keys.
+
+A successful lookup that no longer contains the key clears the receipt. A failed
+lookup shows **GitHub registration could not be checked** and preserves the last
+receipt and saved key. No private key is sent to GitHub during either check.
+
 `POST /user/keys` is *not* used: that is the list of authentication keys.
 GitHub does not treat commits signed with an authentication key as verified.
 
@@ -150,7 +161,7 @@ commit fail.
 
 ## Security notes
 
-Settings separates the saved key, its recorded GitHub registration, and a
+Settings separates the saved key, its checked GitHub registration, and a
 workspace verification receipt. Copy public key copies only the public key.
 Removing the stored key requires confirmation and does not revoke existing
 workspace copies or GitHub trust.

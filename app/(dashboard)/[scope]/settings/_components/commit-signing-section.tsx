@@ -14,6 +14,7 @@ type CommitSigningStatus = {
   fingerprint: string | null
   title: string | null
   registered: boolean
+  registrationStatus?: "registered" | "not_registered" | "unavailable"
   registeredAt: string | null
   githubKeyId: string | null
   createdAt: string | null
@@ -124,6 +125,7 @@ export function CommitSigningSection() {
   }
 
   const configured = data?.configured === true
+  const registrationUnavailable = data.registrationStatus === "unavailable"
 
   return (
     <section className="rounded-lg border border-border/60 bg-card">
@@ -181,8 +183,16 @@ export function CommitSigningSection() {
             </div>
 
             <div className="rounded-md border border-border bg-secondary px-3 py-2 text-sm">
-              <p className="font-medium">GitHub registration: {data.registered ? "recorded" : "not recorded"}</p>
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">{data.registered ? "Mogplex recorded a successful registration. GitHub trust can change independently; a Verified badge also requires a matching commit email." : "Register this public key as a Signing Key on GitHub. If you added it manually, registration may not be recorded here."}</p>
+              <p className="font-medium" role="status">{registrationUnavailable ? "GitHub registration could not be checked" : data.registered ? "Registered with GitHub" : "Not registered with GitHub"}</p>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">{registrationUnavailable ? "Your signing key is saved. Check again to confirm whether GitHub trusts it." : data.registered ? "This public key is on your GitHub account as a signing key. A Verified badge also requires a matching commit email." : "Add this public key as a Signing Key on GitHub, then check its registration here."}</p>
+              <Button variant="outline" size="sm" className="mt-3" disabled={busy !== null} onClick={async () => {
+                setBusy("check")
+                setError(null)
+                setNotice(null)
+                try { await mutate() }
+                catch { setError("Could not check GitHub registration. Try again.") }
+                finally { setBusy(null) }
+              }}>{busy === "check" ? "Checking GitHub…" : "Check GitHub registration"}</Button>
             </div>
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-2">
