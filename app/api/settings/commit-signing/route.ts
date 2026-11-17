@@ -198,6 +198,10 @@ export function createCommitSigningRouteHandlers(
         { status: 409 }
       );
     }
+    console.warn(
+      "[commit-signing] github_registration_failed",
+      signingFailureDiagnostic({ status: result.httpStatus })
+    );
     return NextResponse.json(
       {
         error:

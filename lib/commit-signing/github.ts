@@ -15,7 +15,7 @@ export type SshSigningKeyRegistration =
   | { status: "already_registered"; keyId: string | null }
   | { status: "scope_missing" }
   | { status: "rate_limited" }
-  | { status: "failed"; message: string };
+  | { status: "failed"; message: string; httpStatus?: number };
 
 export type GithubRequest = (
   input: string,
@@ -227,6 +227,7 @@ export async function registerGithubSshSigningKey(
   }
   return {
     status: "failed",
+    httpStatus: response.status,
     message: readMessage(
       body,
       `GitHub refused the signing key (HTTP ${response.status}).`

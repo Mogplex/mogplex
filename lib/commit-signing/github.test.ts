@@ -113,7 +113,11 @@ test("a refused registration keeps the GitHub message", async () => {
     { request: fake.request }
   );
 
-  assert.deepEqual(result, { status: "failed", message: "Server Error" });
+  assert.deepEqual(result, {
+    status: "failed",
+    message: "Server Error",
+    httpStatus: 500,
+  });
 });
 
 test("a network failure is reported instead of thrown", async () => {
@@ -202,5 +206,6 @@ test("a duplicate rejection for a key absent from signing keys stays a failure",
   assert.deepEqual(result, {
     status: "failed",
     message: "key is already in use",
+    httpStatus: 422,
   });
 });

@@ -131,7 +131,11 @@ test("temporary registration failures keep the key visible and can be retried", 
         return;
       }
     }
-    await fulfillJson(route, { ...saved, registered: attempts > 1 });
+    await fulfillJson(route, {
+      ...saved,
+      registered: attempts > 1,
+      registrationStatus: attempts > 1 ? "registered" : "not_registered",
+    });
   });
   await page.goto(scopedPath("settings/commit-signing"));
   await page.getByRole("button", { name: "Register with GitHub" }).click();
@@ -200,6 +204,7 @@ test("a user creates a key, receives manual-registration guidance, and removes i
             publicKey: "ssh-ed25519 public-test-key",
             fingerprint: "SHA256:public-test-fingerprint",
             createdAt: "2026-11-17T00:00:00Z",
+            registrationStatus: "not_registered",
           }
         : empty
     );
@@ -247,6 +252,7 @@ test("saved keys expose copy, honest workspace verification, and cancellable rem
     configured: true,
     publicKey: "ssh-ed25519 public-test-key",
     fingerprint: "SHA256:public-test-fingerprint",
+    registrationStatus: "not_registered",
   };
   let deleted = false;
   await page.route(endpoint, async (route) => {

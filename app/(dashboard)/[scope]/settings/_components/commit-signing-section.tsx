@@ -140,6 +140,7 @@ export function CommitSigningSection() {
   }
 
   const configured = data?.configured === true
+  const registrationPending = busy === "check" || data.registrationStatus === undefined
   const githubNotConnected = data.registrationStatus === "not_connected"
   const registrationUnavailable = data.registrationStatus === "unavailable"
 
@@ -181,7 +182,7 @@ export function CommitSigningSection() {
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
-                  disabled={busy !== null || (data.registered && !registrationUnavailable && !githubNotConnected)}
+                  disabled={busy !== null || registrationPending || (data.registered && !registrationUnavailable && !githubNotConnected)}
                   onClick={() => post({ action: "register" }, "register")}
                   className="rounded-md border border-border px-3 py-1.5 text-xs font-medium disabled:opacity-50"
                 >
@@ -199,8 +200,8 @@ export function CommitSigningSection() {
             </div>
 
             <div className="rounded-md border border-border bg-secondary px-3 py-2 text-sm">
-              <p className="font-medium" role="status">{busy === "check" ? "Checking GitHub registration…" : githubNotConnected ? "Connect GitHub to check registration" : registrationUnavailable ? "GitHub registration could not be checked" : data.registered ? "Registered with GitHub" : "Not registered with GitHub"}</p>
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">{githubNotConnected ? "Connect your GitHub account in Settings → Account, then check again. Your signing key is saved." : registrationUnavailable ? "Your signing key is saved. Check again to confirm whether GitHub trusts it." : data.registered ? "This public key is on your GitHub account as a signing key. A Verified badge also requires a matching commit email." : "Add this public key as a Signing Key on GitHub, then check its registration here."}</p>
+              <p className="font-medium" role="status">{registrationPending ? "Checking GitHub registration…" : githubNotConnected ? "Connect GitHub to check registration" : registrationUnavailable ? "GitHub registration could not be checked" : data.registered ? "Registered with GitHub" : "Not registered with GitHub"}</p>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">{registrationPending ? "Your signing key is saved. Checking whether GitHub trusts this public key." : githubNotConnected ? "Connect your GitHub account in Settings → Account, then check again. Your signing key is saved." : registrationUnavailable ? "Your signing key is saved. Check again to confirm whether GitHub trusts it." : data.registered ? "This public key is on your GitHub account as a signing key. A Verified badge also requires a matching commit email." : "Add this public key as a Signing Key on GitHub, then check its registration here."}</p>
               <Button variant="outline" size="sm" className="mt-3" disabled={busy !== null} onClick={() => void post({ action: "check" }, "check")}>{busy === "check" ? "Checking GitHub…" : "Check GitHub registration"}</Button>
             </div>
             <div className="space-y-2">
