@@ -124,7 +124,8 @@ export function createOAuthTokenStore(deps: OAuthTokenStoreDeps) {
     });
     if (error) {
       throw new Error(
-        `Failed to get ${provider} OAuth token: ${error.message}`
+        `Failed to get ${provider} OAuth token: ${error.message}`,
+        { cause: error }
       );
     }
 

@@ -4,6 +4,7 @@ import {
 } from "@/lib/billing/sandbox-usage";
 import { isNotFoundError } from "@/lib/sandbox/sdk-adapter";
 import { scrubSandboxCommitSigning } from "@/lib/sandbox/commit-signing";
+import { signingFailureDiagnostic } from "@/lib/commit-signing/diagnostics";
 import type { SandboxRestartDeps } from "./types";
 
 type CaptureInput = {
@@ -51,9 +52,10 @@ async function restoreRunningSandboxSigning(
         status: result.status,
       });
     }
-  } catch {
+  } catch (error) {
     console.warn("[sandbox/restart] Could not restore commit signing", {
       sandboxRecordId: input.recordId,
+      diagnostic: signingFailureDiagnostic(error),
     });
   }
 }
@@ -134,6 +136,7 @@ export async function captureLegacyWorkspaceSnapshot(
     : "";
   let snapshotId: string | null = null;
   let snapshotCompletedAt: Date | null = null;
+  let operation = "workspace_state";
   try {
     // Sandbox methods auto-resume stopped VMs. Bind all secret and snapshot
     // operations to this existing session so a concurrent stop stays stopped.
@@ -143,17 +146,30 @@ export async function captureLegacyWorkspaceSnapshot(
     }
     // Keep the private signing key out of stored snapshot state. The
     // restarted sandbox gets it back from the encrypted store.
+    operation = "key_scrub";
     await scrubSandboxCommitSigning({ sandbox: session });
     // The provider uses 0 for no expiry; saved work must never age out.
+    operation = "snapshot";
     const snapshot = await session.snapshot({ expiration: 0 });
     snapshotId = snapshot.snapshotId;
     snapshotCompletedAt = new Date();
   } catch (error) {
+    const diagnostic = signingFailureDiagnostic(error);
     console.error("[sandbox/restart] Snapshot capture failed", {
       sandboxRecordId: input.recordId,
-      providerNotFound: isNotFoundError(error),
-      errorName: error instanceof Error ? error.name : typeof error,
-      errorMessage: error instanceof Error ? error.message : String(error),
+      providerNotFound:
+        isNotFoundError(error) || diagnostic.category === "not_found",
+      operation,
+      diagnostic,
+      // Snapshot API failures contain no key bytes. Keep their existing diagnostics;
+      // errors from the preceding signing cleanup remain strictly allowlisted.
+      ...(operation === "key_scrub"
+        ? {}
+        : {
+            errorName: error instanceof Error ? error.name : typeof error,
+            errorMessage:
+              error instanceof Error ? error.message : String(error),
+          }),
     });
   }
   let storageError: LegacySnapshotError | null = null;
@@ -199,10 +215,13 @@ export async function captureLegacyWorkspaceSnapshot(
         observed,
         readSandboxProviderSession(observed).status
       );
-    } catch {
+    } catch (error) {
       console.warn(
         "[sandbox/restart] Signing recovery could not inspect the workspace",
-        { sandboxRecordId: input.recordId }
+        {
+          sandboxRecordId: input.recordId,
+          diagnostic: signingFailureDiagnostic(error),
+        }
       );
     }
   }
