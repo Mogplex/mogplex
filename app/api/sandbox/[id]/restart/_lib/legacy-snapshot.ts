@@ -9,6 +9,7 @@ import type { SandboxRestartDeps } from "./types";
 type CaptureInput = {
   deps: SandboxRestartDeps;
   recordId: string;
+  userId: string;
   sandboxId: string;
   snapshotProjectId: string | null;
   snapshotTeamId: string | null;
@@ -30,6 +31,30 @@ export class LegacySnapshotError extends Error {
       { cause }
     );
     this.name = "LegacySnapshotError";
+  }
+}
+
+async function restoreRunningSandboxSigning(
+  input: CaptureInput,
+  sandbox: Awaited<ReturnType<SandboxRestartDeps["getSandbox"]>>,
+  status: string
+) {
+  if (status !== "running") return;
+  try {
+    const result = await input.deps.setupSandboxCommitSigning({
+      sandbox,
+      userId: input.userId,
+    });
+    if (result.status === "failed" || result.status === "unsupported") {
+      console.warn("[sandbox/restart] Could not restore commit signing", {
+        sandboxRecordId: input.recordId,
+        status: result.status,
+      });
+    }
+  } catch {
+    console.warn("[sandbox/restart] Could not restore commit signing", {
+      sandboxRecordId: input.recordId,
+    });
   }
 }
 
@@ -56,6 +81,7 @@ async function settleClose(
     return true;
   }
   const current = readSandboxProviderSession(observed);
+  await restoreRunningSandboxSigning(input, observed, current.status);
   if (current.sessionId !== previousSessionId) {
     const endedAt = current.hasReliableStartedAt
       ? current.startedAt
@@ -152,6 +178,26 @@ export async function captureLegacyWorkspaceSnapshot(
   const settled = attempt
     ? await settleClose(input, attempt, previousSessionId, snapshotCompletedAt)
     : true;
+  if (!attempt && !snapshotId) {
+    // Unmetered workspaces need the same recovery, without waking a stopped VM.
+    try {
+      const observed = await input.deps.getSandbox(
+        input.sandboxId,
+        input.credentials,
+        { resume: false }
+      );
+      await restoreRunningSandboxSigning(
+        input,
+        observed,
+        readSandboxProviderSession(observed).status
+      );
+    } catch {
+      console.warn(
+        "[sandbox/restart] Signing recovery could not inspect the workspace",
+        { sandboxRecordId: input.recordId }
+      );
+    }
+  }
   if (storageError) throw storageError;
   if (!settled) throw new LegacySnapshotError(409);
   return snapshotId;

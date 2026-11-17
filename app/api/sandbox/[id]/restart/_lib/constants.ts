@@ -9,6 +9,7 @@ import {
   resolveLoadedSandboxRouteContext,
 } from "@/lib/sandbox/route-context";
 import { resolveRepoSandboxEnv } from "@/lib/vercel/env-vars";
+import { setupSandboxCommitSigning } from "@/lib/sandbox/commit-signing";
 import {
   enforceSandboxBootLimits,
   releaseLimitClaim,
@@ -38,6 +39,7 @@ export const defaultSandboxRestartDeps: SandboxRestartDeps = {
   loadOwnedSandboxRouteContext,
   resolveLoadedSandboxRouteContext,
   getSandbox,
+  setupSandboxCommitSigning,
   stopSandboxRecord,
   updateSandboxRecord,
   resolveRepoSandboxEnv,

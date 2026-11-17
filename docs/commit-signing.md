@@ -164,7 +164,9 @@ commit fail.
   is captured into a workspace snapshot
   (`app/api/sandbox/[id]/restart/_lib/legacy-snapshot.ts`). A cleanup failure
   blocks that capture. The restarted sandbox gets the key back from the
-  encrypted store.
+  encrypted store. After a failed capture, the platform restores signing when
+  the provider confirms the workspace is still running; it never wakes a
+  stopped sandbox just to restore a key.
 - **Persistent sandboxes** keep the key on disk, including provider-managed
   pause snapshots. These are private workspace state, not shared baselines.
   Shared repository baselines are built in a separate ephemeral sandbox

@@ -12,6 +12,7 @@ import type {
   resolveLoadedSandboxRouteContext,
 } from "@/lib/sandbox/route-context";
 import type { resolveRepoSandboxEnv } from "@/lib/vercel/env-vars";
+import type { setupSandboxCommitSigning } from "@/lib/sandbox/commit-signing";
 import type {
   enforceSandboxBootLimits,
   releaseLimitClaim,
@@ -83,6 +84,7 @@ export type SandboxRestartDeps = {
   loadOwnedSandboxRouteContext: typeof loadOwnedSandboxRouteContext;
   resolveLoadedSandboxRouteContext: typeof resolveLoadedSandboxRouteContext;
   getSandbox: typeof getSandbox;
+  setupSandboxCommitSigning: typeof setupSandboxCommitSigning;
   stopSandboxRecord: typeof stopSandboxRecord;
   updateSandboxRecord: typeof updateSandboxRecord;
   resolveRepoSandboxEnv: typeof resolveRepoSandboxEnv;

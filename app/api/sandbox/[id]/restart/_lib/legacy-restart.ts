@@ -92,6 +92,7 @@ export async function handleLegacyRestart(
     restoreSnapshotId = await captureLegacyWorkspaceSnapshot({
       deps,
       recordId: record.id,
+      userId: loaded.auth.userId,
       sandboxId: record.sandbox_id,
       snapshotProjectId,
       snapshotTeamId,
