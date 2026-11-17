@@ -87,7 +87,7 @@
       "vite": "7.3.5",
       "ws": "8.21.0",
       "yaml": "2.8.3",
-      "dompurify": "3.4.14",
+      "dompurify": "3.4.17",
       "postcss>nanoid": "3.3.18",
       "deepmerge-ts": "8.0.0"
     }
