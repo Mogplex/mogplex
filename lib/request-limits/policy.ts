@@ -237,33 +237,6 @@ export function evaluateSnapshotBuildLimitPolicy(input: {
   return allowed();
 }
 
-export function evaluateSandboxExecLimitPolicy(input: {
-  minuteExecs: readonly string[];
-  hourlyExecs: readonly string[];
-  now?: Date;
-}): LimitDecision {
-  const now = input.now ?? new Date();
-
-  const minutelyDecision = evaluateWindowLimit({
-    timestamps: input.minuteExecs,
-    now,
-    limit: REQUEST_LIMITS.sandboxExec.minutelyCalls,
-    code: "sandbox_exec_rate_limited",
-    error: "Sandbox exec rate limit exceeded",
-    reason: "sandbox_exec_minutely_rate_exceeded",
-  });
-  if (!minutelyDecision.allowed) return minutelyDecision;
-
-  return evaluateWindowLimit({
-    timestamps: input.hourlyExecs,
-    now,
-    limit: REQUEST_LIMITS.sandboxExec.hourlyCalls,
-    code: "sandbox_exec_rate_limited",
-    error: "Hourly sandbox exec quota exceeded",
-    reason: "sandbox_exec_hourly_rate_exceeded",
-  });
-}
-
 export function buildSandboxExecConcurrencyDecision(): DeniedLimitDecision {
   return denied({
     code: "sandbox_exec_concurrency_limited",

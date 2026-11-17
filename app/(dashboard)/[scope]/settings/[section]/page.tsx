@@ -7,6 +7,7 @@ import { CliApiKeysSection } from "@/components/settings/cli-api-keys-section";
 import { RepositoriesSection } from "@/components/settings/repositories-section";
 import { PersonalAccountPage } from "../_components/personal-account-page";
 import { ProviderKeysPage } from "../_components/provider-keys-page";
+import { CommitSigningSection } from "../_components/commit-signing-section";
 
 export default async function SettingsSectionPage({ params }: {
   params: Promise<{ section: string }>;
@@ -38,6 +39,7 @@ export default async function SettingsSectionPage({ params }: {
       {section === "teams" && <TeamsListSection />}
       {section === "keys" && <ProviderKeysPage />}
       {section === "mogplex-keys" && <CliApiKeysSection />}
+      {section === "commit-signing" && <CommitSigningSection />}
     </div>
   );
 }

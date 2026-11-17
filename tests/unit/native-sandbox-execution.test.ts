@@ -121,3 +121,37 @@ test("native commands execute through the authorized route in-process, not the 3
     else process.env.INTERNAL_API_SECRET = originalSecret;
   }
 });
+
+test("parallel native commands queue on the same sandbox instead of failing its lock", async () => {
+  await loadSandboxExecRouteModule();
+  const f = fixture();
+  const originalSecret = process.env.INTERNAL_API_SECRET;
+  process.env.INTERNAL_API_SECRET = "fixture-secret";
+  let locked = false;
+  const execution = createNativeSandboxExecution("user-123", TEAM_ID, {
+    ...f.deps,
+    acquireSandboxExecLock: async () => {
+      if (locked) return { acquired: false, retryAfterSeconds: 15 };
+      locked = true;
+      return { acquired: true, token: "lock-1" };
+    },
+    releaseSandboxExecLock: async () => {
+      locked = false;
+    },
+  });
+  try {
+    const responses = await Promise.all(
+      Array.from({ length: 25 }, (_, i) =>
+        execution.execute("record-1", {}, { command: `echo ${i}` })
+      )
+    );
+    assert.deepEqual(
+      responses.map((response) => response.status),
+      Array.from({ length: 25 }).fill(200)
+    );
+    assert.equal(f.commands.length, 25);
+  } finally {
+    if (originalSecret === undefined) delete process.env.INTERNAL_API_SECRET;
+    else process.env.INTERNAL_API_SECRET = originalSecret;
+  }
+});

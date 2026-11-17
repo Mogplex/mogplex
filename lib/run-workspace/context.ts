@@ -74,6 +74,16 @@ export async function loadRunWorkspace(
     },
     sandboxRecordId,
     workingBranch: run.working_branch,
+    checkpoint:
+      run.status === "awaiting_input"
+        ? {
+            kind: run.metadata.checkpoint_kind === "plan" ? "plan" : "review",
+            summary:
+              typeof run.metadata.checkpoint_summary === "string"
+                ? run.metadata.checkpoint_summary
+                : "",
+          }
+        : null,
     canGuide: canGuideRun(run),
     guidance: canGuideRun(run)
       ? (await loadRunGuidance(run, client, true)).map(

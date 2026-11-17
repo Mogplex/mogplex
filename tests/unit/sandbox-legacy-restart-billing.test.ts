@@ -9,6 +9,8 @@ import {
 
 for (const scenario of [
   "running failure",
+  "signing cleanup failure",
+  "unmetered running failure",
   "stopped failure",
   "successful snapshot",
   "successful snapshot unknown outcome",
@@ -34,6 +36,7 @@ for (const scenario of [
     };
     const endedAt = new Date("2026-01-01T00:00:30Z");
     let ledger: "open" | "closing" | "closed" = "open";
+    let signingKeyPresent = true;
     let providerReads = 0;
     let providerStops = 0;
     let launches = 0;
@@ -53,6 +56,7 @@ for (const scenario of [
           buildResolvedSandboxRouteContext(loaded) as never,
         prepareSandboxBillingClose: async () => {
           order.push("prepare");
+          if (scenario === "unmetered running failure") return null;
           ledger = "closing";
           return attempt;
         },
@@ -66,6 +70,12 @@ for (const scenario of [
           ledger = "closed";
           finalizedAt.push(time);
           return { finalized: true, metered: true };
+        },
+        setupSandboxCommitSigning: async ({ userId }) => {
+          assert.equal(userId, "user-1");
+          order.push("restore-signing");
+          signingKeyPresent = true;
+          return { status: "configured" };
         },
         getSandbox: async () => {
           providerReads++;
@@ -95,6 +105,14 @@ for (const scenario of [
               stoppedAt: providerStatus === "stopped" ? endedAt : null,
               updatedAt: endedAt,
             }),
+            runCommand: async (command: { args?: string[] }) => {
+              assert.match(command.args?.[1] ?? "", /MOGPLEX_SIGNING_SCRUBBED/);
+              signingKeyPresent = false;
+              order.push("scrub");
+              return {
+                exitCode: scenario === "signing cleanup failure" ? 1 : 0,
+              };
+            },
             snapshot: async () => {
               order.push("snapshot");
               if (
@@ -161,6 +179,8 @@ for (const scenario of [
       assert.equal(
         ledger,
         scenario === "running failure" ||
+          scenario === "signing cleanup failure" ||
+          scenario === "unmetered running failure" ||
           scenario === "successful snapshot still running"
           ? "open"
           : scenario === "unknown after failure" ||
@@ -169,6 +189,28 @@ for (const scenario of [
             ? "closing"
             : "closed"
       );
+      if (
+        [
+          "running failure",
+          "unmetered running failure",
+          "signing cleanup failure",
+          "rotated failure",
+          "successful snapshot rotated outcome",
+          "successful snapshot still running",
+        ].includes(scenario)
+      ) {
+        assert.equal(
+          signingKeyPresent,
+          true,
+          "a running workspace keeps its signing key after failed restart"
+        );
+        assert.ok(order.includes("restore-signing"));
+      } else {
+        assert.ok(
+          !order.includes("restore-signing"),
+          "never wake an unavailable or stopped sandbox to restore a key"
+        );
+      }
       assert.equal(providerStops, 0);
       assert.equal(launches, scenario === "successful snapshot" ? 1 : 0);
       if (scenario === "running failure" || scenario === "rotated failure") {
@@ -181,7 +223,19 @@ for (const scenario of [
         2,
         "read provider state once after the ambiguous operation"
       );
-      assert.ok(order.indexOf("prepare") < order.indexOf("snapshot"));
+      assert.ok(order.indexOf("prepare") < order.indexOf("scrub"));
+      if (scenario === "signing cleanup failure") {
+        assert.ok(
+          !order.includes("snapshot"),
+          "never capture an unscrubbed signing key"
+        );
+        assert.ok(
+          order.includes("reopen"),
+          "keep the live workspace billing session open"
+        );
+      } else {
+        assert.ok(order.indexOf("scrub") < order.indexOf("snapshot"));
+      }
       if (scenario.startsWith("successful snapshot")) {
         assert.equal(
           storedSnapshotId,

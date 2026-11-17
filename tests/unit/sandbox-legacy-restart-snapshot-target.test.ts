@@ -43,6 +43,7 @@ for (const source of ["platform", "user_vercel_project", null] as const) {
       getSandbox: async (_id, credentials) => {
         assert.deepEqual(credentials, expected);
         return {
+          runCommand: async () => ({ exitCode: 0 }),
           snapshot: async () => ({ snapshotId: "saved-snapshot" }),
         } as never;
       },

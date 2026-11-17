@@ -9,6 +9,8 @@ import {
   syncRunAfterRuntime,
 } from "@/lib/mogplex-api/run-runtime-store";
 import { loadMogplexApiRun } from "@/lib/mogplex-api/runs";
+import { resumeExternalAgentRun } from "@/lib/mogplex-api/run-resume";
+import { TRIGGER_TASK_IDS } from "@/lib/trigger/task-ids";
 import {
   markTerminalSlackDelivery,
   notifyTerminalSlackRunOnce,
@@ -334,4 +336,108 @@ it("a public detail read repairs a hard-timed-out run through actual SQL, withou
     runtime_command_id: "cmd_retained",
   });
   expect(notifications).toEqual(["failed"]);
+});
+
+it("a resume publishes the new call and worker before a detail read can reconcile it", async () => {
+  const resumedCallId = "00000000-0000-4000-8000-000000000006";
+  await pg.exec(
+    "insert into sandboxes values ('00000000-0000-4000-8000-000000000007')"
+  );
+  await pg.exec("update external_agent_runs set status='awaiting_input'");
+  const loadRun = async () =>
+    (
+      await pg.query<ExternalAgentRunRow>(
+        "select * from external_agent_runs where id=$1 and user_id=$2",
+        [runId, user]
+      )
+    ).rows[0];
+  const loadCall = async () =>
+    (
+      await pg.query<AiCall>("select * from ai_calls where id=$1", [
+        resumedCallId,
+      ])
+    ).rows[0];
+  const observedWorkers: string[] = [];
+  const result = await resumeExternalAgentRun(
+    { runId, userId: user, steer: "Approved", runtimeRunId: "run_resume" },
+    {
+      loadRun,
+      createAiCall: async () => {
+        await pg.query(
+          "insert into ai_calls(id,user_id,repo_id,type,model,status) values ($1,$2,$3,'agent','test-model','pending')",
+          [resumedCallId, user, repo]
+        );
+        return loadCall();
+      },
+      updateRun: async (ownerId, id, update) => {
+        const { data, error } = await client
+          .from("external_agent_runs")
+          .update(update)
+          .eq("id", id)
+          .eq("user_id", ownerId)
+          .select("*")
+          .single();
+        if (error) throw error;
+        return data as ExternalAgentRunRow;
+      },
+      launchSandbox: async () => {
+        const detail = await loadMogplexApiRun({
+          userId: user,
+          runId,
+          deps: { loadRunById: loadRun },
+          runtimeDeps: {
+            readRuntime: async (id) => {
+              observedWorkers.push(id);
+              return {
+                id,
+                taskIdentifier: TRIGGER_TASK_IDS.resumeAgentRun,
+                status: id === "run_resume" ? "EXECUTING" : "COMPLETED",
+              };
+            },
+            loadRun,
+            loadCall,
+            finishCall: (call, status, error) =>
+              finishCallAfterRuntime(call, status, error, client),
+            syncRun: (run, status, error) =>
+              syncRunAfterRuntime(run, status, error, client),
+            appendEvent: async () => null,
+            notifyTerminal: async () => {},
+            cleanupSandbox: async () => {},
+            cleanupBranches: async () => {},
+          },
+        });
+        expect(detail).toMatchObject({
+          status: "streaming",
+          aiCallId: resumedCallId,
+          runtime: { runId: "run_resume" },
+        });
+        return {
+          recordId: "00000000-0000-4000-8000-000000000007",
+          sandboxId: "saved-sandbox",
+        };
+      },
+      runHarness: async () => {
+        await pg.query("update ai_calls set status='success' where id=$1", [
+          resumedCallId,
+        ]);
+        return { output: "done" };
+      },
+      loadAiCall: loadCall,
+      appendEvent: async () => null,
+      notifyRunReachedTerminalState: async () => {},
+      notifyRunCheckpoint: async () => {},
+    }
+  );
+  expect(result).toEqual({
+    success: true,
+    status: "success",
+    runId,
+    error: null,
+  });
+  expect(observedWorkers).toEqual(["run_resume"]);
+  expect(await loadRun()).toMatchObject({
+    runtime_provider: "trigger",
+    runtime_run_id: "run_resume",
+    status: "success",
+  });
 });

@@ -3,11 +3,13 @@ import {
   isSandboxProviderSessionTerminal,
 } from "@/lib/billing/sandbox-usage";
 import { isNotFoundError } from "@/lib/sandbox/sdk-adapter";
+import { scrubSandboxCommitSigning } from "@/lib/sandbox/commit-signing";
 import type { SandboxRestartDeps } from "./types";
 
 type CaptureInput = {
   deps: SandboxRestartDeps;
   recordId: string;
+  userId: string;
   sandboxId: string;
   snapshotProjectId: string | null;
   snapshotTeamId: string | null;
@@ -29,6 +31,30 @@ export class LegacySnapshotError extends Error {
       { cause }
     );
     this.name = "LegacySnapshotError";
+  }
+}
+
+async function restoreRunningSandboxSigning(
+  input: CaptureInput,
+  sandbox: Awaited<ReturnType<SandboxRestartDeps["getSandbox"]>>,
+  status: string
+) {
+  if (status !== "running") return;
+  try {
+    const result = await input.deps.setupSandboxCommitSigning({
+      sandbox: sandbox.currentSession(),
+      userId: input.userId,
+    });
+    if (result.status === "failed" || result.status === "unsupported") {
+      console.warn("[sandbox/restart] Could not restore commit signing", {
+        sandboxRecordId: input.recordId,
+        status: result.status,
+      });
+    }
+  } catch {
+    console.warn("[sandbox/restart] Could not restore commit signing", {
+      sandboxRecordId: input.recordId,
+    });
   }
 }
 
@@ -55,6 +81,7 @@ async function settleClose(
     return true;
   }
   const current = readSandboxProviderSession(observed);
+  await restoreRunningSandboxSigning(input, observed, current.status);
   if (current.sessionId !== previousSessionId) {
     const endedAt = current.hasReliableStartedAt
       ? current.startedAt
@@ -84,7 +111,9 @@ export async function captureLegacyWorkspaceSnapshot(
   let sandbox;
   try {
     sandbox = await input.deps.getSandbox(input.sandboxId, input.credentials, {
-      resume: false,
+      // Restart explicitly wakes an idle workspace. Admit the resumed session
+      // before preparing its billing close; later capture/recovery cannot wake it.
+      resume: true,
       onResume: async (resumed) => {
         await input.deps.requireSandboxBillingSession(input.recordId, resumed);
       },
@@ -106,8 +135,17 @@ export async function captureLegacyWorkspaceSnapshot(
   let snapshotId: string | null = null;
   let snapshotCompletedAt: Date | null = null;
   try {
+    // Sandbox methods auto-resume stopped VMs. Bind all secret and snapshot
+    // operations to this existing session so a concurrent stop stays stopped.
+    const session = sandbox.currentSession();
+    if (String(session.status).toLowerCase() !== "running") {
+      throw new Error("Only a running workspace can be captured safely.");
+    }
+    // Keep the private signing key out of stored snapshot state. The
+    // restarted sandbox gets it back from the encrypted store.
+    await scrubSandboxCommitSigning({ sandbox: session });
     // The provider uses 0 for no expiry; saved work must never age out.
-    const snapshot = await sandbox.snapshot({ expiration: 0 });
+    const snapshot = await session.snapshot({ expiration: 0 });
     snapshotId = snapshot.snapshotId;
     snapshotCompletedAt = new Date();
   } catch (error) {
@@ -148,6 +186,26 @@ export async function captureLegacyWorkspaceSnapshot(
   const settled = attempt
     ? await settleClose(input, attempt, previousSessionId, snapshotCompletedAt)
     : true;
+  if (!attempt && !snapshotId) {
+    // Unmetered workspaces need the same recovery, without waking a stopped VM.
+    try {
+      const observed = await input.deps.getSandbox(
+        input.sandboxId,
+        input.credentials,
+        { resume: false }
+      );
+      await restoreRunningSandboxSigning(
+        input,
+        observed,
+        readSandboxProviderSession(observed).status
+      );
+    } catch {
+      console.warn(
+        "[sandbox/restart] Signing recovery could not inspect the workspace",
+        { sandboxRecordId: input.recordId }
+      );
+    }
+  }
   if (storageError) throw storageError;
   if (!settled) throw new LegacySnapshotError(409);
   return snapshotId;

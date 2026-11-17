@@ -17,10 +17,10 @@ test("an attached preview stays attached across follow-ups and releases on leavi
       body: recoveryStream(),
     })
   );
-  const attached = page.waitForRequest(
-    (request) =>
-      request.url().endsWith("/presence") &&
-      request.postDataJSON().event === "attach"
+  const attached = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/presence") &&
+      response.request().postDataJSON().event === "attach"
   );
   await page.getByRole("button", { name: "Open preview", exact: true }).click();
   await attached;
@@ -38,14 +38,24 @@ test("an attached preview stays attached across follow-ups and releases on leavi
   expect(presenceEvents.map((event) => event.event)).toEqual(["attach"]);
   await page.getByRole("button", { name: "Close task tools" }).click();
   expect(presenceEvents.map((event) => event.event)).toEqual(["attach"]);
+  // Unload sends a keepalive request after this document's route fixture can
+  // detach. Assert the browser's emitted request, not the fixture's event list.
   const released = page.waitForRequest(
     (request) =>
       request.url().endsWith("/presence") &&
       request.postDataJSON().event === "release"
   );
   await page.goto(`${scopedPath("control")}?mission=task-two`);
-  await released;
+  const releaseRequest = await released;
   expect(presenceEvents[0].sandboxId).toBe("sandbox-one");
-  expect(presenceEvents.at(-1)?.event).toBe("release");
+  expect(new URL(releaseRequest.url()).pathname).toBe(
+    "/api/sandbox/sandbox-one/presence"
+  );
+  expect(releaseRequest.method()).toBe("POST");
+  expect(releaseRequest.postDataJSON()).toMatchObject({
+    event: "release",
+    sessionId: presenceEvents[0].sessionId,
+    reason: "pagehide",
+  });
   expect(mutations).toEqual([]);
 });

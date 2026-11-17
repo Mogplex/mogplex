@@ -10,6 +10,7 @@ describe("Settings navigation", () => {
       "/alex/settings/teams",
       "/alex/settings/keys",
       "/alex/settings/mogplex-keys",
+      "/alex/settings/commit-signing",
       "/alex/settings/repositories",
       "/alex/settings/billing",
     ]);
@@ -34,7 +35,14 @@ describe("Settings navigation", () => {
       buildSettingsNavItems("alex", "personal", false, {
         hideBilling: true,
       }).map((item) => item.id)
-    ).toEqual(["account", "teams", "keys", "mogplex-keys", "repositories"]);
+    ).toEqual([
+      "account",
+      "teams",
+      "keys",
+      "mogplex-keys",
+      "commit-signing",
+      "repositories",
+    ]);
     expect(
       buildSettingsNavItems("acme", "team", true, { hideBilling: true }).map(
         (item) => item.id

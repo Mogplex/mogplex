@@ -1,5 +1,6 @@
 import type { UIMessage, DynamicToolUIPart } from "ai";
 import type { RunWorkspaceEvent } from "./types";
+import { presentCheckpointText } from "./checkpoint-presentation";
 
 /** Read-only projection of durable events into the existing workspace chat UI. */
 export function projectRunTranscript(
@@ -73,6 +74,14 @@ export function projectRunTranscript(
   const last = parts.at(-1);
   if (finalText && (last?.type !== "text" || !last.text.endsWith(finalText)))
     text(finalText);
+  const visibleParts = parts.flatMap<UIMessage["parts"][number]>((part) => {
+    if (part.type !== "text") return [part];
+    const visible = presentCheckpointText(
+      part.text,
+      ["pending", "streaming"].includes(status)
+    );
+    return visible ? [{ ...part, text: visible }] : [];
+  });
   if (["success", "failed", "cancelled"].includes(status))
     for (const tool of tools.values()) {
       if (tool.state === "input-available")
@@ -88,8 +97,14 @@ export function projectRunTranscript(
       role: "user",
       parts: [{ type: "text", text: prompt }],
     },
-    ...(parts.length > 0
-      ? [{ id: `${runId}-response`, role: "assistant" as const, parts }]
+    ...(visibleParts.length > 0
+      ? [
+          {
+            id: `${runId}-response`,
+            role: "assistant" as const,
+            parts: visibleParts,
+          },
+        ]
       : []),
   ];
 }

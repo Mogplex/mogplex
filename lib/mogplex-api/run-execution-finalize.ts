@@ -39,7 +39,13 @@ export type HarnessRunResult = {
 export type ExternalAgentRunUpdate = Partial<
   Pick<
     ExternalAgentRunRow,
-    "sandbox_record_id" | "sandbox_id" | "status" | "error" | "ai_call_id"
+    | "sandbox_record_id"
+    | "sandbox_id"
+    | "status"
+    | "error"
+    | "ai_call_id"
+    | "runtime_provider"
+    | "runtime_run_id"
   >
 >;
 
