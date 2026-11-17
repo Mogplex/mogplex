@@ -3,6 +3,7 @@ import {
   isSandboxProviderSessionTerminal,
 } from "@/lib/billing/sandbox-usage";
 import { isNotFoundError } from "@/lib/sandbox/sdk-adapter";
+import { scrubSandboxCommitSigning } from "@/lib/sandbox/commit-signing";
 import type { SandboxRestartDeps } from "./types";
 
 type CaptureInput = {
@@ -106,6 +107,9 @@ export async function captureLegacyWorkspaceSnapshot(
   let snapshotId: string | null = null;
   let snapshotCompletedAt: Date | null = null;
   try {
+    // Keep the private signing key out of stored snapshot state. The
+    // restarted sandbox gets it back from the encrypted store.
+    await scrubSandboxCommitSigning({ sandbox });
     // The provider uses 0 for no expiry; saved work must never age out.
     const snapshot = await sandbox.snapshot({ expiration: 0 });
     snapshotId = snapshot.snapshotId;

@@ -4,6 +4,7 @@ import type { recordSandboxLifecycleEvent } from "@/lib/sandbox/auto-pause-prese
 import type { runHarness } from "@/lib/harness/runner";
 import type { getGithubAccessTokenForRepo } from "@/lib/github-access";
 import type { resolveSandboxGitAuthor } from "@/lib/sandbox/git-author";
+import type { setupSandboxCommitSigning } from "@/lib/sandbox/commit-signing";
 import type {
   ensureDevTools,
   syncTerminalRuntimeAuth,
@@ -98,6 +99,7 @@ export type SandboxHarnessPostDeps = {
   runHarness: typeof runHarness;
   getGithubAccessTokenForRepo: typeof getGithubAccessTokenForRepo;
   resolveSandboxGitAuthor: typeof resolveSandboxGitAuthor;
+  setupSandboxCommitSigning: typeof setupSandboxCommitSigning;
   ensureDevTools: typeof ensureDevTools;
   getResolvedConnections: typeof getResolvedConnections;
   injectClaudeMcpConfig: typeof injectClaudeMcpConfig;

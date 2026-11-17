@@ -165,6 +165,8 @@ Optional Sentry: `NEXT_PUBLIC_SENTRY_DSN`, `SENTRY_DSN`, `SENTRY_ORG`, `SENTRY_P
 
 Optional memory embeddings: `OPENAI_API_KEY` powers semantic search for memories via `text-embedding-3-small`. Without it, `/api/memories?q=...` falls back to ILIKE. Storage and listing work regardless.
 
+Optional commit signing: `MOGPLEX_COMMIT_SIGNING_KEY_ENCRYPTION_KEY` encrypts user SSH signing keys at rest. Without it, commit signing stays off and commits are unsigned. See [docs/commit-signing.md](./docs/commit-signing.md).
+
 All env vars managed via Vercel. Run `vercel env pull` to sync `.env.local`.
 
 ### Memories
