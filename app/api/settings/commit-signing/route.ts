@@ -106,15 +106,20 @@ export function createCommitSigningRouteHandlers(
     try {
       token = await deps.getGithubToken(userId);
     } catch (error) {
-      console.warn(
-        "[commit-signing] github_token_lookup failed",
-        signingFailureDiagnostic(error)
-      );
+      const diagnostic = signingFailureDiagnostic(error);
+      const retryable = ![
+        "authorization",
+        "configuration",
+        "not_found",
+        "encryption",
+      ].includes(diagnostic.category);
+      console.warn("[commit-signing] github_token_lookup failed", diagnostic);
       return NextResponse.json(
         {
-          error:
-            "GitHub registration is temporarily unavailable. Your signing key is saved. Please try again.",
-          retryable: true,
+          error: retryable
+            ? "GitHub registration is temporarily unavailable. Your signing key is saved. Please try again."
+            : "GitHub registration is unavailable. Your signing key is saved. Contact support to restore registration.",
+          retryable,
         },
         { status: 503 }
       );

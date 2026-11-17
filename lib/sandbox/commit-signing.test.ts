@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { COMMIT_SIGNING_ENCRYPTION_ENV } from "../commit-signing/secret-box";
+import {
+  COMMIT_SIGNING_ENCRYPTION_ENV,
+  CommitSigningEncryptionError,
+} from "../commit-signing/secret-box";
 import {
   COMMIT_SIGNING_UNSUPPORTED_EXIT_CODE,
   buildCommitSigningScrubScript,
@@ -242,4 +245,25 @@ test("a failed key scrub blocks snapshot capture", async () => {
     scrubSandboxCommitSigning({ sandbox: fake.sandbox }),
     /signing key/i
   );
+});
+
+test("encryption failures provide distinct recovery guidance without leaking their message", async () => {
+  process.env[COMMIT_SIGNING_ENCRYPTION_ENV] = "test-secret-value";
+  try {
+    const result = await setupSandboxCommitSigning({
+      sandbox: fakeSandbox().sandbox,
+      userId: "user-1",
+      loadPrivateKey: async () => {
+        throw new CommitSigningEncryptionError("private-key-material");
+      },
+    });
+    assert.equal(result.status, "failed");
+    assert.match(
+      result.reason ?? "",
+      /could not be decrypted; contact your administrator/
+    );
+    assert.doesNotMatch(JSON.stringify(result), /private-key-material/);
+  } finally {
+    delete process.env[COMMIT_SIGNING_ENCRYPTION_ENV];
+  }
 });

@@ -176,3 +176,21 @@ test("deleteOAuthTokenIfUnchanged deletes only through the conditional RPC and r
     },
   });
 });
+
+test("token lookup retains the RPC cause for safe downstream classification", async () => {
+  const { createOAuthTokenStore } = await loadOAuthTokenStore();
+  const cause = { message: "database detail", code: "42883" };
+  const store = createOAuthTokenStore({
+    rpc: async () => ({ data: null, error: cause }),
+    loadLegacyTokens: async () => ({}),
+    clearLegacyToken: async () => {},
+  });
+  await assert.rejects(
+    store.getOAuthToken("user-1", "github"),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.equal(error.cause, cause);
+      return true;
+    }
+  );
+});
