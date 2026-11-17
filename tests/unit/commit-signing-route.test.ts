@@ -1,65 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createCommitSigningRouteHandlers } from "../../app/api/settings/commit-signing/route";
+import { NextResponse } from "next/server";
+import { commitSigningFixture as fixture } from "../support/commit-signing-fixture";
 import { generateCommitSigningKeyPair } from "../../lib/commit-signing/key-material";
-
-type StoredKey = {
-  publicKey: string;
-  fingerprint: string;
-  title: string | null;
-  githubKeyId: string | null;
-  registeredAt: string | null;
-  createdAt: string;
-};
-
-function fixture(overrides: Record<string, unknown> = {}) {
-  let stored: StoredKey | null = null;
-  const saved: { privateKey: string; publicKey: string }[] = [];
-  const deleted: string[] = [];
-  const registrations: { publicKey: string; title: string }[] = [];
-
-  const handlers = createCommitSigningRouteHandlers({
-    requireUserId: async () => "user-1",
-    isEncryptionConfigured: () => true,
-    loadKey: async () => stored,
-    saveKey: async (input: { privateKey: string; publicKey: string }) => {
-      saved.push({ privateKey: input.privateKey, publicKey: input.publicKey });
-      stored = {
-        publicKey: input.publicKey,
-        fingerprint: "SHA256:test",
-        title: null,
-        githubKeyId: null,
-        registeredAt: null,
-        createdAt: "2026-01-01T00:00:00.000Z",
-      };
-      return stored;
-    },
-    deleteKey: async (userId: string) => {
-      deleted.push(userId);
-      stored = null;
-    },
-    markRegistered: async (input: {
-      githubKeyId: string | null;
-      publicKey: string;
-    }) => {
-      if (stored?.publicKey === input.publicKey) {
-        stored = {
-          ...stored,
-          githubKeyId: input.githubKeyId,
-          registeredAt: "2026-01-02T00:00:00.000Z",
-        };
-      }
-    },
-    getGithubToken: async () => "gh-token",
-    registerKey: async (input: { publicKey: string; title: string }) => {
-      registrations.push(input);
-      return { status: "registered", keyId: "99" };
-    },
-    ...overrides,
-  });
-
-  return { handlers, saved, deleted, registrations, current: () => stored };
-}
 
 test("a failed GitHub token lookup asks for retry without losing the saved key", async () => {
   const { handlers, registrations, current } = fixture({
@@ -290,7 +233,8 @@ test("malformed field types are rejected before saving or registering a key", as
 
 test("all signing settings operations require authentication", async () => {
   const { handlers, saved, deleted } = fixture({
-    requireUserId: async () => new Response("Unauthorized", { status: 401 }),
+    requireUserId: async () =>
+      NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
   });
   assert.equal((await handlers.GET()).status, 401);
   assert.equal(

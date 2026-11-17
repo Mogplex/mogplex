@@ -143,9 +143,10 @@ export async function markCommitSigningKeyRegistered(input: {
 }
 
 /** Forget the GitHub registration (the key stays, the badge does not). */
-export async function clearCommitSigningKeyRegistration(
-  userId: string
-): Promise<void> {
+export async function clearCommitSigningKeyRegistration(input: {
+  userId: string;
+  publicKey: string;
+}): Promise<void> {
   const { error } = await supabaseAdmin
     .from(TABLE)
     .update({
@@ -153,7 +154,8 @@ export async function clearCommitSigningKeyRegistration(
       registered_at: null,
       updated_at: new Date().toISOString(),
     })
-    .eq("user_id", userId);
+    .eq("user_id", input.userId)
+    .eq("public_key", input.publicKey);
   if (error) {
     throw new Error(
       `Failed to clear the GitHub signing key registration: ${error.message}`

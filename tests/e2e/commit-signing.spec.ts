@@ -18,6 +18,90 @@ test.beforeEach(async ({ page }) => {
   await enableScopedE2EAuth(page);
 });
 
+test("refresh recognizes manual GitHub registration and distinguishes removal from a failed check", async ({
+  page,
+}) => {
+  let registrationStatus = "not_registered";
+  let registered = false;
+  let failCheck = false;
+  const publicKey = "ssh-ed25519 manually-registered-key";
+  await page.route(endpoint, async (route) => {
+    if (failCheck && route.request().method() === "POST")
+      return route.fulfill({
+        status: 503,
+        json: { error: "Could not check GitHub registration. Try again." },
+      });
+    // Only the check action may reconcile a receipt; never create a key.
+    if (route.request().method() === "POST")
+      expect(route.request().postDataJSON()).toEqual({ action: "check" });
+    await fulfillJson(route, {
+      ...empty,
+      configured: true,
+      publicKey,
+      fingerprint: "SHA256:manual",
+      registered,
+      registrationStatus,
+    });
+  });
+  await page.goto(scopedPath("settings/commit-signing"));
+  await expect(
+    page.getByText("Not registered with GitHub", { exact: true })
+  ).toBeVisible();
+  registrationStatus = "registered";
+  registered = true;
+  await page.getByRole("button", { name: "Check GitHub registration" }).click();
+  await expect(
+    page.getByText("Registered with GitHub", { exact: true })
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Register with GitHub", exact: true })
+  ).toBeDisabled();
+  await expect(page.getByText(publicKey, { exact: true })).toBeVisible();
+  await page.screenshot({
+    path: test.info().outputPath("registered-signing-desktop.png"),
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({
+    path: test.info().outputPath("registered-signing-mobile.png"),
+    fullPage: true,
+  });
+  failCheck = true;
+  await page.getByRole("button", { name: "Check GitHub registration" }).click();
+  await expect(
+    page.getByText("GitHub registration could not be checked", { exact: true })
+  ).toBeVisible();
+  await expect(
+    page.getByText("Registered with GitHub", { exact: true })
+  ).toHaveCount(0);
+  await expect(
+    page.getByText("Not registered with GitHub", { exact: true })
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Register with GitHub", exact: true })
+  ).toBeEnabled();
+  failCheck = false;
+  registrationStatus = "not_connected";
+  await page.getByRole("button", { name: "Check GitHub registration" }).click();
+  await expect(
+    page.getByText("Connect GitHub to check registration", { exact: true })
+  ).toBeVisible();
+  await expect(
+    page.getByText("Connect your GitHub account in Settings → Account", {
+      exact: false,
+    })
+  ).toBeVisible();
+  registrationStatus = "not_registered";
+  registered = false;
+  await page.getByRole("button", { name: "Check GitHub registration" }).click();
+  await expect(
+    page.getByText("Not registered with GitHub", { exact: true })
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Register with GitHub", exact: true })
+  ).toBeEnabled();
+});
+
 test("temporary registration failures keep the key visible and can be retried", async ({
   page,
 }) => {
@@ -29,7 +113,10 @@ test("temporary registration failures keep the key visible and can be retried", 
     fingerprint: "SHA256:public-test-fingerprint",
   };
   await page.route(endpoint, async (route) => {
-    if (route.request().method() === "POST") {
+    if (
+      route.request().method() === "POST" &&
+      route.request().postDataJSON().action === "register"
+    ) {
       attempts += 1;
       if (attempts === 1) {
         await route.fulfill({
@@ -44,7 +131,11 @@ test("temporary registration failures keep the key visible and can be retried", 
         return;
       }
     }
-    await fulfillJson(route, { ...saved, registered: attempts > 1 });
+    await fulfillJson(route, {
+      ...saved,
+      registered: attempts > 1,
+      registrationStatus: attempts > 1 ? "registered" : "not_registered",
+    });
   });
   await page.goto(scopedPath("settings/commit-signing"));
   await page.getByRole("button", { name: "Register with GitHub" }).click();
@@ -57,7 +148,7 @@ test("temporary registration failures keep the key visible and can be retried", 
   ).toHaveCount(0);
   await page.getByRole("button", { name: "Register with GitHub" }).click();
   await expect(
-    page.getByText("GitHub registration: recorded", { exact: true })
+    page.getByText("Registered with GitHub", { exact: true })
   ).toBeVisible();
   expect(attempts).toBe(2);
 });
@@ -101,7 +192,7 @@ test("a user creates a key, receives manual-registration guidance, and removes i
         });
         return;
       }
-      expect(body.action).toBe("generate");
+      expect(["generate", "check"]).toContain(body.action);
       configured = true;
     }
     await fulfillJson(
@@ -113,6 +204,7 @@ test("a user creates a key, receives manual-registration guidance, and removes i
             publicKey: "ssh-ed25519 public-test-key",
             fingerprint: "SHA256:public-test-fingerprint",
             createdAt: "2026-11-17T00:00:00Z",
+            registrationStatus: "not_registered",
           }
         : empty
     );
@@ -160,6 +252,7 @@ test("saved keys expose copy, honest workspace verification, and cancellable rem
     configured: true,
     publicKey: "ssh-ed25519 public-test-key",
     fingerprint: "SHA256:public-test-fingerprint",
+    registrationStatus: "not_registered",
   };
   let deleted = false;
   await page.route(endpoint, async (route) => {
@@ -200,7 +293,7 @@ test("saved keys expose copy, honest workspace verification, and cancellable rem
   });
   await page.goto(scopedPath("settings/commit-signing"));
   await expect(
-    page.getByText("GitHub registration: not recorded", { exact: true })
+    page.getByText("Not registered with GitHub", { exact: true })
   ).toBeVisible();
   await expect(
     page.getByText("Not verified in a workspace", { exact: true })
@@ -238,7 +331,7 @@ test("saved keys expose copy, honest workspace verification, and cancellable rem
     page.getByText("Verified in the selected workspace", { exact: true })
   ).toBeVisible();
   await expect(
-    page.getByText("GitHub registration: not recorded", { exact: true })
+    page.getByText("Not registered with GitHub", { exact: true })
   ).toBeVisible();
   await page.screenshot({
     path: test.info().outputPath("signing-settings-mobile.png"),
@@ -277,4 +370,40 @@ test("a temporary settings outage does not say signing is disabled", async ({
   await expect(
     page.getByRole("button", { name: "Generate a signing key" })
   ).toBeVisible();
+});
+
+test("a slow GitHub check keeps the saved key visible and tab focus does not repeat it", async ({
+  page,
+}) => {
+  let checks = 0;
+  let complete!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    complete = resolve;
+  });
+  const key = {
+    ...empty,
+    configured: true,
+    publicKey: "ssh-ed25519 saved-key",
+    fingerprint: "SHA256:saved",
+  };
+  await page.route(endpoint, async (route) => {
+    if (route.request().method() === "POST") {
+      expect(route.request().postDataJSON()).toEqual({ action: "check" });
+      checks++;
+      await pending;
+      return fulfillJson(route, { ...key, registrationStatus: "unavailable" });
+    }
+    await fulfillJson(route, key);
+  });
+  await page.goto(scopedPath("settings/commit-signing"));
+  await expect(
+    page.getByText("Checking GitHub registration…", { exact: true })
+  ).toBeVisible();
+  await expect(page.getByText(key.publicKey, { exact: true })).toBeVisible();
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  complete();
+  await expect(
+    page.getByText("GitHub registration could not be checked", { exact: true })
+  ).toBeVisible();
+  expect(checks).toBe(1);
 });

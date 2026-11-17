@@ -74,7 +74,10 @@ it("keeps keys encrypted and user-scoped through save, replacement, registration
     githubKeyId: "42",
     title: "Signing",
   });
-  await clearCommitSigningKeyRegistration(owner);
+  await clearCommitSigningKeyRegistration({
+    userId: owner,
+    publicKey: pair.publicKey,
+  });
   expect(await getCommitSigningKeyView(owner)).toMatchObject({
     githubKeyId: null,
     registeredAt: null,
@@ -91,6 +94,22 @@ it("keeps keys encrypted and user-scoped through save, replacement, registration
   expect(await getCommitSigningKeyView(owner)).toMatchObject({
     publicKey: replacement.publicKey,
     registeredAt: null,
+  });
+  await markCommitSigningKeyRegistered({
+    userId: owner,
+    publicKey: replacement.publicKey,
+    githubKeyId: "replacement",
+  });
+  await clearCommitSigningKeyRegistration({
+    userId: owner,
+    publicKey: pair.publicKey,
+  });
+  await clearCommitSigningKeyRegistration({
+    userId: other,
+    publicKey: replacement.publicKey,
+  });
+  expect(await getCommitSigningKeyView(owner)).toMatchObject({
+    githubKeyId: "replacement",
   });
   await deleteCommitSigningKey(other);
   expect(await getCommitSigningKeyView(owner)).not.toBeNull();
