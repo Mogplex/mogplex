@@ -182,11 +182,12 @@ test("github_comment_issue adds an annotation without replacing the issue body",
 test("github_pull_request_status returns the reviewed head, checks, and unresolved findings", async () => {
   await withAcmeInstallation(async () => {
     await withPatchedFetch(
-      async (url) => {
+      async (url, init) => {
         const parsed = new URL(String(url));
         if (parsed.pathname === "/app/installations/321/access_tokens") {
           return Response.json({ token: "ghs-installation" });
         }
+        assert.match(String(init?.body), /latestOpinionatedReviews/);
         return Response.json({
           data: {
             repository: {

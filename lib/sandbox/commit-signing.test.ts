@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { COMMIT_SIGNING_ENCRYPTION_ENV } from "../commit-signing/secret-box";
+import {
+  COMMIT_SIGNING_ENCRYPTION_ENV,
+  CommitSigningEncryptionError,
+} from "../commit-signing/secret-box";
 import {
   COMMIT_SIGNING_UNSUPPORTED_EXIT_CODE,
   buildCommitSigningScrubScript,
@@ -96,6 +99,61 @@ test("a failing setup command does not throw", async () => {
   assert.equal(result.status, "failed");
 });
 
+test("setup failures retain classified diagnostics without provider secrets", async () => {
+  const entries: unknown[][] = [];
+  const warn = console.warn;
+  console.warn = (...args) => entries.push(args);
+  try {
+    const result = await configureSandboxCommitSigning({
+      privateKey: "private-signing-material",
+      sandbox: {
+        writeFiles: async () => {
+          throw Object.assign(
+            new Error("private-signing-material authorization=secret-token"),
+            { status: 403 }
+          );
+        },
+        runCommand: async () => ({ exitCode: 0 }),
+      },
+    });
+    assert.equal(result.status, "failed");
+    const recorded = JSON.stringify(entries);
+    assert.match(recorded, /key_install/);
+    assert.match(recorded, /authorization/);
+    assert.match(recorded, /403/);
+    assert.doesNotMatch(
+      recorded + JSON.stringify(result),
+      /private-signing-material|secret-token/
+    );
+  } finally {
+    console.warn = warn;
+  }
+});
+
+test("snapshot cleanup errors retain only a safe diagnostic cause", async () => {
+  await assert.rejects(
+    scrubSandboxCommitSigning({
+      sandbox: {
+        writeFiles: async () => {},
+        runCommand: async () => {
+          throw Object.assign(new Error("private-command-detail"), {
+            code: "ETIMEDOUT",
+          });
+        },
+      },
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.deepEqual(error.cause, { category: "timeout", code: "ETIMEDOUT" });
+      assert.doesNotMatch(
+        JSON.stringify(error) + error.message,
+        /private-command-detail/
+      );
+      return true;
+    }
+  );
+});
+
 test("without a key the sandbox is left exactly as it is", async () => {
   process.env[COMMIT_SIGNING_ENCRYPTION_ENV] = "test-secret-value";
   const fake = fakeSandbox(0);
@@ -187,4 +245,25 @@ test("a failed key scrub blocks snapshot capture", async () => {
     scrubSandboxCommitSigning({ sandbox: fake.sandbox }),
     /signing key/i
   );
+});
+
+test("encryption failures provide distinct recovery guidance without leaking their message", async () => {
+  process.env[COMMIT_SIGNING_ENCRYPTION_ENV] = "test-secret-value";
+  try {
+    const result = await setupSandboxCommitSigning({
+      sandbox: fakeSandbox().sandbox,
+      userId: "user-1",
+      loadPrivateKey: async () => {
+        throw new CommitSigningEncryptionError("private-key-material");
+      },
+    });
+    assert.equal(result.status, "failed");
+    assert.match(
+      result.reason ?? "",
+      /could not be decrypted; contact your administrator/
+    );
+    assert.doesNotMatch(JSON.stringify(result), /private-key-material/);
+  } finally {
+    delete process.env[COMMIT_SIGNING_ENCRYPTION_ENV];
+  }
 });

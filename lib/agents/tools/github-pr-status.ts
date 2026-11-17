@@ -117,7 +117,7 @@ query MogplexPullRequestStatus($owner: String!, $repo: String!, $number: Int!) {
           }
         }
       }
-      reviews(last: 50) {
+      reviews: latestOpinionatedReviews(first: 50) {
         totalCount
         nodes { author { login __typename } authorAssociation state body submittedAt url }
       }

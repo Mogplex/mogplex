@@ -122,7 +122,9 @@ export async function loadRunDeliveryGithub(
     number: pull.number,
     githubToken: token,
   });
-  if ("error" in status || status.headSha !== pull.head.sha)
+  if ("error" in status)
+    throw new Error("GitHub delivery status is temporarily unavailable");
+  if (status.headSha !== pull.head.sha)
     throw new Error("Pull request changed while checking delivery. Try again.");
   snapshot.pullRequest = {
     draft: pull.draft,

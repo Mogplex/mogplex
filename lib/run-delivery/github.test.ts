@@ -352,3 +352,13 @@ test("outside reviews stay visible but cannot authorize repairs, including throu
     )
   ).toBe(true);
 });
+
+test("status provider failures are not confused with a changed PR head", async () => {
+  const f = fixture();
+  await expect(
+    loadRunDeliveryGithub(input, {
+      ...f.deps,
+      loadStatus: async () => ({ error: "private provider error" }),
+    })
+  ).rejects.toThrow("GitHub delivery status is temporarily unavailable");
+});

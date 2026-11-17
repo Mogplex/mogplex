@@ -26,6 +26,7 @@ import {
   type CommitSigningKeyView,
 } from "@/lib/commit-signing/storage";
 import { registerGithubSshSigningKey } from "@/lib/commit-signing/github";
+import { signingFailureDiagnostic } from "@/lib/commit-signing/diagnostics";
 
 const DEFAULT_KEY_TITLE = "Mogplex commit signing";
 
@@ -104,8 +105,25 @@ export function createCommitSigningRouteHandlers(
     let token: string | null;
     try {
       token = await deps.getGithubToken(userId);
-    } catch {
-      token = null;
+    } catch (error) {
+      const diagnostic = signingFailureDiagnostic(error);
+      const retryable = ![
+        "authorization",
+        "configuration",
+        "not_found",
+        "encryption",
+      ].includes(diagnostic.category);
+      console.warn("[commit-signing] github_token_lookup failed", diagnostic);
+      return NextResponse.json(
+        {
+          ...statusPayload(view),
+          error: retryable
+            ? "GitHub registration is temporarily unavailable. Your signing key is saved. Please try again."
+            : "GitHub registration is unavailable. Your signing key is saved. Contact support to restore registration.",
+          retryable,
+        },
+        { status: 503 }
+      );
     }
     const title = view.title ?? DEFAULT_KEY_TITLE;
     if (!token) {
