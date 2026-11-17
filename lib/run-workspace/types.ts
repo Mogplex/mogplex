@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { deliverySnapshotSchema } from "@/lib/run-delivery/types";
 import { MOGPLEX_API_RUN_STATUSES } from "@/lib/mogplex-api/runs-types";
 
 export const runWorkspaceSchema = z.object({
@@ -9,6 +10,9 @@ export const runWorkspaceSchema = z.object({
   sandboxRecordId: z.string().nullable(),
   workingBranch: z.string(),
   canGuide: z.boolean(),
+  delivery: deliverySnapshotSchema.nullable().optional(),
+  deliveryFollowThrough: z.boolean().optional(),
+  deliveryLastRepairRevision: z.string().nullable().optional(),
   checkpoint: z
     .object({
       kind: z.enum(["plan", "review"]),

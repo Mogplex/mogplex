@@ -1,3 +1,4 @@
+import { readDeliverySnapshot } from "@/lib/run-delivery/types";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { readSlackRunControlsMetadata } from "@/lib/slack/run-controls";
 import type { ExternalAgentRunRow } from "@/lib/mogplex-api/runs-types";
@@ -83,6 +84,12 @@ export async function loadRunWorkspace(
                 ? run.metadata.checkpoint_summary
                 : "",
           }
+        : null,
+    delivery: readDeliverySnapshot(run.metadata),
+    deliveryFollowThrough: run.metadata.delivery_follow_through === true,
+    deliveryLastRepairRevision:
+      typeof run.metadata.delivery_last_repair_revision === "string"
+        ? run.metadata.delivery_last_repair_revision
         : null,
     canGuide: canGuideRun(run),
     guidance: canGuideRun(run)

@@ -1,3 +1,4 @@
+import { refreshCompletedRunDelivery } from "@/lib/run-delivery/refresh";
 import { buildInternalApiHeaders } from "@/lib/internal-api-auth";
 import { readExternalHarnessProgress } from "@/lib/mogplex-api/harness-progress";
 import { notifySlackRunCheckpoint } from "@/lib/slack/run-checkpoint-notify";
@@ -134,6 +135,7 @@ const defaultExecutionDeps: ExternalAgentRunExecutionDeps = {
   appendEvent: safeAppendAiCallEvent,
   notifyRunReachedTerminalState: notifyTerminalSlackRunOnce,
   notifyRunCheckpoint: notifySlackRunCheckpoint,
+  refreshDelivery: refreshCompletedRunDelivery,
   createProgress: createSlackRunProgressReporter,
 };
 

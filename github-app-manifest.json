@@ -25,7 +25,8 @@
     "pull_requests": "write",
     "repository_creation": "write",
     "statuses": "write",
-    "vulnerability_alerts": "read"
+    "vulnerability_alerts": "read",
+    "deployments": "read"
   },
   "default_events": [
     "check_run",
@@ -37,6 +38,10 @@
     "pull_request_review_comment",
     "push",
     "repository",
-    "workflow_run"
+    "workflow_run",
+    "pull_request_review",
+    "status",
+    "deployment_status",
+    "pull_request_review_thread"
   ]
 }

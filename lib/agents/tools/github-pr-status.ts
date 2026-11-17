@@ -36,7 +36,8 @@ type GithubCheckNode = {
 };
 
 type GithubReview = {
-  author?: { login?: string } | null;
+  authorAssociation?: string;
+  author?: { login?: string; __typename?: string } | null;
   state?: string;
   body?: string | null;
   submittedAt?: string | null;
@@ -44,13 +45,16 @@ type GithubReview = {
 };
 
 type GithubReviewComment = {
-  author?: { login?: string } | null;
+  authorAssociation?: string;
+  author?: { login?: string; __typename?: string } | null;
   body?: string | null;
   createdAt?: string | null;
   url?: string | null;
 };
 
 type GithubReviewThread = {
+  origin?: { nodes?: Array<GithubReviewComment | null> };
+  id?: string;
   isResolved?: boolean;
   comments?: { nodes?: Array<GithubReviewComment | null> };
 };
@@ -74,6 +78,10 @@ type GithubPullRequestStatusBody = {
             nodes?: Array<GithubCheckNode | null>;
           };
         } | null;
+        currentReviews?: {
+          totalCount?: number;
+          nodes?: Array<GithubReview | null>;
+        };
         reviews?: {
           totalCount?: number;
           nodes?: Array<GithubReview | null>;
@@ -113,16 +121,21 @@ query MogplexPullRequestStatus($owner: String!, $repo: String!, $number: Int!) {
           }
         }
       }
+      currentReviews: latestOpinionatedReviews(first: 50) {
+        totalCount
+        nodes { author { login __typename } authorAssociation state body submittedAt url }
+      }
       reviews(last: 50) {
         totalCount
-        nodes { author { login } state body submittedAt url }
+        nodes { author { login __typename } authorAssociation state body submittedAt url }
       }
       reviewThreads(first: 50) {
         totalCount
         nodes {
-          isResolved
+          id isResolved
+          origin: comments(first: 1) { nodes { author { login __typename } authorAssociation } }
           comments(last: 5) {
-            nodes { author { login } body createdAt url }
+            nodes { author { login __typename } body createdAt url }
           }
         }
       }
@@ -185,6 +198,12 @@ function normalizeReviews(nodes: Array<GithubReview | null> = []) {
       ? [
           {
             author: review.author?.login ?? null,
+            ...(review.author?.__typename
+              ? { authorType: review.author.__typename }
+              : {}),
+            ...(review.authorAssociation
+              ? { authorAssociation: review.authorAssociation }
+              : {}),
             state: lower(review.state),
             body: truncateBody(review.body),
             submittedAt: review.submittedAt ?? null,
@@ -212,7 +231,20 @@ function normalizeUnresolvedThreads(
           ]
         : []
     );
-    return [{ comments }];
+    const origin = thread.origin?.nodes?.[0];
+    return [
+      {
+        ...(thread.id ? { id: thread.id } : {}),
+        ...(origin
+          ? {
+              author: origin.author?.login ?? null,
+              authorType: origin.author?.__typename,
+              authorAssociation: origin.authorAssociation,
+            }
+          : {}),
+        comments,
+      },
+    ];
   });
 }
 
@@ -284,6 +316,9 @@ function presentPullRequestChecks(pullRequest: GithubPullRequestStatus) {
 
 function presentPullRequestReviews(pullRequest: GithubPullRequestStatus) {
   const formalReviews = normalizeReviews(pullRequest.reviews?.nodes);
+  const currentOpinionatedReviews = normalizeReviews(
+    pullRequest.currentReviews?.nodes
+  );
   const unresolvedReviewThreads = normalizeUnresolvedThreads(
     pullRequest.reviewThreads?.nodes
   );
@@ -297,6 +332,13 @@ function presentPullRequestReviews(pullRequest: GithubPullRequestStatus) {
   );
   return {
     formalReviews,
+    currentOpinionatedReviews,
+    currentOpinionatedReviewsIncomplete:
+      !pullRequest.currentReviews ||
+      isConnectionIncomplete(
+        pullRequest.currentReviews.totalCount,
+        currentOpinionatedReviews.length
+      ),
     formalReviewsIncomplete: isConnectionIncomplete(
       pullRequest.reviews?.totalCount,
       formalReviews.length
@@ -332,7 +374,7 @@ function presentPullRequestStatus(input: {
   };
 }
 
-async function loadPullRequestStatus(input: {
+export async function loadPullRequestStatus(input: {
   target: GithubPullRequestTarget;
   number: number;
   githubToken: string;
@@ -381,7 +423,7 @@ export function createGithubPullRequestStatusTool(
 ) {
   return defineTool({
     description:
-      "Load a pull request's exact head commit, draft and merge state, CI status, formal reviews, and unresolved review threads from a repository covered by the current user's GitHub connection. Read this before reporting PR readiness or requesting a protected merge. Each check carries `required`: only required checks gate a merge, and GitHub enforces them. A failing check with `required: false` is advisory; name it as advisory, never as required. When `required` is `null`, the check's blocking status is unknown (GitHub did not report it); treat it as required/blocking unless the repository's branch protection rules say otherwise.",
+      "Load a pull request's exact head commit, draft and merge state, CI status, formal reviews, and unresolved review threads from a repository covered by the current user's GitHub connection. `currentOpinionatedReviews` holds each reviewer's current opinion; `formalReviews` is recent history, including comment-only feedback and possibly superseded requests. Use current opinions for readiness and read the history for additional feedback. Read this before reporting PR readiness or requesting a protected merge. Each check carries `required`: only required checks gate a merge, and GitHub enforces them. A failing check with `required: false` is advisory; name it as advisory, never as required. When `required` is `null`, the check's blocking status is unknown (GitHub did not report it); treat it as required/blocking unless the repository's branch protection rules say otherwise.",
     inputSchema: githubPullRequestStatusParams,
     execute: async ({
       owner,

@@ -87,9 +87,9 @@ jobs:
     concurrency:
       group: pr-protection-coverage-${{ github.ref }}
       cancel-in-progress: true
-    # All three coverage tiers run sequentially and take about 15 minutes.
+    # All three coverage tiers run sequentially and can exceed 20 minutes.
     # Leave time for installing the reporter and combining their results.
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - name: Check out repository
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5

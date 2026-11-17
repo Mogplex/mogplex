@@ -243,7 +243,9 @@ test("an awaiting-input workspace resumes its stream without remounting", async 
     await expect(
       page.getByText("Resumed and finished the mobile fix.", { exact: true })
     ).toBeVisible();
-    await expect(page.getByText("Run complete", { exact: true })).toBeVisible();
+    await expect(
+      page.getByText("Agent finished", { exact: true })
+    ).toBeVisible();
     await expect(
       page.getByRole("button", { name: "Continue in workspace chat" })
     ).toBeEnabled();

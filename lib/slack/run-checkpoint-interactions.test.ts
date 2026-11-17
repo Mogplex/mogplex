@@ -103,6 +103,7 @@ it("should resume an approved plan and replace the buttons with who approved it"
       repoId: "repo-1",
       steer: "The user approved your plan. Implement it now.",
       mode: "review",
+      checkpointAiCallId: "call-7",
       idempotencyKey: `checkpoint-resume:${RUN_ID}:call-7`,
     },
   ]);
@@ -127,6 +128,7 @@ it("should ask for feedback in a modal before resuming a revision", async () => 
   expect(JSON.parse(String(views[0].private_metadata))).toEqual({
     runId: RUN_ID,
     kind: "plan",
+    aiCallId: "call-7",
     responseUrl: RESPONSE_URL,
   });
 });
@@ -228,4 +230,38 @@ it("should respect the workspace's allowed users", async () => {
     )
   ).toBe("not_allowed");
   expect(resumes).toEqual([]);
+});
+
+it("rejects an old Slack button after the run advances to a different checkpoint", async () => {
+  const f = harness();
+  const payload = actionPayload(SLACK_CHECKPOINT_APPROVE_ACTION_ID, "plan");
+  payload.actions![0].value = `${RUN_ID}|plan|earlier-call`;
+  expect(await handleCheckpointAction(payload, f.deps)).toBe("not_paused");
+  expect(f.resumes).toEqual([]);
+  expect(JSON.stringify(f.responses)).toContain("checkpoint has changed");
+});
+it("implementation approval explicitly authorizes CI and review follow-through", async () => {
+  const f = harness({
+    loadRun: async () => ({
+      id: RUN_ID,
+      user_id: OWNER,
+      repo_id: "repo-1",
+      ai_call_id: "call-7",
+      status: "awaiting_input",
+      metadata: { checkpoint_kind: "review" },
+    }),
+  });
+  expect(
+    await handleCheckpointAction(
+      actionPayload(SLACK_CHECKPOINT_APPROVE_ACTION_ID, "review"),
+      f.deps
+    )
+  ).toBe("resumed");
+  expect(f.resumes[0]).toMatchObject({
+    followThrough: true,
+    checkpointAiCallId: "call-7",
+  });
+  expect(String(f.resumes[0].steer)).toContain(
+    "Merge only if the user already authorized it"
+  );
 });

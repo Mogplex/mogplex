@@ -19,7 +19,15 @@ function fixture() {
     status: "awaiting_input",
     metadata: { checkpoint_kind: "plan" },
   });
-  const queued = new Map<string, { steer: string; mode?: string }>();
+  const queued = new Map<
+    string,
+    {
+      steer: string;
+      mode?: string;
+      followThrough?: boolean;
+      checkpointAiCallId?: string;
+    }
+  >();
   const deps = {
     requireUserId: async () => "owner",
     loadRun: async (owner: string, id: string) =>
@@ -51,6 +59,11 @@ test("approve and revise use the saved checkpoint and Slack's once-per-pass resu
         `checkpoint-resume:${runId}:${aiCallId}`
       )!;
       assert.equal(
+        continuation.followThrough === true,
+        action === "approve" && kind === "review"
+      );
+      assert.equal(continuation.checkpointAiCallId, aiCallId);
+      assert.equal(
         continuation.mode,
         action === "revise" && kind === "plan" ? "plan" : "review"
       );
@@ -60,7 +73,7 @@ test("approve and revise use the saved checkpoint and Slack's once-per-pass resu
           ? body.feedback
           : kind === "plan"
             ? "The user approved your plan. Implement it now."
-            : "Approved. Ship it: open the pull request."
+            : "Approved. Open the pull request and follow up on CI failures and actionable review findings within this task. Mogplex will resume you on GitHub updates; report blockers that need the user. Merge only if the user already authorized it."
       );
     }
   }
@@ -130,4 +143,18 @@ test("queue failures leave the saved plan available and keep diagnostics private
     error: "Could not confirm your response. Try again.",
   });
   assert.equal(f.run.status, "awaiting_input");
+});
+
+test("legacy checkpoints without a kind resume through the compatible approval path", async () => {
+  const f = fixture();
+  delete f.run.metadata.checkpoint_kind;
+  const response = await createRunCheckpointPostHandler(f.deps)(
+    request({ action: "approve", aiCallId }),
+    params
+  );
+  assert.equal(response.status, 202);
+  const continuation = [...f.queued.values()][0];
+  assert.equal(continuation.followThrough, undefined);
+  assert.equal(continuation.mode, "review");
+  assert.equal(continuation.checkpointAiCallId, aiCallId);
 });

@@ -77,7 +77,7 @@ export function RunCheckpointControls({ context, onRefresh }: {
       <Button type="button" variant="outline" className="min-h-11" onClick={() => onRefresh()}>Refresh status</Button>
     </div> : <>
       <div className="shrink-0 space-y-3 px-4 pb-4 pt-2">
-      <p className="text-muted-foreground leading-5">{plan ? "Approving starts implementation. You can revise the plan first." : "Approving opens the pull request. You can request changes first."}</p>
+      <p className="text-muted-foreground leading-5">{plan ? "Approving starts implementation. You can revise the plan first." : "Approving opens the pull request and follows up on CI and review findings. It does not authorize merging."}</p>
       {revising ? <form className="space-y-3" onSubmit={event => { event.preventDefault(); void submit("revise"); }}>
         <label htmlFor={feedbackId} className="block font-medium">{plan ? "Plan feedback" : "Review feedback"}</label>
         <Textarea ref={feedbackInput} id={feedbackId} className="min-h-24" placeholder="Describe the changes you want…" value={feedback} disabled={sending} onChange={event => setFeedback(event.target.value)} />

@@ -1,3 +1,4 @@
+import { refreshDeliveryForGithubEvent } from "@/lib/run-delivery/webhook";
 import { AbortTaskRunError } from "@trigger.dev/sdk";
 import {
   DatabaseSchemaError,
@@ -244,7 +245,8 @@ function preserveSchemaDrift(errors: unknown[]) {
 export async function dispatchVerifiedGithubWebhook(
   context: WebhookRequestContext,
   repoRows: WebhookRepoRow[],
-  retryFailures = false
+  retryFailures = false,
+  refreshDelivery = refreshDeliveryForGithubEvent
 ) {
   const syncResult = await syncWebhookStateOrResponse(context, retryFailures);
   if (syncResult instanceof Response) return syncResult;
@@ -278,6 +280,17 @@ export async function dispatchVerifiedGithubWebhook(
   // surface the wait outcome alongside the normal dispatch summary.
   let waitResume: RouteFlowWaitsOutcome | null = null;
   let waitResumeFailed = false;
+  let deliveryFailed = false;
+  const deliveryRefresh = refreshDelivery({
+    event: context.event,
+    body: context.body,
+    repos: repoRows,
+  }).catch(() => {
+    deliveryFailed = true;
+    console.warn("[run-delivery] GitHub event refresh failed", {
+      deliveryId: context.deliveryId,
+    });
+  });
   try {
     waitResume = await tryResumeFlowWaitsForGithubEvent({ context, repoRows });
   } catch (error) {
@@ -292,8 +305,10 @@ export async function dispatchVerifiedGithubWebhook(
 
   // Wait resumption and new jobs are independent. Surface wait failures only
   // after admitting the delivery's idempotent jobs, including on every retry.
-  const assertWaitRoutingSucceeded = () => {
+  const assertWaitRoutingSucceeded = async () => {
+    await deliveryRefresh;
     if (!retryFailures) return;
+    if (deliveryFailed) throw new Error("GitHub run delivery refresh failed");
     if (waitResume?.rollbackFailed) {
       console.error("Native GitHub wait requires operator repair", {
         deliveryId: context.deliveryId,
@@ -324,7 +339,7 @@ export async function dispatchVerifiedGithubWebhook(
   if (retryFailures) preserveSchemaDrift(waitResume?.failures ?? []);
   const results = getWebhookEventResults(context.event, context.body);
   if (results.length === 0) {
-    assertWaitRoutingSucceeded();
+    await assertWaitRoutingSucceeded();
     return NextResponse.json({
       ok: true,
       skipped: true,
@@ -345,7 +360,7 @@ export async function dispatchVerifiedGithubWebhook(
   });
   if (jobs instanceof Response) return jobs;
   if (jobs.length === 0) {
-    assertWaitRoutingSucceeded();
+    await assertWaitRoutingSucceeded();
     return NextResponse.json({
       ok: true,
       queued: 0,
@@ -376,7 +391,7 @@ export async function dispatchVerifiedGithubWebhook(
   );
 
   if (retryFailures) preserveSchemaDrift(started.map((result) => result.error));
-  assertWaitRoutingSucceeded();
+  await assertWaitRoutingSucceeded();
   if (
     retryFailures &&
     (enqueueResults.some((result) => result.reason === "ENQUEUE_FAILED") ||

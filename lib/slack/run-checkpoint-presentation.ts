@@ -29,14 +29,22 @@ export function checkpointResumeKey(
 }
 
 /** Button values carry the run and which checkpoint they answer. */
-export function encodeCheckpointAction(runId: string, kind: CheckpointKind) {
-  return `${runId}|${kind}`;
+export function encodeCheckpointAction(
+  runId: string,
+  kind: CheckpointKind,
+  aiCallId?: string
+) {
+  return `${runId}|${kind}${aiCallId ? `|${aiCallId}` : ""}`;
 }
 
 export function decodeCheckpointAction(value: string | undefined) {
-  const [runId, kind] = (value ?? "").split("|");
+  const [runId, kind, aiCallId] = (value ?? "").split("|");
   if (!runId || (kind !== "plan" && kind !== "review")) return null;
-  return { runId, kind: kind as CheckpointKind };
+  return {
+    runId,
+    kind: kind as CheckpointKind,
+    ...(aiCallId ? { aiCallId } : {}),
+  };
 }
 
 function summaryMrkdwn(summary: string | null) {
@@ -65,13 +73,14 @@ const COPY: Record<
     title: "⏸️ *Ready for your review.*",
     approve: "Approve & open PR",
     revise: "Request changes",
-    hint: "Approve to open the pull request, or reply in this thread with changes. Approval does not merge it.",
+    hint: "Approve to open the pull request and follow up on CI and review findings, or reply in this thread with changes. Approval does not merge it.",
   },
 };
 
 /** The checkpoint message: what the agent paused on and how to answer it. */
 export function buildRunCheckpointMessage(input: {
   runId: string;
+  aiCallId?: string;
   runUrl: string;
   checkpoint: HarnessCheckpoint;
 }) {
@@ -90,7 +99,7 @@ export function buildRunCheckpointMessage(input: {
       ? [`*Agent-reported preview:* <${preview}|${escapeMrkdwn(preview)}>`]
       : []),
   ];
-  const value = encodeCheckpointAction(input.runId, kind);
+  const value = encodeCheckpointAction(input.runId, kind, input.aiCallId);
   const blocks: SlackBlock[] = [
     ...sections.map((text) => ({
       type: "section",
@@ -152,7 +161,7 @@ export function buildAnsweredCheckpointBlocks(input: {
 export function approvalSteer(kind: CheckpointKind) {
   return kind === "plan"
     ? "The user approved your plan. Implement it now."
-    : "Approved. Ship it: open the pull request.";
+    : "Approved. Open the pull request and follow up on CI failures and actionable review findings within this task. Mogplex will resume you on GitHub updates; report blockers that need the user. Merge only if the user already authorized it.";
 }
 
 /** The revise modal: a single feedback box. */
