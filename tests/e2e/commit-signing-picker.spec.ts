@@ -201,7 +201,7 @@ for (const sandboxes of [[], history]) {
   });
 }
 
-test("a selected sandbox that stops after refresh cannot be verified or retain a visible receipt", async ({
+test("a selected sandbox that stops after refresh requires a new selection and check after recovery", async ({
   page,
 }) => {
   await page.clock.install();
@@ -267,4 +267,38 @@ test("a selected sandbox that stops after refresh cannot be verified or retain a
   await expect(page.getByRole("option")).toHaveAccessibleName(
     "acme/widgets · fix/signing · Paused"
   );
+  await page
+    .getByRole("combobox", { name: "Search sandboxes" })
+    .press("Escape");
+  sandboxes = [running, paused];
+  await page.clock.fastForward(6000);
+  const recovered = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/sandbox") && response.status() === 200
+  );
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await recovered;
+  await expect(picker).toContainText("Choose a sandbox");
+  await expect(
+    page.getByRole("button", { name: "Verify selected sandbox" })
+  ).toBeDisabled();
+  await expect(
+    page.getByText("This sandbox signed and verified a test commit.", {
+      exact: true,
+    })
+  ).toHaveCount(0);
+  await picker.click();
+  await page
+    .getByRole("option", {
+      name: "acme/widgets · feature/search · Running",
+      exact: true,
+    })
+    .click();
+  await expect(
+    page.getByText("Verified in the selected sandbox", { exact: true })
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Verify selected sandbox" }).click();
+  await expect(
+    page.getByText("Verified in the selected sandbox", { exact: true })
+  ).toBeVisible();
 });

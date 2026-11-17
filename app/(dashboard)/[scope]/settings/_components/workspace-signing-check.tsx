@@ -70,6 +70,12 @@ export function WorkspaceSigningCheck({ fingerprint }: { fingerprint: string | n
 
   const selectedSandbox = currentSandboxes.find(sandbox => sandbox.id === selected)
   const visibleResult = selectedSandbox ? result : null
+  // Forget unavailable selections so recovery cannot revive an old receipt.
+  if (data && selected && !selectedSandbox) {
+    setSelected("")
+    setResult(null)
+    setError(null)
+  }
 
   async function verify() {
     if (!selectedSandbox) return
