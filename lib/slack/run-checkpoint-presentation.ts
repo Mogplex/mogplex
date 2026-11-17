@@ -63,9 +63,9 @@ const COPY: Record<
   },
   review: {
     title: "⏸️ *Ready for your review.*",
-    approve: "Ship it",
+    approve: "Approve & open PR",
     revise: "Request changes",
-    hint: "Ship it to open the pull request, or reply in this thread with changes.",
+    hint: "Approve to open the pull request, or reply in this thread with changes. Approval does not merge it.",
   },
 };
 

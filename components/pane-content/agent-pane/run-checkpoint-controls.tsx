@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { MessageResponse } from "@/components/ai-elements/message";
 import { fetchJsonObject } from "@/lib/client-fetch";
 import type { RunWorkspaceContext } from "@/lib/run-workspace/types";
+import { checkpointSummaryLead } from "@/lib/run-workspace/checkpoint-summary";
 
 export function RunCheckpointControls({ context, onRefresh }: {
   context: RunWorkspaceContext;
@@ -62,16 +63,17 @@ export function RunCheckpointControls({ context, onRefresh }: {
       </div>
     </div>
     {context.checkpoint?.summary && <div className="px-4">
+      <p className="text-foreground mt-3 leading-6 break-words">{checkpointSummaryLead(context.checkpoint.summary)}</p>
       <button type="button" className="text-muted-foreground hover:text-foreground focus-visible:ring-ring flex min-h-11 w-full items-center justify-between gap-2 rounded-md text-left focus-visible:ring-2 focus-visible:outline-none" aria-expanded={expanded} aria-controls={summaryId} onClick={() => setExpanded(value => !value)}>
-        {plan ? "Plan summary" : "Review summary"}<NavArrowDown aria-hidden="true" className={`size-4 shrink-0 transition-transform motion-reduce:transition-none ${expanded ? "rotate-180" : ""}`} />
+        Changes, risks & verification<NavArrowDown aria-hidden="true" className={`size-4 shrink-0 transition-transform motion-reduce:transition-none ${expanded ? "rotate-180" : ""}`} />
       </button>
       <div id={summaryId} hidden={!expanded} className="border-border mb-3 max-h-[min(40vh,20rem)] overflow-auto overscroll-contain border-t pt-3 pr-2">
         {expanded && <MessageResponse className="text-foreground text-sm leading-6 break-words">{context.checkpoint.summary}</MessageResponse>}
       </div>
     </div>}
     {accepted ? <div role="status" className="space-y-2 px-4 pb-4 pt-2">
-      <p className="flex items-center gap-2 font-medium"><CheckCircle aria-hidden="true" className="text-accent-green size-4" />Response received</p>
-      <p className="text-muted-foreground">This run will continue in its saved workspace.</p>
+      <p className="flex items-center gap-2 font-medium"><CheckCircle aria-hidden="true" className="text-accent-green size-4" />Response received · queued</p>
+      <p className="text-muted-foreground">Your response is saved. Waiting for the agent to resume in the saved workspace.</p>
       <Button type="button" variant="outline" className="min-h-11" onClick={() => onRefresh()}>Refresh status</Button>
     </div> : <>
       <div className="space-y-3 px-4 pb-4 pt-2">
@@ -84,7 +86,7 @@ export function RunCheckpointControls({ context, onRefresh }: {
           <Button type="button" variant="outline" className="min-h-11" disabled={sending} onClick={() => setRevising(false)}>Cancel</Button>
         </div>
       </form> : <div className="flex flex-wrap gap-2">
-        <Button className="min-h-11" disabled={sending} onClick={() => void submit("approve")}>{sending ? "Submitting…" : plan ? "Approve plan" : "Ship it"}</Button>
+        <Button className="min-h-11" disabled={sending} onClick={() => void submit("approve")}>{sending ? "Submitting…" : plan ? "Approve plan" : "Approve & open PR"}</Button>
         <Button ref={reviseButton} variant="outline" className="min-h-11" disabled={sending} onClick={() => setRevising(true)}>{plan ? "Revise plan" : "Request changes"}</Button>
       </div>}
       {error && <p role="alert" className="text-destructive leading-5">{error}</p>}
