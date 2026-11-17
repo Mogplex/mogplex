@@ -205,7 +205,6 @@ export async function loadRunDeliveryGithub(
     unresolved: status.unresolvedReviewThreadCount,
     incomplete:
       status.reviewThreadsIncomplete ||
-      status.formalReviewsIncomplete ||
       status.currentOpinionatedReviewsIncomplete,
   };
   snapshot.repairRevision = createHash("sha256")

@@ -387,3 +387,20 @@ test("superseded trusted change requests do not lend authority to an outside rev
     false
   );
 });
+
+test("truncated review history does not hide complete current opinions", async () => {
+  const f = fixture();
+  f.status.formalReviewsIncomplete = true;
+  expect(
+    deliveryReadyForReview(await loadRunDeliveryGithub(input, f.deps))
+  ).toBe(true);
+  f.status.currentOpinionatedReviewsIncomplete = true;
+  expect(
+    deliveryReadyForReview(await loadRunDeliveryGithub(input, f.deps))
+  ).toBe(false);
+  f.status.currentOpinionatedReviewsIncomplete = false;
+  f.status.reviewThreadsIncomplete = true;
+  expect(
+    deliveryReadyForReview(await loadRunDeliveryGithub(input, f.deps))
+  ).toBe(false);
+});

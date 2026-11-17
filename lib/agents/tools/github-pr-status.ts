@@ -423,7 +423,7 @@ export function createGithubPullRequestStatusTool(
 ) {
   return defineTool({
     description:
-      "Load a pull request's exact head commit, draft and merge state, CI status, formal reviews, and unresolved review threads from a repository covered by the current user's GitHub connection. Read this before reporting PR readiness or requesting a protected merge. Each check carries `required`: only required checks gate a merge, and GitHub enforces them. A failing check with `required: false` is advisory; name it as advisory, never as required. When `required` is `null`, the check's blocking status is unknown (GitHub did not report it); treat it as required/blocking unless the repository's branch protection rules say otherwise.",
+      "Load a pull request's exact head commit, draft and merge state, CI status, formal reviews, and unresolved review threads from a repository covered by the current user's GitHub connection. `currentOpinionatedReviews` holds each reviewer's current opinion; `formalReviews` is recent history, including comment-only feedback and possibly superseded requests. Use current opinions for readiness and read the history for additional feedback. Read this before reporting PR readiness or requesting a protected merge. Each check carries `required`: only required checks gate a merge, and GitHub enforces them. A failing check with `required: false` is advisory; name it as advisory, never as required. When `required` is `null`, the check's blocking status is unknown (GitHub did not report it); treat it as required/blocking unless the repository's branch protection rules say otherwise.",
     inputSchema: githubPullRequestStatusParams,
     execute: async ({
       owner,
