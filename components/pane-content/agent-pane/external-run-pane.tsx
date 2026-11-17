@@ -13,6 +13,7 @@ import { isRunActive } from "@/lib/run-workspace/types";
 import { projectRunTranscript } from "@/lib/run-workspace/transcript";
 import { ChatMessageList } from "./chat-message-list";
 import { useExternalRun } from "./use-external-run";
+import { RunDeliveryStatus } from "./run-delivery-status";
 import { RunCheckpointControls } from "./run-checkpoint-controls";
 import { getActiveTeamRequestHeaders } from "@/components/active-scope-provider";
 import { fetchJsonObject } from "@/lib/client-fetch";
@@ -94,10 +95,11 @@ export function ExternalRunPane({ pane, onStreamingChange, onUpdatePane, workspa
 
   const content = <>
     <div className="border-border flex items-center gap-2 border-b px-2 py-1.5 text-xs">
-      <span role="status">{status === "success" ? "Run complete" : status === "failed" ? "Run failed" : status === "cancelled" ? "Run cancelled" : status === "awaiting_input" ? "Waiting for input" : "Agent is working"}</span>
+      <span role="status">{status === "success" ? "Agent finished" : status === "failed" ? "Run failed" : status === "cancelled" ? "Run cancelled" : status === "awaiting_input" ? "Waiting for input" : "Agent is working"}</span>
       <span className="text-muted-foreground">{connection}</span>
       <a className="ml-auto underline" href={scopedHref(scope, `/runs/${pane.externalRunId}?view=details`)}>Run details</a>
     </div>
+    {context && (context.deliveryFollowThrough || context.delivery || status === "success") && <RunDeliveryStatus context={context} onRefresh={reload} />}
     {renderTranscript ? renderTranscript(messages, running) : <ChatMessageList messages={messages} localMsgs={[]} liveConversationRuns={[]} activeCallEvents={[]} isAgentRunning={running} endRef={endRef} />}
     {error && <div role="alert" className="px-2 py-1 text-accent-red">{error}</div>}
     {receipt && <div role="status" className="px-2 py-1 text-xs">{receipt}</div>}

@@ -308,7 +308,9 @@ test("continuing a completed run waits for its delayed recorded history", async 
   });
   try {
     await page.goto(scopedPath(`projects/workspace?run=${runId}`));
-    await expect(page.getByText("Run complete", { exact: true })).toBeVisible();
+    await expect(
+      page.getByText("Agent finished", { exact: true })
+    ).toBeVisible();
     const continueButton = page.getByRole("button", {
       name: "Continue in workspace chat",
     });

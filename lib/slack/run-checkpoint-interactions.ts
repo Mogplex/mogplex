@@ -38,6 +38,8 @@ async function queueResume(input: {
   repoId: string;
   steer: string;
   mode: ResumeMode;
+  followThrough?: boolean;
+  checkpointAiCallId?: string;
   idempotencyKey: string;
 }) {
   const { queueResumeExternalAgentRun } =
@@ -149,6 +151,7 @@ async function respond(
 const reviseMetadataSchema = z.object({
   runId: z.string().refine(isUuid),
   kind: z.enum(["plan", "review"]),
+  aiCallId: z.string().optional(),
   responseUrl: z.string().url().optional(),
 });
 
@@ -186,6 +189,18 @@ export async function handleCheckpointAction(
     return resolved.outcome;
   }
 
+  if (
+    (decoded.aiCallId && decoded.aiCallId !== resolved.run.ai_call_id) ||
+    (typeof resolved.run.metadata.checkpoint_kind === "string" &&
+      decoded.kind !== resolved.run.metadata.checkpoint_kind)
+  ) {
+    await respond(deps, payload.response_url, {
+      response_type: "ephemeral",
+      replace_original: false,
+      text: "This checkpoint has changed. Open the latest run before responding.",
+    });
+    return "not_paused";
+  }
   if (revise) {
     const botToken = await deps.getBotToken(teamId);
     if (!botToken) return "unknown_workspace";
@@ -196,6 +211,7 @@ export async function handleCheckpointAction(
         privateMetadata: JSON.stringify({
           runId: decoded.runId,
           kind: decoded.kind,
+          aiCallId: resolved.run.ai_call_id,
           ...(payload.response_url
             ? { responseUrl: payload.response_url }
             : {}),
@@ -211,6 +227,11 @@ export async function handleCheckpointAction(
     repoId: resolved.run.repo_id,
     steer: approvalSteer(decoded.kind),
     mode: "review",
+    checkpointAiCallId: resolved.run.ai_call_id,
+    ...(decoded.kind === "review" &&
+    resolved.run.metadata.checkpoint_kind === "review"
+      ? { followThrough: true }
+      : {}),
     idempotencyKey: checkpointResumeKey(resolved.run),
   });
   const answer = answeredText({ kind: decoded.kind, slackUserId });
@@ -277,10 +298,23 @@ export async function handleCheckpointReviseSubmission(
     return resolved.outcome;
   }
 
+  if (
+    (metadata.aiCallId && metadata.aiCallId !== resolved.run.ai_call_id) ||
+    (typeof resolved.run.metadata.checkpoint_kind === "string" &&
+      metadata.kind !== resolved.run.metadata.checkpoint_kind)
+  ) {
+    await respond(deps, metadata.responseUrl, {
+      response_type: "ephemeral",
+      replace_original: false,
+      text: "This checkpoint has changed. Open the latest run before responding.",
+    });
+    return "not_paused";
+  }
   await deps.queueResume({
     runId: resolved.run.id,
     userId: resolved.userId,
     repoId: resolved.run.repo_id,
+    checkpointAiCallId: resolved.run.ai_call_id,
     steer: feedback,
     mode: metadata.kind === "plan" ? "plan" : "review",
     idempotencyKey: checkpointResumeKey(resolved.run),

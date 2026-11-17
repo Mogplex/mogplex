@@ -93,6 +93,7 @@ export type FinalizeDeps = HarnessPassNotifiers & {
   appendEvent: typeof safeAppendAiCallEvent;
   /** Optional terminal commit recording for artifact pinning. */
   recordTerminalCommit?: typeof recordTerminalCommitWithTimeout;
+  refreshDelivery?: (userId: string, runId: string) => Promise<void>;
   /** Records the checkpoint the run paused at, merged atomically. */
   recordCheckpoint?: (
     run: ExternalAgentRunRow,
@@ -221,6 +222,19 @@ export async function finalizeHarnessPass(
     await recordFn(finished);
   }
 
+  if (
+    status === "success" &&
+    finished.metadata.delivery_follow_through === true &&
+    deps.refreshDelivery
+  ) {
+    try {
+      await deps.refreshDelivery(finished.user_id, finished.id);
+    } catch {
+      console.warn("[run-delivery] Completion status refresh failed", {
+        runId: finished.id,
+      });
+    }
+  }
   await safeNotifyTerminal(deps, finished, status);
 
   return {

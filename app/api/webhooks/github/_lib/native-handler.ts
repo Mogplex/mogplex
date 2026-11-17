@@ -1,3 +1,4 @@
+import { RUN_DELIVERY_EVENTS } from "@/lib/run-delivery/webhook";
 import { AbortTaskRunError } from "@trigger.dev/sdk";
 import { z } from "zod";
 import { HANDLED_GITHUB_WEBHOOK_EVENTS } from "./event-handlers";
@@ -7,6 +8,7 @@ import { dispatchVerifiedGithubWebhook } from "./verified-dispatch";
 
 const EVENTS = new Set([
   ...HANDLED_GITHUB_WEBHOOK_EVENTS,
+  ...RUN_DELIVERY_EVENTS,
   "installation",
   "installation_repositories",
   "repository",

@@ -56,6 +56,10 @@ export function createRunCheckpointPostHandler(deps = defaults) {
         runId: run.id,
         userId,
         repoId: run.repo_id,
+        checkpointAiCallId: run.ai_call_id,
+        ...(input.data.action === "approve" && kind === "review"
+          ? { followThrough: true }
+          : {}),
         steer:
           input.data.action === "approve"
             ? approvalSteer(kind)

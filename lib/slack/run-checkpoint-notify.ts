@@ -6,6 +6,7 @@ import { buildRunCheckpointMessage } from "./run-checkpoint-presentation";
 
 type SlackNotifiableRun = {
   id: string;
+  ai_call_id?: string;
   metadata: unknown;
   user_id?: string;
 };
@@ -66,6 +67,7 @@ export async function notifySlackRunCheckpoint(
   const runUrl = buildAppUrl(`/runs/${run.id}`).toString();
   const { text, blocks } = buildRunCheckpointMessage({
     runId: run.id,
+    aiCallId: run.ai_call_id,
     runUrl,
     checkpoint,
   });

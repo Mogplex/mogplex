@@ -1,3 +1,4 @@
+import { refreshCompletedRunDelivery } from "@/lib/run-delivery/refresh";
 /** Resume a checkpoint in its saved workspace, preserving uncommitted files. */
 import {
   buildCheckpointProtocolInstructions,
@@ -10,6 +11,7 @@ import {
   safeAppendAiCallEvent,
 } from "@/lib/interactive-runs";
 import type { SandboxRef } from "@/lib/mogplex-api/run-execution-launch";
+import { deliveryResume } from "@/lib/run-delivery/resume";
 import { resumeRunSandbox } from "./run-resume-sandbox";
 import {
   loadRunForExecution,
@@ -27,106 +29,20 @@ import {
 } from "@/lib/mogplex-api/run-execution-finalize";
 import { notifySlackRunCheckpoint } from "@/lib/slack/run-checkpoint-notify";
 import { notifyTerminalSlackRunOnce } from "./run-terminal-notification";
-import { isTriggerRuntimeConfigured } from "@/lib/runtime-providers";
-import { TRIGGER_TASK_IDS } from "@/lib/trigger/task-ids";
 import type { ExternalAgentRunRow } from "@/lib/mogplex-api/runs";
+import type {
+  ResumeMode,
+  ResumeExternalAgentRunPayload,
+} from "./run-resume-queue";
 
-/**
- * How the reply relates to the checkpoint. `review` (default): feedback on
- * implemented work, or approval to ship. `plan`: revise the plan and pause
- * again before changing files. `plan_reply`: a free-form reply to a plan;
- * the agent decides whether it approves or revises.
- */
-export type ResumeMode = "review" | "plan" | "plan_reply";
+export { queueResumeExternalAgentRun } from "./run-resume-queue";
+export type {
+  ResumeMode,
+  ResumeExternalAgentRunPayload,
+} from "./run-resume-queue";
 
-export type ResumeExternalAgentRunPayload = {
-  runId: string;
-  userId: string;
-  /** The user's steering reply that triggered this resume. */
-  steer: string;
-  mode?: ResumeMode;
-};
-
-/**
- * Queues a resume segment on Trigger. A resume can't run inline in the Slack
- * event task (a segment can take many minutes), so the Slack reply handler
- * dispatches it here. Resumes of the same run share a concurrency key so they
- * serialize; the caller owns idempotency (e.g. keyed on the Slack message ts).
- */
-type TriggerHandle = { id?: string | null };
-type TriggerResumeTask = (
-  taskId: string,
-  payload: ResumeExternalAgentRunPayload,
-  options: Record<string, unknown>
-) => Promise<TriggerHandle>;
-
-type QueueResumeDeps = {
-  isRuntimeConfigured: () => boolean;
-  triggerTask: TriggerResumeTask;
-};
-
-async function defaultTriggerResumeTask(
-  taskId: string,
-  payload: ResumeExternalAgentRunPayload,
-  options: Record<string, unknown>
-): Promise<TriggerHandle> {
-  const { tasks } = await import("@trigger.dev/sdk/v3");
-  return tasks.trigger(taskId, payload, options);
-}
-
-export async function queueResumeExternalAgentRun(
-  input: {
-    runId: string;
-    userId: string;
-    repoId: string;
-    steer: string;
-    mode?: ResumeMode;
-    idempotencyKey: string;
-  },
-  overrides: Partial<QueueResumeDeps> = {}
-): Promise<{ runtimeProvider: "trigger"; runtimeRunId: string | null }> {
-  const deps: QueueResumeDeps = {
-    isRuntimeConfigured: isTriggerRuntimeConfigured,
-    triggerTask: defaultTriggerResumeTask,
-    ...overrides,
-  };
-
-  if (!deps.isRuntimeConfigured()) {
-    throw new Error("Trigger.dev runtime is not configured");
-  }
-
-  const handle = await deps.triggerTask(
-    TRIGGER_TASK_IDS.resumeAgentRun,
-    {
-      runId: input.runId,
-      userId: input.userId,
-      steer: input.steer,
-      ...(input.mode ? { mode: input.mode } : {}),
-    },
-    {
-      idempotencyKey: input.idempotencyKey,
-      concurrencyKey: `resume-agent-run:${input.runId}`,
-      maxAttempts: 1,
-      tags: [
-        `user:${input.userId}`,
-        `repo:${input.repoId}`,
-        `external-run:${input.runId}`,
-      ],
-      metadata: {
-        runId: input.runId,
-        userId: input.userId,
-        repoId: input.repoId,
-      },
-    }
-  );
-
-  return {
-    runtimeProvider: "trigger",
-    runtimeRunId: handle.id ?? null,
-  };
-}
-
-type ResumeExternalAgentRunDeps = FinalizeDeps & {
+export type ResumeExternalAgentRunDeps = FinalizeDeps & {
+  delivery: typeof deliveryResume;
   loadRun: (
     runId: string,
     userId: string
@@ -140,6 +56,7 @@ type ResumeExternalAgentRunDeps = FinalizeDeps & {
 };
 
 const defaultResumeDeps: ResumeExternalAgentRunDeps = {
+  delivery: deliveryResume,
   loadRun: loadRunForExecution,
   updateRun: updateExternalAgentRun,
   createAiCall,
@@ -149,6 +66,7 @@ const defaultResumeDeps: ResumeExternalAgentRunDeps = {
   appendEvent: safeAppendAiCallEvent,
   notifyRunReachedTerminalState: notifyTerminalSlackRunOnce,
   notifyRunCheckpoint: notifySlackRunCheckpoint,
+  refreshDelivery: refreshCompletedRunDelivery,
 };
 
 const ORIGINAL_TASK_CHARS = 12_000;
@@ -196,6 +114,13 @@ export function buildResumeContinuePrompt(
       ? ["What you reported at the checkpoint:", summary.slice(0, 4_000), ""]
       : []),
   ];
+  if (mode === "delivery")
+    return [
+      ...header,
+      "This is an automatic follow-up to an implementation the user already approved for PR delivery.",
+      reply,
+      "The PR is already open. Do not ask for the same implementation approval again or emit another checkpoint just to wait for CI. Report what you fixed and the exact checks you verified. Preserve the user's existing merge authority.",
+    ].join("\n");
   if (mode === "plan")
     return [
       ...header,
@@ -239,7 +164,7 @@ export async function resumeExternalAgentRun(
     ...overrides,
   };
 
-  const run = await deps.loadRun(payload.runId, payload.userId);
+  let run = await deps.loadRun(payload.runId, payload.userId);
   if (!run) {
     return {
       success: false,
@@ -249,7 +174,18 @@ export async function resumeExternalAgentRun(
     };
   }
 
-  if (run.status !== "awaiting_input") {
+  const delivery = payload.mode === "delivery";
+  if (delivery) {
+    if (
+      !payload.delivery ||
+      !(await deps.delivery.prepare(run, payload.delivery))
+    )
+      return { success: true, runId: run.id, status: run.status, error: null };
+  } else if (
+    run.status !== "awaiting_input" ||
+    (payload.checkpointAiCallId &&
+      payload.checkpointAiCallId !== run.ai_call_id)
+  ) {
     // Only a run paused at a checkpoint can be resumed. A duplicate reply or a
     // race that already advanced the run lands here and is a no-op.
     return {
@@ -258,6 +194,19 @@ export async function resumeExternalAgentRun(
       status: run.status,
       error: `Run is ${run.status}, not awaiting input`,
     };
+  }
+
+  if (!delivery && payload.followThrough) {
+    const authorized = await deps.delivery.authorize(run);
+    if (!authorized)
+      return {
+        success: false,
+        runId: run.id,
+        status: run.status,
+        error:
+          "This implementation checkpoint has changed. Refresh before approving.",
+      };
+    run = authorized;
   }
 
   // New segment: its own pending ai_call, pinned to external-api so the harness
@@ -281,14 +230,39 @@ export async function resumeExternalAgentRun(
   // Publish the new call and its worker together. Otherwise a status read can
   // reconcile this segment against the completed worker from the prior pass.
   // Keep the saved workspace attached across segments, including failed resumes.
-  const repointed = await deps.updateRun(run.user_id, run.id, {
-    ai_call_id: segmentAiCall.id,
-    runtime_provider: "trigger",
-    runtime_run_id: payload.runtimeRunId,
-    status: "streaming",
-    error: null,
-  });
+  const repointed =
+    delivery && payload.delivery
+      ? await deps.delivery.claim({
+          run,
+          revision: payload.delivery.revision,
+          headSha: payload.delivery.headSha,
+          aiCallId: segmentAiCall.id,
+          runtimeRunId: payload.runtimeRunId,
+        })
+      : payload.followThrough
+        ? await deps.delivery.claimCheckpoint({
+            run,
+            aiCallId: segmentAiCall.id,
+            runtimeRunId: payload.runtimeRunId,
+          })
+        : await deps.updateRun(run.user_id, run.id, {
+            ai_call_id: segmentAiCall.id,
+            runtime_provider: "trigger",
+            runtime_run_id: payload.runtimeRunId,
+            status: "streaming",
+            error: null,
+          });
 
+  if (!repointed) {
+    await deps.delivery.cancelCall(segmentAiCall.id);
+    const current = await deps.loadRun(run.id, run.user_id);
+    return {
+      success: true,
+      runId: run.id,
+      status: current?.status ?? run.status,
+      error: null,
+    };
+  }
   const segmentRun: ExternalAgentRunRow = {
     ...repointed,
     create_branch: false,

@@ -1,3 +1,4 @@
+import { refreshDeliveryForGithubEvent } from "@/lib/run-delivery/webhook";
 import { AbortTaskRunError } from "@trigger.dev/sdk";
 import {
   DatabaseSchemaError,
@@ -278,6 +279,19 @@ export async function dispatchVerifiedGithubWebhook(
   // surface the wait outcome alongside the normal dispatch summary.
   let waitResume: RouteFlowWaitsOutcome | null = null;
   let waitResumeFailed = false;
+  let deliveryFailed = false;
+  try {
+    await refreshDeliveryForGithubEvent({
+      event: context.event,
+      body: context.body,
+      repos: repoRows,
+    });
+  } catch {
+    deliveryFailed = true;
+    console.warn("[run-delivery] GitHub event refresh failed", {
+      deliveryId: context.deliveryId,
+    });
+  }
   try {
     waitResume = await tryResumeFlowWaitsForGithubEvent({ context, repoRows });
   } catch (error) {
@@ -293,6 +307,7 @@ export async function dispatchVerifiedGithubWebhook(
   // Wait resumption and new jobs are independent. Surface wait failures only
   // after admitting the delivery's idempotent jobs, including on every retry.
   const assertWaitRoutingSucceeded = () => {
+    if (deliveryFailed) throw new Error("GitHub run delivery refresh failed");
     if (!retryFailures) return;
     if (waitResume?.rollbackFailed) {
       console.error("Native GitHub wait requires operator repair", {

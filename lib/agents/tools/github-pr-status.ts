@@ -51,6 +51,7 @@ type GithubReviewComment = {
 };
 
 type GithubReviewThread = {
+  id?: string;
   isResolved?: boolean;
   comments?: { nodes?: Array<GithubReviewComment | null> };
 };
@@ -120,7 +121,7 @@ query MogplexPullRequestStatus($owner: String!, $repo: String!, $number: Int!) {
       reviewThreads(first: 50) {
         totalCount
         nodes {
-          isResolved
+          id isResolved
           comments(last: 5) {
             nodes { author { login } body createdAt url }
           }
@@ -212,7 +213,7 @@ function normalizeUnresolvedThreads(
           ]
         : []
     );
-    return [{ comments }];
+    return [{ ...(thread.id ? { id: thread.id } : {}), comments }];
   });
 }
 
@@ -332,7 +333,7 @@ function presentPullRequestStatus(input: {
   };
 }
 
-async function loadPullRequestStatus(input: {
+export async function loadPullRequestStatus(input: {
   target: GithubPullRequestTarget;
   number: number;
   githubToken: string;
