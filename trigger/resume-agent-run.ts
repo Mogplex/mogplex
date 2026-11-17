@@ -7,11 +7,14 @@ import type { ResumeExternalAgentRunPayload } from "@/lib/mogplex-api/run-resume
 export const executeResumeAgentRunTask = task({
   id: TRIGGER_TASK_IDS.resumeAgentRun,
   ...AGENT_WORKER_TASK_OPTIONS,
-  run: async (payload: ResumeExternalAgentRunPayload) => {
+  run: async (payload: ResumeExternalAgentRunPayload, { ctx }) => {
     metadata.set("runId", payload.runId);
     metadata.set("userId", payload.userId);
 
-    const result = await resumeExternalAgentRun(payload);
+    const result = await resumeExternalAgentRun({
+      ...payload,
+      runtimeRunId: ctx.run.id,
+    });
     metadata.set("status", result.status);
     metadata.set("success", result.success);
     if (result.error) metadata.set("error", result.error);

@@ -79,8 +79,8 @@ export function useExternalRun(runId: string) {
   const streamPhase =
     context?.runId === runId
       ? context.status === "awaiting_input"
-        ? "paused"
-        : "ready"
+        ? `paused:${context.aiCallId}`
+        : `ready:${context.aiCallId}`
       : "loading";
   useEffect(() => {
     if (streamPhase === "loading") return;
@@ -156,14 +156,10 @@ export function useExternalRun(runId: string) {
     );
     return () => source.close();
   }, [runId, reload, streamPhase]);
-  const terminal = events.findLast((event) =>
-    ["finished", "failed", "cancelled"].includes(event.type)
-  );
-  const status = terminal
-    ? terminal.type === "finished"
-      ? "success"
-      : terminal.type
-    : (context?.status ?? "pending");
+  // A finished ai_call is one pass, not necessarily the end of the run:
+  // planning passes finish successfully before pausing for approval. The
+  // owned run snapshot is authoritative, including across resumed passes.
+  const status = context?.status ?? "pending";
   return {
     context,
     events,

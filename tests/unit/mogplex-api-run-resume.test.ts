@@ -23,6 +23,7 @@ function baseDeps(overrides: Record<string, unknown> = {}) {
     notifyRunReachedTerminalState: async () => {},
     notifyRunCheckpoint: async () => {},
     recordCheckpoint: async () => {},
+    recordTerminalCommit: async () => {},
     ...overrides,
   };
 }
@@ -107,7 +108,12 @@ test("queueResumeExternalAgentRun passes the resume mode to the task", async () 
 
 test("resumeExternalAgentRun returns not_found for a missing run", async () => {
   const result = await resumeExternalAgentRun(
-    { runId: "missing", userId: "user-123", steer: "go" },
+    {
+      runtimeRunId: "run_resume",
+      runId: "missing",
+      userId: "user-123",
+      steer: "go",
+    },
     { ...baseDeps(), loadRun: async () => null }
   );
   assert.equal(result.success, false);
@@ -117,7 +123,12 @@ test("resumeExternalAgentRun returns not_found for a missing run", async () => {
 test("resumeExternalAgentRun refuses a run that is not awaiting input", async () => {
   let created = false;
   const result = await resumeExternalAgentRun(
-    { runId: "run-1", userId: "user-123", steer: "go" },
+    {
+      runtimeRunId: "run_resume",
+      runId: "run-1",
+      userId: "user-123",
+      steer: "go",
+    },
     {
       ...baseDeps({
         createAiCall: async () => {
@@ -148,7 +159,12 @@ test("resumeExternalAgentRun keeps its saved workspace attached across resume se
   let harnessRunWith: LaunchArg | null = null;
 
   const result = await resumeExternalAgentRun(
-    { runId: "run-1", userId: "user-123", steer: "shrink the header" },
+    {
+      runtimeRunId: "run_resume",
+      runId: "run-1",
+      userId: "user-123",
+      steer: "shrink the header",
+    },
     {
       ...baseDeps(),
       loadRun: async () => currentRun,
@@ -212,7 +228,12 @@ test("resumeExternalAgentRun pauses again when the segment declares a checkpoint
   const checkpoints: Array<string | null> = [];
 
   const result = await resumeExternalAgentRun(
-    { runId: "run-1", userId: "user-123", steer: "one more tweak" },
+    {
+      runtimeRunId: "run_resume",
+      runId: "run-1",
+      userId: "user-123",
+      steer: "one more tweak",
+    },
     {
       ...baseDeps(),
       loadRun: async () => currentRun,
@@ -241,7 +262,12 @@ test("resumeExternalAgentRun records a failed segment launch", async () => {
   const failedEvents: unknown[] = [];
 
   const result = await resumeExternalAgentRun(
-    { runId: "run-1", userId: "user-123", steer: "go" },
+    {
+      runtimeRunId: "run_resume",
+      runId: "run-1",
+      userId: "user-123",
+      steer: "go",
+    },
     {
       ...baseDeps(),
       loadRun: async () => currentRun,
