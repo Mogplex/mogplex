@@ -221,7 +221,7 @@ export function buildResumeContinuePrompt(
  * result without side effects when the run cannot be resumed.
  */
 export async function resumeExternalAgentRun(
-  payload: ResumeExternalAgentRunPayload,
+  payload: ResumeExternalAgentRunPayload & { runtimeRunId: string },
   overrides: Partial<ResumeExternalAgentRunDeps> = {}
 ): Promise<ExternalAgentRunExecutionResult> {
   const deps: ResumeExternalAgentRunDeps = {
@@ -268,9 +268,13 @@ export async function resumeExternalAgentRun(
     },
   });
 
+  // Publish the new call and its worker together. Otherwise a status read can
+  // reconcile this segment against the completed worker from the prior pass.
   // Keep the saved workspace attached across segments, including failed resumes.
   const repointed = await deps.updateRun(run.user_id, run.id, {
     ai_call_id: segmentAiCall.id,
+    runtime_provider: "trigger",
+    runtime_run_id: payload.runtimeRunId,
     status: "streaming",
     error: null,
   });
