@@ -57,6 +57,7 @@ type Verification = { status: string; message: string; fingerprint?: string; che
 export function WorkspaceSigningCheck({ fingerprint }: { fingerprint: string | null }) {
   const [choosing, setChoosing] = useState(false)
   const [selected, setSelected] = useState("")
+  const [selectionUnavailable, setSelectionUnavailable] = useState(false)
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<Verification | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -73,6 +74,7 @@ export function WorkspaceSigningCheck({ fingerprint }: { fingerprint: string | n
   // Forget unavailable selections so recovery cannot revive an old receipt.
   if (data && selected && !selectedSandbox) {
     setSelected("")
+    setSelectionUnavailable(true)
     setResult(null)
     setError(null)
   }
@@ -98,12 +100,13 @@ export function WorkspaceSigningCheck({ fingerprint }: { fingerprint: string | n
     </div>
     <p className="text-xs leading-5 text-muted-foreground">A sandbox is the environment where Git runs for a repository. Verify its signing setup with a temporary commit; your repository stays unchanged.</p>
     {choosing && <div className="space-y-3">
+      {selectionUnavailable && <p role="status" className="text-sm text-muted-foreground">Your selected sandbox is no longer available. Choose another to verify.</p>}
       {loadError ? <div role="alert" className="text-sm text-destructive">Could not load sandboxes. <Button variant="outline" onClick={() => void mutate()}>Try again</Button></div>
         : !data ? <p role="status" className="text-sm text-muted-foreground">Loading sandboxes…</p>
         : currentSandboxes.length === 0 ? <p className="text-sm text-muted-foreground">No available sandboxes. Launch a sandbox from a repository to verify signing.</p>
         : <><label className="block text-xs font-medium" htmlFor="signing-sandbox">Sandbox to check</label>
           <SandboxPicker options={options.map(option => ({ ...option, label: option.label + (labelCounts.get(option.label)! > 1 ? ` · ${option.id.slice(0, 8)}` : "") }))} selected={selectedSandbox?.id ?? ""} disabled={busy}
-            onSelect={id => { setSelected(id); setResult(null); setError(null) }} />
+            onSelect={id => { setSelected(id); setSelectionUnavailable(false); setResult(null); setError(null) }} />
           <Button variant="outline" disabled={!selectedSandbox || busy} onClick={() => void verify()}>{busy ? "Verifying…" : "Verify selected sandbox"}</Button></>}
       {visibleResult && <div role="status" className="rounded-md border border-border bg-secondary p-3 text-sm leading-5">{visibleResult.message}{visibleResult.checkedAt && <p className="mt-1 text-xs text-muted-foreground">Checked {new Date(visibleResult.checkedAt).toLocaleString()}. Recheck after changing sandbox settings.</p>}</div>}
       {error && selectedSandbox && <p role="alert" className="text-sm text-destructive">{error}</p>}

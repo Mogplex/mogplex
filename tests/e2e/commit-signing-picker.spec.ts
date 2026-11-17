@@ -252,6 +252,11 @@ test("a selected sandbox that stops after refresh requires a new selection and c
   await refreshed;
   await expect(picker).toContainText("Choose a sandbox");
   await expect(
+    page.getByText(
+      "Your selected sandbox is no longer available. Choose another to verify."
+    )
+  ).toBeVisible();
+  await expect(
     page.getByRole("button", { name: "Verify selected sandbox" })
   ).toBeDisabled();
   await expect(
@@ -280,6 +285,11 @@ test("a selected sandbox that stops after refresh requires a new selection and c
   await recovered;
   await expect(picker).toContainText("Choose a sandbox");
   await expect(
+    page.getByText(
+      "Your selected sandbox is no longer available. Choose another to verify."
+    )
+  ).toBeVisible();
+  await expect(
     page.getByRole("button", { name: "Verify selected sandbox" })
   ).toBeDisabled();
   await expect(
@@ -295,10 +305,85 @@ test("a selected sandbox that stops after refresh requires a new selection and c
     })
     .click();
   await expect(
+    page.getByText(
+      "Your selected sandbox is no longer available. Choose another to verify."
+    )
+  ).toHaveCount(0);
+  await expect(
     page.getByText("Verified in the selected sandbox", { exact: true })
   ).toHaveCount(0);
   await page.getByRole("button", { name: "Verify selected sandbox" }).click();
   await expect(
     page.getByText("Verified in the selected sandbox", { exact: true })
   ).toBeVisible();
+});
+
+test("explains a sandbox becoming unavailable while verification is in flight", async ({
+  page,
+}) => {
+  await page.clock.install();
+  let sandboxes = [running, paused];
+  await page.route("**/api/sandbox", (route) =>
+    fulfillJson(route, { sandboxes })
+  );
+  let finishCheck!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    finishCheck = resolve;
+  });
+  await page.route("**/api/sandbox/*/commit-signing", async (route) => {
+    await pending;
+    await route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({ error: "The old check failed." }),
+    });
+  });
+  await page.goto(scopedPath("settings/commit-signing"));
+  await page
+    .getByRole("button", { name: "Verify signing", exact: true })
+    .click();
+  const picker = page.getByRole("combobox", {
+    name: "Sandbox to check",
+    exact: true,
+  });
+  await picker.click();
+  await page
+    .getByRole("option", {
+      name: "acme/widgets · feature/search · Running",
+      exact: true,
+    })
+    .click();
+  await page.getByRole("button", { name: "Verify selected sandbox" }).click();
+  await expect(page.getByRole("button", { name: "Verifying…" })).toBeVisible();
+  sandboxes = [paused];
+  await page.clock.fastForward(6000);
+  const refreshed = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/sandbox") && response.status() === 200
+  );
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await refreshed;
+  const notice = page.getByText(
+    "Your selected sandbox is no longer available. Choose another to verify."
+  );
+  await expect(notice).toBeVisible();
+  finishCheck();
+  await expect(
+    page.getByRole("button", { name: "Verify selected sandbox" })
+  ).toBeDisabled();
+  await expect(notice).toBeVisible();
+  await picker.click();
+  await page
+    .getByRole("option", {
+      name: "acme/widgets · fix/signing · Paused",
+      exact: true,
+    })
+    .click();
+  await expect(notice).toHaveCount(0);
+  await expect(
+    page.getByText("The old check failed.", { exact: true })
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Verify selected sandbox" })
+  ).toBeEnabled();
 });
