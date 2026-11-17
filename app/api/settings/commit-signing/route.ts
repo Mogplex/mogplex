@@ -2,7 +2,7 @@
  * Commit signing settings for the signed-in user.
  *
  * GET    -> the current signing key status (never the private key)
- * POST   -> generate, import, or register a signing key
+ * POST   -> generate, import, register, or check a signing key
  * DELETE -> remove the stored signing key
  *
  * The private key is never returned by this API: it is encrypted before it is
@@ -36,7 +36,7 @@ import { signingFailureDiagnostic } from "@/lib/commit-signing/diagnostics";
 const DEFAULT_KEY_TITLE = "Mogplex commit signing";
 
 const postBodySchema = z.object({
-  action: z.enum(["generate", "import", "register"]),
+  action: z.enum(["generate", "import", "register", "check"]),
   privateKey: z.string().optional(),
   title: z.string().optional(),
   registerWithGithub: z.boolean().optional(),
@@ -174,7 +174,18 @@ export function createCommitSigningRouteHandlers(
       return NextResponse.json({
         ...statusPayload(current),
         registration: result.status,
+        registrationStatus: "registered",
       });
+    }
+    if (result.status === "rate_limited") {
+      return NextResponse.json(
+        {
+          error:
+            "GitHub registration is temporarily unavailable. Your signing key is saved. Please try again later.",
+          retryable: true,
+        },
+        { status: 503 }
+      );
     }
     if (result.status === "scope_missing") {
       return NextResponse.json(
@@ -200,29 +211,40 @@ export function createCommitSigningRouteHandlers(
     userId: string,
     view: CommitSigningKeyView
   ) {
-    let result: GithubSigningKeyStatus = { status: "unavailable" };
+    let result: GithubSigningKeyStatus | { status: "not_connected" } = {
+      status: "unavailable",
+    };
     try {
       const token = await deps.getGithubToken(userId);
-      if (token)
-        result = await deps.checkKey({ token, publicKey: view.publicKey });
+      result = token
+        ? await deps.checkKey({ token, publicKey: view.publicKey })
+        : { status: "not_connected" };
     } catch (error) {
       console.warn(
         "[commit-signing] github_registration_check failed",
         signingFailureDiagnostic(error)
       );
     }
-    if (
-      result.status === "registered" &&
-      (!view.registeredAt || view.githubKeyId !== result.keyId)
-    ) {
-      await deps.markRegistered({
-        userId,
-        publicKey: view.publicKey,
-        githubKeyId: result.keyId,
-        title: view.title,
-      });
-    } else if (result.status === "not_registered" && view.registeredAt) {
-      await deps.clearRegistration({ userId, publicKey: view.publicKey });
+    try {
+      if (
+        result.status === "registered" &&
+        (!view.registeredAt || view.githubKeyId !== result.keyId)
+      ) {
+        await deps.markRegistered({
+          userId,
+          publicKey: view.publicKey,
+          githubKeyId: result.keyId,
+          title: view.title,
+        });
+      } else if (result.status === "not_registered" && view.registeredAt) {
+        await deps.clearRegistration({ userId, publicKey: view.publicKey });
+      }
+    } catch (error) {
+      console.warn(
+        "[commit-signing] github_registration_receipt failed",
+        signingFailureDiagnostic(error)
+      );
+      result = { status: "unavailable" };
     }
     const current = await deps.loadKey(userId);
     return NextResponse.json({
@@ -253,9 +275,7 @@ export function createCommitSigningRouteHandlers(
       );
     }
     const view = await deps.loadKey(userId);
-    return view
-      ? reconcileRegistration(userId, view)
-      : NextResponse.json(statusPayload(null));
+    return NextResponse.json(statusPayload(view));
   }
 
   async function POST(request: Request) {
@@ -333,7 +353,7 @@ export function createCommitSigningRouteHandlers(
       return NextResponse.json(statusPayload(view));
     }
 
-    if (action === "register") {
+    if (action === "register" || action === "check") {
       const view = await deps.loadKey(userId);
       if (!view) {
         return NextResponse.json(
@@ -341,7 +361,9 @@ export function createCommitSigningRouteHandlers(
           { status: 404 }
         );
       }
-      return registerWithGithub(userId, view);
+      return action === "check"
+        ? reconcileRegistration(userId, view)
+        : registerWithGithub(userId, view);
     }
 
     return NextResponse.json({ error: "Unknown action." }, { status: 400 });

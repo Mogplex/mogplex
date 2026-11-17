@@ -90,9 +90,12 @@ carry by default.
   shows the public key, which the user can paste into
   **GitHub -> Settings -> SSH and GPG keys -> Signing keys**.
 
-Opening Settings or choosing **Check GitHub registration** checks the connected
+Settings loads the saved key immediately, then checks once in the background.
+Choosing **Check GitHub registration** runs another check of the connected
 GitHub account's public SSH signing keys. Mogplex matches the exact public key,
-including keys added manually, and updates its registration receipt. This read
+including keys added manually, and updates its registration receipt through an
+authenticated `POST { action: "check" }`. Plain settings GETs never call GitHub
+or write receipts, and window focus does not trigger checks. The GitHub lookup
 does not require signing-key management permissions. Automatic registration
 also checks for an existing key before attempting to create it; GitHub App user
 tokens need the **SSH signing keys: write** account permission to create keys.

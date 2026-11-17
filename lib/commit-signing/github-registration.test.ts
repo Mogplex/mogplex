@@ -127,3 +127,48 @@ test("GitHub hides missing signing-key write permissions behind a 404", async ()
     )
   ).toEqual({ status: "scope_missing" });
 });
+
+test.each([
+  {
+    status: 403,
+    headers: new Headers({ "x-ratelimit-remaining": "0" }),
+    message: "API rate limit exceeded",
+  },
+  {
+    status: 403,
+    headers: new Headers({ "Retry-After": "60" }),
+    message: "secondary rate limit",
+  },
+  {
+    status: 403,
+    headers: new Headers(),
+    message: "You have exceeded a secondary rate limit",
+  },
+  { status: 429, headers: new Headers(), message: "Too many requests" },
+])(
+  "registration rate limits remain retryable: %j",
+  async ({ status, headers, message }) => {
+    expect(
+      await registerGithubSshSigningKey(
+        { ...input, title: "Signing" },
+        {
+          request: async () => Response.json({ message }, { status, headers }),
+        }
+      )
+    ).toEqual({ status: "rate_limited" });
+  }
+);
+
+test("SSO enforcement is not misreported as missing signing-key permissions", async () => {
+  const result = await registerGithubSshSigningKey(
+    { ...input, title: "Signing" },
+    {
+      request: async () =>
+        Response.json(
+          { message: "SSO required" },
+          { status: 403, headers: { "x-github-sso": "required" } }
+        ),
+    }
+  );
+  expect(result.status).toBe("failed");
+});

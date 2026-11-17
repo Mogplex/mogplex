@@ -23,10 +23,17 @@ test("refresh recognizes manual GitHub registration and distinguishes removal fr
 }) => {
   let registrationStatus = "not_registered";
   let registered = false;
+  let failCheck = false;
   const publicKey = "ssh-ed25519 manually-registered-key";
   await page.route(endpoint, async (route) => {
-    // Refresh must check status, never create, replace or re-register a key.
-    expect(route.request().method()).toBe("GET");
+    if (failCheck && route.request().method() === "POST")
+      return route.fulfill({
+        status: 503,
+        json: { error: "Could not check GitHub registration. Try again." },
+      });
+    // Only the check action may reconcile a receipt; never create a key.
+    if (route.request().method() === "POST")
+      expect(route.request().postDataJSON()).toEqual({ action: "check" });
     await fulfillJson(route, {
       ...empty,
       configured: true,
@@ -59,7 +66,7 @@ test("refresh recognizes manual GitHub registration and distinguishes removal fr
     path: test.info().outputPath("registered-signing-mobile.png"),
     fullPage: true,
   });
-  registrationStatus = "unavailable";
+  failCheck = true;
   await page.getByRole("button", { name: "Check GitHub registration" }).click();
   await expect(
     page.getByText("GitHub registration could not be checked", { exact: true })
@@ -70,6 +77,20 @@ test("refresh recognizes manual GitHub registration and distinguishes removal fr
   await expect(
     page.getByText("Not registered with GitHub", { exact: true })
   ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Register with GitHub", exact: true })
+  ).toBeEnabled();
+  failCheck = false;
+  registrationStatus = "not_connected";
+  await page.getByRole("button", { name: "Check GitHub registration" }).click();
+  await expect(
+    page.getByText("Connect GitHub to check registration", { exact: true })
+  ).toBeVisible();
+  await expect(
+    page.getByText("Connect your GitHub account in Settings → Account", {
+      exact: false,
+    })
+  ).toBeVisible();
   registrationStatus = "not_registered";
   registered = false;
   await page.getByRole("button", { name: "Check GitHub registration" }).click();
@@ -92,7 +113,10 @@ test("temporary registration failures keep the key visible and can be retried", 
     fingerprint: "SHA256:public-test-fingerprint",
   };
   await page.route(endpoint, async (route) => {
-    if (route.request().method() === "POST") {
+    if (
+      route.request().method() === "POST" &&
+      route.request().postDataJSON().action === "register"
+    ) {
       attempts += 1;
       if (attempts === 1) {
         await route.fulfill({
@@ -164,7 +188,7 @@ test("a user creates a key, receives manual-registration guidance, and removes i
         });
         return;
       }
-      expect(body.action).toBe("generate");
+      expect(["generate", "check"]).toContain(body.action);
       configured = true;
     }
     await fulfillJson(
@@ -340,4 +364,40 @@ test("a temporary settings outage does not say signing is disabled", async ({
   await expect(
     page.getByRole("button", { name: "Generate a signing key" })
   ).toBeVisible();
+});
+
+test("a slow GitHub check keeps the saved key visible and tab focus does not repeat it", async ({
+  page,
+}) => {
+  let checks = 0;
+  let complete!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    complete = resolve;
+  });
+  const key = {
+    ...empty,
+    configured: true,
+    publicKey: "ssh-ed25519 saved-key",
+    fingerprint: "SHA256:saved",
+  };
+  await page.route(endpoint, async (route) => {
+    if (route.request().method() === "POST") {
+      expect(route.request().postDataJSON()).toEqual({ action: "check" });
+      checks++;
+      await pending;
+      return fulfillJson(route, { ...key, registrationStatus: "unavailable" });
+    }
+    await fulfillJson(route, key);
+  });
+  await page.goto(scopedPath("settings/commit-signing"));
+  await expect(
+    page.getByText("Checking GitHub registration…", { exact: true })
+  ).toBeVisible();
+  await expect(page.getByText(key.publicKey, { exact: true })).toBeVisible();
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  complete();
+  await expect(
+    page.getByText("GitHub registration could not be checked", { exact: true })
+  ).toBeVisible();
+  expect(checks).toBe(1);
 });

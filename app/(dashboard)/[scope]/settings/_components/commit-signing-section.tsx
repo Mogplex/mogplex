@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import useSWR from "swr"
 import { ClientFetchError } from "@/lib/client-fetch"
 import { Button } from "@/components/ui/button"
@@ -14,7 +14,7 @@ type CommitSigningStatus = {
   fingerprint: string | null
   title: string | null
   registered: boolean
-  registrationStatus?: "registered" | "not_registered" | "unavailable"
+  registrationStatus?: "registered" | "not_registered" | "unavailable" | "not_connected"
   registeredAt: string | null
   githubKeyId: string | null
   createdAt: string | null
@@ -36,8 +36,10 @@ async function loadStatus(url: string) {
 export function CommitSigningSection() {
   const { data, error: loadError, mutate } = useSWR(
     "/api/settings/commit-signing",
-    loadStatus
+    loadStatus,
+    { revalidateOnFocus: false, revalidateOnReconnect: false }
   )
+  const checkedKey = useRef<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -46,6 +48,9 @@ export function CommitSigningSection() {
 
   const post = useCallback(
     async (body: Record<string, unknown>, action: string) => {
+      const markCheckUnavailable = async () => {
+        if (action === "check") await mutate(current => current?.available ? { ...current, registrationStatus: "unavailable" } : current, { revalidate: false })
+      }
       setBusy(action)
       setError(null)
       setNotice(null)
@@ -55,11 +60,12 @@ export function CommitSigningSection() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
         })
-        const payload = (await response.json().catch(() => ({}))) as {
+        const payload = (await response.json().catch(() => ({}))) as CommitSigningStatus & {
           error?: string
           manualRegistrationRequired?: boolean
         }
         if (!response.ok) {
+          await markCheckUnavailable()
           setError(payload.error || "Commit signing request failed")
           if (payload.manualRegistrationRequired) {
             setNotice(
@@ -69,8 +75,9 @@ export function CommitSigningSection() {
           return
         }
         setImportKey("")
-        await mutate()
+        await mutate(payload, { revalidate: false })
       } catch {
+        await markCheckUnavailable()
         setError("Network error while talking to the server")
       } finally {
         setBusy(null)
@@ -78,6 +85,14 @@ export function CommitSigningSection() {
     },
     [mutate]
   )
+
+  const publicKey = data?.available ? data.publicKey : null
+  useEffect(() => {
+    if (!publicKey) { checkedKey.current = null; return }
+    if (busy || checkedKey.current === publicKey) return
+    checkedKey.current = publicKey
+    void post({ action: "check" }, "check")
+  }, [publicKey, busy, post])
 
   const revoke = useCallback(async () => {
     setBusy("revoke")
@@ -125,6 +140,7 @@ export function CommitSigningSection() {
   }
 
   const configured = data?.configured === true
+  const githubNotConnected = data.registrationStatus === "not_connected"
   const registrationUnavailable = data.registrationStatus === "unavailable"
 
   return (
@@ -165,7 +181,7 @@ export function CommitSigningSection() {
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
-                  disabled={busy !== null || data?.registered === true}
+                  disabled={busy !== null || (data.registered && !registrationUnavailable && !githubNotConnected)}
                   onClick={() => post({ action: "register" }, "register")}
                   className="rounded-md border border-border px-3 py-1.5 text-xs font-medium disabled:opacity-50"
                 >
@@ -183,16 +199,9 @@ export function CommitSigningSection() {
             </div>
 
             <div className="rounded-md border border-border bg-secondary px-3 py-2 text-sm">
-              <p className="font-medium" role="status">{registrationUnavailable ? "GitHub registration could not be checked" : data.registered ? "Registered with GitHub" : "Not registered with GitHub"}</p>
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">{registrationUnavailable ? "Your signing key is saved. Check again to confirm whether GitHub trusts it." : data.registered ? "This public key is on your GitHub account as a signing key. A Verified badge also requires a matching commit email." : "Add this public key as a Signing Key on GitHub, then check its registration here."}</p>
-              <Button variant="outline" size="sm" className="mt-3" disabled={busy !== null} onClick={async () => {
-                setBusy("check")
-                setError(null)
-                setNotice(null)
-                try { await mutate() }
-                catch { setError("Could not check GitHub registration. Try again.") }
-                finally { setBusy(null) }
-              }}>{busy === "check" ? "Checking GitHub…" : "Check GitHub registration"}</Button>
+              <p className="font-medium" role="status">{busy === "check" ? "Checking GitHub registration…" : githubNotConnected ? "Connect GitHub to check registration" : registrationUnavailable ? "GitHub registration could not be checked" : data.registered ? "Registered with GitHub" : "Not registered with GitHub"}</p>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">{githubNotConnected ? "Connect your GitHub account in Settings → Account, then check again. Your signing key is saved." : registrationUnavailable ? "Your signing key is saved. Check again to confirm whether GitHub trusts it." : data.registered ? "This public key is on your GitHub account as a signing key. A Verified badge also requires a matching commit email." : "Add this public key as a Signing Key on GitHub, then check its registration here."}</p>
+              <Button variant="outline" size="sm" className="mt-3" disabled={busy !== null} onClick={() => void post({ action: "check" }, "check")}>{busy === "check" ? "Checking GitHub…" : "Check GitHub registration"}</Button>
             </div>
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-2">

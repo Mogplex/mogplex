@@ -14,6 +14,7 @@ export type SshSigningKeyRegistration =
   | { status: "registered"; keyId: string | null }
   | { status: "already_registered"; keyId: string | null }
   | { status: "scope_missing" }
+  | { status: "rate_limited" }
   | { status: "failed"; message: string };
 
 export type GithubRequest = (
@@ -38,6 +39,10 @@ function requestHeaders(token: string): Record<string, string> {
     "Content-Type": "application/json",
     "User-Agent": "mogplex",
   };
+}
+
+function normalizePublicKey(key: string): string {
+  return key.trim().split(/\s+/).slice(0, 2).join(" ");
 }
 
 function readKeyId(body: unknown): string | null {
@@ -91,11 +96,7 @@ export async function checkGithubSshSigningKey(
       !/^[a-z\d](?:[a-z\d-]*[a-z\d])?$/i.test(login)
     )
       return { status: "unavailable" };
-    const normalized = input.publicKey
-      .trim()
-      .split(/\s+/)
-      .slice(0, 2)
-      .join(" ");
+    const normalized = normalizePublicKey(input.publicKey);
     for (let page = 1; ; page += 1) {
       const response = await deps.request(
         `https://api.github.com/users/${encodeURIComponent(login)}/ssh_signing_keys?per_page=100&page=${page}`,
@@ -112,7 +113,7 @@ export async function checkGithubSshSigningKey(
           !readKeyId(entry)
         )
           return { status: "unavailable" };
-        if (entry.key.trim().split(/\s+/).slice(0, 2).join(" ") === normalized)
+        if (normalizePublicKey(entry.key) === normalized)
           return { status: "registered", keyId: readKeyId(entry)! };
       }
       if (keys.length < 100) return { status: "not_registered" };
@@ -202,19 +203,25 @@ export async function registerGithubSshSigningKey(
   if (response.status === 422) {
     // A 422 can also reject an invalid key. Only claim registration when
     // the exact public key is present on this authenticated account.
-    const normalized = input.publicKey
-      .trim()
-      .split(/\s+/)
-      .slice(0, 2)
-      .join(" ");
+    const normalized = normalizePublicKey(input.publicKey);
     const keys = await listGithubSshSigningKeys(input.token, { request });
     const existing = keys.find(
-      (key) =>
-        key.publicKey?.trim().split(/\s+/).slice(0, 2).join(" ") === normalized
+      (key) => normalizePublicKey(key.publicKey ?? "") === normalized
     );
     if (existing) return { status: "already_registered", keyId: existing.id };
   }
-  if (response.status === 403 || response.status === 404) {
+  if (
+    response.status === 429 ||
+    (response.status === 403 &&
+      (response.headers.get("x-ratelimit-remaining") === "0" ||
+        response.headers.has("retry-after") ||
+        /rate limit/i.test(readMessage(body, ""))))
+  )
+    return { status: "rate_limited" };
+  if (
+    (response.status === 403 && !response.headers.has("x-github-sso")) ||
+    response.status === 404
+  ) {
     // Missing signing-key permissions can also be hidden behind a 404.
     return { status: "scope_missing" };
   }
