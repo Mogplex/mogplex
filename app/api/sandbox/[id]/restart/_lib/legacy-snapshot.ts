@@ -154,11 +154,13 @@ export async function captureLegacyWorkspaceSnapshot(
     snapshotId = snapshot.snapshotId;
     snapshotCompletedAt = new Date();
   } catch (error) {
+    const diagnostic = signingFailureDiagnostic(error);
     console.error("[sandbox/restart] Snapshot capture failed", {
       sandboxRecordId: input.recordId,
-      providerNotFound: isNotFoundError(error),
+      providerNotFound:
+        isNotFoundError(error) || diagnostic.category === "not_found",
       operation,
-      diagnostic: signingFailureDiagnostic(error),
+      diagnostic,
       // Snapshot API failures contain no key bytes. Keep their existing diagnostics;
       // errors from the preceding signing cleanup remain strictly allowlisted.
       ...(operation === "key_scrub"

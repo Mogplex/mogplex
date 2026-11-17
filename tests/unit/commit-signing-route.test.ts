@@ -85,6 +85,8 @@ test("a failed GitHub token lookup asks for retry without losing the saved key",
   const body = await response.json();
   assert.equal(response.status, 503);
   assert.equal(body.retryable, true);
+  assert.equal(body.publicKey, publicKey);
+  assert.equal(body.configured, true);
   assert.match(body.error, /try again/i);
   assert.equal(body.manualRegistrationRequired, undefined);
   assert.doesNotMatch(

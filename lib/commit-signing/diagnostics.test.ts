@@ -60,3 +60,11 @@ test("encryption failures remain identifiable without copying their messages", (
     )
   ).toEqual({ category: "encryption" });
 });
+
+test("permanent database schema and constraint errors remain actionable", () => {
+  for (const code of ["42703", "PGRST116", "23505"])
+    expect(signingFailureDiagnostic({ code })).toEqual({
+      code,
+      category: "configuration",
+    });
+});
