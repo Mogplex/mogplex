@@ -33,11 +33,12 @@ for (const action of ["approve", "revise"] as const) {
       route.fulfill({ json: context })
     );
     let streams = 0;
+    const output = `## Implementation plan\n\n1. Add a welcoming heading.\n2. Test mobile layout.\n\n<<<MOGPLEX_CHECKPOINT>>>\n${JSON.stringify({ kind: "plan", summary: context.checkpoint!.summary, previewUrl: null })}\n<<<END_MOGPLEX_CHECKPOINT>>>`;
     await page.route("**/api/runs/*/stream?*", (route) => {
       streams++;
       return route.fulfill({
         contentType: "text/event-stream",
-        body: `event: run\ndata: ${JSON.stringify(context)}\n\nevent: finished\ndata: ${JSON.stringify({ id: "done", type: "finished", toolName: null, message: "Planning pass finished", payload: {}, createdAt: "2026-09-05T00:00:01Z" })}\n\nevent: replay_complete\ndata: {}\n\n`,
+        body: `event: run\ndata: ${JSON.stringify(context)}\n\nevent: log\ndata: ${JSON.stringify({ id: "plan", type: "log", toolName: null, message: output, payload: { kind: "assistant_final" }, createdAt: "2026-09-05T00:00:01Z" })}\n\nevent: finished\ndata: ${JSON.stringify({ id: "done", type: "finished", toolName: null, message: "Planning pass finished", payload: {}, createdAt: "2026-09-05T00:00:02Z" })}\n\nevent: replay_complete\ndata: {}\n\n`,
       });
     });
     const submissions: unknown[] = [];
@@ -64,13 +65,34 @@ for (const action of ["approve", "revise"] as const) {
       conversation.getByText("Waiting for input", { exact: true })
     ).toBeVisible();
     await expect(
+      conversation.getByRole("heading", {
+        name: "Implementation plan",
+        exact: true,
+      })
+    ).toBeVisible();
+    await expect(conversation).not.toContainText("MOGPLEX_CHECKPOINT");
+    await expect(conversation).not.toContainText('"previewUrl"');
+    const summary = conversation.getByRole("button", {
+      name: "Plan summary",
+      exact: true,
+    });
+    await expect(summary).toHaveAttribute("aria-expanded", "false");
+    await summary.click();
+    await expect(summary).toHaveAttribute("aria-expanded", "true");
+    await expect(
       conversation.getByText(context.checkpoint!.summary, { exact: true })
     ).toBeVisible();
+    await summary.click();
+    await expect(
+      conversation.getByText(context.checkpoint!.summary, { exact: true })
+    ).toHaveCount(0);
     await expect(
       conversation.getByRole("button", { name: "Continue in this chat" })
     ).toHaveCount(0);
     expect(submissions).toEqual([]);
     await page.reload();
+    await expect(summary).toBeVisible();
+    await page.screenshot({ path: test.info().outputPath("checkpoint.png") });
     if (action === "revise") {
       await conversation
         .getByRole("button", { name: "Revise plan", exact: true })
@@ -78,6 +100,17 @@ for (const action of ["approve", "revise"] as const) {
       const feedback = conversation.getByRole("textbox", {
         name: "Plan feedback",
       });
+      await expect(feedback).toBeFocused();
+      await conversation
+        .getByRole("button", { name: "Cancel", exact: true })
+        .click();
+      await expect(
+        conversation.getByRole("button", { name: "Revise plan", exact: true })
+      ).toBeFocused();
+      await conversation
+        .getByRole("button", { name: "Revise plan", exact: true })
+        .press("Enter");
+      await expect(feedback).toBeFocused();
       await feedback.fill("Keep the existing colors");
       await conversation.getByRole("button", { name: "Send feedback" }).click();
       await expect(conversation.getByRole("alert")).toContainText(

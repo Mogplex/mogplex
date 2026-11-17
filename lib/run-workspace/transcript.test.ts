@@ -1,6 +1,10 @@
 import { expect, it } from "vitest";
 import type { PresentedAiCallEvent } from "@/lib/mogplex-api/run-control";
 import { projectRunTranscript } from "./transcript";
+import {
+  CHECKPOINT_MARKER_START as start,
+  CHECKPOINT_MARKER_END as end,
+} from "@/lib/harness/checkpoint";
 
 const event = (
   id: string,
@@ -14,6 +18,131 @@ const event = (
   payload,
   toolName: "bash",
   createdAt: "",
+});
+
+it("shows the readable plan once and hides checkpoint transport in saved history", () => {
+  const output = `## Plan\n\n- Preserve desktop.\n\n${start}\n${JSON.stringify({ kind: "plan", summary: "Preserve desktop." })}\n${end}`;
+  const events = [
+    event("1", "log", output, { kind: "assistant_delta" }),
+    event("2", "log", output, { kind: "assistant_final" }),
+  ];
+  const messages = projectRunTranscript("r", "Fix", events, "awaiting_input");
+  expect(messages[1].parts).toEqual([
+    { type: "text", text: "## Plan\n\n- Preserve desktop." },
+  ]);
+  expect(events[0].message).toBe(output);
+});
+
+it("renders checkpoint-only output as readable markdown, not JSON", () => {
+  const output = `${start}\n${JSON.stringify({ summary: "## Changes\n\n- Fixed mobile.\n- Tests passed." })}\n${end}`;
+  expect(
+    projectRunTranscript(
+      "r",
+      "Fix",
+      [event("1", "log", output, { kind: "assistant_final" })],
+      "awaiting_input"
+    )[1].parts
+  ).toEqual([
+    { type: "text", text: "## Changes\n\n- Fixed mobile.\n- Tests passed." },
+  ]);
+});
+
+it.each(["pending", "streaming"])(
+  "never flashes partial checkpoint markers or JSON while %s deltas arrive",
+  (status) => {
+    const output = `Ready.\n\n${start}{"summary":"Ready."}${end}`;
+    for (let i = output.indexOf("<"); i <= output.length; i++) {
+      const events = Array.from(output.slice(0, i), (char, index) =>
+        event(String(index), "log", char, { kind: "assistant_delta" })
+      );
+      const parts = projectRunTranscript("r", "Fix", events, status)[1].parts;
+      expect(parts).toHaveLength(1);
+      expect(parts[0]).toMatchObject({
+        type: "text",
+        text: expect.any(String),
+      });
+      expect((parts[0] as { text: string }).text.trim()).toBe("Ready.");
+    }
+  }
+);
+
+it.each(["failed", "cancelled"])(
+  "hides a truncated marker after a %s run without losing code indentation",
+  (status) => {
+    const prose = "    const planned = true;";
+    for (const suffix of [
+      `${start}{"summary":"Ready"}${end}`,
+      "<<<MOGPLEX_CHEC",
+    ]) {
+      const output = `${prose}\n\n${suffix}`;
+      expect(
+        projectRunTranscript(
+          "r",
+          "Fix",
+          [event("1", "log", output, { kind: "assistant_final" })],
+          status
+        )[1].parts
+      ).toEqual([{ type: "text", text: prose }]);
+    }
+  }
+);
+
+it("keeps ordinary assistant whitespace and trailing punctuation unchanged", () => {
+  const output = "    indented example\n\nUse x <";
+  expect(
+    projectRunTranscript(
+      "r",
+      "Fix",
+      [event("1", "log", output, { kind: "assistant_final" })],
+      "success"
+    )[1].parts
+  ).toEqual([{ type: "text", text: output }]);
+});
+
+it("keeps multiple checkpoint summaries readable and suppresses empty or unfinished protocol-only output", () => {
+  const first = `${start}{"summary":"First plan"}${end}`;
+  const second = `${start}{"summary":"Updated plan"}${end}`;
+  expect(
+    projectRunTranscript(
+      "r",
+      "Fix",
+      [event("1", "log", first + second, { kind: "assistant_final" })],
+      "awaiting_input"
+    )[1].parts
+  ).toEqual([{ type: "text", text: "First plan\n\nUpdated plan" }]);
+  for (const output of [
+    start,
+    `${start}{"summary":`,
+    `${start}{}${end}`,
+    `${start}{bad}${end}`,
+  ]) {
+    expect(
+      projectRunTranscript(
+        "r",
+        "Fix",
+        [event("1", "log", output, { kind: "assistant_delta" })],
+        "streaming"
+      )
+    ).toHaveLength(1);
+  }
+});
+
+it("hides malformed checkpoint transport and preserves literal tool output and the user request", () => {
+  const output = `Plan above.\n${start}{bad json}${end}\nMore context.`;
+  const messages = projectRunTranscript(
+    "r",
+    start,
+    [
+      event("1", "log", output, { kind: "assistant_final" }),
+      event("2", "tool_finished", "", { toolCallId: "t", output: start }),
+    ],
+    "success"
+  );
+  expect(messages[0].parts).toEqual([{ type: "text", text: start }]);
+  expect(messages[1].parts).toEqual([
+    expect.objectContaining({ output: start }),
+    { type: "text", text: "Plan above.\n\nMore context." },
+  ]);
 });
 
 it("restores worker commands and output after reconnecting", () => {
