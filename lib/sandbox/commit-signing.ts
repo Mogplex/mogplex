@@ -10,7 +10,10 @@
  * that can write files and run a command, so the same setup works for the
  * Vercel sandbox and any future backend.
  */
-import { isCommitSigningEncryptionConfigured } from "@/lib/commit-signing/secret-box";
+import {
+  isCommitSigningEncryptionConfigured,
+  CommitSigningEncryptionError,
+} from "@/lib/commit-signing/secret-box";
 import { signingFailureDiagnostic } from "@/lib/commit-signing/diagnostics";
 import {
   getCommitSigningKey,
@@ -220,7 +223,10 @@ export async function setupSandboxCommitSigning(input: {
     );
     return {
       status: "failed",
-      reason: "the signing key could not be loaded",
+      reason:
+        error instanceof CommitSigningEncryptionError
+          ? "the stored signing key could not be decrypted; contact your administrator"
+          : "the signing key could not be loaded",
     };
   }
 
@@ -243,7 +249,9 @@ export async function scrubSandboxCommitSigning(input: {
       console.warn("[commit-signing] key_scrub failed", {
         exitCode: result.exitCode,
       });
-      throw new Error("Signing key cleanup failed");
+      throw Object.assign(new Error("Signing key cleanup failed"), {
+        exitCode: result.exitCode,
+      });
     }
   } catch (error) {
     throw new Error(

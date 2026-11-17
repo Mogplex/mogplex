@@ -329,3 +329,29 @@ test("a delayed GitHub response cannot mark a replacement key registered", async
   assert.equal(response.status, 409);
   assert.match((await response.json()).error, /key changed/i);
 });
+
+test("token-store configuration failures preserve the key and point to support", async () => {
+  const { handlers, current } = fixture({
+    getGithubToken: async () => {
+      throw new Error("sensitive rpc detail", { cause: { code: "42883" } });
+    },
+  });
+  await handlers.POST(
+    new Request("http://localhost/api", {
+      method: "POST",
+      body: JSON.stringify({ action: "generate" }),
+    })
+  );
+  const response = await handlers.POST(
+    new Request("http://localhost/api", {
+      method: "POST",
+      body: JSON.stringify({ action: "register" }),
+    })
+  );
+  const body = await response.json();
+  assert.equal(response.status, 503);
+  assert.equal(body.retryable, false);
+  assert.match(body.error, /Contact support/);
+  assert.doesNotMatch(body.error, /sensitive|Connect your GitHub|try again/);
+  assert.ok(current());
+});

@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import { CommitSigningEncryptionError } from "./secret-box";
 import { signingFailureDiagnostic } from "./diagnostics";
 
 test.each([
@@ -26,4 +27,36 @@ test.each([
   ],
 ])("retains only safe diagnostic fields for %j", (input, expected) => {
   expect(signingFailureDiagnostic(input)).toEqual(expected);
+});
+
+test("classifies nested network causes and safely terminates cyclic error chains", () => {
+  const cause = { code: "ECONNRESET", message: "private-key-material" };
+  expect(
+    signingFailureDiagnostic(new TypeError("fetch failed", { cause }))
+  ).toEqual({ category: "unavailable", code: "ECONNRESET" });
+  const cyclic: { cause?: unknown; message: string } = {
+    message: "private-key-material",
+  };
+  cyclic.cause = cyclic;
+  expect(signingFailureDiagnostic(cyclic)).toEqual({ category: "unknown" });
+  expect(signingFailureDiagnostic({ statusCode: 403 })).toEqual({
+    category: "authorization",
+    status: 403,
+  });
+  expect(signingFailureDiagnostic({ cause: { code: "42883" } })).toEqual({
+    category: "configuration",
+    code: "42883",
+  });
+  expect(signingFailureDiagnostic({ exitCode: 2 })).toEqual({
+    category: "command_failed",
+    exitCode: 2,
+  });
+});
+
+test("encryption failures remain identifiable without copying their messages", () => {
+  expect(
+    signingFailureDiagnostic(
+      new CommitSigningEncryptionError("private-key-material")
+    )
+  ).toEqual({ category: "encryption" });
 });

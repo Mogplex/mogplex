@@ -124,7 +124,8 @@ export async function captureLegacyWorkspaceSnapshot(
     console.error("[sandbox/restart] Snapshot provider lookup failed", {
       sandboxRecordId: input.recordId,
       providerNotFound: isNotFoundError(error),
-      diagnostic: signingFailureDiagnostic(error),
+      errorName: error instanceof Error ? error.name : typeof error,
+      errorMessage: error instanceof Error ? error.message : String(error),
     });
     if (!isNotFoundError(error)) throw error;
     return null;
@@ -135,6 +136,7 @@ export async function captureLegacyWorkspaceSnapshot(
     : "";
   let snapshotId: string | null = null;
   let snapshotCompletedAt: Date | null = null;
+  let operation = "workspace_state";
   try {
     // Sandbox methods auto-resume stopped VMs. Bind all secret and snapshot
     // operations to this existing session so a concurrent stop stays stopped.
@@ -144,8 +146,10 @@ export async function captureLegacyWorkspaceSnapshot(
     }
     // Keep the private signing key out of stored snapshot state. The
     // restarted sandbox gets it back from the encrypted store.
+    operation = "key_scrub";
     await scrubSandboxCommitSigning({ sandbox: session });
     // The provider uses 0 for no expiry; saved work must never age out.
+    operation = "snapshot";
     const snapshot = await session.snapshot({ expiration: 0 });
     snapshotId = snapshot.snapshotId;
     snapshotCompletedAt = new Date();
@@ -153,9 +157,17 @@ export async function captureLegacyWorkspaceSnapshot(
     console.error("[sandbox/restart] Snapshot capture failed", {
       sandboxRecordId: input.recordId,
       providerNotFound: isNotFoundError(error),
-      diagnostic: signingFailureDiagnostic(
-        error instanceof Error ? (error.cause ?? error) : error
-      ),
+      operation,
+      diagnostic: signingFailureDiagnostic(error),
+      // Snapshot API failures contain no key bytes. Keep their existing diagnostics;
+      // errors from the preceding signing cleanup remain strictly allowlisted.
+      ...(operation === "key_scrub"
+        ? {}
+        : {
+            errorName: error instanceof Error ? error.name : typeof error,
+            errorMessage:
+              error instanceof Error ? error.message : String(error),
+          }),
     });
   }
   let storageError: LegacySnapshotError | null = null;
