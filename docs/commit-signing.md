@@ -150,6 +150,19 @@ commit fail.
 
 ## Security notes
 
+Settings separates the saved key, its recorded GitHub registration, and a
+workspace verification receipt. Copy public key copies only the public key.
+Removing the stored key requires confirmation and does not revoke existing
+workspace copies or GitHub trust.
+
+**Verify signing** checks an explicitly selected running workspace. It reads
+the effective Git signing configuration and proves that the installed key can
+sign and verify a commit in a temporary repository, which is then removed.
+The user's checkout is unchanged. Paused workspaces are never resumed by the
+check. The timestamped result applies to that workspace and saved fingerprint;
+recheck after changing its configuration. GitHub registration remains a separate
+receipt and is not inferred from successful local signature verification.
+
 - **The agent can read the key.** The agent runs arbitrary commands inside
   the sandbox, and the signing key has to be on the sandbox filesystem for git
   to use it. A prompt-injected agent could copy the key out. The key is
