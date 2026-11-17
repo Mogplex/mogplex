@@ -3,16 +3,17 @@
 // event recording for each limit type.
 
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import {
-  evaluateSandboxExecLimitPolicy,
-  evaluateSnapshotBuildLimitPolicy,
-} from "./policy";
+import { allowed, evaluateSnapshotBuildLimitPolicy } from "./policy";
 import {
   loadAllowedLimitEventTimestamps,
   recordLimitDecision,
 } from "./recording";
 import { claimAtomicLimitDecision, type LimitRpc } from "./claims";
-import { CONCURRENCY_RETRY_AFTER_SECONDS, REQUEST_LIMITS } from "./types";
+import {
+  CONCURRENCY_RETRY_AFTER_SECONDS,
+  REQUEST_LIMITS,
+  type LimitDecision,
+} from "./types";
 
 export async function enforceChatLimits(input: {
   userId: string;
@@ -144,47 +145,18 @@ export async function enforceSandboxExecLimits(input: {
   userId: string;
   sandboxId: string;
   now?: Date;
-}) {
-  const now = input.now ?? new Date();
-  const minuteStart = new Date(
-    now.getTime() -
-      REQUEST_LIMITS.sandboxExec.minutelyCalls.windowSeconds * 1000
-  ).toISOString();
-  const hourStart = new Date(
-    now.getTime() - REQUEST_LIMITS.sandboxExec.hourlyCalls.windowSeconds * 1000
-  ).toISOString();
-
-  const [minuteExecs, hourlyExecs] = await Promise.all([
-    loadAllowedLimitEventTimestamps({
-      userId: input.userId,
-      routeKey: "sandbox_exec",
-      since: minuteStart,
-    }),
-    loadAllowedLimitEventTimestamps({
-      userId: input.userId,
-      routeKey: "sandbox_exec",
-      since: hourStart,
-    }),
-  ]);
-
-  const decision = evaluateSandboxExecLimitPolicy({
-    minuteExecs,
-    hourlyExecs,
-    now,
-  });
-
+}): Promise<LimitDecision> {
+  // Commands are already authorized and serialized by the sandbox lock.
+  // Count quotas penalized normal agent research and shared unrelated runs'
+  // budgets. Keep admission telemetry without per-minute/per-hour caps.
+  const decision: LimitDecision = allowed();
   await recordLimitDecision({
     userId: input.userId,
     routeKey: "sandbox_exec",
     decision,
     sandboxId: input.sandboxId,
     resourceId: input.sandboxId,
-    metadata: {
-      minute_execs: minuteExecs.length,
-      hourly_execs: hourlyExecs.length,
-    },
   });
-
   return decision;
 }
 

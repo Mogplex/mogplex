@@ -13,6 +13,7 @@ import { isRunActive } from "@/lib/run-workspace/types";
 import { projectRunTranscript } from "@/lib/run-workspace/transcript";
 import { ChatMessageList } from "./chat-message-list";
 import { useExternalRun } from "./use-external-run";
+import { RunCheckpointControls } from "./run-checkpoint-controls";
 import { getActiveTeamRequestHeaders } from "@/components/active-scope-provider";
 import { fetchJsonObject } from "@/lib/client-fetch";
 
@@ -100,13 +101,13 @@ export function ExternalRunPane({ pane, onStreamingChange, onUpdatePane, workspa
     {renderTranscript ? renderTranscript(messages, running) : <ChatMessageList messages={messages} localMsgs={[]} liveConversationRuns={[]} activeCallEvents={[]} isAgentRunning={running} endRef={endRef} />}
     {error && <div role="alert" className="px-2 py-1 text-accent-red">{error}</div>}
     {receipt && <div role="status" className="px-2 py-1 text-xs">{receipt}</div>}
-    {running && context?.canGuide ? <form className="border-border space-y-2 border-t p-2" onSubmit={event => { event.preventDefault(); void sendGuidance(); }}>
+    {status === "awaiting_input" && context ? <RunCheckpointControls key={context.aiCallId} context={context} onRefresh={reload} /> : running && context?.canGuide ? <form className="border-border space-y-2 border-t p-2" onSubmit={event => { event.preventDefault(); void sendGuidance(); }}>
       <Textarea aria-label="Guide this run" placeholder="Add guidance for this run…" value={text} onChange={event => setText(event.target.value)} />
       <Button type="submit" size="sm" disabled={sending || !text.trim()}>{sending ? "Sending…" : "Send guidance"}</Button>
     </form> : !running && status !== "awaiting_input" && context ? <div className="border-border border-t p-2">
       {!historyReady && <p role="status" className="text-muted-foreground mb-2 text-xs">Loading run history before continuing…</p>}
       {workspaceHref ? <Button size="sm" asChild><a href={workspaceHref}>Continue in workspace chat</a></Button> : <Button size="sm" onClick={() => void continueChat()} disabled={sending || !user || !historyReady}>{onContinue ? "Continue in this chat" : "Continue in workspace chat"}</Button>}
-    </div> : <p className="text-muted-foreground p-2 text-xs">{status === "awaiting_input" ? "Open run details to review the checkpoint." : "Watching this run. Open run details for controls."}</p>}
+    </div> : <p className="text-muted-foreground p-2 text-xs">Watching this run. Open run details for controls.</p>}
   </>;
   return renderWorkspace ? renderWorkspace({ messages, running, children: content, onFeedback: feedback => setText(current => [current, feedback].filter(Boolean).join("\n\n")) }) : content;
 }

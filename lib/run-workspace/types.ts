@@ -9,6 +9,13 @@ export const runWorkspaceSchema = z.object({
   sandboxRecordId: z.string().nullable(),
   workingBranch: z.string(),
   canGuide: z.boolean(),
+  checkpoint: z
+    .object({
+      kind: z.enum(["plan", "review"]),
+      summary: z.string(),
+    })
+    .nullable()
+    .optional(),
   guidance: z
     .array(
       z.object({
