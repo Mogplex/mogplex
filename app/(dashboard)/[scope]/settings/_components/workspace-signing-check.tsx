@@ -17,7 +17,7 @@ function sandboxLabel(sandbox: SigningSandbox) {
   const status = sandbox.runtime_summary.status
   return [sandbox.repo?.full_name || "Repository unavailable", sandbox.working_branch || "default branch", sandbox.root_directory, status.charAt(0).toUpperCase() + status.slice(1)].filter(Boolean).join(" · ")
 }
-type SandboxOption = { id: string; label: string; keywords: string[] }
+type SandboxOption = { id: string; label: string }
 
 function SandboxPicker({ options, selected, disabled, onSelect }: {
   options: SandboxOption[]; selected: string; disabled: boolean; onSelect: (id: string) => void
@@ -32,7 +32,7 @@ function SandboxPicker({ options, selected, disabled, onSelect }: {
       </Button>
     </PopoverTrigger>
     <PopoverContent aria-label="Sandbox choices" align="start" collisionPadding={16} className="w-[var(--radix-popover-trigger-width)] max-w-[calc(100vw-32px)] p-0">
-      <Command key={open ? "open" : "closed"} label="Search sandboxes" filter={(_value, search, keywords) => {
+      <Command label="Search sandboxes" filter={(_value, search, keywords) => {
         const text = keywords?.join(" ").toLowerCase() ?? ""
         return search.trim().toLowerCase().split(/\s+/).every(term => text.includes(term)) ? 1 : 0
       }}>
@@ -40,7 +40,7 @@ function SandboxPicker({ options, selected, disabled, onSelect }: {
         <CommandList className="max-h-[min(300px,calc(var(--radix-popover-content-available-height)-48px))] overscroll-contain">
           <CommandEmpty>No sandboxes match your search.</CommandEmpty>
           <CommandGroup>
-            {options.map(option => <CommandItem key={option.id} value={option.id} keywords={option.keywords} aria-label={option.label}
+            {options.map(option => <CommandItem key={option.id} value={option.id} keywords={[option.label]} aria-label={option.label}
               onSelect={() => { onSelect(option.id); setOpen(false) }}>
               <span className="min-w-0 flex-1 break-words">{option.label}</span>
               {selected === option.id && <Check aria-hidden className="size-4 shrink-0" />}
@@ -64,7 +64,7 @@ export function WorkspaceSigningCheck({ fingerprint }: { fingerprint: string | n
     url => fetchJsonObject<{ sandboxes: SigningSandbox[] }>(url, "Could not load sandboxes", { headers: getActiveTeamRequestHeaders() }))
 
   const currentSandboxes = data?.sandboxes.filter(isCurrentControlSandbox) ?? []
-  const options = currentSandboxes.map(sandbox => ({ id: sandbox.id, label: sandboxLabel(sandbox), keywords: [sandbox.repo?.full_name || "Repository unavailable", sandbox.working_branch || "default branch"] }))
+  const options = currentSandboxes.map(sandbox => ({ id: sandbox.id, label: sandboxLabel(sandbox) }))
   const labelCounts = new Map<string, number>()
   for (const option of options) labelCounts.set(option.label, (labelCounts.get(option.label) ?? 0) + 1)
 

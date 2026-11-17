@@ -45,6 +45,7 @@ const release = sandbox(
   "release/ready",
   "creating"
 );
+release.root_directory = "apps/web";
 const history = [
   sandbox(
     "00000000-0000-4000-8000-000000000004",
@@ -112,7 +113,12 @@ test("searches repository and branch, excludes historical sandboxes, and support
   await search.fill("RELEASE/READY");
   await expect(page.getByRole("option")).toHaveCount(1);
   await expect(page.getByRole("option")).toHaveAccessibleName(
-    "acme/dashboard · release/ready · Creating"
+    "acme/dashboard · release/ready · apps/web · Creating"
+  );
+  await search.fill("apps/web");
+  await expect(page.getByRole("option")).toHaveCount(1);
+  await expect(page.getByRole("option")).toHaveAccessibleName(
+    "acme/dashboard · release/ready · apps/web · Creating"
   );
   await search.fill("widgets fix/signing");
   await expect(page.getByRole("option")).toHaveCount(1);
@@ -194,3 +200,71 @@ for (const sandboxes of [[], history]) {
     ).toHaveCount(0);
   });
 }
+
+test("a selected sandbox that stops after refresh cannot be verified or retain a visible receipt", async ({
+  page,
+}) => {
+  await page.clock.install();
+  let sandboxes = [running, paused];
+  await page.route("**/api/sandbox", (route) =>
+    fulfillJson(route, { sandboxes })
+  );
+  await page.route("**/api/sandbox/*/commit-signing", (route) =>
+    fulfillJson(route, {
+      status: "verified",
+      message: "This sandbox signed and verified a test commit.",
+      fingerprint: key.fingerprint,
+    })
+  );
+  await page.goto(scopedPath("settings/commit-signing"));
+  await page
+    .getByRole("button", { name: "Verify signing", exact: true })
+    .click();
+  const picker = page.getByRole("combobox", {
+    name: "Sandbox to check",
+    exact: true,
+  });
+  await picker.click();
+  await page
+    .getByRole("option", {
+      name: "acme/widgets · feature/search · Running",
+      exact: true,
+    })
+    .click();
+  await page.getByRole("button", { name: "Verify selected sandbox" }).click();
+  await expect(
+    page.getByText("Verified in the selected sandbox", { exact: true })
+  ).toBeVisible();
+  sandboxes = [
+    {
+      ...running,
+      runtime_summary: { ...running.runtime_summary, status: "stopped" },
+    },
+    paused,
+  ];
+  // Advance SWR's focus throttle and deduplication windows without a real sleep.
+  await page.clock.fastForward(6000);
+  const refreshed = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/sandbox") && response.status() === 200
+  );
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await refreshed;
+  await expect(picker).toContainText("Choose a sandbox");
+  await expect(
+    page.getByRole("button", { name: "Verify selected sandbox" })
+  ).toBeDisabled();
+  await expect(
+    page.getByText("Verified in the selected sandbox", { exact: true })
+  ).toHaveCount(0);
+  await expect(
+    page.getByText("This sandbox signed and verified a test commit.", {
+      exact: true,
+    })
+  ).toHaveCount(0);
+  await picker.click();
+  await expect(page.getByRole("option")).toHaveCount(1);
+  await expect(page.getByRole("option")).toHaveAccessibleName(
+    "acme/widgets · fix/signing · Paused"
+  );
+});

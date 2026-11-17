@@ -356,6 +356,10 @@ test("saved keys expose copy, honest sandbox verification, and cancellable remov
       " · Running",
   ]);
   await page
+    .getByRole("combobox", { name: "Search sandboxes", exact: true })
+    .fill("00000000");
+  await expect(page.getByRole("option")).toHaveCount(1);
+  await page
     .getByRole("option", {
       name: "acme/widgets · feature/signing · Running · 00000000",
       exact: true,
