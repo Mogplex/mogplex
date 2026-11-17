@@ -116,6 +116,7 @@ export function createCommitSigningRouteHandlers(
       console.warn("[commit-signing] github_token_lookup failed", diagnostic);
       return NextResponse.json(
         {
+          ...statusPayload(view),
           error: retryable
             ? "GitHub registration is temporarily unavailable. Your signing key is saved. Please try again."
             : "GitHub registration is unavailable. Your signing key is saved. Contact support to restore registration.",

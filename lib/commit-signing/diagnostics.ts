@@ -12,6 +12,9 @@ const SAFE_CODES = new Set([
   "42883",
   "42P01",
   "PGRST202",
+  "42703",
+  "PGRST116",
+  "23505",
 ]);
 
 /** Never copy provider messages: file-operation errors can contain private keys. */
@@ -53,7 +56,9 @@ export function signingFailureDiagnostic(error: unknown) {
   }
   const category = encryption
     ? "encryption"
-    : ["42883", "42P01", "PGRST202"].includes(code ?? "")
+    : ["42883", "42P01", "PGRST202", "42703", "PGRST116", "23505"].includes(
+          code ?? ""
+        )
       ? "configuration"
       : code === "ETIMEDOUT" || status === 408 || status === 504
         ? "timeout"
