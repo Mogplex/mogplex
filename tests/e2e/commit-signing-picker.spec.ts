@@ -366,7 +366,12 @@ test("explains a sandbox becoming unavailable while verification is in flight", 
   const notice = page.getByText(
     "Your selected sandbox is no longer available. Choose another to verify."
   );
-  await expect(notice).toBeVisible();
+  await expect(
+    page.getByText(
+      "Your selected sandbox is no longer available. Waiting for the current check to finish."
+    )
+  ).toBeVisible();
+  await expect(picker).toBeDisabled();
   finishCheck();
   await expect(
     page.getByRole("button", { name: "Verify selected sandbox" })

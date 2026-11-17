@@ -100,7 +100,7 @@ export function WorkspaceSigningCheck({ fingerprint }: { fingerprint: string | n
     </div>
     <p className="text-xs leading-5 text-muted-foreground">A sandbox is the environment where Git runs for a repository. Verify its signing setup with a temporary commit; your repository stays unchanged.</p>
     {choosing && <div className="space-y-3">
-      {selectionUnavailable && <p role="status" className="text-sm text-muted-foreground">Your selected sandbox is no longer available. Choose another to verify.</p>}
+      {selectionUnavailable && <p role="status" className="text-sm text-muted-foreground">Your selected sandbox is no longer available. {busy ? "Waiting for the current check to finish." : "Choose another to verify."}</p>}
       {loadError ? <div role="alert" className="text-sm text-destructive">Could not load sandboxes. <Button variant="outline" onClick={() => void mutate()}>Try again</Button></div>
         : !data ? <p role="status" className="text-sm text-muted-foreground">Loading sandboxes…</p>
         : currentSandboxes.length === 0 ? <p className="text-sm text-muted-foreground">No available sandboxes. Launch a sandbox from a repository to verify signing.</p>
