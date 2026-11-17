@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { signingFailureDiagnostic } from "@/lib/commit-signing/diagnostics";
 import {
   loadOwnedSandboxRouteContext,
   buildSandboxRouteErrorResponse,
@@ -59,7 +60,10 @@ export function createSigningVerificationHandler(
         requireCapability: "tools.bash",
       });
       if (!context.ok) {
-        if (context.status >= 500)
+        if (context.status >= 500) {
+          console.warn("[commit-signing] verify_workspace lookup failed", {
+            status: context.status,
+          });
           return Response.json(
             {
               error:
@@ -67,6 +71,7 @@ export function createSigningVerificationHandler(
             },
             { status: 503 }
           );
+        }
         return buildSandboxRouteErrorResponse(context);
       }
       const key = await deps.loadKey(context.auth.userId);
@@ -79,12 +84,15 @@ export function createSigningVerificationHandler(
       const session = context.sandbox?.currentSession();
       if (session?.status !== "running")
         return Response.json({
-          status: "paused",
+          status: session?.status === "stopped" ? "paused" : "not_running",
           message:
-            "Resume this workspace before verifying signing. Verification does not start it automatically.",
+            session?.status === "stopped"
+              ? "Resume this workspace before verifying signing. Verification does not start it automatically."
+              : "This workspace is not running yet. Wait for its current operation to finish, then verify again.",
         });
       const command = await session.runCommand({
         cmd: "sh",
+        signal: AbortSignal.timeout(15_000),
         args: [
           "-c",
           buildSigningVerificationScript(),
@@ -106,7 +114,11 @@ export function createSigningVerificationHandler(
         fingerprint: key.fingerprint,
         checkedAt: new Date().toISOString(),
       });
-    } catch {
+    } catch (error) {
+      console.warn(
+        "[commit-signing] verify_workspace failed",
+        signingFailureDiagnostic(error)
+      );
       return Response.json(
         {
           error:

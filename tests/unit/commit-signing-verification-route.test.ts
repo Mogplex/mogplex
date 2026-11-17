@@ -52,6 +52,9 @@ function fixture(overrides: Partial<SigningVerificationDeps> = {}) {
     commands,
     checks,
     post,
+    setStatus: (value: string) => {
+      status = value;
+    },
     pause: () => {
       status = "stopped";
     },
@@ -65,6 +68,7 @@ test("requires an owned capability-gated workspace and verifies only its current
   assert.equal(body.status, "verified");
   assert.equal(body.fingerprint, key.fingerprint);
   assert.equal(f.commands.length, 1);
+  assert.ok(f.commands[0].signal instanceof AbortSignal);
   assert.equal(f.commands[0].cwd, "/vercel/sandbox/apps/web");
   assert.equal(f.commands[0].args?.at(-1), "ssh-ed25519 AAAA");
   assert.deepEqual(f.checks, [
@@ -118,4 +122,15 @@ test("provider failures remain retryable and do not echo secret-bearing messages
   const body = await response.text();
   assert.match(body, /Try again/);
   assert.doesNotMatch(body, /private-provider-detail/);
+});
+
+test("pending and transitioning workspaces do not receive misleading resume advice", async () => {
+  const f = fixture();
+  for (const status of ["pending", "stopping", "snapshotting", "failed"]) {
+    f.setStatus(status);
+    const body = await (await f.post()).json();
+    assert.equal(body.status, "not_running");
+    assert.doesNotMatch(body.message, /Resume/);
+  }
+  assert.equal(f.commands.length, 0);
 });
