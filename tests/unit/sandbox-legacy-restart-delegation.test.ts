@@ -76,6 +76,7 @@ for (const [host, root, savedTeam, requestedTeam] of [
         buildResolvedSandboxRouteContext(loaded) as never,
       getSandbox: async () =>
         ({
+          runCommand: async () => ({ exitCode: 0 }),
           snapshot: async (options: unknown) => {
             snapshotOptions.push(options);
             return { snapshotId: "saved-snapshot" };
@@ -239,6 +240,7 @@ for (const failure of ["provider", "snapshot", "metadata", "record"] as const) {
             status: 404,
           });
         return {
+          runCommand: async () => ({ exitCode: 0 }),
           snapshot: async () => {
             if (failure === "snapshot") throw new Error("Snapshot unavailable");
             return { snapshotId: "saved-snapshot" };
@@ -297,6 +299,7 @@ test("snapshot metadata never overwrites a concurrently replaced provider record
         buildResolvedSandboxRouteContext(loaded) as never,
       getSandbox: async () =>
         ({
+          runCommand: async () => ({ exitCode: 0 }),
           snapshot: async () => ({ snapshotId: "old-vm-snapshot" }),
         }) as never,
       stopSandboxRecord: async () => ({ id: "sandbox-1" }) as never,

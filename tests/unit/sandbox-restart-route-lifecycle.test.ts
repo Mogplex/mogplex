@@ -64,6 +64,7 @@ test("POST /api/sandbox/[id]/restart preserves a stopped ephemeral workspace wit
       return {
         sandbox: { persistent: false },
         status: "stopped",
+        runCommand: async () => ({ exitCode: 0 }),
         snapshot: async () => {
           throw new Error("non-persistent stopped sandbox has no snapshot");
         },
@@ -106,7 +107,7 @@ test("POST /api/sandbox/[id]/restart preserves a stopped ephemeral workspace wit
   assert.deepEqual(fetchBodies, []);
   assert.deepEqual(
     getSandboxOptions.map((option) => option.resume),
-    [false, false]
+    [false, true, false]
   );
 });
 
@@ -155,6 +156,7 @@ test("POST /api/sandbox/[id]/restart logs when non-persistent demotion loses the
         ({
           sandbox: { persistent: false },
           status: "stopped",
+          runCommand: async () => ({ exitCode: 0 }),
           snapshot: async () => {
             throw new Error("non-persistent stopped sandbox has no snapshot");
           },
@@ -217,6 +219,7 @@ test("POST /api/sandbox/[id]/restart preserves the record when snapshot metadata
         buildResolvedSandboxRouteContext(loaded) as never,
       getSandbox: async () =>
         ({
+          runCommand: async () => ({ exitCode: 0 }),
           snapshot: async () => ({ snapshotId: "snapshot-123" }),
           stop: async () => {},
         }) as never,

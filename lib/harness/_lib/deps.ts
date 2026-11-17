@@ -6,6 +6,7 @@ import { recordSandboxLifecycleEvent } from "@/lib/sandbox/auto-pause-presence";
 import { runHarness } from "@/lib/harness/runner";
 import { getGithubAccessTokenForRepo } from "@/lib/github-access";
 import { resolveSandboxGitAuthor } from "@/lib/sandbox/git-author";
+import { setupSandboxCommitSigning } from "@/lib/sandbox/commit-signing";
 import {
   ensureDevTools,
   syncTerminalRuntimeAuth,
@@ -76,6 +77,7 @@ export const defaultSandboxHarnessPostDeps: SandboxHarnessPostDeps = {
   runHarness,
   getGithubAccessTokenForRepo,
   resolveSandboxGitAuthor,
+  setupSandboxCommitSigning,
   ensureDevTools,
   getResolvedConnections,
   injectClaudeMcpConfig,

@@ -5,6 +5,7 @@ export const PERSONAL_SETTINGS = [
   { id: "teams", label: "Teams" },
   { id: "keys", label: "Provider Keys" },
   { id: "mogplex-keys", label: "Mogplex Keys" },
+  { id: "commit-signing", label: "Commit Signing" },
   { id: "repositories", label: "Repositories" },
   { id: "billing", label: "Billing" },
 ] as const;

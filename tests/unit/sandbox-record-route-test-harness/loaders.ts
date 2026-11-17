@@ -68,6 +68,27 @@ export async function loadSandboxRestartRouteModule() {
           metered: false,
         }),
         ...overrides,
+        ...(overrides.getSandbox
+          ? {
+              getSandbox: async (
+                ...args: Parameters<NonNullable<typeof overrides.getSandbox>>
+              ) => {
+                const sandbox = await overrides.getSandbox!(...args);
+                const currentSession = sandbox.currentSession?.bind(sandbox);
+                const status = sandbox.status ?? "running";
+                // Existing route fixtures describe one provider session. Expose
+                // its commands through the SDK Session API as well as the handle.
+                return Object.assign(sandbox, {
+                  currentSession: () => ({
+                    ...(currentSession?.() ?? { status }),
+                    runCommand: sandbox.runCommand?.bind(sandbox),
+                    writeFiles: sandbox.writeFiles?.bind(sandbox),
+                    snapshot: sandbox.snapshot?.bind(sandbox),
+                  }),
+                }) as typeof sandbox;
+              },
+            }
+          : {}),
       }),
   };
 }

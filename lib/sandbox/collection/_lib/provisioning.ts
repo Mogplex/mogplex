@@ -9,6 +9,7 @@ import { resolveRepoSandboxEnv } from "@/lib/vercel/env-vars";
 import { detectRuntimeFromGithub } from "@/lib/sandbox/runtimes";
 import { previewAllowsRoot404 } from "@/lib/sandbox/client";
 import { resolveSandboxGitAuthor } from "@/lib/sandbox/git-author";
+import { setupSandboxCommitSigning } from "@/lib/sandbox/commit-signing";
 import { clearRepoSnapshotIfCurrent } from "@/lib/repo-snapshots";
 import { createSandboxBillingOnResume } from "@/lib/billing/sandbox-usage";
 import { shellQuoteSingle } from "./utils";
@@ -346,6 +347,16 @@ export async function configureSandboxGitAccess(input: {
     if (credSetup.exitCode !== 0) {
       console.warn(
         `[sandbox/create] Git credential setup failed, exitCode=${credSetup.exitCode}`
+      );
+    }
+    const signing = await setupSandboxCommitSigning({
+      sandbox: input.sandbox,
+      userId: input.userId,
+    });
+    if (signing.status === "failed" || signing.status === "unsupported") {
+      console.warn(
+        `[sandbox/create] Commit signing not enabled, status=${signing.status}`,
+        signing.reason
       );
     }
   } catch (credErr) {

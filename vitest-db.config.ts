@@ -20,5 +20,8 @@ export default defineConfig({
     // Cases boot WASM Postgres and apply real migrations before assertions.
     // Allow CI contention; this tier checks correctness, not query latency.
     testTimeout: 30_000,
+    // Fixtures do the same work in beforeAll/beforeEach; coverage instrumentation
+    // can exceed Vitest's default 10-second hook budget on the four-CPU runner.
+    hookTimeout: 30_000,
   },
 });

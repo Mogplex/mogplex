@@ -105,7 +105,10 @@ export async function setupSandboxEnv(
 export async function setupGitDeliveryAuth(
   deps: Pick<
     SandboxHarnessPostDeps,
-    "resolveSandboxGitAuthor" | "ensureDevTools" | "syncTerminalRuntimeAuth"
+    | "resolveSandboxGitAuthor"
+    | "setupSandboxCommitSigning"
+    | "ensureDevTools"
+    | "syncTerminalRuntimeAuth"
   >,
   sandbox: Sandbox,
   ctx: SandboxSetupContext,
@@ -120,6 +123,17 @@ export async function setupGitDeliveryAuth(
     console.warn("[harness] ensureDevTools failed", {
       sandboxId: ctx.sandboxId,
       error: devToolsResult.error,
+    });
+  }
+  const signing = await deps.setupSandboxCommitSigning({
+    sandbox,
+    userId: ctx.userId,
+  });
+  if (signing.status === "failed" || signing.status === "unsupported") {
+    console.warn("[harness] commit signing not enabled", {
+      sandboxId: ctx.sandboxId,
+      status: signing.status,
+      reason: signing.reason,
     });
   }
   const authSync = await deps.syncTerminalRuntimeAuth(sandbox, {
