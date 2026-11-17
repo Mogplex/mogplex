@@ -4,7 +4,7 @@ import { captureLegacyWorkspaceSnapshot } from "../../app/api/sandbox/[id]/resta
 import type { SandboxRestartDeps } from "../../app/api/sandbox/[id]/restart/_lib/types";
 
 for (const status of ["running", "stopped"] as const) {
-  test(`signing snapshot uses the existing ${status} session without auto-resume`, async () => {
+  test(`signing capture stays on the ${status} session returned by restart lookup`, async () => {
     let wakes = 0;
     let commands = 0;
     let captures = 0;

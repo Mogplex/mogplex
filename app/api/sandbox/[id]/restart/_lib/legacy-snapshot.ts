@@ -111,7 +111,9 @@ export async function captureLegacyWorkspaceSnapshot(
   let sandbox;
   try {
     sandbox = await input.deps.getSandbox(input.sandboxId, input.credentials, {
-      resume: false,
+      // Restart explicitly wakes an idle workspace. Admit the resumed session
+      // before preparing its billing close; later capture/recovery cannot wake it.
+      resume: true,
       onResume: async (resumed) => {
         await input.deps.requireSandboxBillingSession(input.recordId, resumed);
       },

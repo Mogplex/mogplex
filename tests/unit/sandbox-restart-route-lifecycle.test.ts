@@ -107,7 +107,7 @@ test("POST /api/sandbox/[id]/restart preserves a stopped ephemeral workspace wit
   assert.deepEqual(fetchBodies, []);
   assert.deepEqual(
     getSandboxOptions.map((option) => option.resume),
-    [false, false, false]
+    [false, true, false]
   );
 });
 
