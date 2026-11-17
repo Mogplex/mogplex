@@ -10,6 +10,7 @@ import {
 } from "@/lib/mogplex-api/run-runtime-store";
 import { loadMogplexApiRun } from "@/lib/mogplex-api/runs";
 import { resumeExternalAgentRun } from "@/lib/mogplex-api/run-resume";
+import { TRIGGER_TASK_IDS } from "@/lib/trigger/task-ids";
 import {
   markTerminalSlackDelivery,
   notifyTerminalSlackRunOnce,
@@ -389,7 +390,7 @@ it("a resume publishes the new call and worker before a detail read can reconcil
               observedWorkers.push(id);
               return {
                 id,
-                taskIdentifier: "execute-resume-agent-run",
+                taskIdentifier: TRIGGER_TASK_IDS.resumeAgentRun,
                 status: id === "run_resume" ? "EXECUTING" : "COMPLETED",
               };
             },

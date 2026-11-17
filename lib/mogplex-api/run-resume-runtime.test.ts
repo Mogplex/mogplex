@@ -1,6 +1,7 @@
 import { expect, it } from "vitest";
 import { resumeExternalAgentRun } from "./run-resume";
 import { reconcileExternalAgentRunRuntime } from "./run-runtime";
+import { TRIGGER_TASK_IDS } from "@/lib/trigger/task-ids";
 import {
   buildAiCall,
   buildRunRow,
@@ -37,8 +38,8 @@ it.each(["trigger", null] as const)(
                 id,
                 taskIdentifier:
                   id === "run_active_resume"
-                    ? "execute-resume-agent-run"
-                    : "execute-external-agent-run",
+                    ? TRIGGER_TASK_IDS.resumeAgentRun
+                    : TRIGGER_TASK_IDS.externalAgentRun,
                 status: id === "run_active_resume" ? "EXECUTING" : "COMPLETED",
               };
             },
@@ -73,5 +74,43 @@ it.each(["trigger", null] as const)(
       runtime_run_id: "run_active_resume",
       ai_call_id: "resumed-call",
     });
+  }
+);
+
+it.each([false, true])(
+  "keeps a cancellation during sandbox restoration (restore throws: %s)",
+  async (restoreThrows) => {
+    let run = buildRunRow({ status: "awaiting_input" });
+    let harnessStarted = false;
+    const result = await resumeExternalAgentRun(
+      {
+        runId: run.id,
+        userId: run.user_id,
+        steer: "Approved",
+        runtimeRunId: "run_resume",
+      },
+      {
+        loadRun: async () => run,
+        createAiCall: async () => buildAiCall(),
+        updateRun: async (_userId, _runId, update) =>
+          (run = { ...run, ...update }),
+        launchSandbox: async () => {
+          run = { ...run, status: "cancelled" };
+          if (restoreThrows) throw new Error("restoration interrupted");
+          return { recordId: "saved-record", sandboxId: "saved-sandbox" };
+        },
+        runHarness: async () => {
+          harnessStarted = true;
+          return { output: "done" };
+        },
+        loadAiCall: async () => buildAiCall({ status: "success" }),
+        appendEvent: async () => null,
+        notifyRunReachedTerminalState: async () => {},
+        notifyRunCheckpoint: async () => {},
+      }
+    );
+    expect(result).toMatchObject({ status: "cancelled", error: null });
+    expect(run.status).toBe("cancelled");
+    expect(harnessStarted).toBe(false);
   }
 );

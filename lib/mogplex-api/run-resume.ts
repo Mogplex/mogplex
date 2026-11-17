@@ -22,6 +22,7 @@ import {
 import {
   finalizeFailedPass,
   finalizeHarnessPass,
+  TERMINAL_RUN_STATUSES,
   type FinalizeDeps,
 } from "@/lib/mogplex-api/run-execution-finalize";
 import { notifySlackRunCheckpoint } from "@/lib/slack/run-checkpoint-notify";
@@ -151,6 +152,15 @@ const defaultResumeDeps: ResumeExternalAgentRunDeps = {
 };
 
 const ORIGINAL_TASK_CHARS = 12_000;
+
+function terminalResumeResult(run: ExternalAgentRunRow) {
+  return {
+    success: run.status === "success",
+    runId: run.id,
+    status: run.status,
+    error: run.error,
+  };
+}
 
 /** The run's task without its plan-first protocol, which no longer applies. */
 function originalTask(prompt: string) {
@@ -287,6 +297,11 @@ export async function resumeExternalAgentRun(
 
   try {
     const sandbox = await deps.launchSandbox(segmentRun);
+    // Restoring a saved VM can take time. A cancellation during that wait wins.
+    const current = await deps.loadRun(run.id, run.user_id);
+    if (current && TERMINAL_RUN_STATUSES.has(current.status)) {
+      return terminalResumeResult(current);
+    }
     const running = await deps.updateRun(run.user_id, run.id, {
       sandbox_record_id: sandbox.recordId,
       sandbox_id: sandbox.sandboxId,
@@ -301,6 +316,10 @@ export async function resumeExternalAgentRun(
     const harnessResult = await deps.runHarness(runForHarness, sandbox);
     return await finalizeHarnessPass(runForHarness, harnessResult, deps);
   } catch (error) {
+    const current = await deps.loadRun(run.id, run.user_id);
+    if (current && TERMINAL_RUN_STATUSES.has(current.status)) {
+      return terminalResumeResult(current);
+    }
     return await finalizeFailedPass(segmentRun, error, deps);
   }
 }
