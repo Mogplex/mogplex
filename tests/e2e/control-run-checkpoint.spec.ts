@@ -20,7 +20,7 @@ for (const action of ["approve", "revise"] as const) {
       canGuide: true,
       checkpoint: {
         kind: "plan",
-        summary: "Add a welcoming heading and test mobile layout.",
+        summary: "Add a **welcoming heading** and test mobile layout.",
       },
       repo: {
         id: "repo-1",
@@ -73,23 +73,31 @@ for (const action of ["approve", "revise"] as const) {
     await expect(conversation).not.toContainText("MOGPLEX_CHECKPOINT");
     await expect(conversation).not.toContainText('"previewUrl"');
     const summary = conversation.getByRole("button", {
-      name: "Changes, risks & verification",
+      name: "Plan, risks & verification",
       exact: true,
     });
     await expect(summary).toHaveAttribute("aria-expanded", "false");
     await expect(
-      conversation.getByText(context.checkpoint!.summary, { exact: true })
+      conversation.getByText(
+        "Add a welcoming heading and test mobile layout.",
+        { exact: true }
+      )
     ).toBeVisible();
     await summary.click();
     await expect(summary).toHaveAttribute("aria-expanded", "true");
     await expect(
       conversation
-        .getByText(context.checkpoint!.summary, { exact: true })
+        .getByText("Add a welcoming heading and test mobile layout.", {
+          exact: true,
+        })
         .last()
     ).toBeVisible();
     await summary.click();
     await expect(
-      conversation.getByText(context.checkpoint!.summary, { exact: true })
+      conversation.getByText(
+        "Add a welcoming heading and test mobile layout.",
+        { exact: true }
+      )
     ).toBeVisible();
     await expect(
       conversation.getByRole("button", { name: "Continue in this chat" })

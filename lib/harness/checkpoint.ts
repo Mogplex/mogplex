@@ -117,7 +117,7 @@ export function buildPlanFirstProtocolInstructions(): string {
     "2. Do NOT create, edit, or delete files, and do not commit or push, until the user approves the plan.",
     "3. Print exactly this block, with a one-sentence summary followed by Changes, Risks, and Verification Markdown sections (short bullet lines, under 1,500 characters, as one-line JSON with line breaks written as \\n). For Verification describe planned checks, not completed results. Then end your turn:",
     CHECKPOINT_MARKER_START,
-    '{"kind":"plan","previewUrl":null,"summary":"<the plan>"}',
+    '{"kind":"plan","previewUrl":null,"summary":"<one-sentence plan>\\n\\n## Changes\\n<files and approach>\\n\\n## Risks\\n<risks or open questions>\\n\\n## Verification\\n<planned checks>"}',
     CHECKPOINT_MARKER_END,
   ].join("\n");
 }

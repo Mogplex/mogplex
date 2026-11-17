@@ -63,9 +63,9 @@ export function RunCheckpointControls({ context, onRefresh }: {
       </div>
     </div>
     {context.checkpoint?.summary && <div className="min-h-0 overflow-y-auto overscroll-contain px-4">
-      <p className="text-foreground mt-3 leading-6 break-words">{checkpointSummaryLead(context.checkpoint.summary)}</p>
+      <MessageResponse className="text-foreground mt-3 text-sm leading-6 break-words">{checkpointSummaryLead(context.checkpoint.summary)}</MessageResponse>
       <button type="button" className="text-muted-foreground hover:text-foreground focus-visible:ring-ring flex min-h-11 w-full items-center justify-between gap-2 rounded-md text-left focus-visible:ring-2 focus-visible:outline-none" aria-expanded={expanded} aria-controls={summaryId} onClick={() => setExpanded(value => !value)}>
-        Changes, risks & verification<NavArrowDown aria-hidden="true" className={`size-4 shrink-0 transition-transform motion-reduce:transition-none ${expanded ? "rotate-180" : ""}`} />
+        {plan ? "Plan, risks & verification" : "Changes, risks & verification"}<NavArrowDown aria-hidden="true" className={`size-4 shrink-0 transition-transform motion-reduce:transition-none ${expanded ? "rotate-180" : ""}`} />
       </button>
       <div id={summaryId} hidden={!expanded} className="border-border mb-3 border-t pt-3 pr-2">
         {expanded && <MessageResponse className="text-foreground text-sm leading-6 break-words [&_h2]:my-3 [&_h2]:text-base [&_h3]:text-sm">{checkpointSummaryDetails(context.checkpoint.summary)}</MessageResponse>}

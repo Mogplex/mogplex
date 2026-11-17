@@ -31,3 +31,14 @@ test("expanded details preserve long legacy leads and avoid duplicating a short 
   expect(checkpointSummaryDetails(long)).toBe(long);
   expect(checkpointSummaryDetails("Single paragraph")).toBe("Single paragraph");
 });
+
+test("truncated lead paragraphs are never removed from the full details", () => {
+  for (const size of [219, 220, 221]) {
+    const lead = "x".repeat(size);
+    const full = lead + "\n\nDetails";
+    expect(Array.from(checkpointSummaryLead(full)).length).toBeLessThanOrEqual(
+      220
+    );
+    expect(checkpointSummaryDetails(full)).toBe(size > 220 ? full : "Details");
+  }
+});
