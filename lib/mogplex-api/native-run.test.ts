@@ -194,6 +194,7 @@ test("native cancellation prevents model execution and finalizes the existing ca
   const result = await exercise("cancelled");
   assert.equal(result.caught, undefined);
   assert.equal(result.call.status, "cancelled");
+  assert.equal(result.call.gateway_generation_ids, undefined);
   assert.equal(result.model.doStreamCalls.length, 0);
   assert.ok(result.closed);
 });
@@ -209,6 +210,7 @@ test("unavailable owned sandbox fails before model execution", async () => {
 test("a failed execution lease prevents model work and finalizes the call", async () => {
   const result = await exercise("lease_failure");
   assert.match(String(result.caught), /Lease refused/);
+  assert.equal(result.call.gateway_generation_ids, undefined);
   assert.equal(result.call.status, "failed");
   assert.equal(result.model.doStreamCalls.length, 0);
   assert.ok(result.closed);
