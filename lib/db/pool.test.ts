@@ -52,6 +52,7 @@ it("replaces a disconnected idle connection for the next query", async () => {
 
 it("still rejects an active query on disconnect without replaying it", async () => {
   const pool = getNeonPool();
+  await pool.query("SELECT 1");
   const connectionCount = server.connections;
   await expect(pool.query("SELECT disconnect")).rejects.toThrow(
     "Connection terminated unexpectedly"
