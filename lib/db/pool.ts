@@ -80,6 +80,16 @@ export function getNeonPool(): Pool {
             : (SHIM_TYPE_PARSERS[oid] ?? defaultTextParser(oid)),
       } as never,
     });
+    // pg already evicts failed idle clients. Handle their background error so
+    // a dropped connection cannot become an uncaught process exception.
+    pool.on("error", (error) => {
+      // pg attaches the client (including credentials) to this error.
+      console.warn("[db/pool] Idle connection failed; removed from pool", {
+        name: error.name,
+        message: error.message,
+        code: "code" in error ? error.code : undefined,
+      });
+    });
   }
   return pool;
 }
