@@ -14,6 +14,7 @@ export {
   getGatewayCost,
   isNotFoundError,
   fetchAggregateGatewayCost,
+  GatewayCostLookupError,
   gatewayCostUpdateFilter,
 } from "./gateway";
 

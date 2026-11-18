@@ -1,12 +1,23 @@
+import { APICallError } from "ai";
 import type {
   AggregateGatewayCostResult,
   GatewayGenerationInfoClient,
 } from "./types";
 
+function httpStatusCode(value: unknown): number | null {
+  return typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= 100 &&
+    value <= 599
+    ? value
+    : null;
+}
+
 export class GatewayCostLookupError extends Error {
   readonly diagnostic: {
     generation_id: string;
-    status_code: number | null;
+    http_status_code: number | null;
+    sdk_status_code: number | null;
     retryable: boolean | null;
   };
 
@@ -16,16 +27,18 @@ export class GatewayCostLookupError extends Error {
     const details = typeof cause === "object" && cause !== null ? cause : {};
     const status = "statusCode" in details ? details.statusCode : null;
     const retryable = "isRetryable" in details ? details.isRetryable : null;
+    const nestedCause = "cause" in details ? details.cause : null;
+    const apiError = APICallError.isInstance(cause)
+      ? cause
+      : APICallError.isInstance(nestedCause)
+        ? nestedCause
+        : null;
     // Only copy classification fields, never upstream bodies, URLs, or headers.
     this.diagnostic = {
       generation_id: generationId,
-      status_code:
-        typeof status === "number" &&
-        Number.isInteger(status) &&
-        status >= 100 &&
-        status <= 599
-          ? status
-          : null,
+      // GatewayError defaults to 500 for transport failures without a response.
+      http_status_code: httpStatusCode(apiError?.statusCode),
+      sdk_status_code: httpStatusCode(status),
       retryable: typeof retryable === "boolean" ? retryable : null,
     };
   }
