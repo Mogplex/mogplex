@@ -3,6 +3,34 @@ import type {
   GatewayGenerationInfoClient,
 } from "./types";
 
+export class GatewayCostLookupError extends Error {
+  readonly diagnostic: {
+    generation_id: string;
+    status_code: number | null;
+    retryable: boolean | null;
+  };
+
+  constructor(generationId: string, cause: unknown) {
+    super("Gateway generation cost lookup failed", { cause });
+    this.name = "GatewayCostLookupError";
+    const details = typeof cause === "object" && cause !== null ? cause : {};
+    const status = "statusCode" in details ? details.statusCode : null;
+    const retryable = "isRetryable" in details ? details.isRetryable : null;
+    // Only copy classification fields, never upstream bodies, URLs, or headers.
+    this.diagnostic = {
+      generation_id: generationId,
+      status_code:
+        typeof status === "number" &&
+        Number.isInteger(status) &&
+        status >= 100 &&
+        status <= 599
+          ? status
+          : null,
+      retryable: typeof retryable === "boolean" ? retryable : null,
+    };
+  }
+}
+
 export function getGatewayCost(info: unknown): number | null {
   if (!info || typeof info !== "object") return null;
   const value =
@@ -52,12 +80,12 @@ export async function fetchAggregateGatewayCost(
   let anyMissingCost = false;
   let anyNotFound = false;
 
-  for (const result of results) {
+  for (const [index, result] of results.entries()) {
     if (result.status === "rejected") {
       if (isNotFoundError(result.reason)) {
         anyNotFound = true;
       } else {
-        throw result.reason;
+        throw new GatewayCostLookupError(generationIds[index], result.reason);
       }
     } else {
       // Count HTTP 200 responses as resolved, regardless of whether cost is present.
