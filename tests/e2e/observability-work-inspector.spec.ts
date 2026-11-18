@@ -110,9 +110,18 @@ test("scrolling past the inspector end does not move the page", async ({
       element.addEventListener("scroll", () => resolve(), { once: true })
     ),
   }));
-  await page.mouse.wheel(0, 10000);
-  await scrolled.evaluate(({ complete }) => complete);
-  await scrolled.dispose();
+  try {
+    await test.step(
+      "Wait for the wheel to scroll the inspector",
+      async () => {
+        await page.mouse.wheel(0, 10000);
+        await scrolled.evaluate(({ complete }) => complete);
+      },
+      { timeout: 10_000 }
+    );
+  } finally {
+    await scrolled.dispose();
+  }
   expect(
     await inspector.evaluate(
       (element) =>
