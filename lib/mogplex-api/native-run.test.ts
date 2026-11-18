@@ -213,3 +213,13 @@ test("a failed execution lease prevents model work and finalizes the call", asyn
   assert.equal(result.model.doStreamCalls.length, 0);
   assert.ok(result.closed);
 });
+
+test("native tool loops persist every generation for cost reconciliation", async () => {
+  const result = await exercise("tool_progress");
+  assert.equal(result.caught, undefined);
+  assert.deepEqual(result.call.gateway_generation_ids, [
+    "gen_first",
+    "gen_last",
+  ]);
+  assert.equal(result.call.gateway_generation_id, "gen_first");
+});

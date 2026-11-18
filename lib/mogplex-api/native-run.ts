@@ -136,6 +136,7 @@ export async function runNativeMogplexAgent(
       cacheCreationInputTokens: usage.cacheCreationInputTokens,
       reasoningTokens: usage.reasoningTokens,
       gatewayGenerationId: usage.generationId,
+      gatewayGenerationIds: usage.generationIds,
       metadata: {
         ...call.metadata,
         harness_id: "mogplex",

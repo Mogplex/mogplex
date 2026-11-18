@@ -97,6 +97,7 @@ export async function exercise(
             sink.enqueue({
               type: "finish",
               finishReason: { unified: "tool-calls", raw: "tool-calls" },
+              providerMetadata: { gateway: { generationId: "gen_first" } },
               usage: {
                 inputTokens: {
                   total: 12,
@@ -116,6 +117,7 @@ export async function exercise(
             sink.enqueue({
               type: "finish",
               finishReason: { unified: "stop", raw: "stop" },
+              providerMetadata: { gateway: { generationId: "gen_last" } },
               usage: {
                 inputTokens: {
                   total: 12,
