@@ -68,6 +68,15 @@ export const SHIM_TYPE_PARSERS: Record<number, (value: string) => unknown> = {
 
 let pool: Pool | null = null;
 
+function reportConnectionError(error: Error) {
+  // pg attaches the client (including credentials) to idle-connection errors.
+  console.warn("[db/pool] Database connection failed", {
+    name: error.name,
+    message: error.message,
+    code: "code" in error ? error.code : undefined,
+  });
+}
+
 export function getNeonPool(): Pool {
   if (!pool) {
     pool = new Pool({
@@ -79,6 +88,17 @@ export function getNeonPool(): Pool {
             ? types.getTypeParser(oid as 20, "binary")
             : (SHIM_TYPE_PARSERS[oid] ?? defaultTextParser(oid)),
       } as never,
+    });
+    // pg already evicts failed idle clients. Handle their background error so
+    // a dropped connection cannot become an uncaught process exception.
+    pool.on("error", reportConnectionError);
+    // pg detaches its idle listener during checkout. Operations such as the
+    // reaper hold a client between queries, when disconnects also emit errors.
+    pool.on("acquire", (client) => {
+      client.on("error", reportConnectionError);
+    });
+    pool.on("release", (_error, client) => {
+      client.off("error", reportConnectionError);
     });
   }
   return pool;
