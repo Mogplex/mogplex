@@ -4,7 +4,11 @@ import type {
   AiCallCostReconciliationRow,
   GatewayGenerationInfoClient,
 } from "./types";
-import { fetchAggregateGatewayCost, isNotFoundError } from "./gateway";
+import {
+  fetchAggregateGatewayCost,
+  GatewayCostLookupError,
+  isNotFoundError,
+} from "./gateway";
 import { persistGatewayAiCallCost } from "./persistence";
 import { reconcileHarnessReportCost } from "./harness-report";
 import {
@@ -108,12 +112,16 @@ export async function reconcileAiCallCostRow(
       return "skipped";
     }
 
-    deps.sentry.captureException(error, {
+    const lookupError = error instanceof GatewayCostLookupError ? error : null;
+    // Keep the original SDK exception and grouping while retaining which of
+    // the row's parallel lookups failed and how Gateway classified it.
+    deps.sentry.captureException(lookupError ? lookupError.cause : error, {
       extra: {
         ai_call_id: row.id,
         gateway_generation_id: row.gateway_generation_id,
         gateway_generation_ids: row.gateway_generation_ids,
         completed_at: row.completed_at,
+        ...(lookupError ? { gateway_lookup: lookupError.diagnostic } : {}),
       },
     });
     return "errored";

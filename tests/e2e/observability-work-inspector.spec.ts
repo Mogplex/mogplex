@@ -102,15 +102,26 @@ test("scrolling past the inspector end does not move the page", async ({
   const bounds = await inspector.boundingBox();
   if (!bounds) throw new Error("Inspector is not visible");
   await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + 30);
-  const scrolled = inspector.evaluate(
-    (element) =>
-      new Promise<void>((resolve) =>
-        // eslint-disable-next-line github/prefer-observers -- One-shot native scroll synchronization in this browser test.
-        element.addEventListener("scroll", () => resolve(), { once: true })
-      )
-  );
-  await page.mouse.wheel(0, 10000);
-  await scrolled;
+  // Await installation: locator resolution can otherwise race the wheel input.
+  // Wrap the promise so evaluateHandle returns before the scroll event fires.
+  const scrolled = await inspector.evaluateHandle((element) => ({
+    complete: new Promise<void>((resolve) =>
+      // eslint-disable-next-line github/prefer-observers -- One-shot native scroll synchronization in this browser test.
+      element.addEventListener("scroll", () => resolve(), { once: true })
+    ),
+  }));
+  try {
+    await test.step(
+      "Wait for the wheel to scroll the inspector",
+      async () => {
+        await page.mouse.wheel(0, 10000);
+        await scrolled.evaluate(({ complete }) => complete);
+      },
+      { timeout: 10_000 }
+    );
+  } finally {
+    await scrolled.dispose();
+  }
   expect(
     await inspector.evaluate(
       (element) =>

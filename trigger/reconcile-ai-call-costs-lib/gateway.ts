@@ -1,7 +1,48 @@
+import { APICallError } from "ai";
 import type {
   AggregateGatewayCostResult,
   GatewayGenerationInfoClient,
 } from "./types";
+
+function httpStatusCode(value: unknown): number | null {
+  return typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= 100 &&
+    value <= 599
+    ? value
+    : null;
+}
+
+export class GatewayCostLookupError extends Error {
+  readonly diagnostic: {
+    generation_id: string;
+    http_status_code: number | null;
+    sdk_status_code: number | null;
+    retryable: boolean | null;
+  };
+
+  constructor(generationId: string, cause: unknown) {
+    super("Gateway generation cost lookup failed", { cause });
+    this.name = "GatewayCostLookupError";
+    const details = typeof cause === "object" && cause !== null ? cause : {};
+    const status = "statusCode" in details ? details.statusCode : null;
+    const retryable = "isRetryable" in details ? details.isRetryable : null;
+    const nestedCause = "cause" in details ? details.cause : null;
+    const apiError = APICallError.isInstance(cause)
+      ? cause
+      : APICallError.isInstance(nestedCause)
+        ? nestedCause
+        : null;
+    // Only copy classification fields, never upstream bodies, URLs, or headers.
+    this.diagnostic = {
+      generation_id: generationId,
+      // GatewayError defaults to 500 for transport failures without a response.
+      http_status_code: httpStatusCode(apiError?.statusCode),
+      sdk_status_code: httpStatusCode(status),
+      retryable: typeof retryable === "boolean" ? retryable : null,
+    };
+  }
+}
 
 export function getGatewayCost(info: unknown): number | null {
   if (!info || typeof info !== "object") return null;
@@ -52,12 +93,12 @@ export async function fetchAggregateGatewayCost(
   let anyMissingCost = false;
   let anyNotFound = false;
 
-  for (const result of results) {
+  for (const [index, result] of results.entries()) {
     if (result.status === "rejected") {
       if (isNotFoundError(result.reason)) {
         anyNotFound = true;
       } else {
-        throw result.reason;
+        throw new GatewayCostLookupError(generationIds[index], result.reason);
       }
     } else {
       // Count HTTP 200 responses as resolved, regardless of whether cost is present.
